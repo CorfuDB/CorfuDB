@@ -4,8 +4,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.taskdefs.Copy;
 import org.apache.tools.ant.taskdefs.Execute;
+import org.apache.tools.ant.taskdefs.PumpStreamHandler;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Optional;
 
@@ -47,13 +50,17 @@ public class ExecutionHelper {
      *
      * @param command shell command
      */
-    public void executeCommand(Optional<Path> workDir, String command) throws IOException {
+    public String executeCommand(Optional<Path> workDir, String command) throws IOException {
         Execute exec = new Execute();
 
         exec.setCommandline(new String[]{"sh", "-c", command});
         exec.setAntRun(PROJECT);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        exec.setStreamHandler(new PumpStreamHandler(out, out));
         workDir.ifPresent(wd -> exec.setWorkingDirectory(wd.toFile()));
         log.info("Executing command: {}, workDir: {}", command, workDir);
         exec.execute();
+
+        return out.toString(StandardCharsets.UTF_8.name());
     }
 }

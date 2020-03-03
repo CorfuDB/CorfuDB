@@ -4,7 +4,7 @@ import java.util.Map;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Assert;
@@ -20,10 +20,10 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
     /**
      * High level:
      *
-     * This test will create OBJECT_NUM of objects in an SMRMap. Each object's sum will be incremented by VAL until we
+     * This test will create OBJECT_NUM of objects in an CorfuTable. Each object's sum will be incremented by VAL until we
      * reach FINAL_SUM. At the end of this test we:
      *
-     *   1) Check that there are OBJECT_NUM number of objects in the SMRMap.
+     *   1) Check that there are OBJECT_NUM number of objects in the CorfuTable.
      *   2) Ensure that each object's sum is equal to FINAL_SUM
      *
      * Details (the mechanism by which we increment the values in each object):
@@ -39,7 +39,7 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
     public void testStress() throws Exception {
 
         String mapName = "testMapA";
-        Map<Long, Long> testMap = instantiateCorfuObject(SMRMap.class, mapName);
+        Map<Long, Long> testMap = instantiateCorfuObject(CorfuTable.class, mapName);
 
         final int VAL = 1;
 
@@ -75,9 +75,9 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
     public void testStress2() throws Exception {
 
         String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
+        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
         String mapName2 = "testMapB";
-        Map<Long, Long> testMap2 = instantiateCorfuObject(SMRMap.class, mapName2);
+        Map<Long, Long> testMap2 = instantiateCorfuObject(CorfuTable.class, mapName2);
 
 
         final int VAL = 1;
@@ -117,9 +117,9 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
     public class NonOverlappingWriter {
 
         String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
+        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
         String mapName2 = "testMapB";
-        Map<Long, Long> testMap2 = instantiateCorfuObject(SMRMap.class, mapName2);
+        Map<Long, Long> testMap2 = instantiateCorfuObject(CorfuTable.class, mapName2);
 
 
         int start;
@@ -155,7 +155,7 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         /**
          * Does the actual work.
          *
-         * @param idx SMRMap key index to update
+         * @param idx CorfuTable key index to update
          * @param val how much to increment the value by.
          */
         private void simpleCreateImpl(long idx, long val) {
@@ -184,7 +184,7 @@ public class MultipleNonOverlappingTest extends AbstractTransactionsTest {
         /**
          * Does the actual work.
          *
-         * @param idx SMRMap key index to update
+         * @param idx CorfuTable key index to update
          * @param val how much to increment the value by.
          */
         private void duoCreateImpl(long idx, long val) {

@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.log;
 
-import static org.junit.Assert.*;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.junit.Rule;
@@ -10,6 +8,8 @@ import org.junit.rules.TemporaryFolder;
 
 import java.util.HashMap;
 import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
 
 @Slf4j
 public class StreamLogDataStoreTest {

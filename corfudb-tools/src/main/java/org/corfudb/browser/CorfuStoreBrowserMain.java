@@ -1,7 +1,9 @@
 package org.corfudb.browser;
 
 import java.util.Map;
+import java.util.Optional;
 
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
@@ -19,22 +21,31 @@ import org.docopt.Docopt;
  */
 @Slf4j
 public class CorfuStoreBrowserMain {
+    private enum OperationType {
+        listTables,
+        infoTable,
+        showTable,
+        dropTable
+    }
+
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
         "--port=<port> --namespace=<namespace> --tablename=<tablename> " +
         "--operation=<operation> "+
         "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
+        "[--diskPath=<pathToTempDirForLargeTables>] "+
         "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<showTables|listTables> Operation\n"
+        + "--operation=<listTables|infoTable|showTable|dropTable> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--keystore=<keystore_file> KeyStore File\n"
         + "--ks_password=<keystore_password> KeyStore Password\n"
         + "--truststore=<truststore_file> TrustStore File\n"
         + "--truststore_password=<truststore_password> Truststore Password\n"
+        + "--diskPath=<path to temp folder for large tables> Path to Temp Dir\n"
         + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) {
@@ -51,9 +62,14 @@ public class CorfuStoreBrowserMain {
             boolean tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled")
                 .toString());
             String operation = opts.get("--operation").toString();
+
+            final int SYSTEM_EXIT_ERROR_CODE = 1;
+            final int SYSTEM_DOWN_RETRIES = 5;
             CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder
                 builder = CorfuRuntime.CorfuRuntimeParameters.builder()
                 .cacheDisabled(true)
+                .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
+                .systemDownHandlerTriggerLimit(SYSTEM_DOWN_RETRIES)
                 .tlsEnabled(tlsEnabled);
             if (tlsEnabled) {
                 String keystore = opts.get("--keystore").toString();
@@ -67,6 +83,7 @@ public class CorfuStoreBrowserMain {
                     .trustStore(truststore)
                     .tsPasswordFile(truststore_password);
             }
+
             runtime = CorfuRuntime.fromParameters(builder.build());
             String singleNodeEndpoint = String.format("%s:%d", host, port);
             runtime.parseConfigurationString(singleNodeEndpoint);
@@ -74,19 +91,31 @@ public class CorfuStoreBrowserMain {
             runtime.connect();
             log.info("Successfully connected to {}", singleNodeEndpoint);
 
-            CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
-            switch (operation) {
-                case "listTables":
-                    String namespace = opts.containsKey("--namespace") ?
-                        opts.get("--namespace").toString() : null;
+            CorfuStoreBrowser browser;
+            if (opts.get("--diskPath") != null) {
+                browser = new CorfuStoreBrowser(runtime, opts.get("--diskPath").toString());
+            } else {
+                browser = new CorfuStoreBrowser(runtime);
+            }
+            String namespace = Optional.ofNullable(opts.get("--namespace"))
+                    .map(n -> n.toString())
+                    .orElse(null);
+            String tableName = Optional.ofNullable(opts.get("--tablename"))
+                    .map(t -> t.toString())
+                    .orElse(null);
+            switch (Enum.valueOf(OperationType.class, operation)) {
+                case listTables:
                     browser.listTables(namespace);
                     break;
-
-                default:
-                    CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
-                        browser.getTable(opts.get("--namespace").toString(),
-                        opts.get("--tablename").toString());
-                    browser.printTable(table);
+                case infoTable:
+                    browser.printTableInfo(namespace, tableName);
+                    break;
+                case dropTable:
+                    browser.dropTable(namespace, tableName);
+                    break;
+                case showTable:
+                    browser.printTable(namespace, tableName);
+                    break;
             }
         } catch (Throwable t) {
             log.error("Error in Browser Execution.", t);

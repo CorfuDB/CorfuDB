@@ -10,8 +10,8 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
-import org.corfudb.infrastructure.orchestrator.workflows.RestoreRedundancyMergeSegmentsWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RemoveNodeWorkflow;
+import org.corfudb.infrastructure.orchestrator.workflows.RestoreRedundancyMergeSegmentsWorkflow;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
@@ -19,13 +19,13 @@ import org.corfudb.protocols.wireprotocol.orchestrator.CreateRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.Response;
+import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -127,7 +127,8 @@ public class Orchestrator {
                 dispatch(workflow, msg, ctx, r);
                 break;
             case RESTORE_REDUNDANCY_MERGE_SEGMENTS:
-                workflow = new RestoreRedundancyMergeSegmentsWorkflow((RestoreRedundancyMergeSegmentsRequest) orchReq.getRequest());
+                workflow = new RestoreRedundancyMergeSegmentsWorkflow(
+                        (RestoreRedundancyMergeSegmentsRequest) orchReq.getRequest());
                 dispatch(workflow, msg, ctx, r);
                 break;
             default:
@@ -191,7 +192,6 @@ public class Orchestrator {
         } else {
             // Create a new workflow for this endpoint and return a new workflow id
             activeWorkflows.put(workflow.getId(), req.getEndpoint());
-
             executor.execute(() -> run(workflow, ACTION_RETRY));
 
             OrchestratorResponse resp = new OrchestratorResponse(new CreateWorkflowResponse(workflow.getId()));
@@ -208,11 +208,11 @@ public class Orchestrator {
      * @param actionRetry the number of times to retry an action before failing the workflow.
      */
     void run(@Nonnull IWorkflow workflow, int actionRetry) {
+
         CorfuRuntime rt = null;
         try {
             getRuntime.get().invalidateLayout();
             Layout currLayout = getRuntime.get().getLayoutView().getLayout();
-
             List<NodeLocator> servers = currLayout.getAllActiveServers().stream()
                     .map(NodeLocator::parseString)
                     .collect(Collectors.toList());

@@ -222,6 +222,7 @@ target
 *.dat
 
 /it/src/test/resources/vm.credentials.properties
-/benchmarks/src/jmh/resources/vm.credentials.properties
 
 test/.jqwik-database
+.flattened-pom.xml
+/*/.flattened-pom.xml

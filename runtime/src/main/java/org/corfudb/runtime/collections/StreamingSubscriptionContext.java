@@ -183,6 +183,7 @@ public class StreamingSubscriptionContext {
             }
 
             MultiObjectSMREntry multiObjSMREntry = (MultiObjectSMREntry) logData.getPayload(runtime);
+            long epoch = logData.getEpoch();
             //Build the CorfuStreamEntries from the MultiObjectSMREntry.
             CorfuStreamEntries update = new CorfuStreamEntries(multiObjSMREntry.getEntryMap()
                     .entrySet()
@@ -193,6 +194,7 @@ public class StreamingSubscriptionContext {
                         e -> e.getValue().getUpdates()
                                 .stream()
                                 .map(smrEntry -> CorfuStreamEntry.fromSMREntry(smrEntry,
+                                            epoch,
                                             tablesOfInterest.get(e.getKey()).getKeyClass(),
                                             tablesOfInterest.get(e.getKey()).getPayloadClass(),
                                             tablesOfInterest.get(e.getKey()).getMetadataClass()))

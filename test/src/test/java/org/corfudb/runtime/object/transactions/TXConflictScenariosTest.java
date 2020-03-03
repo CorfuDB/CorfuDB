@@ -8,7 +8,7 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.CorfuSharedCounter;
 import org.junit.Test;
@@ -252,7 +252,7 @@ public abstract class TXConflictScenariosTest extends AbstractTransactionContext
 
         Map<String, String> testMap2 = (Map<String, String>)
                 instantiateCorfuObject(
-                        new TypeToken<SMRMap<String, String>>() {}, "test stream");
+                        new TypeToken<CorfuTable<String, String>>() {}, "test stream");
 
         t(1, () -> TXBegin() );
         t(1, () -> testMap.put("a", "a") );

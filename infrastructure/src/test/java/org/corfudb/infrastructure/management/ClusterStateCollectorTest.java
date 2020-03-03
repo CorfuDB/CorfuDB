@@ -1,13 +1,7 @@
 package org.corfudb.infrastructure.management;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
-import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
-import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -19,6 +13,11 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.management.NodeStateTestUtil.nodeState;
+import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.FAILED;
+import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.ConnectionStatus.OK;
 
 public class ClusterStateCollectorTest {
     private final long epoch = 1;
@@ -66,7 +65,6 @@ public class ClusterStateCollectorTest {
 
         ClusterStateCollector collector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
-                .heartbeatCounter(new HeartbeatCounter())
                 .clusterState(clusterConnectivity)
                 .build();
 
@@ -110,7 +108,6 @@ public class ClusterStateCollectorTest {
 
         ClusterStateCollector collector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
-                .heartbeatCounter(new HeartbeatCounter())
                 .clusterState(clusterConnectivity)
                 .build();
 

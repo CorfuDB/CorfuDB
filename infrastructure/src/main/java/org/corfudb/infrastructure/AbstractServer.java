@@ -5,8 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 
-import java.util.List;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -25,7 +23,7 @@ public abstract class AbstractServer {
      *
      * @return A message handler.
      */
-    public abstract CorfuMsgHandler getHandler();
+    public abstract HandlerMethods getHandler();
 
     /**
      * Seal the server with the epoch.
@@ -39,13 +37,24 @@ public abstract class AbstractServer {
     public abstract boolean isServerReadyToHandleMsg(CorfuMsg msg);
 
     /**
+     * A stub that handlers can override to manage their threading, otherwise
+     * the requests will be executed on the IO threads
+     * @param msg
+     * @param ctx
+     * @param r
+     */
+    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        getHandler().handle(msg, ctx, r);
+    }
+
+    /**
      * Handle a incoming Netty message.
      *
      * @param msg An incoming message.
      * @param ctx The channel handler context.
      * @param r   The router that took in the message.
      */
-    public void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    public final void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (getState() == ServerState.SHUTDOWN) {
             log.warn("Server received {} but is already shutdown.", msg.getMsgType().toString());
             return;
@@ -56,9 +65,7 @@ public abstract class AbstractServer {
             return;
         }
 
-        if (!getHandler().handle(msg, ctx, r)) {
-            log.warn("Received unhandled message type {}", msg.getMsgType());
-        }
+        processRequest(msg, ctx, r);
     }
 
     protected void setState(ServerState newState) {
@@ -75,16 +82,11 @@ public abstract class AbstractServer {
         return state.get();
     }
 
-    public abstract ExecutorService getExecutor(CorfuMsgType corfuMsgType);
-
-    public abstract List<ExecutorService> getExecutors();
-
     /**
      * Shutdown the server.
      */
     public void shutdown() {
         setState(ServerState.SHUTDOWN);
-        getExecutors().forEach(ExecutorService::shutdownNow);
     }
 
     /**

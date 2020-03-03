@@ -1,9 +1,5 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
-
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -16,6 +12,10 @@ import org.corfudb.universe.node.server.CorfuServer;
 import org.junit.Test;
 
 import java.time.Duration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
 public class HandOfGodIT extends GenericIntegrationTest {
 
@@ -76,7 +76,7 @@ public class HandOfGodIT extends GenericIntegrationTest {
             ClusterStatusReport clusterStatusReport = corfuClient.getManagementView().getClusterStatus();
             assertThat(clusterStatusReport.getClusterStatus()).isEqualTo(ClusterStatus.STABLE);
 
-            ScenarioUtils.waitUninterruptibly(Duration.ofSeconds(20));
+            ScenarioUtils.waitUninterruptibly(Duration.ofSeconds(30));
 
             // Verify data path working
             for (int i = 0; i < DEFAULT_TABLE_ITER; i++) {

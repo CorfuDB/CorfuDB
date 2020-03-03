@@ -1,5 +1,17 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
+import org.corfudb.protocols.wireprotocol.ClusterState;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
+import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
+import org.junit.Test;
+
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.A;
 import static org.corfudb.infrastructure.management.NodeStateTestUtil.B;
@@ -13,33 +25,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
-import org.corfudb.protocols.wireprotocol.ClusterState;
-import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.protocols.wireprotocol.NodeState.HeartbeatTimestamp;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
-import org.corfudb.runtime.view.Layout;
-import org.junit.Test;
-
-import java.util.Optional;
-
 public class ClusterGraphTest {
 
     @Test
     public void testTransformation() {
         NodeState a = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .heartbeat(new HeartbeatTimestamp(0, 0))
                 .connectivity(connectivity(A, ImmutableMap.of(A, OK, B, OK, C, FAILED)))
                 .build();
 
         NodeState b = NodeState.builder()
                 .sequencerMetrics(SequencerMetrics.READY)
-                .heartbeat(new HeartbeatTimestamp(0, 0))
                 .connectivity(connectivity(B, ImmutableMap.of(A, OK, B, OK, C, FAILED)))
                 .build();
 
@@ -209,7 +205,6 @@ public class ClusterGraphTest {
     private NodeState unavailableNodeState(String endpoint) {
         return new NodeState(
                 unavailable(endpoint),
-                new HeartbeatTimestamp(Layout.INVALID_EPOCH, 0),
                 SequencerMetrics.UNKNOWN
         );
     }

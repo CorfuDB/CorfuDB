@@ -1,8 +1,5 @@
 package org.corfudb.universe.scenario;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
-
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.universe.GenericIntegrationTest;
 import org.corfudb.universe.group.cluster.CorfuCluster;
@@ -16,6 +13,9 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
 
 public class ClusterResizeIT extends GenericIntegrationTest {
 

@@ -19,8 +19,8 @@ import org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.NodeC
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.ISMRMap;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.ICorfuTable;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -43,7 +43,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -549,11 +548,11 @@ public class ManagementViewTest extends AbstractViewTest {
     }
 
 
-    protected ISMRMap<Integer, String> getMap() {
-        ISMRMap<Integer, String> testMap;
+    protected ICorfuTable<Integer, String> getMap() {
+        ICorfuTable<Integer, String> testMap;
 
-        testMap = (ISMRMap<Integer, String>) instantiateCorfuObject(
-                new TypeToken<SMRMap<Integer, String>>() {
+        testMap = (ICorfuTable<Integer, String>) instantiateCorfuObject(
+                new TypeToken<CorfuTable<Integer, String>>() {
                 }, "test stream"
         );
 
@@ -983,7 +982,6 @@ public class ManagementViewTest extends AbstractViewTest {
             bootstrapAllServers(l);
 
             corfuRuntime = getRuntime(l).connect();
-
             setAggressiveTimeouts(l, corfuRuntime,
                     getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
             setAggressiveDetectorTimeouts(SERVERS.PORT_0);
@@ -1650,7 +1648,8 @@ public class ManagementViewTest extends AbstractViewTest {
      * Starts with cluster of 1 node: PORT_0.
      * We then bootstrap the layout server of PORT_1 with a layout.
      * A rule is added to prevent the management server from being bootstrapped. Then the bootstrapNewNode is
-     * triggered. This should fail and throw a timeout exception.
+     * triggered. This should pass, since the bootstrap new node function is a part of an add node workflow, that
+     * requires a management server to be bootstrapped.
      */
     @Test
     public void testPartialBootstrapNodeFailure() {
@@ -1663,10 +1662,6 @@ public class ManagementViewTest extends AbstractViewTest {
 
         addClientRule(corfuRuntime, new TestRule().matches(corfuMsg ->
                 corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST)).drop());
-
-        // Attempt bootstrapping the node. The node should attempt bootstrapping both the components Layout Server and
-        // Management Server.
-        assertThatThrownBy(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1)::get)
-                .hasRootCauseInstanceOf(TimeoutException.class);
+        assertThat(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1).join()).isTrue();
     }
 }

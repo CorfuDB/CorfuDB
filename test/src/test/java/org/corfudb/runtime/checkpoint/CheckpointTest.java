@@ -2,11 +2,19 @@ package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Iterators;
 import com.google.common.reflect.TypeToken;
 
+import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,12 +23,14 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.clients.TestRule;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
+import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -37,10 +47,10 @@ public class CheckpointTest extends AbstractObjectTest {
         final byte serializerByte = (byte) 20;
         ISerializer serializer = new CPSerializer(serializerByte);
         Serializers.registerSerializer(serializer);
-        return (SMRMap<String, Long>)
+        return (CorfuTable<String, Long>)
                 instantiateCorfuObject(
                         rt,
-                        new TypeToken<SMRMap<String, Long>>() {
+                        new TypeToken<CorfuTable<String, Long>>() {
                         },
                         mapName,
                         serializer);
@@ -55,17 +65,17 @@ public class CheckpointTest extends AbstractObjectTest {
     final String streamNameB = "mystreamB";
     final String author = "ckpointTest";
 
-    private CorfuRuntime getARuntime() {
+    private CorfuRuntime getNewRuntime() {
         return getNewRuntime(getDefaultNode()).connect();
     }
 
     /**
      * checkpoint the maps
      */
-    void mapCkpoint(CorfuRuntime rt, SMRMap... maps) throws Exception {
+    void mapCkpoint(CorfuRuntime rt, CorfuTable... maps) throws Exception {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
             MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-            for (SMRMap map : maps) {
+            for (CorfuTable map : maps) {
                 mcw1.addMap(map);
             }
 
@@ -78,14 +88,14 @@ public class CheckpointTest extends AbstractObjectTest {
     /**
      * checkpoint the maps, and then trim the log
      */
-    void mapCkpointAndTrim(CorfuRuntime rt, SMRMap... maps) throws Exception {
+    void mapCkpointAndTrim(CorfuRuntime rt, CorfuTable... maps) throws Exception {
         Token checkpointAddress = Token.UNINITIALIZED;
         Token lastCheckpointAddress = Token.UNINITIALIZED;
 
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_VERY_LOW; i++) {
             try {
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-                for (SMRMap map : maps) {
+                for (CorfuTable map : maps) {
                     mcw1.addMap(map);
                 }
 
@@ -126,7 +136,7 @@ public class CheckpointTest extends AbstractObjectTest {
      * @param expectedFullsize
      */
     void validateMapRebuild(int mapSize, boolean expectedFullsize, boolean trimCanHappen) {
-        CorfuRuntime rt = getARuntime();
+        CorfuRuntime rt = getNewRuntime();
         try {
             Map<String, Long> localm2A = openMap(rt, streamNameA);
             Map<String, Long> localm2B = openMap(rt, streamNameB);
@@ -187,7 +197,7 @@ public class CheckpointTest extends AbstractObjectTest {
     public void periodicCkpointTest() throws Exception {
         final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
 
-        CorfuRuntime rt = getARuntime();
+        CorfuRuntime rt = getNewRuntime();
 
         Map<String, Long> mapA = openMap(rt, streamNameA);
         Map<String, Long> mapB = openMap(rt, streamNameB);
@@ -200,7 +210,7 @@ public class CheckpointTest extends AbstractObjectTest {
         // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
         // thread 1: perform a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
         scheduleConcurrently(1, ignored_task_num -> {
-            mapCkpoint(rt, (SMRMap) mapA, (SMRMap) mapB);
+            mapCkpoint(rt, (CorfuTable) mapA, (CorfuTable) mapB);
         });
 
         // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
@@ -235,12 +245,12 @@ public class CheckpointTest extends AbstractObjectTest {
     public void emptyCkpointTest() throws Exception {
         final int mapSize = 0;
 
-        CorfuRuntime rt = getARuntime();
+        CorfuRuntime rt = getNewRuntime();
         Map<String, Long> mapA = openMap(rt, streamNameA);
         Map<String, Long> mapB = openMap(rt, streamNameB);
 
         scheduleConcurrently(1, ignored_task_num -> {
-            mapCkpoint(rt, (SMRMap) mapA, (SMRMap) mapB);
+            mapCkpoint(rt, (CorfuTable) mapA, (CorfuTable) mapB);
         });
 
         // thread 2: repeat ITERATIONS_LOW times starting a fresh runtime, and instantiating the maps.
@@ -262,7 +272,7 @@ public class CheckpointTest extends AbstractObjectTest {
     public void emptyCkpointTest2() throws Exception {
         final int mapSize = 0;
 
-        CorfuRuntime rt = getARuntime();
+        CorfuRuntime rt = getNewRuntime();
 
         rt.shutdown();
     }
@@ -288,7 +298,7 @@ public class CheckpointTest extends AbstractObjectTest {
     public void periodicCkpointNoUpdatesTest() throws Exception {
         final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
 
-        CorfuRuntime rt = getARuntime();
+        CorfuRuntime rt = getNewRuntime();
         Map<String, Long> mapA = openMap(rt, streamNameA);
         Map<String, Long> mapB = openMap(rt, streamNameB);
 
@@ -297,7 +307,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         // thread 1: perform a periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times
         scheduleConcurrently(1, ignored_task_num -> {
-            mapCkpoint(rt, (SMRMap) mapA, (SMRMap) mapB);
+            mapCkpoint(rt, (CorfuTable) mapA, (CorfuTable) mapB);
         });
 
         // repeated ITERATIONS_LOW times starting a fresh runtime, and instantiating the maps.
@@ -339,7 +349,7 @@ public class CheckpointTest extends AbstractObjectTest {
         final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
         final int WAIT_TIME_SECONDS = 10;
 
-        CorfuRuntime rt = getARuntime();
+        CorfuRuntime rt = getNewRuntime();
 
         try {
             Map<String, Long> mapA = openMap(rt, streamNameA);
@@ -353,7 +363,7 @@ public class CheckpointTest extends AbstractObjectTest {
             // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times,
             // and immediate prefix-trim of the log up to the checkpoint position
             scheduleConcurrently(1, ignored_task_num -> {
-                mapCkpointAndTrim(rt, (SMRMap) mapA, (SMRMap) mapB);
+                mapCkpointAndTrim(rt, (CorfuTable) mapA, (CorfuTable) mapB);
             });
 
             // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
@@ -389,7 +399,7 @@ public class CheckpointTest extends AbstractObjectTest {
     @Test
     public void prefixTrimNotReachingSequencer() throws Exception {
         final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
-        CorfuRuntime rt = getARuntime();
+        CorfuRuntime rt = getNewRuntime();
 
         TestRule dropSequencerTrim = new TestRule()
                 .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SEQUENCER_TRIM_REQ))
@@ -408,7 +418,7 @@ public class CheckpointTest extends AbstractObjectTest {
             // thread 2: periodic checkpoint of the maps, repeating ITERATIONS_VERY_LOW times,
             // and immediate prefix-trim of the log up to the checkpoint position
             scheduleConcurrently(1, ignored_task_num -> {
-                mapCkpointAndTrim(rt, (SMRMap) mapA, (SMRMap) mapB);
+                mapCkpointAndTrim(rt, (CorfuTable) mapA, (CorfuTable) mapB);
             });
 
             // thread 3: repeated ITERATION_LOW times starting a fresh runtime, and instantiating the maps.
@@ -429,7 +439,7 @@ public class CheckpointTest extends AbstractObjectTest {
             // Verify that last trim cycle completed (async task) before validating map rebuild
             Token currentTrimMark =  Token.UNINITIALIZED;
             while(currentTrimMark.getSequence() != lastValidCheckpoint.getSequence() + 1L) {
-                currentTrimMark = getARuntime().getAddressSpaceView().getTrimMark();
+                currentTrimMark = getNewRuntime().getAddressSpaceView().getTrimMark();
             }
 
             // finally, after all three threads finish, again we start a fresh runtime and instantiate the maps.
@@ -470,7 +480,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
         t(1, () -> {
 
-            CorfuRuntime rt = getARuntime();
+            CorfuRuntime rt = getNewRuntime();
             try {
                 Map<String, Long> mapA = openMap(rt, streamNameA);
 
@@ -481,7 +491,7 @@ public class CheckpointTest extends AbstractObjectTest {
 
                 // now, take a checkpoint and perform a prefix-trim
                 MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-                mcw1.addMap((SMRMap) mapA);
+                mcw1.addMap((CorfuTable) mapA);
                 mcw1.appendCheckpoints(rt, author);
 
                 // Trim the log
@@ -502,7 +512,7 @@ public class CheckpointTest extends AbstractObjectTest {
         // start a new runtime
         t(2, () -> {
             latch.await();
-            CorfuRuntime rt = getARuntime();
+            CorfuRuntime rt = getNewRuntime();
 
             Map<String, Long> localm2A = openMap(rt, streamNameA);
 
@@ -550,7 +560,7 @@ public class CheckpointTest extends AbstractObjectTest {
     @Test
     public void prefixTrimTwiceAtSameAddress() throws Exception {
         final int mapSize = 5;
-        CorfuRuntime rt = getARuntime();
+        CorfuRuntime rt = getNewRuntime();
         Map<String, Long> map1 = openMap(rt, streamNameA);
         Map<String, Long> map2 = openMap(rt, streamNameB);
         populateMaps(mapSize, map1, map2);
@@ -569,13 +579,13 @@ public class CheckpointTest extends AbstractObjectTest {
     @Test
     public void transactionalReadAfterCheckpoint() throws Exception {
         Map<String, String> testMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setStreamName("test")
                 .open();
 
         Map<String, String> testMap2 = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .setStreamName("test2")
                 .open();
@@ -590,8 +600,8 @@ public class CheckpointTest extends AbstractObjectTest {
 
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
-        mcw.addMap((SMRMap) testMap);
-        mcw.addMap((SMRMap) testMap2);
+        mcw.addMap((CorfuTable) testMap);
+        mcw.addMap((CorfuTable) testMap2);
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), "author");
 
         // TX1: Move object to 1
@@ -630,12 +640,12 @@ public class CheckpointTest extends AbstractObjectTest {
         final int mapSize = PARAMETERS.NUM_ITERATIONS_LOW;
         final String streamName = "test";
 
-        CorfuRuntime rt = getARuntime();
-        CorfuRuntime runtime = getARuntime();
+        CorfuRuntime rt = getNewRuntime();
+        CorfuRuntime runtime = getNewRuntime();
 
         try {
             StreamingMap<String, Long> testMap = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<SMRMap<String, Long>>() {
+                    .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                     })
                     .setStreamName(streamName)
                     .open();
@@ -678,5 +688,58 @@ public class CheckpointTest extends AbstractObjectTest {
             rt.shutdown();
             runtime.shutdown();
         }
+    }
+
+    /**
+     * This test creates a CorfuTable backed by a RocksDb can be checkpointed.
+     */
+    @Test
+    public void PersistedCorfuTableTests() {
+        String path = PARAMETERS.TEST_TEMP_DIR;
+
+        CorfuRuntime rt = getDefaultRuntime();
+
+        UUID tableId = UUID.randomUUID();
+        Supplier<StreamingMap<String, String>> writerMapSupplier = () ->
+                new PersistedStreamingMap<>(Paths.get(path + tableId + "writer"),
+                        PersistedStreamingMap.getPersistedStreamingMapOptions(),
+                        Serializers.JSON, rt);
+
+        CorfuTable<String, String> diskBackedMap = rt.getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .streamID(tableId)
+                .setSerializer(Serializers.JSON)
+                .setArguments(writerMapSupplier, ICorfuVersionPolicy.MONOTONIC)
+                .open();
+
+        final int numKeys = 303;
+        for (int x = 0; x < numKeys; x++) {
+            diskBackedMap.put(String.valueOf(x), "payload" + x);
+        }
+
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap(diskBackedMap);
+        Token token = mcw.appendCheckpoints(rt, "Author1");
+        rt.getAddressSpaceView().prefixTrim(token);
+        rt.getAddressSpaceView().gc();
+
+        CorfuRuntime newRt = getNewRuntime();
+
+        Supplier<StreamingMap<String, String>> readerMapSupplier = () ->
+                new PersistedStreamingMap<>(Paths.get(path + tableId + "reader"),
+                        PersistedStreamingMap.getPersistedStreamingMapOptions(),
+                        Serializers.JSON, rt);
+
+        CorfuTable<String, String> newDiskBackedMap = newRt.getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .streamID(tableId)
+                .setSerializer(Serializers.JSON)
+                .setArguments(readerMapSupplier, ICorfuVersionPolicy.MONOTONIC)
+                .open();
+
+        assertThat(Iterators.elementsEqual(newDiskBackedMap.entryStream().iterator(),
+                diskBackedMap.entryStream().iterator())).isTrue();
     }
 }

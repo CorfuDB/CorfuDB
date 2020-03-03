@@ -1,10 +1,7 @@
 package org.corfudb.infrastructure.management;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.junit.Test;
@@ -12,6 +9,8 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class FailureDetectorTest {
 
@@ -24,7 +23,7 @@ public class FailureDetectorTest {
                 .maxPeriod(Duration.ofMillis(200))
                 .periodDelta(Duration.ofMillis(50))
                 .build();
-        FailureDetector failureDetector = new FailureDetector(new HeartbeatCounter(), endpoint);
+        FailureDetector failureDetector = new FailureDetector(endpoint);
         failureDetector.setNetworkStretcher(ns);
 
         long epoch = 1;
