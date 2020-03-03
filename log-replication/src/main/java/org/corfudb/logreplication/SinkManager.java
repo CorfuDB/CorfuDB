@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 
+import static org.corfudb.logreplication.message.MessageType.LOG_ENTRY_MESSAGE;
+import static org.corfudb.logreplication.message.MessageType.SNAPSHOT_MESSAGE;
 import static org.corfudb.logreplication.send.LogEntrySender.*;
 
 /**
@@ -35,12 +37,15 @@ public class SinkManager implements DataReceiver {
 
     private int ackCycleTime = DEFAULT_RESENT_TIMER/DEFAULT_MAX_RETRY;
     private int ackCycleCnt = DEFAULT_READER_QUEUE_SIZE;
+    private int bufferSize = DEFAULT_READER_QUEUE_SIZE;
 
     private CorfuRuntime runtime;
+    private SinkBufferManager sinkBufferManager;
     private StreamsSnapshotWriter snapshotWriter;
     private LogEntryWriter logEntryWriter;
     private PersistedWriterMetadata persistedWriterMetadata;
     private RxState rxState;
+    @Getter
     private DataSender dataSender;
     private DataControl dataControl;
     private LogReplicationConfig config;
@@ -51,9 +56,6 @@ public class SinkManager implements DataReceiver {
     @VisibleForTesting
     @Getter
     private ObservableValue rxMessageCount = new ObservableValue(rxMessageCounter);
-
-    private int ackCnt = 0;
-    private long ackTime = 0;
 
     /**
      * Constructor
@@ -91,6 +93,8 @@ public class SinkManager implements DataReceiver {
         logEntryWriter.setTimestamp(persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
                 persistedWriterMetadata.getLastProcessedLogTimestamp());
         readConfig();
+        sinkBufferManager = new SinkBufferManager(LOG_ENTRY_MESSAGE, ackCycleTime, ackCycleCnt, bufferSize,
+                persistedWriterMetadata.getLastProcessedLogTimestamp(), this);
     }
 
     private void readConfig() {
@@ -101,14 +105,14 @@ public class SinkManager implements DataReceiver {
             Properties props = new Properties();
             props.load(reader);
 
-            int logWriterQueueSize = Integer.parseInt(props.getProperty("log_writer_queue_size", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
-            logEntryWriter.setMaxMsgQueSize(logWriterQueueSize);
+            bufferSize = Integer.parseInt(props.getProperty("log_writer_queue_size", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
+            logEntryWriter.setMaxMsgQueSize(bufferSize);
 
             ackCycleCnt = Integer.parseInt(props.getProperty("log_writer_ack_cycle_count", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
             ackCycleTime = Integer.parseInt(props.getProperty("log_writer_ack_cycle_time", Integer.toString(DEFAULT_RESENT_TIMER)));
             reader.close();
             log.info("log writer config queue size {} ackCycleCnt {} ackCycleTime {}",
-                    logWriterQueueSize, ackCycleCnt, ackCycleTime);
+                    bufferSize, ackCycleCnt, ackCycleTime);
         } catch (Exception e) {
             log.warn("Caught an exception while reading the config file: {}", e.getCause());
         }
@@ -119,6 +123,8 @@ public class SinkManager implements DataReceiver {
     public void startSnapshotApply() {
         log.debug("Start of a snapshot apply");
         rxState = RxState.SNAPSHOT_SYNC;
+        // If we don't use AR, we need our own buffer
+        // sinkBufferManager = new SinkBufferManager(SNAPSHOT_MESSAGE, ackCycleTime, ackCycleCnt, bufferSize);
     }
 
     /**
@@ -137,11 +143,21 @@ public class SinkManager implements DataReceiver {
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
                 snapshotRequestId);
 
+        sinkBufferManager = new SinkBufferManager(LOG_ENTRY_MESSAGE, ackCycleTime, ackCycleCnt, bufferSize,
+                persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(), this);
         dataSender.send(DataMessage.generateAck(metadata), snapshotRequestId, true);
     }
 
     @Override
     public void receive(DataMessage dataMessage) {
+        if (rxState == RxState.LOG_SYNC) {
+            sinkBufferManager.receive(dataMessage);
+        } else {
+            receiveWithoutBuffering(dataMessage);
+        }
+    }
+
+    public void receiveWithoutBuffering(DataMessage dataMessage) {
 
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
@@ -179,18 +195,6 @@ public class SinkManager implements DataReceiver {
         }
     }
 
-    private boolean shouldAck() {
-        ackCnt++;
-        long currentTime = java.lang.System.currentTimeMillis();
-        if (ackCnt == ackCycleCnt || (currentTime - ackTime) >= ackCycleTime) {
-            ackCnt = 0;
-            ackTime = currentTime;
-            return true;
-        }
-
-        return false;
-    }
-
     private void applyLogEntrySync(LogReplicationEntry message) {
         // Apply log entry sync message
         long ackTs = logEntryWriter.apply(message);
@@ -198,14 +202,6 @@ public class SinkManager implements DataReceiver {
         // Send Ack for log entry
         if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
             persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
-
-            if (shouldAck()) {
-                // Prepare ACK message for Log Entry Sync
-                LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED,
-                        message.getMetadata().getSyncRequestId(), ackTs,
-                        message.getMetadata().getSnapshotTimestamp());
-                dataSender.send(DataMessage.generateAck(metadata));
-            }
         }
     }
 
@@ -235,7 +231,7 @@ public class SinkManager implements DataReceiver {
     }
 
     private boolean receivedValidMessage(LogReplicationEntry message) {
-        return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_MESSAGE
+        return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE
                 || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_START)
                 || rxState == RxState.LOG_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
