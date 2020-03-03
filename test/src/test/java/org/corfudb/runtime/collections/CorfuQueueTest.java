@@ -81,6 +81,7 @@ public class CorfuQueueTest extends AbstractViewTest {
         List<CorfuQueueRecord<String>> records = corfuQueue.entryList();
         assertThat(records.size()).isEqualTo(expected);
 
+        // Only retrieve entries greater than the first entry.
         List<CorfuQueueRecord<String>> recAfter = corfuQueue.entryList(
                 records.get(0).getRecordId().getEntryId(),
                 records.size());

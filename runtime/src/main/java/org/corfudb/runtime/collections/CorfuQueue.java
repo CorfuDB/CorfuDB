@@ -261,10 +261,9 @@ public class CorfuQueue<E> {
         );
 
         int index = 0;
-        for (Long entryId : corfuTable.keySet().stream().sorted().collect(Collectors.toList())) {
-            if (entryId <= entriesAfter) {
-                continue;
-            }
+        for (Long entryId : corfuTable.keySet().stream()
+                .filter(e -> e > entriesAfter)
+                .sorted().collect(Collectors.toList())) {
             if (++index >= maxEntries) {
                 break;
             }
