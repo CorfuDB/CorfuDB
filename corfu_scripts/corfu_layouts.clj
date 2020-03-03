@@ -45,9 +45,8 @@ Options:
            (.. (get-layout-view) (updateLayout layout layout-rank))
            -1)
          (catch org.corfudb.runtime.exceptions.OutrankedException e
-                (inc layout-rank))))
-   )))
-  )
+                (inc layout-rank))))))))
+
 (defn print-layout [] (pprint-json (.. (.. (get-layout-view) (getLayout)) (asJSONString))))
 (defn edit-layout [] (let [layout (.. (get-layout-view) (getLayout))
                            temp-file (java.io.File/createTempFile "corfu" ".tmp")]
@@ -89,15 +88,10 @@ Options:
                                                         (throw e)))
                                                     ))
                                          (install-layout new-layout)
-                                         (println "New layout installed!")
-                                         )
-                                   )
-                                )
-                            )
+                                         (println "New layout installed!")))))
                        ))))
 
 ; determine whether to read or write
 (cond (.. localcmd (get "query")) (print-layout)
   (.. localcmd (get "edit")) (edit-layout)
-  :else (println "Unknown arguments.")
-  )
+  :else (println "Unknown arguments."))
