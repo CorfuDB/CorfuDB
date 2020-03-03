@@ -26,7 +26,6 @@ import org.corfudb.util.concurrent.SingletonResource;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -97,7 +96,6 @@ public class ManagementServer extends AbstractServer {
     private static final int SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT = 60;
 
     private final ExecutorService executor;
-    private final ExecutorService heartbeatThread;
 
     private final Lock healingLock = new ReentrantLock();
 
@@ -109,7 +107,8 @@ public class ManagementServer extends AbstractServer {
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (msg.getMsgType() == CorfuMsgType.NODE_STATE_REQUEST) {
-            heartbeatThread.submit(() -> getHandler().handle(msg, ctx, r));
+            // Execute this request on the io thread
+            getHandler().handle(msg, ctx, r);
         } else {
             executor.submit(() -> getHandler().handle(msg, ctx, r));
         }
@@ -123,7 +122,6 @@ public class ManagementServer extends AbstractServer {
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
-        heartbeatThread.shutdown();
         orchestrator.shutdown();
         managementAgent.shutdown();
 
@@ -141,8 +139,6 @@ public class ManagementServer extends AbstractServer {
 
         this.executor = Executors.newFixedThreadPool(serverContext.getManagementServerThreadCount(),
                 new ServerThreadFactory("management-", new ServerThreadFactory.ExceptionHandler()));
-        this.heartbeatThread = Executors.newSingleThreadExecutor(
-                new ServerThreadFactory("heartbeat-", new ServerThreadFactory.ExceptionHandler()));
 
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
 

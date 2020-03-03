@@ -1,24 +1,7 @@
 package org.corfudb.runtime.view;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import javax.annotation.Nonnull;
-
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -34,10 +17,25 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.workflows.AddNode;
 import org.corfudb.runtime.view.workflows.ForceRemoveNode;
 import org.corfudb.runtime.view.workflows.HealNode;
-import org.corfudb.runtime.view.workflows.RestoreRedundancyMergeSegments;
 import org.corfudb.runtime.view.workflows.RemoveNode;
+import org.corfudb.runtime.view.workflows.RestoreRedundancyMergeSegments;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
+
+import javax.annotation.Nonnull;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * A view of the Management Service to manage reconfigurations of the Corfu Cluster.
@@ -583,7 +581,7 @@ public class ManagementView extends AbstractView {
      * @param layout   Layout to bootstrap with.
      * @return Completable Future which completes with True when the management server is bootstrapped.
      */
-    CompletableFuture<Boolean> bootstrapManagementServer(@Nonnull String endpoint, @Nonnull Layout layout) {
+    public CompletableFuture<Boolean> bootstrapManagementServer(@Nonnull String endpoint, @Nonnull Layout layout) {
         return runtime.getLayoutView().getRuntimeLayout(layout)
                 .getManagementClient(endpoint)
                 .bootstrapManagement(layout)

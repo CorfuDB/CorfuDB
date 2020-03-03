@@ -4,10 +4,10 @@ import com.google.common.collect.ImmutableSortedSet;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.client.LocalCorfuClient;
 import org.corfudb.universe.universe.UniverseParams;
-
-import java.util.Optional;
 
 @Slf4j
 @Getter
@@ -20,9 +20,14 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
     @NonNull
     protected final U universeParams;
 
-    protected AbstractCorfuServer(@NonNull T params, @NonNull U universeParams) {
+    @NonNull
+    protected final LoggingParams loggingParams;
+
+    protected AbstractCorfuServer(@NonNull T params, @NonNull U universeParams,
+                                  @NonNull LoggingParams loggingParams) {
         this.params = params;
         this.universeParams = universeParams;
+        this.loggingParams = loggingParams;
     }
 
 
@@ -66,7 +71,7 @@ public abstract class AbstractCorfuServer<T extends CorfuServerParams, U extends
     public LocalCorfuClient getLocalCorfuClient() {
         return LocalCorfuClient.builder()
                 .serverEndpoints(ImmutableSortedSet.of(getEndpoint()))
-                .prometheusMetricsPort(Optional.empty())
+                .corfuRuntimeParams(CorfuRuntime.CorfuRuntimeParameters.builder())
                 .build()
                 .deploy();
     }

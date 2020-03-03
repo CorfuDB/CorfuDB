@@ -35,6 +35,7 @@ import org.corfudb.test.DisabledOnTravis;
 import org.corfudb.test.concurrent.TestThreadGroups;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.Utils;
 import org.fusesource.jansi.Ansi;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -465,10 +466,11 @@ public class AbstractCorfuTest {
                 f.get();
             }
         } catch (ExecutionException ee) {
-            if (ee.getCause() instanceof Error) {
-                throw (Error) ee.getCause();
+            final Throwable cause = Utils.extractCauseWithCompleteStacktrace(ee);
+            if (cause instanceof Error) {
+                throw (Error) cause;
             }
-            throw (Exception) ee.getCause();
+            throw (Exception) cause;
         } catch (InterruptedException ie) {
             throw new RuntimeException(ie);
         }
@@ -522,7 +524,7 @@ public class AbstractCorfuTest {
             try {
                 return result.get();
             } catch (ExecutionException e) {
-                throw (Exception) e.getCause();
+                throw (Exception) Utils.extractCauseWithCompleteStacktrace(e);
             } catch (InterruptedException ie){
                 throw new RuntimeException(ie);
             }

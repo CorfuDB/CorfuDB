@@ -95,6 +95,7 @@ public class LogUnitServer extends AbstractServer {
      * storage.
      */
     private final LogUnitServerCache dataCache;
+    @Getter
     private final StreamLog streamLog;
     private final StreamLogCompaction logCleaner;
     private final BatchProcessor batchWriter;
@@ -223,8 +224,8 @@ public class LogUnitServer extends AbstractServer {
                     dataCache.put(msg.getPayload().getGlobalAddress(), logData);
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
                 }, executor).exceptionally(ex -> {
-                    handleException(ex, ctx, msg, r);
-                    return null;
+            handleException(ex, ctx, msg, r);
+            return null;
         });
     }
 
@@ -358,7 +359,7 @@ public class LogUnitServer extends AbstractServer {
             if (ce.getCause() instanceof WrongEpochException) {
                 // The BaseServer expects to observe this exception,
                 // when it happens, so it needs to be unwrapped
-                throw (WrongEpochException) ce.getCause();
+                throw (WrongEpochException) Utils.extractCauseWithCompleteStacktrace(ce);
             }
         }
         log.info("LogUnit sealServerWithEpoch: sealed and flushed with epoch {}", epoch);
@@ -394,15 +395,14 @@ public class LogUnitServer extends AbstractServer {
                         log.info("LogUnit Server Reset.");
                         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
                     }).exceptionally(ex -> {
-                        handleException(ex, ctx, msg, r);
-                        return null;
-                    });
+                handleException(ex, ctx, msg, r);
+                return null;
+            });
         } else {
             log.info("LogUnit Server Reset request received but reset already done.");
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         }
     }
-
 
 
     /**
@@ -442,7 +442,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     /**
-     * Log unit server configuration class
+     * Log unit server parameters.
      */
     @Builder
     @Getter

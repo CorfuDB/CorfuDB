@@ -2,19 +2,29 @@ package org.corfudb.browser;
 
 import com.google.common.reflect.TypeToken;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.object.ICorfuVersionPolicy;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
+import org.rocksdb.Options;
 
 /**
  * This is the CorfuStore Browser Tool which prints data in a given namespace and table.
@@ -24,6 +34,7 @@ import org.corfudb.util.serializer.Serializers;
 @Slf4j
 public class CorfuStoreBrowser {
     private final CorfuRuntime runtime;
+    private final String diskPath;
 
     /**
      * Creates a CorfuBrowser which connects a runtime to the server.
@@ -31,6 +42,18 @@ public class CorfuStoreBrowser {
      */
     public CorfuStoreBrowser(CorfuRuntime runtime) {
         this.runtime = runtime;
+        this.diskPath = null;
+    }
+
+    /**
+     * Creates a CorfuBrowser which connects a runtime to the server.
+     * @param runtime CorfuRuntime which has connected to the server
+     * @param diskPath path to temp disk directory for loading large tables
+     *                 that won't fit into memory
+     */
+    public CorfuStoreBrowser(CorfuRuntime runtime, String diskPath) {
+        this.runtime = runtime;
+        this.diskPath = diskPath;
     }
 
     /**
@@ -65,19 +88,28 @@ public class CorfuStoreBrowser {
         String namespace, String tableName) {
         log.info("Namespace: {}", namespace);
         log.info("TableName: {}", tableName);
-        ISerializer dynamicProtobufSerializer =
-            new DynamicProtobufSerializer(runtime);
-        Serializers.registerSerializer(dynamicProtobufSerializer);
 
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable =
-            runtime.getObjectsView().build()
-            .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
-            })
-            .setStreamName(
-                TableRegistry.getFullyQualifiedTableName(namespace, tableName))
-            .setSerializer(dynamicProtobufSerializer)
-            .open();
-        return corfuTable;
+        ISerializer dynamicProtobufSerializer =
+                new DynamicProtobufSerializer(runtime);
+        Serializers.registerSerializer(dynamicProtobufSerializer);
+        String fullTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
+        SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
+        runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                .setStreamName(fullTableName)
+                .setSerializer(dynamicProtobufSerializer);
+
+        if (diskPath != null) {
+            final Options options = new Options().setCreateIfMissing(true);
+            final Supplier<StreamingMap<CorfuDynamicKey, CorfuDynamicRecord>> mapSupplier = () ->
+                    new PersistedStreamingMap<>(
+                            Paths.get(diskPath),
+                            options,
+                            dynamicProtobufSerializer, runtime);
+            corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC);
+        }
+
+        return corfuTableBuilder.open();
     }
 
     /**
@@ -88,16 +120,14 @@ public class CorfuStoreBrowser {
      */
     public int printTable(String namespace, String tablename) {
         verifyNamespaceAndTablename(namespace, tablename);
+        StringBuilder builder;
+
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tablename);
         int size = table.size();
-        log.info("======Printing Table {} in namespace {} with {} entries======",
-                tablename, namespace, size);
-        StringBuilder builder;
-        for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry :
-            table.entrySet()) {
-            builder = new StringBuilder("\nKey:\n" + entry.getKey().getKey())
-                .append("\nPayload:\n" + entry.getValue().getPayload())
-                .append("\nMetadata:\n" + entry.getValue().getMetadata())
+        for (CorfuDynamicKey entry : table.keySet()) {
+            builder = new StringBuilder("\nKey:\n" + entry.getKey())
+                .append("\nPayload:\n" + table.get(entry).getPayload())
+                .append("\nMetadata:\n" + table.get(entry).getMetadata())
                 .append("\n====================\n");
             log.info(builder.toString());
         }
@@ -114,7 +144,7 @@ public class CorfuStoreBrowser {
         verifyNamespace(namespace);
         int numTables = 0;
         log.info("\n=====Tables=======\n");
-        for (CorfuStoreMetadata.TableName tableName : runtime.getTableRegistry()
+        for (TableName tableName : runtime.getTableRegistry()
                 .listTables(namespace)) {
             log.info("Table: " + tableName.getTableName());
             log.info("Namespace: " + tableName.getNamespace());

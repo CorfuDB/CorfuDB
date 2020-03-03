@@ -22,6 +22,7 @@ import java.util.concurrent.TimeoutException;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.util.Utils;
 
 /**
  * Factory for custom futures used by the quorum replication.
@@ -153,7 +154,7 @@ public class QuorumFuturesFactory {
                                 try {
                                     futures[i].get(); // this will throw the ExecutionException
                                 } catch (ExecutionException e) {
-                                    Throwable t = e.getCause();
+                                    Throwable t = Utils.extractCauseWithCompleteStacktrace(e);
                                     throwables.add(t);
                                     if (failFastThrowables.contains(t.getClass())) {
                                         done = canceled = true;

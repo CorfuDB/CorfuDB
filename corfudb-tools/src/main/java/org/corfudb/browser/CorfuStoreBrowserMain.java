@@ -33,6 +33,7 @@ public class CorfuStoreBrowserMain {
         "--operation=<operation> "+
         "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
+        "[--diskPath=<pathToTempDirForLargeTables>] "+
         "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
@@ -44,6 +45,7 @@ public class CorfuStoreBrowserMain {
         + "--ks_password=<keystore_password> KeyStore Password\n"
         + "--truststore=<truststore_file> TrustStore File\n"
         + "--truststore_password=<truststore_password> Truststore Password\n"
+        + "--diskPath=<path to temp folder for large tables> Path to Temp Dir\n"
         + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) {
@@ -60,9 +62,14 @@ public class CorfuStoreBrowserMain {
             boolean tlsEnabled = Boolean.parseBoolean(opts.get("--tlsEnabled")
                 .toString());
             String operation = opts.get("--operation").toString();
+
+            final int SYSTEM_EXIT_ERROR_CODE = 1;
+            final int SYSTEM_DOWN_RETRIES = 5;
             CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder
                 builder = CorfuRuntime.CorfuRuntimeParameters.builder()
                 .cacheDisabled(true)
+                .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
+                .systemDownHandlerTriggerLimit(SYSTEM_DOWN_RETRIES)
                 .tlsEnabled(tlsEnabled);
             if (tlsEnabled) {
                 String keystore = opts.get("--keystore").toString();
@@ -76,6 +83,7 @@ public class CorfuStoreBrowserMain {
                     .trustStore(truststore)
                     .tsPasswordFile(truststore_password);
             }
+
             runtime = CorfuRuntime.fromParameters(builder.build());
             String singleNodeEndpoint = String.format("%s:%d", host, port);
             runtime.parseConfigurationString(singleNodeEndpoint);
@@ -83,7 +91,12 @@ public class CorfuStoreBrowserMain {
             runtime.connect();
             log.info("Successfully connected to {}", singleNodeEndpoint);
 
-            CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+            CorfuStoreBrowser browser;
+            if (opts.get("--diskPath") != null) {
+                browser = new CorfuStoreBrowser(runtime, opts.get("--diskPath").toString());
+            } else {
+                browser = new CorfuStoreBrowser(runtime);
+            }
             String namespace = Optional.ofNullable(opts.get("--namespace"))
                     .map(n -> n.toString())
                     .orElse(null);

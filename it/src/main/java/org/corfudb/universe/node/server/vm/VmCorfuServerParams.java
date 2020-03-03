@@ -1,8 +1,5 @@
 package org.corfudb.universe.node.server.vm;
 
-import static org.corfudb.universe.node.server.CorfuServer.Mode;
-import static org.corfudb.universe.node.server.CorfuServer.Persistence;
-
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -14,6 +11,9 @@ import org.slf4j.event.Level;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
+
+import static org.corfudb.universe.node.server.CorfuServer.Mode;
+import static org.corfudb.universe.node.server.CorfuServer.Persistence;
 
 
 /**
@@ -30,11 +30,11 @@ public class VmCorfuServerParams extends CorfuServerParams {
     public VmCorfuServerParams(
             VmName vmName, int port, Mode mode, Persistence persistence,
             Level logLevel, String clusterName, Duration stopTimeout, String serverVersion,
-            Path serverJarDirectory, String dockerImage, int logSizeQuotaPercentage) {
+            Path universeDirectory, String dockerImage, double logSizeQuotaPercentage) {
 
         super(
                 port, mode, persistence, logLevel, clusterName, stopTimeout,
-                Optional.empty(), serverVersion, serverJarDirectory, dockerImage,
+                Optional.empty(), serverVersion, universeDirectory, dockerImage,
                 logSizeQuotaPercentage
         );
         this.vmName = vmName;

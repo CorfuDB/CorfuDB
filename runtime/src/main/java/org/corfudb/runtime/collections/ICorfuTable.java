@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 
@@ -27,6 +28,16 @@ public interface ICorfuTable<K, V>
     void delete(K key);
 
     /**
+     * Returns a filtered {@link List} view of the values contained in this map.
+     * This method has a memory/CPU advantage over the map iterators as no deep copy
+     * is actually performed.
+     *
+     * @param valuePredicate java predicate (function to evaluate)
+     * @return a view of the values contained in this map meeting the predicate condition.
+     */
+    List<V> scanAndFilter(Predicate<? super V> valuePredicate);
+
+    /**
      * Returns a {@link Collection} filtered by entries (keys and/or values).
      * This method has a memory/CPU advantage over the map iterators as no deep copy
      * is actually performed.
@@ -34,6 +45,6 @@ public interface ICorfuTable<K, V>
      * @param entryPredicate java predicate (function to evaluate)
      * @return a view of the entries contained in this map meeting the predicate condition.
      */
-    Collection<Map.Entry<K, V>> scanAndFilterByEntry(Predicate<? super Entry<K, V>>
-                                                             entryPredicate);
+    Collection<Entry<K, V>> scanAndFilterByEntry(
+            Predicate<? super Map.Entry<K, V>> entryPredicate);
 }

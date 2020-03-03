@@ -1,5 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
@@ -145,7 +146,7 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      * @param obj the entry's payload object
      * @return size of serialized buffer
      */
-    static int getSerializedSize(Object obj, String codecType) {
+    static int getSerializedSize(Object obj, Codec.Type codecType) {
         ILogData ld = new LogData(DataType.DATA, obj, codecType);
         ld.acquireBuffer();
         int size = ld.getSizeEstimate();

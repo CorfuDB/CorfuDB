@@ -14,8 +14,6 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.net.InetSocketAddress;
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 

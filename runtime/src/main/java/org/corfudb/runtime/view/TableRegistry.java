@@ -16,9 +16,11 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
@@ -31,9 +33,6 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
-import org.rocksdb.CompactionOptionsUniversal;
-import org.rocksdb.CompressionType;
-import org.rocksdb.Options;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -82,7 +81,8 @@ public class TableRegistry {
     /**
      * This {@link CorfuTable} holds the schemas of the key, payload and metadata for every table created.
      */
-    private final CorfuTable<TableName, CorfuRecord<TableDescriptors, Message>> registryTable;
+    @Getter
+    private final CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable;
 
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
@@ -91,7 +91,7 @@ public class TableRegistry {
         this.protobufSerializer = new ProtobufSerializer(classMap);
         Serializers.registerSerializer(this.protobufSerializer);
         this.registryTable = this.runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, Message>>>() {
+                .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
                 })
                 .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
                 .setSerializer(this.protobufSerializer)
@@ -100,6 +100,7 @@ public class TableRegistry {
         // Register the table schemas to schema table.
         addTypeToClassMap(TableName.getDefaultInstance());
         addTypeToClassMap(TableDescriptors.getDefaultInstance());
+        addTypeToClassMap(TableMetadata.getDefaultInstance());
 
         // Register the registry table itself.
         try {
@@ -107,7 +108,8 @@ public class TableRegistry {
                     REGISTRY_TABLE_NAME,
                     TableName.class,
                     TableDescriptors.class,
-                    null);
+                    TableMetadata.class,
+                    TableOptions.<TableName, TableDescriptors>builder().build());
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -133,7 +135,8 @@ public class TableRegistry {
                        @Nonnull String tableName,
                        @Nonnull Class<K> keyClass,
                        @Nonnull Class<V> payloadClass,
-                       @Nullable Class<M> metadataClass)
+                       @Nullable Class<M> metadataClass,
+                       @Nonnull final TableOptions<K, V> tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
         TableName tableNameKey = TableName.newBuilder()
@@ -158,10 +161,12 @@ public class TableRegistry {
         }
         TableDescriptors tableDescriptors = tableDescriptorsBuilder.build();
 
+        TableMetadata.Builder metadataBuilder = TableMetadata.newBuilder();
+        metadataBuilder.setDiskBased(tableOptions.getPersistentDataPath().isPresent());
         try {
             this.runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
             this.registryTable.putIfAbsent(tableNameKey,
-                    new CorfuRecord<>(tableDescriptors, null));
+                    new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
         } finally {
             this.runtime.getObjectsView().TXEnd();
         }
@@ -240,37 +245,6 @@ public class TableRegistry {
     }
 
     /**
-     * A set of options defined for disk-backed {@link CorfuTable}.
-     *
-     * For a set of options that dictate RocksDB memory usage can be found here:
-     * https://github.com/facebook/rocksdb/wiki/Memory-usage-in-RocksDB
-     *
-     * Block Cache:  Which can be set via Options::setTableFormatConfig.
-     *               Out of box, RocksDB will use LRU-based block cache
-     *               implementation with 8MB capacity.
-     * Index/Filter: Is a function of the block cache. Generally it infates
-     *               the block cache by about 50%. The exact number can be
-     *               retrieved via "rocksdb.estimate-table-readers-mem"
-     *               property.
-     * Write Buffer: Also known as memtable is defined by the ColumnFamilyOptions
-     *               option. The default is 64 MB.
-     */
-    private Options getPersistentMapOptions() {
-        final int maxSizeAmplificationPercent = 50;
-        final Options options = new Options();
-
-        options.setCreateIfMissing(true);
-        options.setCompressionType(CompressionType.LZ4_COMPRESSION);
-
-        // Set a threshold at which full compaction will be triggered.
-        // This is important as it purges tombstoned entries.
-        final CompactionOptionsUniversal compactionOptions = new CompactionOptionsUniversal();
-        compactionOptions.setMaxSizeAmplificationPercent(maxSizeAmplificationPercent);
-        options.setCompactionOptionsUniversal(compactionOptions);
-        return options;
-    }
-
-    /**
      * Opens a Corfu table with the specified options.
      *
      * @param namespace    Namespace of the table.
@@ -316,7 +290,7 @@ public class TableRegistry {
             versionPolicy = ICorfuVersionPolicy.MONOTONIC;
             mapSupplier = () -> new PersistedStreamingMap<>(
                     tableOptions.getPersistentDataPath().get(),
-                    getPersistentMapOptions(),
+                    PersistedStreamingMap.getPersistedStreamingMapOptions(),
                     protobufSerializer, this.runtime);
         }
 
@@ -331,7 +305,7 @@ public class TableRegistry {
                 mapSupplier, versionPolicy);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
-        registerTable(namespace, tableName, kClass, vClass, mClass);
+        registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
         return table;
     }
 
