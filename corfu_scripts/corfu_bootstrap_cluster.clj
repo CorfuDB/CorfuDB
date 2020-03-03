@@ -31,8 +31,8 @@ Options:
                       (do
                         (doseq [server (.getLayoutServers new-layout)]
                            (do (let [router (get-router server localcmd)]
-                               (.get (.bootstrapLayout (new LayoutClient router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
-                               (.get (.bootstrapManagement (new ManagementClient router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
+                               (.get (.bootstrapLayout (get-layout-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
+                               (.get (.bootstrapManagement (get-management-client router (.getEpoch new-layout) (.getClusterId new-layout)) new-layout))
                             )))
                         (println "New layout installed!")
                         ))))
