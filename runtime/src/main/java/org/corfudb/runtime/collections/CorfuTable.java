@@ -60,6 +60,8 @@ import java.util.stream.Stream;
 public class CorfuTable<K, V> implements
         ICorfuTable<K, V>, ICorfuSMR<CorfuTable<K, V>> {
 
+    private final static int MIN_PROCESSORS = 1;
+    private final static int NUM_PROCESSORS = Runtime.getRuntime().availableProcessors();
     // Accessor/Mutator threads can interleave in a way that create a deadlock because they can create a
     // circular dependency between the VersionLockedObject(VLO) lock and the common forkjoin thread pool. In order
     // to break the dependency, parallel stream operations have to execute on a separate pool that applications
@@ -67,7 +69,8 @@ public class CorfuTable<K, V> implements
     // can acquire the VLO lock and cause the other 3 threads to wait, but after acquiring the VLO lock, the thread
     // gets block on parallel stream, because the pool is exhausted with threads that are trying to acquire the VLO
     // look, which creates a circular dependency. In other words, a deadlock.
-    private final static ForkJoinPool pool = new ForkJoinPool(Runtime.getRuntime().availableProcessors() - 1,
+    private final static ForkJoinPool pool = new ForkJoinPool((NUM_PROCESSORS > MIN_PROCESSORS) ?
+            NUM_PROCESSORS - 1 : MIN_PROCESSORS,
             pool -> {
                 final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
                 worker.setName("CorfuTable-Forkjoin-pool-" + worker.getPoolIndex());
