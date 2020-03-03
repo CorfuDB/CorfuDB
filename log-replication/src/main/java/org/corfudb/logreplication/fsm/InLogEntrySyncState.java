@@ -61,6 +61,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 if (transitionEventId == event.getMetadata().getRequestId()) {
                     cancelLogEntrySync("sync cancel.");
                     LogReplicationState inRequireSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
+                    logEntrySender.getPendingEntries().evictAll();
                     inRequireSnapshotSyncState.setTransitionEventId(event.getEventID());
                     return inRequireSnapshotSyncState;
                 }
