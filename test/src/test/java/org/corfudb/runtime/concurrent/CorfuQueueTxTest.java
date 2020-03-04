@@ -88,8 +88,8 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                     TXBegin(txnType);
                     Long coinToss = new Random().nextLong() % numConflictKeys;
                     conflictMap.put(coinToss, coinToss);
-                    CorfuRecordId id = corfuQueue.enqueue(queueData);
                     lock.lock();
+                    CorfuRecordId id = corfuQueue.enqueue(queueData);
                     final long streamOffset = TXEnd();
                     validator.add(new Record(id, queueData));
                     log.debug("ENQ:" + id + "=>" + queueData + " at " + streamOffset);
