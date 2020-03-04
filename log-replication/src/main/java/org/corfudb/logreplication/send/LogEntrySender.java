@@ -238,6 +238,7 @@ public class LogEntrySender {
     public void reset(PersistedReaderMetadata readerMetadata) {
         taskActive = true;
         logEntryReader.reset(readerMetadata.getLastSentBaseSnapshotTimestamp(), readerMetadata.getLastAckedTimestamp());
+        pendingEntries.evictAll();
     }
 
     /**
