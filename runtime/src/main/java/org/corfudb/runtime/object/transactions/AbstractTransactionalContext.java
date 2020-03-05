@@ -243,6 +243,8 @@ public abstract class AbstractTransactionalContext implements
                                                              SMREntry updateEntry,
                                                              Object[] conflictObject);
 
+    public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
+
     /**
      * Add a given transaction to this transactional context, merging
      * the read and write sets.
@@ -348,6 +350,10 @@ public abstract class AbstractTransactionalContext implements
     long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
             conflictObjects) {
         return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
+    }
+
+    void addToWriteSet(UUID streamId, SMREntry updateEntry) {
+        getWriteSetInfo().add(streamId, updateEntry);
     }
 
     void mergeWriteSetInto(WriteSetInfo other) {
