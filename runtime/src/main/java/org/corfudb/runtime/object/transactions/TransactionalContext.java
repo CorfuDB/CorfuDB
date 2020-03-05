@@ -23,8 +23,7 @@ public class TransactionalContext {
      * for a given thread.
      */
     private static final ThreadLocal<Deque<AbstractTransactionalContext>>
-            threadTransactionStack = ThreadLocal.withInitial(
-            LinkedList<AbstractTransactionalContext>::new);
+            threadTransactionStack = ThreadLocal.withInitial(LinkedList::new);
 
     /** Whether or not the current thread is in a nested transaction.
      *
