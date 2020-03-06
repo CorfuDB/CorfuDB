@@ -29,7 +29,7 @@ public class PersistedWriterMetadata {
     // another node or process.
     private long lastBaseSnapshotStart;
 
-    private Map<String, Long> writerMetaDataTable;
+    private CorfuTable<String, Long> writerMetaDataTable;
 
     CorfuRuntime runtime;
 
@@ -51,8 +51,11 @@ public class PersistedWriterMetadata {
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapTransferDone.getVal(), Address.NON_ADDRESS);
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapApplyDone.getVal(), Address.NON_ADDRESS);
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), Address.NON_ADDRESS);
+                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), Address.NON_ADDRESS);
+                log.info("Init all persistedMetadata to {}", Address.NON_ADDRESS);
+            } else {
+                log.warn("Skip init persistedMetadata as its size is  {}", writerMetaDataTable.size());
             }
-
         } catch (TransactionAbortedException e) {
             log.debug("Caught an exception {}", e.getStackTrace());
             log.warn("Transaction is aborted with writerMetadataTable.size {} ", writerMetaDataTable.size());
@@ -83,7 +86,6 @@ public class PersistedWriterMetadata {
         int retry = 0;
         boolean doRetry = true;
         while (retry++ < NUM_RETRY_WRITE && doRetry) {
-            retry++;
             try {
                 runtime.getObjectsView().TXBegin();
                 persistedEpic = writerMetaDataTable.get(PersistedWriterMetadataType.SnapshotEpic.getVal());
@@ -92,23 +94,22 @@ public class PersistedWriterMetadata {
                 if (ts >= persistedTs) {
                     writerMetaDataTable.put(PersistedWriterMetadataType.SnapshotEpic.getVal(), ++persistedEpic);
                     writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), ts);
+                    writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), Address.NON_ADDRESS);
                     //TODO:  clean persistentQue if no AR
+                    log.info("Update the snapshot epic {} lastSnapStart {} lastSnapSeqNum {} ",
+                            persistedTs, ts, Address.NON_ADDRESS);
+                } else {
+                    log.warn("the current snapStart is not larger than the persisted snapStart {}, skip the update ",
+                            ts, persistedTs);
                 }
-
                 doRetry = false;
             } catch (TransactionAbortedException e) {
                 log.debug("Caught transaction aborted exception {}", e.getStackTrace());
-                //todo maxi, should we throw a new type of exception to stop snapshot sync.
-
                 log.warn("While trying to update lastSnapStart value to {}, aborted with retry {}", ts, retry);
                 System.out.println("While trying to update lastSnapStart value " + ts +" aborted with retry " + retry);
             } finally {
                 runtime.getObjectsView().TXEnd();
                 persistedTs = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
-                if (ts != persistedTs) {
-                    log.warn("The current LastSnapStart ts {} is not equal the persisted ts {} with retry {}. ",
-                            ts, persistedTs, retry);
-                }
                 System.out.println("setSrcBaseSnapshotStart  " + ts + " persitedTs " + persistedTs);
             }
         }
@@ -132,6 +133,11 @@ public class PersistedWriterMetadata {
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapTransferDone.getVal(), ts);
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapApplyDone.getVal(), ts);
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), ts);
+                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), Address.NON_ADDRESS);
+                log.info("update lastSnapTransferDone {} ", ts);
+            } else {
+                log.warn("skip update lastSnapTransferDone as Epic curent {} != persist {} or BaseSnapStart: current {} != persist {}",
+                        snapshotEpic, epic, lastBaseSnapshotStart, ts);
             }
         } catch (TransactionAbortedException e) {
             log.warn("Transaction is aborted. The snapshot has been updated by someone else");
@@ -139,6 +145,11 @@ public class PersistedWriterMetadata {
             runtime.getObjectsView().TXEnd();
         }
     }
+
+    public long getLastSrcBaseSnapshotTimestamp() {
+        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapApplyDone.getVal());
+    }
+
 
     /**
      * This call should be done in a transaction while applying a log entry message.
@@ -149,12 +160,20 @@ public class PersistedWriterMetadata {
         writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), ts);
     }
 
-    public long getLastSrcBaseSnapshotTimestamp() {
-        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapApplyDone.getVal());
-    }
-
     public long getLastProcessedLogTimestamp() {
         return writerMetaDataTable.get(PersistedWriterMetadataType.LastLogProcessed.getVal());
+    }
+
+    /**
+     * This should be called in a transaction context while applying a snapshot replication entry.
+     * @param ts
+     */
+    public void setLastSnapSeqNum(long ts) {
+        writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), ts);
+    }
+
+    public long getLastSnapSeqNum() {
+        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapSeqNum.getVal());
     }
 
     public enum PersistedWriterMetadataType {
@@ -162,6 +181,7 @@ public class PersistedWriterMetadata {
         LastSnapStart("lastSnapStart"),
         LastSnapTransferDone("lastSnapTransferDone"),
         LastSnapApplyDone("lastSnapApplied"),
+        LastSnapSeqNum("lastSnapSeqNum"),
         LastLogProcessed("lastLogProcessed");
 
         @Getter

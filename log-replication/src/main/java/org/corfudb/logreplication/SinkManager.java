@@ -87,8 +87,9 @@ public class SinkManager implements DataReceiver {
 
     public void setLogReplicationConfig(LogReplicationConfig config) {
         this.config = config;
-        snapshotWriter = new StreamsSnapshotWriter(runtime, config);
         persistedWriterMetadata = new PersistedWriterMetadata(runtime, config.getRemoteSiteID());
+
+        snapshotWriter = new StreamsSnapshotWriter(runtime, config, persistedWriterMetadata);
         logEntryWriter = new LogEntryWriter(runtime, config, persistedWriterMetadata);
         logEntryWriter.setTimestamp(persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
                 persistedWriterMetadata.getLastProcessedLogTimestamp());
