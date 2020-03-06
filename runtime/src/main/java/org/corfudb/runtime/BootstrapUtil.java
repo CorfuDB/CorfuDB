@@ -109,33 +109,32 @@ public class BootstrapUtil {
         for (String server : layout.getAllServers()) {
             int retry = retries;
 
-            IClientRouter router = new NettyClientRouter(NodeLocator.parseString(server),
-                    corfuRuntimeParameters);
-            router.addClient(new LayoutHandler())
-                    .addClient(new ManagementHandler())
-                    .addClient(new BaseHandler());
+            try(NettyClientRouter router = new  NettyClientRouter(NodeLocator.parseString(server),
+                    corfuRuntimeParameters)) {
+                router.addClient(new LayoutHandler())
+                        .addClient(new ManagementHandler())
+                        .addClient(new BaseHandler());
 
-            while (retry-- > 0) {
-                try {
-                    log.info("Attempting to bootstrap node: {} with layout:{}", server, layout);
-                    bootstrapLayoutServer(router, layout);
-                    bootstrapManagementServer(router, layout);
-                    break;
-                } catch (AlreadyBootstrappedException abe) {
-                    log.error("Bootstrapping node: {} failed with exception:", server, abe);
-                    log.error("Cannot retry since already bootstrapped.");
-                    throw new RuntimeException(abe);
-                } catch (Exception e) {
-                    log.error("Bootstrapping node: {} failed with exception:", server, e);
-                    if (retry == 0) {
-                        throw new RetryExhaustedException("Bootstrapping node: retry exhausted");
+                while (retry-- > 0) {
+                    try {
+                        log.info("Attempting to bootstrap node: {} with layout:{}", server, layout);
+                        bootstrapLayoutServer(router, layout);
+                        bootstrapManagementServer(router, layout);
+                        break;
+                    } catch (AlreadyBootstrappedException abe) {
+                        log.error("Bootstrapping node: {} failed with exception:", server, abe);
+                        log.error("Cannot retry since already bootstrapped.");
+                        throw new RuntimeException(abe);
+                    } catch (Exception e) {
+                        log.error("Bootstrapping node: {} failed with exception:", server, e);
+                        if (retry == 0) {
+                            throw new RetryExhaustedException("Bootstrapping node: retry exhausted");
+                        }
+                        log.warn("Retrying bootstrap {} times in {}ms.", retry, retryDuration.toMillis());
+                        Sleep.sleepUninterruptibly(retryDuration);
                     }
-                    log.warn("Retrying bootstrap {} times in {}ms.", retry, retryDuration.toMillis());
-                    Sleep.sleepUninterruptibly(retryDuration);
                 }
             }
-
-            router.stop();
         }
         log.info("Successfully Bootstrapped layout:{} .", layout);
     }

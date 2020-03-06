@@ -435,7 +435,7 @@ public class CorfuRuntime {
          * The compression codec to use to encode a write's payload
          */
         @Default
-        private String codecType = Codec.Type.ZSTD.toString();
+        private Codec.Type codecType = Codec.Type.ZSTD;
 
         // Register handlers region
 
@@ -982,6 +982,10 @@ public class CorfuRuntime {
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(
                                 "Interrupted during layout fetch", ie);
+                    } catch (WrongClusterException we) {
+                        // It is futile trying to re-connect to the wrong cluster
+                        log.warn("Giving up since cluster is incorrect or reconfigured!");
+                        throw we;
                     } catch (ExecutionException ee){
                         if (ee.getCause() instanceof TimeoutException) {
                             log.warn("Tried to get layout from {} but failed by timeout", s);

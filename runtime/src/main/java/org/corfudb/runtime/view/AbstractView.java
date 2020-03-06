@@ -11,9 +11,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.Utils;
 
 /**
  * All views inherit from AbstractView.
@@ -84,15 +86,16 @@ public abstract class AbstractView {
             // If an error or an unchecked exception is thrown by the layout.get() completable
             // future, the exception will materialize as an ExecutionException. In that case,
             // we need to propagate this Error or unchecked exception.
-            if (ex.getCause() instanceof Error) {
+            final Throwable cause = Utils.extractCauseWithCompleteStacktrace(ex);
+            if (cause instanceof Error) {
                 log.error("getLayoutUninterruptibly: Encountered error. Aborting layoutHelper", ex);
-                throw (Error) ex.getCause();
+                throw (Error) cause;
             }
 
-            if (ex.getCause() instanceof RuntimeException) {
+            if (cause instanceof RuntimeException) {
                 log.error("getLayoutUninterruptibly: Encountered unchecked exception. "
                         + "Aborting layoutHelper", ex);
-                throw (RuntimeException) ex.getCause();
+                throw (RuntimeException) cause;
             }
 
             log.error("getLayoutUninterruptibly: Encountered exception while fetching layout");
@@ -148,7 +151,10 @@ public abstract class AbstractView {
                             + "invalidate view", we.getCorrectEpoch());
                 } else if (re instanceof NetworkException) {
                     log.warn("layoutHelper: System seems unavailable", re);
-                } else {
+                } else if (re instanceof WrongClusterException) {
+                    log.warn("layoutHelper: Cluster reconfiguration or incorrect cluster", re);
+                    throw re;
+                }else {
                     throw re;
                 }
                 if (rethrowAllExceptions) {

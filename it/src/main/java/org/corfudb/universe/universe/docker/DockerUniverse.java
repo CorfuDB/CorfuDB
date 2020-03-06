@@ -35,15 +35,12 @@ public class DockerUniverse extends AbstractUniverse<NodeParams, UniverseParams>
     private final DockerClient docker;
     private final DockerNetwork network = new DockerNetwork();
     private final AtomicBoolean initialized = new AtomicBoolean();
-    private final LoggingParams loggingParams;
     private final AtomicBoolean destroyed = new AtomicBoolean();
 
     @Builder
     public DockerUniverse(UniverseParams universeParams, DockerClient docker, LoggingParams loggingParams) {
-        super(universeParams);
+        super(universeParams, loggingParams);
         this.docker = docker;
-        this.loggingParams = loggingParams;
-
         init();
     }
 

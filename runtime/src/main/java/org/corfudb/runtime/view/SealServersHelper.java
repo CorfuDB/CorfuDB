@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.Utils;
 
 /**
  * Helper class to seal requested servers.
@@ -135,7 +136,7 @@ public class SealServersHelper {
             throw new UnrecoverableCorfuInterruptedError("Sealing interrupted", ie);
         } catch (ExecutionException e) {
             if (e.getCause() instanceof QuorumUnreachableException) {
-                throw (QuorumUnreachableException) e.getCause();
+                throw (QuorumUnreachableException) Utils.extractCauseWithCompleteStacktrace(e);
             }
         }
 

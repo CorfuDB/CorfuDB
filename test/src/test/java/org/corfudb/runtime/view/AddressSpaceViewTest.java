@@ -99,7 +99,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
     public void ensureStripingWorks() throws Exception {
         setupNodes();
         CorfuRuntime rt = getRuntime().connect();
-        rt.getParameters().setCodecType(Codec.Type.NONE.toString());
+        rt.getParameters().setCodecType(Codec.Type.NONE);
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();

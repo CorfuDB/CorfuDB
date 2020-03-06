@@ -55,19 +55,20 @@ public final class CFUtils {
         } catch (InterruptedException e) {
             throw new UnrecoverableCorfuInterruptedError("Interrupted while completing future", e);
         } catch (ExecutionException ee) {
-            if (throwableA.isInstance(ee.getCause())) {
-                throw (A) ee.getCause();
+            final Throwable cause = Utils.extractCauseWithCompleteStacktrace(ee);
+            if (throwableA.isInstance(cause)) {
+                throw (A) cause;
             }
-            if (throwableB.isInstance(ee.getCause())) {
-                throw (B) ee.getCause();
+            if (throwableB.isInstance(cause)) {
+                throw (B) cause;
             }
-            if (throwableC.isInstance(ee.getCause())) {
-                throw (C) ee.getCause();
+            if (throwableC.isInstance(cause)) {
+                throw (C) cause;
             }
-            if (throwableD.isInstance(ee.getCause())) {
-                throw (D) ee.getCause();
+            if (throwableD.isInstance(cause)) {
+                throw (D) cause;
             }
-            throw new RuntimeException(ee.getCause());
+            throw new RuntimeException(cause);
         }
     }
 
@@ -201,7 +202,7 @@ public final class CFUtils {
 
         Throwable unwrapThrowable = throwable;
         if (throwable instanceof ExecutionException || throwable instanceof CompletionException) {
-            unwrapThrowable = throwable.getCause();
+            unwrapThrowable = Utils.extractCauseWithCompleteStacktrace(throwable);
         }
 
         if (throwableA.isInstance(unwrapThrowable)) {

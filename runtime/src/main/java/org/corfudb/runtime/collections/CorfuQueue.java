@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Persisted Queue supported by CorfuDB using distributed State Machine Replication.
@@ -226,11 +227,12 @@ public class CorfuQueue<E> {
      * <p>This function currently does not return a view like the java.util implementation,
      * and changes to the entryList will *not* be reflected in the map. </p>
      *
+     * @param entriesAfter - Return only entries greater than this entry in the Queue.
      * @param maxEntries - Limit the number of entries returned from start of the queue
      * @throws IllegalArgumentException if maxEntries is negative.
      * @return List of Entries sorted by their enqueue order
      */
-    public List<CorfuQueueRecord<E>> entryList(int maxEntries) {
+    public List<CorfuQueueRecord<E>> entryList(Long entriesAfter, int maxEntries) {
         if (maxEntries <= 0) {
             throw new IllegalArgumentException("entryList given negative maxEntries");
         }
@@ -257,16 +259,18 @@ public class CorfuQueue<E> {
         List<CorfuQueueRecord<E>> copy = new ArrayList<>(
                 Math.min(corfuTable.size(), maxEntries)
         );
+
         int index = 0;
-        for (Map.Entry<Long, E> entry : corfuTable.entrySet()) {
+        for (Long entryId : corfuTable.keySet().stream()
+                .filter(e -> e > entriesAfter)
+                .sorted().collect(Collectors.toList())) {
             if (++index >= maxEntries) {
                 break;
             }
             // Note that index is already limited to fit within MAX_BITS_FOR_INDEX
             long ordering = (snapshotVersion << MAX_BITS_FOR_INDEX) | index;
-            long entryId = entry.getKey();
             CorfuQueueRecord<E> record = new CorfuQueueRecord<>(
-                    ordering, entryId, entry.getValue()
+                    ordering, entryId, corfuTable.get(entryId)
             );
             copy.add(record);
         }
@@ -281,7 +285,15 @@ public class CorfuQueue<E> {
      * @return all the entries in the Queue
      */
     public List<CorfuQueueRecord<E>> entryList() {
-        return this.entryList(MAX_INDEX_ENTRIES);
+        return this.entryList(0L, MAX_INDEX_ENTRIES);
+    }
+
+    /**
+     * @param maxEntries limit number of entries returned to this.
+     * @return all the entries in the Queue
+     */
+    public List<CorfuQueueRecord<E>> entryList(int maxEntries) {
+        return this.entryList(0L, maxEntries);
     }
 
     public boolean isEmpty() {
