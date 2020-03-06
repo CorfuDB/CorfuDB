@@ -121,7 +121,7 @@ public class SequencerServer extends AbstractServer {
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @Getter
-    private SequencerServerCache cache;
+    private final SequencerServerCache cache;
 
     @Getter
     @Setter
@@ -152,8 +152,12 @@ public class SequencerServer extends AbstractServer {
         this.executor = Executors.newSingleThreadExecutor(
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
+
         globalLogTail = Address.getMinAddress();
-        this.cache = new SequencerServerCache(config.getCacheSize(), globalLogTail - 1);
+
+        this.cache = new SequencerServerCache(config.getCacheSize());
+
+
         setUpTimerNameCache();
     }
 
@@ -257,12 +261,11 @@ public class SequencerServer extends AbstractServer {
             // for each key pair, check for conflict; if not present, check against the wildcard
             for (byte[] conflictParam : conflictParamSet) {
 
-                Long keyAddress = cache.get(new ConflictTxStream(conflictStream.getKey(),
-                        conflictParam, Address.NON_ADDRESS));
+                Long keyAddress = cache.getIfPresent(new ConflictTxStream(conflictStream.getKey(), conflictParam));
 
                 log.trace("Commit-ck[{}] conflict-key[{}](ts={})", txInfo, conflictParam, keyAddress);
 
-                if (keyAddress > txSnapshotTimestamp.getSequence()) {
+                if (keyAddress != null && keyAddress > txSnapshotTimestamp.getSequence()) {
                     log.debug("ABORT[{}] conflict-key[{}](ts={})", txInfo, conflictParam, keyAddress);
                     return new TxResolutionResponse(
                             TokenType.TX_ABORT_CONFLICT,
@@ -361,6 +364,7 @@ public class SequencerServer extends AbstractServer {
     public void resetServer(CorfuPayloadMsg<SequencerRecoveryMsg> msg,
                                          ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Reset sequencer server.");
+        long initialToken = msg.getPayload().getGlobalTail();
         final Map<UUID, StreamAddressSpace> addressSpaceMap = msg.getPayload().getStreamsAddressMap();
         final long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
 
@@ -402,8 +406,11 @@ public class SequencerServer extends AbstractServer {
         // Note, this is correct, but conservative (may lead to false abort).
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
-            globalLogTail = msg.getPayload().getGlobalTail();
-            cache = new SequencerServerCache(cache.getCacheSize(), globalLogTail - 1);
+            // Evict all entries from the cache. This eviction triggers the callback modifying the maxConflictWildcard.
+            cache.invalidateAll();
+            globalLogTail = initialToken;
+            cache.updateMaxConflictAddress(initialToken - 1);
+
             // Clear the existing map as it could have been populated by an earlier reset.
             streamTailToGlobalTailMap = new HashMap<>();
 
@@ -616,7 +623,7 @@ public class SequencerServer extends AbstractServer {
                         // insert an entry with the new timestamp using the
                         // hash code based on the param and the stream id.
                         value.forEach(conflictParam ->
-                                cache.put(new ConflictTxStream(key, conflictParam, newTail - 1)));
+                                cache.put(new ConflictTxStream(key, conflictParam), newTail - 1));
                     });
         }
 
@@ -693,14 +700,15 @@ public class SequencerServer extends AbstractServer {
     @Builder
     @Getter
     public static class Config {
-        private static final int DEFAULT_CACHE_SIZE = 250_000;
+        private static final long DEFAULT_CACHE_SIZE = 250_000L;
 
         @Default
-        private final int cacheSize = DEFAULT_CACHE_SIZE;
+        private final long cacheSize = DEFAULT_CACHE_SIZE;
 
         public static Config parse(Map<String, Object> opts) {
-            int cacheSize = (int)(opts.containsKey("--sequencer-cache-size") ?
-            Integer.parseInt((String)opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE);
+            long cacheSize = opts.containsKey("--sequencer-cache-size") ?
+                    Long.parseLong((String) opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE;
+
             return Config.builder()
                     .cacheSize(cacheSize)
                     .build();
