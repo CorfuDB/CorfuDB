@@ -88,8 +88,8 @@ public class SinkManager implements DataReceiver {
     public void setLogReplicationConfig(LogReplicationConfig config) {
         this.config = config;
         snapshotWriter = new StreamsSnapshotWriter(runtime, config);
-        logEntryWriter = new LogEntryWriter(runtime, config);
         persistedWriterMetadata = new PersistedWriterMetadata(runtime, config.getRemoteSiteID());
+        logEntryWriter = new LogEntryWriter(runtime, config, persistedWriterMetadata);
         logEntryWriter.setTimestamp(persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
                 persistedWriterMetadata.getLastProcessedLogTimestamp());
         readConfig();
@@ -134,7 +134,7 @@ public class SinkManager implements DataReceiver {
         log.debug("Complete of a snapshot apply");
         //check if the all the expected message has received
         rxState = RxState.LOG_SYNC;
-        persistedWriterMetadata.setsrcBaseSnapshotDone();
+        persistedWriterMetadata.setSrcBaseSnapshotDone();
 
         // Prepare and Send Snapshot Sync ACK
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_REPLICATED,
@@ -200,9 +200,9 @@ public class SinkManager implements DataReceiver {
         long ackTs = logEntryWriter.apply(message);
 
         // Send Ack for log entry
-        if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
-            persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
-        }
+        //if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
+        //    persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
+        //}
     }
 
     private void applySnapshotSync(LogReplicationEntry message) {
@@ -216,15 +216,16 @@ public class SinkManager implements DataReceiver {
     }
 
     private void initializeSnapshotSync(LogReplicationEntry entry) {
+        long timestamp = entry.getMetadata().getSnapshotTimestamp();
 
         log.debug("Received snapshot sync start marker for {} on base snapshot timestamp {}",
                 entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
 
         // If we are just starting snapshot sync, initialize base snapshot start
-        persistedWriterMetadata.setsrcBaseSnapshotStart(entry.getMetadata().getSnapshotTimestamp());
+        timestamp = persistedWriterMetadata.setSrcBaseSnapshotStart(timestamp);
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
-        snapshotWriter.reset(entry.getMetadata().getSnapshotTimestamp());
+        snapshotWriter.reset(timestamp);
 
         // Retrieve snapshot request ID to be used for ACK of snapshot sync complete
         snapshotRequestId = entry.getMetadata().getSyncRequestId();

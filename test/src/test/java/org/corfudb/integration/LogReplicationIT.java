@@ -53,7 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 import static org.corfudb.logreplication.receive.PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed;
-import static org.corfudb.logreplication.receive.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapDone;
+import static org.corfudb.logreplication.receive.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapApplyDone;
 import static org.corfudb.logreplication.receive.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart;
 import static org.corfudb.logreplication.send.PersistedReaderMetadata.PersistedMetaDataType.LastLogSync;
 import static org.corfudb.logreplication.send.PersistedReaderMetadata.PersistedMetaDataType.LastSnapSync;
@@ -72,7 +72,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static final UUID REMOTE_SITE_ID = UUID.randomUUID();
     static final String TABLE_PREFIX = "test";
 
-    static private final int NUM_KEYS = 10;
+    static private final int NUM_KEYS = 4;
 
     static private final int NUM_KEYS_LARGE = 1000;
     static private final int NUM_KEYS_VERY_LARGE = 20000;
@@ -461,7 +461,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS);
 
         // Verify data just written against in-memory copy
-        System.out.println("****** Verify Source Data");
+        System.out.println("\n****** Verify Source Data");
         verifyData(srcCorfuTables, srcDataForVerification);
 
         // Before initiating log replication, verify these tables have no actual data in the destination node.
@@ -1141,22 +1141,17 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Write a large number of entries, so we can be sure the trim happens during log entry sync
         generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS_LARGE, srcDataRuntime, 0);
 
-        // Replicate the only table we created, block until 10 messages are received,
+        // Replicate the only table we created, block until 2 messages are received,
         // then enforce a trim on the log.
         expectedSinkReceivedMessages = RX_MESSAGES_LIMIT;
-        // Then wait for till ACKTS
-        expectedAckTimestamp = -1;
-        testConfig.clear();
-        testConfig.setWaitOn(WAIT.ON_ACK_TS);
-        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_ACK_TS, WAIT.ON_SINK_RECEIVE),
+
+
+        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_SINK_RECEIVE),
                 false, new DefaultDataControlConfig(false, NUM_KEYS_LARGE));
 
         System.out.println("****** Trim log, will trigger a full snapshot sync");
-        // Unblocked as soon as 50 messages are received (even though snapshot sync continues)
-        // Force a trim on 4/5 space of the log (16K) to ensure we're ahead of the read point
-        //trim(srcDataRuntime, TRIM_RATIO);
+
         Token toke = ckStreamsAndTrim(srcDataRuntime, srcCorfuTables);
-        expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
 
         // Be sure log was trimmed
         while (srcDataRuntime.getAddressSpaceView().getTrimMark().getSequence() < toke.getSequence()) {
@@ -1167,7 +1162,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         checkStateChange(fsm, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
         System.out.println("Block untill full snapshot transfer complete");
-        blockUntilExpectedValueReached.acquire();
+        checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
 
         verifyData(dstCorfuTables, dstDataForVerification);
         cleanEnv();
@@ -1455,6 +1450,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private void verifyExpectedValue(long expectedValue, long currentValue) {
         // If expected value, release semaphore / unblock the wait
+        //System.out.println("expected " + expectedValue + " currentValue " + currentValue);
         if (expectedValue == currentValue) {
             blockUntilExpectedValueReached.release();
         }
@@ -1463,6 +1459,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private void verifyExpectedAckMessage(ObservableAckMsg observableAckMsg) {
         // If expected a ackTs, release semaphore / unblock the wait
         LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(observableAckMsg.getDataMessage().getData());
+        System.out.println("ackMsg " + logReplicationEntry.getMetadata());
         switch (testConfig.waitOn) {
             case ON_ACK:
                 verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
@@ -1477,7 +1474,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         long lastSnapSync = readerMetaDataTable.get(LastSnapSync.getVal());
 
         long lastSnapStart = writerMetaDataTable.get(LastSnapStart.getVal());
-        long lastSnapDone = writerMetaDataTable.get(LastSnapDone.getVal());
+        long lastSnapDone = writerMetaDataTable.get(LastSnapApplyDone.getVal());
 
         System.out.println("\nlastSnapSync " + lastSnapSync + " lastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
         assertThat(lastSnapStart == lastSnapSync).isTrue();

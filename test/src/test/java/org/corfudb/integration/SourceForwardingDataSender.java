@@ -89,7 +89,14 @@ public class SourceForwardingDataSender implements DataSender {
 
     @Override
     public boolean send(List<DataMessage> messages, UUID snapshotSyncId, boolean completed) {
-        messages.forEach(msg -> send(msg, snapshotSyncId, completed));
+        boolean lastComplete = false;
+        for (int i = 0; i < messages.size(); i++) {
+            if (i == messages.size() - 1) {
+                lastComplete = completed;
+            }
+            System.out.println("Send msg " + i + " " + lastComplete);
+            send(messages.get(i), snapshotSyncId, lastComplete);
+        }
         return true;
     }
 

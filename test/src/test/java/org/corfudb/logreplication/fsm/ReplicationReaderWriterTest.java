@@ -3,6 +3,7 @@ package org.corfudb.logreplication.fsm;
 import org.corfudb.integration.ReplicationReaderWriterIT;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.receive.LogEntryWriter;
+import org.corfudb.logreplication.receive.PersistedWriterMetadata;
 import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.SnapshotReadMessage;
@@ -57,9 +58,11 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         readerRuntime = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect();
         writerRuntime = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect();
 
-        LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(),UUID.randomUUID());
+        UUID uuid = UUID.randomUUID();
+        LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(), uuid);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(readerRuntime, uuid);
         logEntryReader = new StreamsLogEntryReader(readerRuntime, config);
-        logEntryWriter = new LogEntryWriter(writerRuntime, config);
+        logEntryWriter = new LogEntryWriter(writerRuntime, config, persistedWriterMetadata);
     }
 
     @Test
