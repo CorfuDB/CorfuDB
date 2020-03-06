@@ -13,18 +13,14 @@ import org.corfudb.logreplication.fsm.ObservableAckMsg;
 import org.corfudb.logreplication.fsm.ObservableValue;
 import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.logreplication.receive.PersistedWriterMetadata;
-import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
 
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
 import org.corfudb.logreplication.send.PersistedReaderMetadata;
 
-import org.corfudb.logreplication.send.SnapshotReadMessage;
-import org.corfudb.logreplication.send.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 
@@ -285,23 +281,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
-     * Generate Non-Transactional data on 'tables' and push the data for
-     * further verification into an in-memory copy 'tablesForVerification'.
-     */
-    private void generateData(HashMap<String, CorfuTable<Long, Long>> tables,
-                      HashMap<String, HashMap<Long, Long>> tablesForVerification,
-                      int numKeys, long startValue) {
-        for (int i = 0; i < numKeys; i++) {
-            for (String name : tables.keySet()) {
-                tablesForVerification.putIfAbsent(name, new HashMap<>());
-                long key_val = i + startValue;
-                tables.get(name).put(key_val, key_val);
-                tablesForVerification.get(name).put(key_val, key_val);
-            }
-        }
-    }
-
-    /**
      * Generate Transactional data on 'tables' and push the data for
      * further verification into an in-memory copy 'tablesForVerification'.
      */
@@ -366,78 +345,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         }
     }
 
-    void verifyDataIncomplete(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
-        for (String name : hashMap.keySet()) {
-            CorfuTable<Long, Long> realizedTable = tables.get(name);
-            HashMap<Long, Long> expectedKeys = hashMap.get(name);
-
-            System.out.println("Table[" + name + "]: " + realizedTable.keySet().size() + " keys; Expected "
-                    + expectedKeys.size() + " keys");
-
-            assertThat(expectedKeys.keySet().containsAll(realizedTable.keySet())).isTrue();
-            assertThat(realizedTable.keySet().containsAll(expectedKeys.keySet())).isFalse();
-            assertThat(realizedTable.keySet().size() == expectedKeys.keySet().size()).isFalse();
-
-            for (Long key : realizedTable.keySet()) {
-                assertThat(expectedKeys.get(key)).isEqualTo(realizedTable.get(key));
-            }
-        }
-    }
-
     private void verifyNoData(HashMap<String, CorfuTable<Long, Long>> tables) {
         for (CorfuTable table : tables.values()) {
             assertThat(table.keySet().isEmpty());
         }
-    }
-
-    /**
-     * Enforce checkpoint entries at the streams.
-     */
-    private void ckStreams(CorfuRuntime rt, HashMap<String, CorfuTable<Long, Long>> tables) {
-        MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-        for (CorfuTable map : tables.values()) {
-            mcw1.addMap(map);
-        }
-
-        Token checkpointAddress = mcw1.appendCheckpoints(rt, "test");
-
-        // Trim the log
-        rt.getAddressSpaceView().prefixTrim(checkpointAddress);
-        rt.getAddressSpaceView().gc();
-    }
-
-    private void readMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
-        StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
-
-        reader.reset(rt.getAddressSpaceView().getLogTail());
-        while (true) {
-            SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
-            msgQ.addAll(snapshotReadMessage.getMessages());
-            if (snapshotReadMessage.isEndRead()) {
-                break;
-            }
-        }
-    }
-
-    private void writeMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config);
-
-        if (msgQ.isEmpty()) {
-            System.out.println("msgQ is empty");
-        }
-        writer.reset(msgQ.get(0).metadata.getSnapshotTimestamp());
-
-        for (LogReplicationEntry msg : msgQ) {
-            writer.apply(msg);
-        }
-    }
-
-    private void printTails(String tag) {
-        System.out.println("\n" + tag);
-        System.out.println("src dataTail " + srcDataRuntime.getAddressSpaceView().getLogTail() + " readerTail " + readerRuntime.getAddressSpaceView().getLogTail());
-        System.out.println("dst dataTail " + dstDataRuntime.getAddressSpaceView().getLogTail() + " writerTail " + writerRuntime.getAddressSpaceView().getLogTail());
     }
 
     /* ***************************** LOG REPLICATION IT TESTS ***************************** */

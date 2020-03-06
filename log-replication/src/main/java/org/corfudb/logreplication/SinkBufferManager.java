@@ -57,7 +57,7 @@ public class SinkBufferManager {
 
     void receive(DataMessage dataMessage) {
         LogReplicationEntry entry = LogReplicationEntry.deserialize(dataMessage.getData());
-        switch (entry.metadata.getMessageMetadataType()) {
+        switch (entry.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
                 sinkManager.receiveWithoutBuffering(dataMessage);
                 break;

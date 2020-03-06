@@ -9,7 +9,7 @@ import java.util.UUID;
 public class LogReplicationEntry {
 
     @Getter
-    public LogReplicationEntryMetadata metadata;
+    private LogReplicationEntryMetadata metadata;
 
     @Getter
     private byte[] payload;

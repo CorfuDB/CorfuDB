@@ -327,13 +327,15 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeSnapLogMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config);
+        UUID uuid = UUID.randomUUID();
+        LogReplicationConfig config = new LogReplicationConfig(streams, uuid);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid);
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
 
         if (msgQ.isEmpty()) {
             System.out.println("msgQ is empty");
         }
-        writer.reset(msgQ.get(0).metadata.getSnapshotTimestamp());
+        writer.reset(msgQ.get(0).getMetadata().getSnapshotTimestamp());
 
         for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
