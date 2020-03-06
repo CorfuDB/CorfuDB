@@ -13,6 +13,7 @@ import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
@@ -32,6 +33,8 @@ import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_READER_QUEU
  * Process TxMessage that contains transaction logs for registered streams.
  */
 public class LogEntryWriter {
+    private final static int MAX_NUM_TX_RETRY = 3;
+
     @Setter
     private int maxMsgQueSize = DEFAULT_READER_QUEUE_SIZE; //The max size of the msgQ.
 
@@ -40,9 +43,12 @@ public class LogEntryWriter {
     CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
+    private PersistedWriterMetadata persistedWriterMetadata;
 
-    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config) {
+    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config, PersistedWriterMetadata persistedWriterMetadata) {
         this.rt = rt;
+        this.persistedWriterMetadata = persistedWriterMetadata;
+
         Set<String> streams = config.getStreamsToReplicate();
         streamUUIDs = new HashSet<>();
 
@@ -79,7 +85,8 @@ public class LogEntryWriter {
      * @param txMessage
      */
     void processMsg(LogReplicationEntry txMessage) {
-        // Convert from byte[] to OpaqueEntry
+        boolean doRetry = true;
+        int numRetry = 0;
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getPayload()));
         Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
 
@@ -88,22 +95,37 @@ public class LogEntryWriter {
             throw new ReplicationWriterException("Wrong streams set");
         }
 
-        try {
-            MultiObjectSMREntry multiObjectSMREntry = new MultiObjectSMREntry();
+        long msgTs = txMessage.metadata.timestamp;
+        long persistTs = Address.NON_ADDRESS;
 
-            for (UUID uuid : opaqueEntry.getEntries().keySet()) {
-                for(SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
-                    multiObjectSMREntry.addTo(uuid, smrEntry);
+        while (doRetry && numRetry++ < MAX_NUM_TX_RETRY) {
+            try {
+                rt.getObjectsView().TXBegin();
+                persistTs = persistedWriterMetadata.getLastProcessedLogTimestamp();
+                if (msgTs > persistTs ) {
+                    MultiObjectSMREntry multiObjectSMREntry = new MultiObjectSMREntry();
+                    for (UUID uuid : opaqueEntry.getEntries().keySet()) {
+                        for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
+                            multiObjectSMREntry.addTo(uuid, smrEntry);
+                        }
+                    }
+
+                    //todo: xiaoqin Need to verify that .append follow the transaction schema
+                    rt.getStreamsView().append(multiObjectSMREntry, null, opaqueEntry.getEntries().keySet().toArray(new UUID[0]));
+                    persistedWriterMetadata.setLastProcessedLogTimestamp(msgTs);
+
+                    log.trace("Append msg {} as its timestamp is not later than the persisted one {}", txMessage.metadata, persistTs);
+                } else {
+                    log.warn("Skip write this msg {} as its timestamp is later than the persisted one {}", txMessage.metadata, persistTs);
                 }
+                doRetry = false;
+            } catch (TransactionAbortedException e) {
+                log.warn("Caught an exception {} , will retry", e);
+            } finally {
+                rt.getObjectsView().TXEnd();
             }
-            rt.getStreamsView().append(multiObjectSMREntry, null, opaqueEntry.getEntries().keySet().toArray(new UUID[0]));
-        } catch (Exception e) {
-            log.warn("Caught an exception ", e);
-            throw e;
         }
-
-        lastMsgTs = txMessage.getMetadata().getTimestamp();
-        log.trace("process message " + txMessage.metadata.timestamp);
+        lastMsgTs = Math.max(persistTs, msgTs);
     }
 
     /**

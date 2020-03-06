@@ -55,15 +55,12 @@ public class SinkBufferManager {
         buffer = new HashMap<>();
     }
 
-    /*
-     * It will either buffer it or call SinkManager's receive.
-     *
-     * @param dataMessage
-     */
     void receive(DataMessage dataMessage) {
         LogReplicationEntry entry = LogReplicationEntry.deserialize(dataMessage.getData());
         switch (entry.metadata.getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
+                sinkManager.receiveWithoutBuffering(dataMessage);
+                break;
             case LOG_ENTRY_MESSAGE:
                 processMsgAndBuffer(entry);
                 break;
