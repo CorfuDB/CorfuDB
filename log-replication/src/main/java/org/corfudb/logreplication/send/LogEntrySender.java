@@ -158,7 +158,7 @@ public class LogEntrySender {
 
                 entry.retry(getCurrentTime());
                 dataSender.send(new DataMessage(entry.getData().serialize()));
-                log.info("resend message " + entry.getData().metadata.timestamp);
+                log.info("resend message " + entry.getData().getMetadata().getTimestamp());
             }
         }
    }
@@ -191,7 +191,7 @@ public class LogEntrySender {
                 if (message != null) {
                     pendingEntries.append(message, getCurrentTime());
                     dataSender.send(new DataMessage(message.serialize()));
-                    log.trace("send message " + message.metadata.timestamp);
+                    log.trace("send message " + message.getMetadata().getTimestamp());
                 } else {
                     if (message == null) {
                         // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
