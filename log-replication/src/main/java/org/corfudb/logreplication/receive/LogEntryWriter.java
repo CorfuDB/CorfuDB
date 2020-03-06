@@ -14,6 +14,7 @@ import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
@@ -103,18 +104,14 @@ public class LogEntryWriter {
                 rt.getObjectsView().TXBegin();
                 persistTs = persistedWriterMetadata.getLastProcessedLogTimestamp();
                 if (msgTs > persistTs ) {
-                    MultiObjectSMREntry multiObjectSMREntry = new MultiObjectSMREntry();
                     for (UUID uuid : opaqueEntry.getEntries().keySet()) {
                         for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
-                            multiObjectSMREntry.addTo(uuid, smrEntry);
+                            TransactionalContext.getCurrentContext().logUpdate(uuid, smrEntry);
                         }
                     }
 
-                    //todo: xiaoqin Need to verify that .append follow the transaction schema
-                    rt.getStreamsView().append(multiObjectSMREntry, null, opaqueEntry.getEntries().keySet().toArray(new UUID[0]));
                     persistedWriterMetadata.setLastProcessedLogTimestamp(msgTs);
-
-                    log.trace("Append msg {} as its timestamp is not later than the persisted one {}", txMessage.metadata, persistTs);
+                    log.trace("Will append msg {} as its timestamp is not later than the persisted one {}", txMessage.metadata, persistTs);
                 } else {
                     log.warn("Skip write this msg {} as its timestamp is later than the persisted one {}", txMessage.metadata, persistTs);
                 }
