@@ -169,22 +169,12 @@ public class LayoutServer extends AbstractServer {
             @NonNull IServerRouter r) {
 
         if (getCurrentLayout() == null) {
-            Layout layout = msg.getPayload().getLayout();
-
             log.info("handleMessageLayoutBootstrap: Bootstrap with new layout={}, {}",
-                    layout, msg);
-
-            if (layout.getClusterId() == null) {
-                log.warn("handleMessageLayoutBootstrap: The layout does {} not have a clusterId",
-                        layout);
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-            }
-            else{
-                setCurrentLayout(layout);
-                serverContext.setServerEpoch(layout.getEpoch(), r);
-                //send a response that the bootstrap was successful.
-                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
-            }
+                    msg.getPayload().getLayout(), msg);
+            setCurrentLayout(msg.getPayload().getLayout());
+            serverContext.setServerEpoch(getCurrentLayout().getEpoch(), r);
+            //send a response that the bootstrap was successful.
+            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
         } else {
             // We are already bootstrapped, bootstrap again is not allowed.
             log.warn("handleMessageLayoutBootstrap: Got a request to bootstrap a server which is "

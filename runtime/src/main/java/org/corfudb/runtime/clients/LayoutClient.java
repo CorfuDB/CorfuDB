@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import javax.annotation.Nonnull;
@@ -23,8 +22,8 @@ import org.corfudb.runtime.view.Layout;
  */
 public class LayoutClient extends AbstractClient {
 
-    public LayoutClient(IClientRouter router, long epoch, UUID clusterID) {
-        super(router, epoch, clusterID);
+    public LayoutClient(IClientRouter router, long epoch) {
+        super(router, epoch);
     }
 
     /**

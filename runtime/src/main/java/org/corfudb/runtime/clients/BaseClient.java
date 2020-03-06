@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import lombok.Getter;
@@ -32,12 +31,9 @@ public class BaseClient implements IClient {
 
     private final long epoch;
 
-    private final UUID clusterId;
-
-    public BaseClient(IClientRouter router, long epoch, UUID clusterId) {
+    public BaseClient(IClientRouter router, long epoch) {
         this.router = router;
         this.epoch = epoch;
-        this.clusterId = clusterId;
     }
 
     /**
@@ -62,7 +58,7 @@ public class BaseClient implements IClient {
      * @return Completable future which returns true on successful epoch set.
      */
     public CompletableFuture<Boolean> sealRemoteServer(long newEpoch) {
-        CorfuMsg msg = new CorfuPayloadMsg<>(CorfuMsgType.SEAL, newEpoch).setEpoch(epoch).setClusterID(clusterId);
+        CorfuMsg msg = new CorfuPayloadMsg<>(CorfuMsgType.SEAL, newEpoch).setEpoch(epoch);
         log.info("sealRemoteServer: send SEAL from me(clientId={}) to new epoch {}",
                 msg.getClientID(), epoch);
         return router.sendMessageAndGetCompletable(msg);
@@ -70,7 +66,7 @@ public class BaseClient implements IClient {
 
     public CompletableFuture<VersionInfo> getVersionInfo() {
         return router.sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsgType.VERSION_REQUEST).setEpoch(epoch).setClusterID(clusterId));
+                new CorfuMsg(CorfuMsgType.VERSION_REQUEST).setEpoch(epoch));
     }
 
 
@@ -82,7 +78,7 @@ public class BaseClient implements IClient {
      */
     public CompletableFuture<Boolean> ping() {
         return router.sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsgType.PING).setEpoch(epoch).setClusterID(clusterId));
+                new CorfuMsg(CorfuMsgType.PING).setEpoch(epoch));
     }
 
     /**
@@ -94,7 +90,7 @@ public class BaseClient implements IClient {
      */
     public CompletableFuture<Boolean> reset() {
         return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESET)
-                .setEpoch(epoch).setClusterID(clusterId));
+                .setEpoch(epoch));
     }
 
     /**
@@ -105,6 +101,6 @@ public class BaseClient implements IClient {
      */
     public CompletableFuture<Boolean> restart() {
         return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESTART)
-                .setEpoch(epoch).setClusterID(clusterId));
+                .setEpoch(epoch));
     }
 }

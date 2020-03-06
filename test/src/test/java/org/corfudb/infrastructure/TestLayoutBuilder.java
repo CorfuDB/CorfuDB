@@ -34,7 +34,6 @@ public class TestLayoutBuilder {
         layoutServers = new ArrayList<>();
         unresponsiveServers = new ArrayList<>();
         segments = new ArrayList<>();
-        clusterId = Layout.INVALID_CLUSTER_ID;
     }
 
     static String getEndpoint(int port) {
@@ -50,7 +49,7 @@ public class TestLayoutBuilder {
                 .addLogUnit(port)
                 .addToSegment()
                 .addToLayout()
-                .setClusterId(Layout.INVALID_CLUSTER_ID)
+                .setClusterId(UUID.randomUUID())
                 .build();
     }
 

@@ -21,7 +21,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -110,9 +109,8 @@ public class RuntimeLayout {
             endpointClientMap.computeIfAbsent(endpoint, s -> {
                 try {
                     Constructor<? extends IClient> ctor =
-                            clientClass.getDeclaredConstructor(IClientRouter.class, long.class, UUID.class);
-                    IClient inst = ctor.newInstance(getRuntime()
-                            .getRouter(endpoint), layout.getEpoch(), layout.getClusterId());
+                            clientClass.getDeclaredConstructor(IClientRouter.class, long.class);
+                    IClient inst = ctor.newInstance(getRuntime().getRouter(endpoint), layout.getEpoch());
                     inst.setPriorityLevel(getRuntime().getParameters().getPriorityLevel());
                     return inst;
                 } catch (NoSuchMethodException | IllegalAccessException | InstantiationException

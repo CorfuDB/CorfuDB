@@ -4,7 +4,6 @@
 (import org.docopt.Docopt) ; parse some cmdline opts
 (import org.corfudb.protocols.wireprotocol.TokenResponse)
 (import org.corfudb.protocols.wireprotocol.LogData)
-(import java.util.UUID)
 (import org.corfudb.protocols.wireprotocol.DataType)
 (import org.corfudb.protocols.wireprotocol.ILogData)
 
@@ -60,7 +59,7 @@ Options:
 
 ; a function which reads a logunit entry to stdout
 (defn read-logunit [address] (let [obj
-         (.. (.. (get-logunit-client (get-router (.. localcmd (get "<endpoint>")) localcmd) 0 (.UUID (fromString "00000000-0000-0000-0000-000000000000")))) (read address)) (get))]
+         (.. (.. (get-logunit-client (get-router (.. localcmd (get "<endpoint>")) localcmd) 0) (read address)) (get))]
 
          (let [read-response (.. (.. obj (getAddresses)) (get address))]
          (if (.equals (.. read-response (getType)) org.corfudb.protocols.wireprotocol.DataType/DATA)
@@ -78,7 +77,7 @@ Options:
           (.. logData (useToken (new TokenResponse address 0 (java.util.Collections/singletonMap stream (long -5)))))
           )
 
-      (.. (.. (get-logunit-client (get-router (.. localcmd (get "<endpoint>")) localcmd) 0 (.UUID (fromString "00000000-0000-0000-0000-000000000000")))
+      (.. (.. (get-logunit-client (get-router (.. localcmd (get "<endpoint>")) localcmd) 0)
               (write logData)) (get))
 ))))
 

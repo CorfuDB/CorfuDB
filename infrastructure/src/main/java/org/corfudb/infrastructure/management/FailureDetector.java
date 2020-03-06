@@ -28,7 +28,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -94,7 +93,7 @@ public class FailureDetector implements IDetector {
 
         // Perform polling of all responsive servers.
         return pollRound(
-                layout.getEpoch(), layout.getClusterId(), allServers, routerMap, sequencerMetrics,
+                layout.getEpoch(), allServers, routerMap, sequencerMetrics,
                 ImmutableList.copyOf(layout.getUnresponsiveServers())
         );
     }
@@ -117,7 +116,7 @@ public class FailureDetector implements IDetector {
      */
     @VisibleForTesting
     PollReport pollRound(
-            long epoch, UUID clusterID, Set<String> allServers, Map<String, IClientRouter> router,
+            long epoch, Set<String> allServers, Map<String, IClientRouter> router,
             SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes) {
 
         if (failureThreshold < 1) {
@@ -127,7 +126,7 @@ public class FailureDetector implements IDetector {
         List<PollReport> reports = new ArrayList<>();
         for (int iteration = 0; iteration < failureThreshold; iteration++) {
             PollReport currReport = pollIteration(
-                    allServers, router, epoch, clusterID, sequencerMetrics, layoutUnresponsiveNodes
+                    allServers, router, epoch, sequencerMetrics, layoutUnresponsiveNodes
             );
             reports.add(currReport);
 
@@ -226,13 +225,12 @@ public class FailureDetector implements IDetector {
      * @param allServers              all servers in the cluster
      * @param clientRouters           client clientRouters
      * @param epoch                   current epoch
-     * @param clusterID               current cluster id
      * @param sequencerMetrics        metrics
      * @param layoutUnresponsiveNodes all unresponsive servers in a cluster
      * @return a poll report
      */
     private PollReport pollIteration(
-            Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch, UUID clusterID,
+            Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch,
             SequencerMetrics sequencerMetrics, ImmutableList<String> layoutUnresponsiveNodes) {
 
         log.trace("Poll iteration. Epoch: {}", epoch);
@@ -241,7 +239,7 @@ public class FailureDetector implements IDetector {
 
         ClusterStateCollector clusterCollector = ClusterStateCollector.builder()
                 .localEndpoint(localEndpoint)
-                .clusterState(pollAsync(allServers, clientRouters, epoch, clusterID))
+                .clusterState(pollAsync(allServers, clientRouters, epoch))
                 .build();
 
         //Cluster state internal map.
@@ -267,17 +265,15 @@ public class FailureDetector implements IDetector {
      * @param allServers    All active members in the layout.
      * @param clientRouters Map of routers for all active members.
      * @param epoch         Current epoch for the polling round to stamp the ping messages.
-     * @param clusterId     Current clusterId
      * @return Map of Completable futures for the pings.
      */
     private Map<String, CompletableFuture<NodeState>> pollAsync(
-            Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch, UUID clusterId) {
+            Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch) {
         // Poll servers for health.  All ping activity will happen in the background.
         Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
         allServers.forEach(s -> {
             try {
-                clusterState.put(s, new ManagementClient(clientRouters.get(s), epoch, clusterId)
-                        .sendNodeStateRequest());
+                clusterState.put(s, new ManagementClient(clientRouters.get(s), epoch).sendNodeStateRequest());
             } catch (Exception e) {
                 CompletableFuture<NodeState> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
