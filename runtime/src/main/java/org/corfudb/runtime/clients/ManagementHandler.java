@@ -4,7 +4,6 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
-import java.util.UUID;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -27,8 +26,8 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
     IClientRouter router;
 
     @Override
-    public ManagementClient getClient(long epoch, UUID clusterID) {
-        return new ManagementClient(router, epoch, clusterID);
+    public ManagementClient getClient(long epoch) {
+        return new ManagementClient(router, epoch);
     }
 
     /**

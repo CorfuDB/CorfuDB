@@ -85,23 +85,11 @@ public class LayoutViewTest extends AbstractViewTest {
             .addLogUnit(SERVERS.PORT_0)
             .addToSegment()
             .addToLayout()
-            .setClusterId(UUID.fromString("00000000-0000-0000-0000-000000000000"))
+            .setClusterId(UUID.nameUUIDFromBytes("wrong cluster".getBytes()))
             .build();
         r.getLayoutView().getRuntimeLayout(l).sealMinServerSet();
         r.invalidateLayout();
-        Layout l2 = new TestLayoutBuilder()
-                .setEpoch(1)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addSequencer(SERVERS.PORT_0)
-                .buildSegment()
-                .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
-                .addToSegment()
-                .addToLayout()
-                .setClusterId(UUID.fromString("00000000-0000-0000-0000-000000000001"))
-                .build();
-
-        assertThatThrownBy(() -> r.getLayoutView().updateLayout(l2, 1L))
+        assertThatThrownBy(() -> r.getLayoutView().updateLayout(l, 1L))
             .isInstanceOf(WrongClusterException.class);
     }
 

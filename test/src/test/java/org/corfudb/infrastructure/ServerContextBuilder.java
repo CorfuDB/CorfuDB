@@ -44,7 +44,7 @@ public class ServerContextBuilder {
     String prefix = "";
     String retention = "1000";
 
-    String clusterId = "00000000-0000-0000-0000-000000000000";
+    String clusterId = "auto";
     boolean isTest = true;
 
     public ServerContextBuilder() {

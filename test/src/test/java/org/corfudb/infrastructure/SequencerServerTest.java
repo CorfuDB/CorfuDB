@@ -31,22 +31,15 @@ public class SequencerServerTest extends AbstractServerTest {
         super();
     }
 
+    ServerContext serverContext;
+
     SequencerServer server;
 
     @Override
     public AbstractServer getDefaultServer() {
-        ServerContext serverContext = new ServerContextBuilder().setSingle(true).build();
-        serverContext.installSingleNodeLayoutIfAbsent();
-        serverContext.setServerRouter(router);
-        router.setServerContext(serverContext);
-        serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(), router);
+        serverContext = ServerContextBuilder.defaultTestContext(SERVERS.PORT_0);
         server = new SequencerServer(serverContext);
         return server;
-    }
-
-    @Override
-    public void resetTest() {
-        super.resetTest();
     }
 
     @Before
@@ -273,23 +266,24 @@ public class SequencerServerTest extends AbstractServerTest {
         assertThat(server.getGlobalLogTail()).isEqualTo(num);
 
         // Sequencer accepts a delta bootstrap message only if the new epoch is consecutive.
-        long newEpoch = server.getServerContext().getServerEpoch() + 1;
-        server.getServerContext().setServerEpoch(newEpoch, server.getServerContext().getServerRouter());
-        CompletableFuture<Boolean> future1 = sendRequestWithEpoch(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
-                Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)), newEpoch);
-        assertThat(future1.join()).isEqualTo(true);
-        // Sequencer accepts only a full bootstrap message if the epoch is not consecutive.
-        newEpoch = server.getServerContext().getServerEpoch() + 2;
-        server.getServerContext().setServerEpoch(newEpoch, server.getServerContext().getServerRouter());
-        future1 = sendRequestWithEpoch(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
-                Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)), newEpoch);
-        assertThat(future1.join()).isEqualTo(false);
-        future1 = sendRequestWithEpoch(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
-                num, Collections.singletonMap(streamA, new StreamAddressSpace(Address.NON_ADDRESS,
-                Roaring64NavigableMap.bitmapOf(num))), newEpoch, false)), newEpoch);
+        long newEpoch = serverContext.getServerEpoch() + 1;
+        serverContext.setServerEpoch(newEpoch, serverContext.getServerRouter());
+        CompletableFuture<Boolean> future1 = sendRequest(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
+                Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)));
         assertThat(future1.join()).isEqualTo(true);
 
-        future = sendRequestWithEpoch(CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(0L, Collections.emptyList())), newEpoch);
+        // Sequencer accepts only a full bootstrap message if the epoch is not consecutive.
+        newEpoch = serverContext.getServerEpoch() + 2;
+        serverContext.setServerEpoch(newEpoch, serverContext.getServerRouter());
+        future1 = sendRequest(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
+                Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)));
+        assertThat(future1.join()).isEqualTo(false);
+        future1 = sendRequest(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
+                num, Collections.singletonMap(streamA, new StreamAddressSpace(Address.NON_ADDRESS,
+                Roaring64NavigableMap.bitmapOf(num))), newEpoch, false)));
+        assertThat(future1.join()).isEqualTo(true);
+
+        future = sendRequest(CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(0L, Collections.emptyList())));
         assertThat(future.join())
                 .isEqualTo(new TokenResponse(TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY,
                         TokenResponse.NO_CONFLICT_STREAM, new Token(newEpoch, num - 1),

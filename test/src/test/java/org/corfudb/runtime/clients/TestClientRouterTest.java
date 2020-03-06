@@ -8,7 +8,6 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,7 +29,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
         tcr = new TestClientRouter(tsr);
         BaseHandler baseHandler = new BaseHandler();
         tcr.addClient(baseHandler);
-        bc = new BaseClient(tcr, 0L, UUID.fromString("00000000-0000-0000-0000-000000000000"));
+        bc = new BaseClient(tcr, 0L);
 
     }
 

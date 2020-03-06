@@ -5,8 +5,6 @@ import com.google.common.collect.ImmutableSet;
 
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.SequencerServer;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -30,25 +28,15 @@ public class SequencerHandlerTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-
-        ServerContext sc = new ServerContextBuilder()
-                .setMemory(true)
-                .setSingle(true)
-                .setServerRouter(serverRouter)
-                .build();
-        sc.installSingleNodeLayoutIfAbsent();
-        serverRouter.setServerContext(sc);
-        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), serverRouter);
-
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new SequencerServer(sc))
+                .add(new SequencerServer(defaultServerContext()))
                 .build();
     }
 
     @Override
     Set<IClient> getClientsForTest() {
         SequencerHandler sequencerHandler = new SequencerHandler();
-        client = new SequencerClient(router, 0L, UUID.fromString("00000000-0000-0000-0000-000000000000"));
+        client = new SequencerClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
                 .add(sequencerHandler)
                 .add(new BaseHandler())
