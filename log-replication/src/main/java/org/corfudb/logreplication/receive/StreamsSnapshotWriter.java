@@ -11,6 +11,9 @@ import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.Serializers;
 
@@ -30,17 +33,21 @@ import java.util.UUID;
 @Slf4j
 @NotThreadSafe
 public class StreamsSnapshotWriter implements SnapshotWriter {
+    private final static int MAX_NUM_TX_RETRY = 4;
     HashMap<UUID, IStreamView> streamViewMap; // It contains all the streams registered for write to.
     CorfuRuntime rt;
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private Set<UUID> streamsDone;
     private long recvSeq;
+    private PersistedWriterMetadata persistedWriterMetadata;
 
     // The sequence number of the message, it has received.
     // It is expecting the message in order of the sequence.
 
-    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config) {
+    public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, PersistedWriterMetadata persistedWriterMetadata) {
         this.rt = rt;
+        this.persistedWriterMetadata = persistedWriterMetadata;
+
         streamViewMap = new HashMap<>();
 
         for (String stream : config.getStreamsToReplicate()) {
@@ -55,10 +62,24 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * TODO: replace with stream API
      */
     void clearTables() {
-        for (IStreamView sv : streamViewMap.values()) {
-            //maxi: just put dummy args and serilizer, may ask Maithem for correctness.
-            SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-            sv.append(entry);
+        boolean doRetry = true;
+        int numRetry = 0;
+
+        while (doRetry && numRetry++ < MAX_NUM_TX_RETRY) {
+            try {
+                rt.getObjectsView().TXBegin();
+                for (UUID streamID : streamViewMap.keySet()) {
+                    SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+                    TransactionalContext.getCurrentContext().logUpdate(streamID, entry);
+                }
+
+                doRetry = false;
+                log.info("Clear tables for streams {} ", streamViewMap.keySet());
+            } catch (TransactionAbortedException e) {
+                log.warn("Caught an exception {} will retry {}", e, numRetry);
+            } finally {
+                rt.getObjectsView().TXEnd();
+            }
         }
     }
 
@@ -91,22 +112,53 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * Convert an OpaqueEntry to an MultiObjectSMREntry and write to log.
      * @param opaqueEntry
      */
-    void processOpaqueEntry(OpaqueEntry opaqueEntry) {
-        for (UUID uuid : opaqueEntry.getEntries().keySet()) {
-            for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
-                streamViewMap.get(uuid).append(smrEntry);
+    void processOpaqueEntry(LogReplicationEntry entry, OpaqueEntry opaqueEntry) {
+        int numRetry = 0;
+        boolean doRetry = true;
+        long currentSeqNum = entry.getMetadata().getSnapshotSyncSeqNum();
+        long persistentSeqNum = Address.NON_ADDRESS;
+
+        while (doRetry && numRetry++ < MAX_NUM_TX_RETRY){
+            try {
+                rt.getObjectsView().TXBegin();
+                // read persistentMetadata's snapshot seq number
+                persistentSeqNum = persistedWriterMetadata.getLastSnapSeqNum();
+
+                if (currentSeqNum == (persistentSeqNum + 1)) {
+                    for (UUID uuid : opaqueEntry.getEntries().keySet()) {
+                        for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
+                            //streamViewMap.get(uuid).append(smrEntry);
+                            TransactionalContext.getCurrentContext().logUpdate(uuid, smrEntry);
+                        }
+                    }
+                    persistedWriterMetadata.setLastSnapSeqNum(currentSeqNum);
+                    log.debug("Process the entry {} and set sequence number {} ",
+                            entry.getMetadata(), currentSeqNum);
+
+                } else {
+                    log.warn("Skip the entry {} as the sequence number is not equal to {} + 1",
+                            entry.getMetadata(), persistentSeqNum);
+                }
+
+                // We have succeed update successfull, don't need retry any more.
+                doRetry = false;
+            } catch (TransactionAbortedException e) {
+                log.warn("Caught an exception {}, will retry {}.", e, numRetry);
+             } finally {
+                rt.getObjectsView().TXEnd();
             }
         }
     }
-
     @Override
     public void apply(LogReplicationEntry message) {
         verifyMetadata(message.getMetadata());
         System.out.println("writer got recv seq " + message.getMetadata().getSnapshotSyncSeqNum());
-        if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq) {
-            log.error("Expecting sequencer {} != recvSeq {}",
-                    message.getMetadata().getSnapshotSyncSeqNum(), recvSeq);
-            throw new ReplicationWriterException("Message is out of order");
+        if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq ||
+                message.getMetadata().getMessageMetadataType() != MessageType.SNAPSHOT_MESSAGE) {
+            log.error("Expecting sequencer {} != recvSeq {} or wrong message type {} expecting {}",
+                    message.getMetadata().getSnapshotSyncSeqNum(), recvSeq,
+                    message.getMetadata().getMessageMetadataType(), MessageType.SNAPSHOT_MESSAGE);
+            throw new ReplicationWriterException("Message is out of order or wrong type");
         }
 
         byte[] payload = message.getPayload();
@@ -117,7 +169,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             return;
         }
 
-        processOpaqueEntry(opaqueEntry);
+        processOpaqueEntry(message, opaqueEntry);
         recvSeq++;
     }
 
