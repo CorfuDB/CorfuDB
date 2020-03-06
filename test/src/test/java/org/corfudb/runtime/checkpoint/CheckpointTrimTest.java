@@ -176,11 +176,12 @@ public class CheckpointTrimTest extends AbstractViewTest {
     }
 
     /**
-     * Verify that the streaming interface can be consumed directly and that
-     * {@link TrimmedException} is being thrown when linearizable history is lost.
+     * Ensure that stream initialization (seek) works after a checkpoint and
+     * trim cycle has been complete and that {@link TrimmedException} is being
+     * thrown when linearizable history is lost.
      */
     @Test
-    public void rawStreamConsumer() {
+    public void rawStreamConsumerRestart() {
         final int BATCH_SIZE = 10;
         final int CHECKPOINT_SIZE = 3;
         final String CHECKPOINT_AUTHOR = "Author";
@@ -194,13 +195,9 @@ public class CheckpointTrimTest extends AbstractViewTest {
         mcw.addMap(map);
 
         IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
-
-        // Insert a checkpoint
         Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR);
+        IntStream.range(0, BATCH_SIZE * 2).forEach(idx -> map.put(idx, idx));
 
-        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
-
-        // Trim the log in between the checkpoints
         trim(checkpointAddress);
 
         CorfuRuntime newRuntime = getNewRuntime(getDefaultNode()).connect();
@@ -210,19 +207,130 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .setStreamName(tableName)
                 .open();
 
-        IStreamView s = newRuntime.getStreamsView().get(CorfuRuntime.getStreamID(tableName));
-        s.seek(BATCH_SIZE + CHECKPOINT_SIZE);
-        // Seek beyond the last trimmed address.
-        // The first call to remainingUpTo() will load the checkpoint, and the
-        // second one will fetch the actual data.
-        Assertions.assertThat(Stream.of(s.remainingUpTo(Long.MAX_VALUE), s.remainingUpTo(Long.MAX_VALUE))
+        // Create a new stream and seek beyond the last trimmed address.
+        IStreamView stream = newRuntime.getStreamsView().get(CorfuRuntime.getStreamID(tableName));
+        stream.seek(BATCH_SIZE + CHECKPOINT_SIZE);
+
+        // Replay to the stream to the latest address.
+        Assertions.assertThat(Stream.of(
+                stream.remainingUpTo(Long.MAX_VALUE), stream.remainingUpTo(Long.MAX_VALUE))
                 .map(List::size).mapToInt(Integer::intValue).sum())
-                .isEqualTo(BATCH_SIZE);
+                .isEqualTo(BATCH_SIZE * 2);
 
         trim(mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR));
         IntStream.range(0, BATCH_SIZE).forEach(idx -> newMap.put(idx, idx));
-        Assertions.assertThatThrownBy(() -> s.remainingUpTo(Long.MAX_VALUE))
+        Assertions.assertThatThrownBy(() -> stream.remainingUpTo(Long.MAX_VALUE))
                 .isInstanceOf(TrimmedException.class);
+    }
+
+    /**
+     * Verify that the stream can be consumed directly after
+     * several checkpoint and trim cycles.
+     */
+    @Test
+    public void rawStreamConsumerMultipleCheckpointTrim() {
+        final int BATCH_SIZE = 10;
+        final int CHECKPOINT_SIZE = 3;
+        final String CHECKPOINT_AUTHOR = "Author";
+        final String tableName = "test";
+        final CorfuTable<Integer, Integer> map = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+                .setStreamName(tableName)
+                .open();
+
+        final MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter();
+        mcw.addMap(map);
+
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+        trim(mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR));
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+
+        CorfuRuntime newRuntime = getNewRuntime(getDefaultNode()).connect();
+
+        // Create a new stream and seek beyond the last trimmed address.
+        IStreamView stream = newRuntime.getStreamsView().get(CorfuRuntime.getStreamID(tableName));
+        stream.seek(BATCH_SIZE + CHECKPOINT_SIZE);
+
+        // Replay to the stream to the latest address.
+        Assertions.assertThat(Stream.of(
+                stream.remainingUpTo(Long.MAX_VALUE), stream.remainingUpTo(Long.MAX_VALUE))
+                .map(List::size).mapToInt(Integer::intValue).sum())
+                .isEqualTo(BATCH_SIZE);
+
+        // Create a new checkpoint, produce some data and immediately consume it.
+        Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR);
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+        Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
+                .map(List::size).mapToInt(Integer::intValue).sum())
+                .isEqualTo(BATCH_SIZE);
+
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+        trim(checkpointAddress);
+        stream.gc(checkpointAddress.getSequence());
+        Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
+                .map(List::size).mapToInt(Integer::intValue).sum())
+                .isEqualTo(BATCH_SIZE);
+    }
+
+    /**
+     * Verify that the stream can be consumed directly during
+     * a quiescent period for several checkpoint and trim cycles.
+     */
+    @Test
+    public void rawStreamQuiescent() {
+        final int BATCH_SIZE = 10;
+        final int EMPTY = 0;
+        final String CHECKPOINT_AUTHOR = "Author";
+        final String tableName = "test";
+        final CorfuTable<Integer, Integer> map = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {
+                })
+                .setStreamName(tableName)
+                .open();
+
+        final IStreamView stream = getDefaultRuntime().getStreamsView()
+                        .get(CorfuRuntime.getStreamID(tableName));
+        final MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter();
+        mcw.addMap(map);
+
+        // Produce BATCH_SIZE data.
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(idx, idx));
+        // Consume it via the streaming layer.
+        Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
+                .map(List::size).mapToInt(Integer::intValue).sum())
+                .isEqualTo(BATCH_SIZE);
+
+        // Checkpoint the stream.
+        Token checkpointAddress = mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR);
+        // Try to consume more data via the stream. There should be none.
+        // Calling remainingUpTo() after the checkpoint has been complete,
+        // ensures that the hole that was produced will get picked up by the
+        // resolved queue and the global pointer.
+        Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
+                .map(List::size).mapToInt(Integer::intValue).sum())
+                .isEqualTo(EMPTY);
+
+        trim(checkpointAddress);
+        stream.gc(checkpointAddress.getSequence());
+
+        // Write some data and immediately consume it. Our pointer should be at
+        // at the trim mark.
+        IntStream.range(0, BATCH_SIZE * 2).forEach(idx -> map.put(idx, idx));
+        Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
+                .map(List::size).mapToInt(Integer::intValue).sum())
+                .isEqualTo(BATCH_SIZE * 2);
+
+        // Do one more round. This time, do not write any data after the checkpoint.
+        checkpointAddress = mcw.appendCheckpoints(getRuntime(), CHECKPOINT_AUTHOR);
+        Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
+                .map(List::size).mapToInt(Integer::intValue).sum())
+                .isEqualTo(EMPTY);
+
+        trim(checkpointAddress);
+        stream.gc(checkpointAddress.getSequence());
+        Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
+                .map(List::size).mapToInt(Integer::intValue).sum())
+                .isEqualTo(EMPTY);
     }
 
     /**
