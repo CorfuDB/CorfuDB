@@ -9,7 +9,6 @@ import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
 import org.corfudb.logreplication.message.MessageType;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -96,7 +95,7 @@ public class LogEntryWriter {
             throw new ReplicationWriterException("Wrong streams set");
         }
 
-        long msgTs = txMessage.metadata.timestamp;
+        long msgTs = txMessage.getMetadata().timestamp;
         long persistTs = Address.NON_ADDRESS;
 
         while (doRetry && numRetry++ < MAX_NUM_TX_RETRY) {
@@ -111,9 +110,11 @@ public class LogEntryWriter {
                     }
 
                     persistedWriterMetadata.setLastProcessedLogTimestamp(msgTs);
-                    log.trace("Will append msg {} as its timestamp is not later than the persisted one {}", txMessage.metadata, persistTs);
+                    log.trace("Will append msg {} as its timestamp is not later than the persisted one {}",
+                            txMessage.getMetadata(), persistTs);
                 } else {
-                    log.warn("Skip write this msg {} as its timestamp is later than the persisted one {}", txMessage.metadata, persistTs);
+                    log.warn("Skip write this msg {} as its timestamp is later than the persisted one {}",
+                            txMessage.getMetadata(), persistTs);
                 }
                 doRetry = false;
             } catch (TransactionAbortedException e) {
