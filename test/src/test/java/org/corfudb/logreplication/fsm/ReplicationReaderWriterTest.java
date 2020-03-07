@@ -97,10 +97,12 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
     }
 
     void writeMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config);
+        UUID uuid = UUID.randomUUID();
+        LogReplicationConfig config = new LogReplicationConfig(streams, uuid);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid);
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
 
-        writer.reset(msgQ.get(0).metadata.getSnapshotTimestamp());
+        writer.reset(msgQ.get(0).getMetadata().getSnapshotTimestamp());
 
         for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
