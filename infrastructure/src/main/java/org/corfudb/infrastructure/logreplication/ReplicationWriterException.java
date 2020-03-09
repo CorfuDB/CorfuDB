@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.receive;
+package org.corfudb.infrastructure.logreplication;
 
 public class ReplicationWriterException extends RuntimeException {
     public ReplicationWriterException() { }

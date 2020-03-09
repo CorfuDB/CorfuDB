@@ -49,6 +49,7 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -132,7 +133,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /** The {@link CorfuRuntimeParameters} used to configure the
      *  router.
      */
-    private final CorfuRuntimeParameters parameters;
+    private final RuntimeParameters parameters;
 
     /** A {@link CompletableFuture} which is completed when a connection,
      *  including a successful handshake completes and messages can be sent
@@ -168,12 +169,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     public NettyClientRouter(@Nonnull NodeLocator node,
                              @Nonnull EventLoopGroup eventLoopGroup,
-                             @Nonnull CorfuRuntimeParameters parameters) {
+                             @Nonnull RuntimeParameters parameters) {
         this(node, eventLoopGroup, parameters, false);
     }
     public NettyClientRouter(@Nonnull NodeLocator node,
                              @Nonnull EventLoopGroup eventLoopGroup,
-                             @Nonnull CorfuRuntimeParameters parameters,
+                             @Nonnull RuntimeParameters parameters,
                              boolean manageEventLoop) {
         this.node = node;
         this.parameters = parameters;
@@ -204,10 +205,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (parameters.isTlsEnabled()) {
             try {
                 sslContext = SslContextConstructor.constructSslContext(false,
-                    parameters.getKeyStore(),
-                    parameters.getKsPasswordFile(),
-                    parameters.getTrustStore(),
-                    parameters.getTsPasswordFile());
+                        parameters.getKeyStore(),
+                        parameters.getKsPasswordFile(),
+                        parameters.getTrustStore(),
+                        parameters.getTsPasswordFile());
             } catch (SSLException e) {
                 throw new UnrecoverableCorfuError(e);
             }
@@ -273,6 +274,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
+                log.info("***** Init channel");
                 ch.pipeline().addLast(new IdleStateHandler(parameters.getIdleConnectionTimeout(),
                         parameters.getKeepAlivePeriod(), 0));
                 if (parameters.isTlsEnabled()) {
@@ -370,6 +372,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (shutdown) {
             return;
         }
+        log.info("Connect Async {}:{}", node.getHost(), node.getPort());
         // Use the bootstrap to create a new channel.
         ChannelFuture f = bootstrap.connect(node.getHost(), node.getPort());
         f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));
@@ -385,13 +388,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (future.isSuccess()) {
             // Register a future to reconnect in case we get disconnected
             addReconnectionOnCloseFuture(future.channel(), bootstrap);
-            log.debug("connectAsync[{}]: Channel connected.", node);
+            log.info("connectAsync[{}]: Channel connected.", node);
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
             // a sleep period.
             if (!shutdown) {
                 Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
-                log.debug("connectAsync[{}]: Channel connection failed, reconnecting...", node);
+                log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
                 // Call connect, which will retry the call again.
                 // Note that this is not recursive, because it is called in the
                 // context of the handler future.
@@ -658,7 +661,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * Creates a new NettyClientRouter connected to the specified endpoint.
      *
      * @param endpoint Endpoint to connectAsync to.
-     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, CorfuRuntimeParameters)}
+     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, RuntimeParameters)}
      */
     @Deprecated
     public NettyClientRouter(String endpoint) {
@@ -670,12 +673,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      *
      * @param host Host to connectAsync to.
      * @param port Port to connectAsync to.
-     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, CorfuRuntimeParameters)}
+     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, RuntimeParameters)}
      */
     @Deprecated
     public NettyClientRouter(String host, Integer port) {
         this(NodeLocator.builder().host(host).port(port).build(),
-            CorfuRuntimeParameters.builder().build());
+            RuntimeParameters.builder().build());
     }
 
     /**
@@ -683,7 +686,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      *
      * @param host Host to connectAsync to.
      * @param port Port to connectAsync to.
-     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, CorfuRuntimeParameters)}
+     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, RuntimeParameters)}
      */
     @Deprecated
     public NettyClientRouter(String host, Integer port, Boolean tls,
@@ -691,7 +694,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         String tsPasswordFile, Boolean saslPlainText, String usernameFile,
         String passwordFile) {
         this(NodeLocator.builder().host(host).port(port).build(),
-            CorfuRuntimeParameters.builder()
+            RuntimeParameters.builder()
                 .tlsEnabled(tls)
                 .keyStore(keyStore)
                 .ksPasswordFile(ksPasswordFile)
@@ -704,7 +707,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     }
 
     public NettyClientRouter(@Nonnull NodeLocator node,
-        @Nonnull CorfuRuntimeParameters parameters) {
+        @Nonnull RuntimeParameters parameters) {
         this(node, parameters.getSocketType()
             .getGenerator().generate(parameters.getNettyEventLoopThreads(),
                 new ThreadFactoryBuilder()

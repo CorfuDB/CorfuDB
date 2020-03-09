@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.message;
+package org.corfudb.protocols.wireprotocol.logreplication;
 
 import lombok.Data;
 import org.corfudb.runtime.view.Address;
@@ -36,7 +36,7 @@ public class LogReplicationEntryMetadata {
      */
     private long snapshotTimestamp;
 
-    private long snapshotSyncSeqNum; //used by snapshot fullsync stream only, zero means the start of the stream.
+    private long snapshotSyncSeqNum; //used by snapshot full sync stream only, zero means the start of the stream.
 
 
     public LogReplicationEntryMetadata(MessageType type, UUID syncRequestId, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {

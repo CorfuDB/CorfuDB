@@ -1,10 +1,11 @@
 package org.corfudb.logreplication.fsm;
 
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.integration.ReplicationReaderWriterIT;
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.receive.LogEntryWriter;
-import org.corfudb.logreplication.receive.PersistedWriterMetadata;
-import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.infrastructure.logreplication.LogEntryWriter;
+import org.corfudb.infrastructure.logreplication.PersistedWriterMetadata;
+import org.corfudb.infrastructure.logreplication.StreamsSnapshotWriter;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.SnapshotReadMessage;
 import org.corfudb.logreplication.send.StreamsLogEntryReader;

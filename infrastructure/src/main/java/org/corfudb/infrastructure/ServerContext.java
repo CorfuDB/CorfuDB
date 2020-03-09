@@ -255,7 +255,7 @@ public class ServerContext implements AutoCloseable {
      *
      * @return The server channel type.
      */
-    ChannelImplementation getChannelImplementation() {
+    public ChannelImplementation getChannelImplementation() {
         final String type = getServerConfig(String.class, "--implementation");
         return ChannelImplementation.valueOf(type.toUpperCase());
     }

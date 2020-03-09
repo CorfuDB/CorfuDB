@@ -4,8 +4,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.DataControl;
-import org.corfudb.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.ObservableValue;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.logreplication.send.PersistedReaderMetadata;
@@ -142,14 +143,13 @@ public class LogReplicationFSM {
      * @param config log replication configuration
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
-     * @param dataControl implementation of a data control, this represents the application callback for control messages.
      * @param readProcessor read processor for data transformation
      * @param workers FSM executor service for state tasks
      */
-    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, DataSender dataSender, DataControl dataControl,
+    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, DataSender dataSender,
                              ReadProcessor readProcessor, ExecutorService workers) {
         // Use stream-based readers for snapshot and log entry sync reads
-        this(runtime, new StreamsSnapshotReader(runtime, config), dataSender, dataControl,
+        this(runtime, new StreamsSnapshotReader(runtime, config), dataSender,
                 new StreamsLogEntryReader(runtime, config), readProcessor, config, workers);
     }
 
@@ -160,14 +160,12 @@ public class LogReplicationFSM {
      * @param runtime Corfu Runtime
      * @param snapshotReader snapshot reader implementation
      * @param dataSender application callback for snapshot and log entry sync messages
-     * @param dataControl implementation of a data control, this represents the application
-     *                    callback for control messages.
      * @param logEntryReader log entry reader implementation
      * @param readProcessor read processor (for data transformation)
      * @param workers FSM executor service for state tasks
      */
     @VisibleForTesting
-    public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender, DataControl dataControl,
+    public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                              LogEntryReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
                              ExecutorService workers) {
 
@@ -177,7 +175,7 @@ public class LogReplicationFSM {
         LogEntrySender logEntrySender = new LogEntrySender(runtime, logEntryReader, dataSender, readProcessor, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
-        initializeStates(snapshotSender, logEntrySender, dataControl);
+        initializeStates(snapshotSender, logEntrySender);
 
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.logReplicationFSMWorkers = workers;
@@ -196,9 +194,8 @@ public class LogReplicationFSM {
      *
      * @param snapshotSender reads and transmits snapshot syncs
      * @param logEntrySender reads and transmits log entry sync
-     * @param dataControl
      */
-    private void initializeStates(SnapshotSender snapshotSender, LogEntrySender logEntrySender, DataControl dataControl) {
+    private void initializeStates(SnapshotSender snapshotSender, LogEntrySender logEntrySender) {
         /*
          * Log Replication State instances are kept in a map to be reused in transitions, avoid creating one
           * per every transition (reduce GC cycles).
@@ -206,7 +203,6 @@ public class LogReplicationFSM {
         states.put(LogReplicationStateType.INITIALIZED, new InitializedState(this));
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotSender));
         states.put(LogReplicationStateType.IN_LOG_ENTRY_SYNC, new InLogEntrySyncState(this, logEntrySender));
-        states.put(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, new InRequireSnapshotSyncState(this, dataControl));
         states.put(LogReplicationStateType.STOPPED, new StoppedState());
     }
 
@@ -223,7 +219,9 @@ public class LogReplicationFSM {
                 // Log: not accepting events, in stopped state
                 return;
             }
-            log.info("Enqueue event {} with ID {}", event.getType(), event.getEventID());
+            if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
+                log.info("Enqueue event {} with ID {}", event.getType(), event.getEventID());
+            }
             eventQueue.put(event);
         } catch (InterruptedException ex) {
             log.error("Log Replication interrupted Exception: ", ex);
@@ -246,7 +244,9 @@ public class LogReplicationFSM {
             //   Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
 
-            log.info("Log Replication FSM consume event {}", event);
+            if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
+                log.info("Log Replication FSM consume event {}", event);
+            }
 
             if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
                 if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC &&

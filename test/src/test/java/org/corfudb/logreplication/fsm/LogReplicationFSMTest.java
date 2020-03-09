@@ -3,9 +3,10 @@ package org.corfudb.logreplication.fsm;
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.logreplication.DataControl;
-import org.corfudb.logreplication.DataSender;
-import org.corfudb.logreplication.message.LogReplicationEntry;
+import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.ObservableValue;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.logreplication.send.DefaultReadProcessor;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
@@ -58,7 +59,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private LogReplicationFSM fsm;
     private CorfuRuntime runtime;
     private DataSender dataSender;
-    private DataControl dataControl;
     private SnapshotReader snapshotReader;
     private LogEntryReader logEntryReader;
 
@@ -143,7 +143,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #3: Trimmed Exception
         // Because this is an internal state, we need to capture the actual event id internally generated
         UUID logEntrySyncID = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC).getTransitionEventId();
-        transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, logEntrySyncID, true);
+        transition(LogReplicationEventType.SYNC_CANCEL, LogReplicationStateType.IN_SNAPSHOT_SYNC, logEntrySyncID, true);
     }
 
     private void insertDelay(int timeMilliseconds) throws InterruptedException {
@@ -389,7 +389,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         logEntryReader = new TestLogEntryReader();
         dataSender = new TestDataSender();
-        dataControl = new TestDataControl();
 
         switch(readerImpl) {
             case EMPTY:
@@ -423,7 +422,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
         }
 
-        fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, dataControl, logEntryReader,
+        fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET, UUID.randomUUID()),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
         transitionObservable = fsm.getNumTransitions();

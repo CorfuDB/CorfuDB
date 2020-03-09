@@ -1,13 +1,12 @@
-package org.corfudb.logreplication.receive;
+package org.corfudb.infrastructure.logreplication;
 
 import io.netty.buffer.Unpooled;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
-import org.corfudb.logreplication.message.MessageType;
-import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -25,21 +24,20 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_READER_QUEUE_SIZE;
 
-@NotThreadSafe
-@Slf4j
 /**
  * Process TxMessage that contains transaction logs for registered streams.
  */
+@NotThreadSafe
+@Slf4j
 public class LogEntryWriter {
     private final static int MAX_NUM_TX_RETRY = 3;
 
     @Setter
-    private int maxMsgQueSize = DEFAULT_READER_QUEUE_SIZE; //The max size of the msgQ.
+    private int maxMsgQueSize = SinkManager.DEFAULT_READER_QUEUE_SIZE; //The max size of the msgQ.
 
     private Set<UUID> streamUUIDs; //the set of streams that log entry writer will work on.
-    HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the streamview.
+    HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the stream view.
     CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
@@ -55,7 +53,7 @@ public class LogEntryWriter {
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
-        //msgQ = new HashMap<>();
+
         srcGlobalSnapshot = Address.NON_ADDRESS;
         lastMsgTs = Address.NON_ADDRESS;
 

@@ -32,7 +32,7 @@ public class NodeRouterPool {
     @Setter
     private Function<String, IClientRouter> createRouterFunction;
 
-    NodeRouterPool(Function<String, IClientRouter> createRouterFunction) {
+    public NodeRouterPool(Function<String, IClientRouter> createRouterFunction) {
         this.createRouterFunction = createRouterFunction;
     }
 

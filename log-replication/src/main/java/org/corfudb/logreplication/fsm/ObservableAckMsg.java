@@ -1,12 +1,12 @@
 package org.corfudb.logreplication.fsm;
 import lombok.Data;
-import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.Observable;
 
 /**
  * This class represents an observable value which reflects the number of
- * received messages and the last received DataMessage, i.e.,
+ * received messages and the last received LogReplicationEntry, i.e.,
  * an object that the application will observe
  * to receive notifications on change.
  */
@@ -14,14 +14,14 @@ import java.util.Observable;
 public class ObservableAckMsg extends Observable
 {
     int msgCnt;
-    DataMessage dataMessage;
+    LogReplicationEntry dataMessage;
 
     public ObservableAckMsg() {
         this.msgCnt = 0;
         this.dataMessage = null;
     }
 
-    public void setValue(DataMessage dataMessage)
+    public void setValue(LogReplicationEntry dataMessage)
     {
         if (dataMessage != null) {
             this.dataMessage = dataMessage;

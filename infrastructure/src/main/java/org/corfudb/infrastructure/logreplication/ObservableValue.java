@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.fsm;
+package org.corfudb.infrastructure.logreplication;
 
 import java.util.Observable;
 

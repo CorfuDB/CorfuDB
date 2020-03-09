@@ -1,8 +1,8 @@
 package org.corfudb.logreplication.fsm;
 
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
-import org.corfudb.logreplication.message.MessageType;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.logreplication.send.SnapshotReadMessage;
 import org.corfudb.logreplication.send.SnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
@@ -15,7 +15,7 @@ import java.util.UUID;
  * Dummy implementation of snapshot reader for testing purposes.
  *
  * This reader attempts to access n entries in the log in a continuous address space and
- * wraps the payload in the DataMessage.
+ * wraps the payload in the LogReplicationEntry.
  */
 public class TestSnapshotReader implements SnapshotReader {
 

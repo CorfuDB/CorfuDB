@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.send;
 
 import lombok.Data;
-import org.corfudb.logreplication.message.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.List;
 
