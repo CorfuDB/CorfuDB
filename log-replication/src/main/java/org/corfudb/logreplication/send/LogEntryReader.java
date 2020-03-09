@@ -1,6 +1,6 @@
 package org.corfudb.logreplication.send;
 
-import org.corfudb.logreplication.message.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.UUID;
 
