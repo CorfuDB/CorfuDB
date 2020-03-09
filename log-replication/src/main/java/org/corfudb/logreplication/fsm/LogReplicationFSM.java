@@ -223,7 +223,9 @@ public class LogReplicationFSM {
                 // Log: not accepting events, in stopped state
                 return;
             }
-            log.info("Enqueue event {} with ID {}", event.getType(), event.getEventID());
+            if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
+                log.info("Enqueue event {} with ID {}", event.getType(), event.getEventID());
+            }
             eventQueue.put(event);
         } catch (InterruptedException ex) {
             log.error("Log Replication interrupted Exception: ", ex);
@@ -246,7 +248,9 @@ public class LogReplicationFSM {
             //   Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
 
-            log.info("Log Replication FSM consume event {}", event);
+            if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
+                log.info("Log Replication FSM consume event {}", event);
+            }
 
             if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
                 if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC &&
