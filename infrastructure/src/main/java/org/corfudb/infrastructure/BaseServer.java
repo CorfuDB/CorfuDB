@@ -62,6 +62,7 @@ public class BaseServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.PING)
     private void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.info("PING received by Base Server");
         r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
     }
 
