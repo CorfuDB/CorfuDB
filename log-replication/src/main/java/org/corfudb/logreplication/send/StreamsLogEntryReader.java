@@ -3,9 +3,9 @@ package org.corfudb.logreplication.send;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.message.MessageType;
-import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -91,7 +91,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         globalBaseSnapshot = snapshot;
         preMsgTs = Math.max(snapshot, ackTimestamp);
-        log.trace("snapshot {} ackTimestamp {} preMsgTs {}", snapshot, ackTimestamp, preMsgTs);
+        log.info("snapshot {} ackTimestamp {} preMsgTs {}", snapshot, ackTimestamp, preMsgTs);
         txStream.seek(preMsgTs + 1);
         sequence = 0;
     }

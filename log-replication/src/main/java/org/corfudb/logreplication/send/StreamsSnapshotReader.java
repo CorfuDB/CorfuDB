@@ -3,10 +3,9 @@ package org.corfudb.logreplication.send;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.message.MessageType;
-import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -73,7 +72,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param entries
      * @return
      */
-    LogReplicationEntry generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries, UUID snapshotRequestId) {
+    org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries, UUID snapshotRequestId) {
         currentMsgTs = stream.maxVersion;
         OpaqueEntry opaqueEntry = generateOpaqueEntry(currentMsgTs, stream.uuid, entries);
         if (!stream.iterator.hasNext()) {
@@ -84,7 +83,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, opaqueEntry);
 
-        LogReplicationEntry txMsg = new LogReplicationEntry(MessageType.SNAPSHOT_MESSAGE, snapshotRequestId, currentMsgTs,
+        org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry txMsg = new org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry(MessageType.SNAPSHOT_MESSAGE, snapshotRequestId, currentMsgTs,
                 preMsgTs, snapshotTimestamp, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
@@ -120,9 +119,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param stream bookkeeping of the current stream information.
      * @return
      */
-    LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
+    org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
         List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
-        LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
+        org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
         log.info("Successfully pass stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);
         return txMsg;
     }
@@ -137,7 +136,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
     public SnapshotReadMessage read(UUID syncRequestId) {
 
         boolean endSnapshotSync = false;
-        List msgs = new ArrayList<DataMessage>();
+        List msgs = new ArrayList<LogReplicationEntry>();
 
         // If the currentStreamInfo still has entry to process, it will reuse the currentStreamInfo
         // and process the remaining entries.

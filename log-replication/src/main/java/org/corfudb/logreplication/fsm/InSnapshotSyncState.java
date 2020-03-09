@@ -92,9 +92,11 @@ public class InSnapshotSyncState implements LogReplicationState {
                 // If cancel was intended for current snapshot sync task, cancel and transition to new state
                 if (transitionEventId == event.getMetadata().getRequestId()) {
                     cancelSnapshotSync("cancellation request.");
-                    LogReplicationState inRequireSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
-                    inRequireSnapshotSyncState.setTransitionEventId(event.getEventID());
-                    return inRequireSnapshotSyncState;
+                    // Re-trigger SnapshotSync due to error, generate a new event Id for the new snapshot sync
+                    LogReplicationState inSnapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
+                    inSnapshotSyncState.setTransitionEventId(UUID.randomUUID());
+                    snapshotSender.reset();
+                    return inSnapshotSyncState;
                 }
 
                 log.warn("Sync Cancel for eventId {}, but running snapshot sync for {}",

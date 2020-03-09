@@ -4,12 +4,12 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
-import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.message.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -17,8 +17,15 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import java.io.File;
 import java.io.FileReader;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 /**
  * This class is responsible of managing the transmission of log entries,
@@ -33,11 +40,12 @@ public class LogEntrySender {
     public static final int DEFAULT_READER_QUEUE_SIZE = 1;
     public static final int DEFAULT_RESENT_TIMER = 5000;
     public static final int DEFAULT_MAX_RETRY = 5;
+    public static final int DEFAULT_TIMEOUT = 5000;
 
     /*
      * for internal timer increasing for each message in milliseconds
      */
-    final static private long TIME_INCREMEMNT = 10;
+    final static private long TIME_INCREMENT = 10;
 
     private int readerBatchSize = DEFAULT_READER_QUEUE_SIZE;
 
@@ -91,6 +99,10 @@ public class LogEntrySender {
 
 
     private volatile boolean taskActive = false;
+
+
+    private Map<Long, CompletableFuture<LogReplicationEntry>> pendingLogEntriesAcked = new HashMap<>();
+    private List<CompletableFuture<LogReplicationEntry>> pendingForAck = new ArrayList<>();
 
     /**
      * Stop the send for Log Entry Sync
@@ -152,12 +164,13 @@ public class LogEntrySender {
             LogReplicationPendingEntry entry  = pendingEntries.list.get(i);
             if (entry.timeout(getCurrentTime(), msgTimer)) {
                 if (errorOnMsgTimeout && entry.retry >= maxRetry) {
-                    log.warn("Entry {} data {} has been resent max times {} for timer {}.", entry, entry.data, maxRetry, msgTimer);
+                    log.warn("Entry {} of type {} has been resent max times {} for timer {}.", entry.getData().getMetadata().getTimestamp(),
+                            entry.getData().getMetadata().getMessageMetadataType(), maxRetry, msgTimer);
                     throw new LogEntrySyncTimeoutException("timeout");
                 }
 
                 entry.retry(getCurrentTime());
-                dataSender.send(new DataMessage(entry.getData().serialize()));
+                dataSender.send(entry.getData());
                 log.info("resend message " + entry.getData().getMetadata().getTimestamp());
             }
         }
@@ -173,6 +186,34 @@ public class LogEntrySender {
         try {
             // If there are pending entries, resend them.
             if (!pendingEntries.list.isEmpty()) {
+                try {
+                    LogReplicationEntry ack = (LogReplicationEntry)CompletableFuture.anyOf(pendingLogEntriesAcked
+                            .values().toArray(new CompletableFuture<?>[pendingLogEntriesAcked.size()])).get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                    log.trace("Received Log Entry ack ({}) for {}", ack.getMetadata().getMessageMetadataType(),
+                            ack.getMetadata().getTimestamp());
+                    updateAckTs(ack.getMetadata().getTimestamp());
+
+                    // Remove all CFs for all entries with lower timestamps than that of the ACKed LogReplicationEntry
+                    // This is because receiver can send aggregated ACKs.
+                    pendingLogEntriesAcked = pendingLogEntriesAcked.entrySet().stream()
+                            .filter(entry -> entry.getKey() > ack.getMetadata().getTimestamp())
+                            .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
+
+                    log.trace("Total pending log entry acks: {}, for timestamps: {}", pendingLogEntriesAcked.size(), pendingLogEntriesAcked.keySet());
+
+                    // Enforce a Log Entry Sync Replicated (ack) event, which will update metadata information
+                    // Todo (Consider directly updating Corfu Metadata information here, without going through FSM)
+                    logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
+                                new LogReplicationEventMetadata(ack.getMetadata().getSyncRequestId(), ack.getMetadata().getTimestamp())));
+
+                } catch (TimeoutException te) {
+                    log.info("Log Entry ACK timed out, pending acks for {}", pendingLogEntriesAcked.keySet());
+                } catch (Exception e) {
+                    log.error("Exception caught while waiting on log entry ACK.", e);
+                    cancelLogEntrySync(LogReplicationError.UNKNOWN, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
+                    return;
+                }
+
                 resend();
             }
         } catch (LogEntrySyncTimeoutException te) {
@@ -182,7 +223,7 @@ public class LogEntrySender {
         }
 
         while (taskActive && pendingEntries.list.size() < readerBatchSize) {
-            LogReplicationEntry message;
+            org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message;
             // Read and Send Log Entries
             try {
                 message = logEntryReader.read(logEntrySyncEventId);
@@ -190,7 +231,8 @@ public class LogEntrySender {
 
                 if (message != null) {
                     pendingEntries.append(message, getCurrentTime());
-                    dataSender.send(new DataMessage(message.serialize()));
+                    CompletableFuture<LogReplicationEntry> cf = dataSender.send(message);
+                    pendingLogEntriesAcked.put(message.getMetadata().getTimestamp(), cf);
                     log.trace("send message " + message.getMetadata().getTimestamp());
                 } else {
                     if (message == null) {
@@ -199,7 +241,7 @@ public class LogEntrySender {
                         taskActive = false;
                         break;
                     }
-                    // ??
+
                     // Request full sync (something is wrong I cant deliver)
                     // (Optimization):
                     // Back-off for couple of seconds and retry n times if not require full sync
@@ -249,12 +291,15 @@ public class LogEntrySender {
         if (ackTimestamp <= ackTs)
             return;
         ackTs = ackTimestamp;
+        log.info("Pending entries before eviction at {} is {}", ackTs, pendingEntries.list.size());
         pendingEntries.evictAll(ackTs);
+        log.info("Pending entries AFTER eviction at {} is {}", ackTs, pendingEntries.list.size());
+
         log.trace("ackTS " + ackTs + " queue size " + pendingEntries.list.size());
     }
 
     private long getCurrentTime() {
-        currentTime += TIME_INCREMEMNT;
+        currentTime += TIME_INCREMENT;
         return currentTime;
     }
 
@@ -265,7 +310,7 @@ public class LogEntrySender {
     @Data
     public static class LogReplicationPendingEntry {
         // The address of the log entry
-        LogReplicationEntry data;
+        org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data;
 
         // The first time the log entry is sent over
         long time;
@@ -273,7 +318,7 @@ public class LogEntrySender {
         // The number of retries for this entry
         int retry;
 
-        public LogReplicationPendingEntry(LogReplicationEntry data, long time) {
+        public LogReplicationPendingEntry(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data, long time) {
             this.data = data;
             this.time = time;
             this.retry = 0;
@@ -314,7 +359,7 @@ public class LogEntrySender {
             list.removeIf(a->(a.data.getMetadata().getTimestamp() <= address));
         }
 
-        void append(LogReplicationEntry data, long timer) {
+        void append(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data, long timer) {
             LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data, timer);
             list.add(entry);
         }

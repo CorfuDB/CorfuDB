@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.receive;
+package org.corfudb.infrastructure.logreplication;
 
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
