@@ -152,7 +152,8 @@ public class LogEntrySender {
             LogReplicationPendingEntry entry  = pendingEntries.list.get(i);
             if (entry.timeout(getCurrentTime(), msgTimer)) {
                 if (errorOnMsgTimeout && entry.retry >= maxRetry) {
-                    log.warn("Entry {} data {} has been resent max times {} for timer {}.", entry, entry.data, maxRetry, msgTimer);
+                    log.warn("Entry {} of type {} has been resent max times {} for timer {}.", entry.getData().getMetadata().getTimestamp(),
+                            entry.getData().getMetadata().getMessageMetadataType(), maxRetry, msgTimer);
                     throw new LogEntrySyncTimeoutException("timeout");
                 }
 
