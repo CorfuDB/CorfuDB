@@ -49,6 +49,7 @@ import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -132,7 +133,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     /** The {@link CorfuRuntimeParameters} used to configure the
      *  router.
      */
-    private final CorfuRuntimeParameters parameters;
+    private final RuntimeParameters parameters;
 
     /** A {@link CompletableFuture} which is completed when a connection,
      *  including a successful handshake completes and messages can be sent
@@ -144,18 +145,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     private SslContext sslContext;
     private final Map<CorfuMsgType, String> timerNameCache;
 
-    /**
-     * Creates a new NettyClientRouter connected to the specified host and port with the
-     * specified tls and sasl options. The new {@link this} will attempt connection to
-     * the node until {@link this#stop()} is called.
-     *
-     * @param node           The node to connect to.
-     * @param eventLoopGroup The {@link EventLoopGroup} for servicing I/O.
-     * @param parameters     A {@link CorfuRuntimeParameters} with the desired configuration.
-     */
     public NettyClientRouter(@Nonnull NodeLocator node,
-        @Nonnull EventLoopGroup eventLoopGroup,
-        @Nonnull CorfuRuntimeParameters parameters) {
+                             @Nonnull EventLoopGroup eventLoopGroup,
+                             @Nonnull RuntimeParameters parameters) {
         this.node = node;
         this.parameters = parameters;
 
@@ -183,10 +175,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (parameters.isTlsEnabled()) {
             try {
                 sslContext = SslContextConstructor.constructSslContext(false,
-                    parameters.getKeyStore(),
-                    parameters.getKsPasswordFile(),
-                    parameters.getTrustStore(),
-                    parameters.getTsPasswordFile());
+                        parameters.getKeyStore(),
+                        parameters.getKsPasswordFile(),
+                        parameters.getTrustStore(),
+                        parameters.getTsPasswordFile());
             } catch (SSLException e) {
                 throw new UnrecoverableCorfuError(e);
             }
@@ -623,7 +615,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * Creates a new NettyClientRouter connected to the specified endpoint.
      *
      * @param endpoint Endpoint to connectAsync to.
-     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, CorfuRuntimeParameters)}
+     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, RuntimeParameters)}
      */
     @Deprecated
     public NettyClientRouter(String endpoint) {
@@ -635,12 +627,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      *
      * @param host Host to connectAsync to.
      * @param port Port to connectAsync to.
-     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, CorfuRuntimeParameters)}
+     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, RuntimeParameters)}
      */
     @Deprecated
     public NettyClientRouter(String host, Integer port) {
         this(NodeLocator.builder().host(host).port(port).build(),
-            CorfuRuntimeParameters.builder().build());
+            RuntimeParameters.builder().build());
     }
 
     /**
@@ -648,7 +640,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      *
      * @param host Host to connectAsync to.
      * @param port Port to connectAsync to.
-     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, CorfuRuntimeParameters)}
+     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, RuntimeParameters)}
      */
     @Deprecated
     public NettyClientRouter(String host, Integer port, Boolean tls,
@@ -656,7 +648,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         String tsPasswordFile, Boolean saslPlainText, String usernameFile,
         String passwordFile) {
         this(NodeLocator.builder().host(host).port(port).build(),
-            CorfuRuntimeParameters.builder()
+            RuntimeParameters.builder()
                 .tlsEnabled(tls)
                 .keyStore(keyStore)
                 .ksPasswordFile(ksPasswordFile)
@@ -669,7 +661,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     }
 
     public NettyClientRouter(@Nonnull NodeLocator node,
-        @Nonnull CorfuRuntimeParameters parameters) {
+        @Nonnull RuntimeParameters parameters) {
         this(node, parameters.getSocketType()
             .getGenerator().generate(Runtime.getRuntime().availableProcessors() * 2,
                 new ThreadFactoryBuilder()
