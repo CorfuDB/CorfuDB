@@ -93,6 +93,7 @@ public class SnapshotSender {
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
+                    System.out.println("Trim Exception");
                     log.warn("Cancel snapshot sync due to trimmed exception.", te);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC);
                     cancel = true;
@@ -211,6 +212,7 @@ public class SnapshotSender {
         // TODO: Do we need to persist the baseSnapshotTimestamp in the event of failover?
         // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data
         baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
+        System.out.println("Reset baseSnapshotTimestamp " + baseSnapshotTimestamp);
 
         // Starting a new snapshot sync, reset the reader's snapshot timestamp
         snapshotReader.reset(baseSnapshotTimestamp);
