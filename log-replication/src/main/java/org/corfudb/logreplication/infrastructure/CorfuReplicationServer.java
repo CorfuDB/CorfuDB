@@ -222,7 +222,7 @@ public class CorfuReplicationServer {
 
                     // Start LogReplicationDiscovery Service, responsible for
                     // acquiring lease, retrieving Site Manager Info and processing this info
-                    Runnable runnable = new CorfuReplicationDiscoveryService(activeServer); // or an anonymous class, or lambda...
+                    Runnable runnable = new CorfuReplicationDiscoveryService(); // or an anonymous class, or lambda...
                     Thread replicationDiscoveryThread = new Thread(runnable);
                     replicationDiscoveryThread.start();
 
@@ -243,14 +243,6 @@ public class CorfuReplicationServer {
             }
 
             log.info("main: Server exiting due to shutdown");
-        }
-
-        public void startLogReplication() {
-
-        }
-
-        public void startLogApply() {
-
         }
 
         /**
