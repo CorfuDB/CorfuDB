@@ -2,10 +2,7 @@ package org.corfudb.logreplication.infrastructure;
 
 public class CorfuReplicationDiscoveryService implements Runnable {
 
-    private final CorfuReplicationServerNode logReplicationServer;
-
-    public CorfuReplicationDiscoveryService(CorfuReplicationServerNode logReplicationServer) {
-        this.logReplicationServer = logReplicationServer;
+    public CorfuReplicationDiscoveryService() {
     }
 
     @Override
@@ -19,8 +16,9 @@ public class CorfuReplicationDiscoveryService implements Runnable {
         // Determine if current node is PRIMARY or STANDBY
 
         // If PRIMARY, start replication through CorfuReplicationServer.startLogReplication() ----> SourceManager.start() -> negotiation protocol
+        // CorfuReplicationManager.startLogReplication();
 
         // If STANDBY, start SinkManager CorfuReplicationServer.startLogApply() (to receive log replicated data)
-
+        // CorfuReplicationManager.startLogApply();
     }
 }
