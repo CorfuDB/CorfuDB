@@ -142,6 +142,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         // If the currentStreamInfo still has entry to process, it will reuse the currentStreamInfo
         // and process the remaining entries.
         if (currentStreamInfo == null) {
+            System.out.println("Current stream is null");
             while (!streamsToSend.isEmpty()) {
                 // Setup a new stream
                 currentStreamInfo = new OpaqueStreamIterator(streamsToSend.poll(), rt, snapshotTimestamp);
@@ -158,10 +159,14 @@ public class StreamsSnapshotReader implements SnapshotReader {
         }
 
         if (currentStreamInfo.iterator.hasNext()) {
+            System.out.println("has next");
+
             msgs.add(read(currentStreamInfo, syncRequestId));
         }
 
         if (!currentStreamInfo.iterator.hasNext()) {
+            System.out.println("does not has next");
+
             log.debug("Snapshot reader finished reading stream {}", currentStreamInfo.uuid);
             currentStreamInfo = null;
 
