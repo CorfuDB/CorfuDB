@@ -4,7 +4,6 @@ import com.google.common.reflect.TypeToken;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.SourceManager;
-import org.corfudb.logreplication.fsm.InRequireSnapshotSyncState;
 import org.corfudb.logreplication.fsm.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
@@ -692,7 +691,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         testConfig.clear().setDropMessageLevel(2);
         LogReplicationFSM fsm = startLogEntrySync(crossTables, WAIT.ON_ERROR);
 
-        checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
+        // checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
     }
 
     /**
@@ -824,88 +823,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyPersistedLogEntryMetadata();
     }
 
-    /**
-     * If a Snapshot Sync or Log Entry Sync is canceled due to an error. A request to initiate
-     * Snapshot Sync is issued to the application to recover log replication.
-     *
-     * In this test we evaluate that the request is received by the Data Control and that it is not further
-     * re-triggered if the snapshot sync request is started.
-     */
-    @Test
-    public void testResendRequireSnapshotSyncRequestOnceAndCompleted() throws Exception {
-        testResendRequireSnapshotSyncRequest(1, 1);
-    }
-
-    /**
-     * If a Snapshot Sync or Log Entry Sync is canceled due to an error. A request to initiate
-     * Snapshot Sync is issued to the application to recover log replication.
-     *
-     * In this test we evaluate that in the case the request is dropped by the Data Control that it is
-     * further resent.
-     **/
-    @Test
-    public void testResendRequireSnapshotSyncRequestMultipleTimes() throws Exception {
-       testResendRequireSnapshotSyncRequest(SNAPSHOT_SYNC_DROPS + 1,
-               SNAPSHOT_SYNC_DROPS + 2);
-    }
-
-
-    private void testResendRequireSnapshotSyncRequest(int expectedDataControlMessages,
-                                                      int expectedRescheduleSnapshotSyncMessages) throws Exception {
-        // Setup Environment
-        setupEnv();
-
-        // No Data is required
-        // Start a Log Entry Sync and in parallel issue a SYNC_CANCEL, the SYNC_CANCEL should cause a
-        // required snapshot sync. We'll drop the message2 times, so we expect 3 Data Control calls, the third one
-        // should succeed.
-        expectedDataControlCalls = expectedDataControlMessages;
-
-        SourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(Collections.singleton(t0),
-                Arrays.asList(WAIT.ON_DATA_CONTROL_CALL, WAIT.ON_RESCHEDULE_SNAPSHOT_SYNC),
-                new DefaultDataControlConfig(true, SNAPSHOT_SYNC_DROPS));
-
-        // Start Log Entry Sync
-        System.out.println("****** Start Log Entry Sync");
-        UUID startReplicationID = logReplicationSourceManager.startReplication();
-
-        // Delay the SYNC_CANCEL, so we have guarantees that log entry sync has started
-        Executors.newSingleThreadScheduledExecutor().schedule(() -> {
-            System.out.println("****** Cancel Log Replication");
-            logReplicationSourceManager.getLogReplicationFSM()
-                    .input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL,
-                            new LogReplicationEventMetadata(startReplicationID)));
-        }, SYNC_CANCEL_DELAY, TimeUnit.MILLISECONDS);
-
-        checkStateChange(logReplicationSourceManager.getLogReplicationFSM(), LogReplicationStateType.IN_LOG_ENTRY_SYNC,
-                true);
-
-        // Block until the data control receives SNAPSHOT_SYNC_DROP + 1 messages (as snapshot sync should
-        // be re-scheduled as there has been no request)
-        System.out.println("****** Wait until the wait condition is met");
-        blockUntilExpectedValueReached.acquire();
-
-        // Because the Data Control received our request, log replication should restarted and because there is
-        // no data it should quickly go back to Log Entry Sync.
-        checkStateChange(logReplicationSourceManager.getLogReplicationFSM(),
-                LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
-
-        // We should wait at least 600 ms from the moment the data control received the message
-        // which is the retry_snapshot_timeout, before completing
-
-        // The 4th snapshot sync re-schedule should be the last, as the third moved us out of the blocked state
-        expectedRescheduleSnapshotSync = expectedRescheduleSnapshotSyncMessages;
-
-        // Block until scheduler counter is updated, we expect it to be 0 as it should not be rescheduled, because
-        // the data control re-initiated the log replication.
-        System.out.println("****** Wait until the re-scheduler cancels its next task.");
-        blockUntilExpectedValueReached.acquire();
-
-        checkStateChange(logReplicationSourceManager.getLogReplicationFSM(),
-                LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
-
-    }
-
 
     /**
      * This test attempts to perform a snapshot sync, when part of the log has already been trimmed before starting.
@@ -937,7 +854,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 new DefaultDataControlConfig(true, NUM_KEYS_LARGE));
 
         // Verify its in require snapshot sync state and that data was not completely transferred to destination
-        checkStateChange(sourceManager.getLogReplicationFSM(), LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
+        // checkStateChange(sourceManager.getLogReplicationFSM(), LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
         verifyNoData(dstCorfuTables);
     }
 
@@ -950,10 +867,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Test
     public void testSnapshotSyncWithTrimmedExceptions() throws Exception {
         final int RX_MESSAGES_LIMIT = 2;
-        final int TRIM_RATIO = NUM_KEYS_LARGE - 10;
 
         // Setup Environment: two corfu servers (source & destination)
         setupEnv();
+
         // Open One Stream
         openStreams(srcCorfuTables, srcDataRuntime, 1);
         openStreams(dstCorfuTables, dstDataRuntime, 1);
@@ -1025,7 +942,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 new DefaultDataControlConfig(true, NUM_KEYS_LARGE));
 
         // Verify its in require snapshot sync state and that data was not completely transferred to destination
-        checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
+//        checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
         System.out.println("****** Verify no data at destination");
         verifyNoData(dstCorfuTables);
     }
@@ -1276,17 +1193,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
 
         // Data Control and Data Sender
-        DefaultDataControl sourceDataControl = new DefaultDataControl(dataControlConfig);
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel());
 
         // Source Manager
-        SourceManager logReplicationSourceManager = new SourceManager(readerRuntime, sourceDataSender,
-                sourceDataControl, config);
+        SourceManager logReplicationSourceManager = new SourceManager(readerRuntime, sourceDataSender, config);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
         sourceDataSender.setSourceManager(logReplicationSourceManager);
-        sourceDataControl.setSourceManager(logReplicationSourceManager);
 
         // Add this class as observer of the value of interest for the wait condition
         for (WAIT waitCondition : waitConditions) {
@@ -1301,14 +1215,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     errorsLogEntrySync.addObserver(this);
                     break;
                 case ON_DATA_CONTROL_CALL: // Wait on Data Control Calls on Source
-                    dataControlCalls = sourceDataControl.getControlCalls();
-                    dataControlCalls.addObserver(this);
+                    // TODO (Anny) replace for new logic as In require snapshot sync state is removed
                     break;
                 case ON_RESCHEDULE_SNAPSHOT_SYNC: // Wait on calls to reschedule snapshot sync request on Source
-                    InRequireSnapshotSyncState inRequireSnapshotSyncState = (InRequireSnapshotSyncState)logReplicationSourceManager.getLogReplicationFSM()
-                            .getStates().get(LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC);
-                    rescheduleSnapshotSync = inRequireSnapshotSyncState.getRescheduleCount();
-                    rescheduleSnapshotSync.addObserver(this);
+                    // TODO (Anny) replace for new logic as In require snapshot sync state is removed
                     break;
                 case ON_SINK_RECEIVE: // Wait on Received Messages on Sink (Destination)
                     sinkReceivedMessages = sourceDataSender.getSinkManager().getRxMessageCount();
@@ -1347,6 +1257,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Override
     public void update(Observable o, Object arg) {
         if (o == ackMessages) {
+            System.out.println("Ack " + ackMessages.getValue());
             verifyExpectedAckMessage((ObservableAckMsg)o);
         } else if (o == errorsLogEntrySync) {
             verifyExpectedValue(expectedErrors, errorsLogEntrySync.getValue());
