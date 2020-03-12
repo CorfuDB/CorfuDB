@@ -33,11 +33,11 @@ public class SslContextConstructor {
                                                  String ksPasswordFile,
                                                  @NonNull String trustStorePath,
                                                  String tsPasswordFile) throws SSLException {
-        log.info("Construct ssl context based on the following information:");
-        log.info("Key store file path: {}.", keyStorePath);
-        log.info("Key store password file path: {}.", ksPasswordFile);
-        log.info("Trust store file path: {}.", trustStorePath);
-        log.info("Trust store password file path: {}.", tsPasswordFile);
+        log.trace("Construct ssl context based on the following information:");
+        log.trace("Key store file path: {}.", keyStorePath);
+        log.trace("Key store password file path: {}.", ksPasswordFile);
+        log.trace("Trust store file path: {}.", trustStorePath);
+        log.trace("Trust store password file path: {}.", tsPasswordFile);
 
         KeyManagerFactory kmf = createKeyManagerFactory(keyStorePath, ksPasswordFile);
         ReloadableTrustManagerFactory tmf = new ReloadableTrustManagerFactory(trustStorePath, tsPasswordFile);
