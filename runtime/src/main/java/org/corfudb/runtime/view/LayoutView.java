@@ -245,10 +245,6 @@ public class LayoutView extends AbstractView {
                     .filter(x -> x)
                     .count();
 
-            log.debug("propose: Successful responses={}, needed={}, timeouts={}, "
-                            + "wrongEpochRejected={}",
-                    count, getQuorumNumber(), timeouts, wrongEpochRejected);
-
             if (count >= getQuorumNumber()) {
                 break;
             }
