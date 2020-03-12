@@ -46,7 +46,12 @@ public class AddNode extends WorkflowRequest {
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
         // Bootstrap a management server first.
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
-        runtime.getManagementView().bootstrapManagementServer(nodeForWorkflow, layout).join();
+        boolean bootstrapped =
+                runtime.getManagementView().bootstrapManagementServer(nodeForWorkflow, layout);
+
+        if (!bootstrapped) {
+            log.warn("Management server is already bootstrapped.");
+        }
         // Send the add node request to the node's orchestrator.
         CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);
         log.info("sendRequest: requested to add {} on orchestrator {}:{}",

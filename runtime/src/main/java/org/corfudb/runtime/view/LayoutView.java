@@ -319,21 +319,26 @@ public class LayoutView extends AbstractView {
      *
      * @param endpoint Endpoint to bootstrap.
      * @param layout   Layout to bootstrap with.
-     * @return Completable Future which completes with True when the layout server is bootstrapped.
+     * @return True when the layout server is bootstrapped, false otherwise.
+     * @throws TimeoutException If a timeout has occurred.
      */
-    CompletableFuture<Boolean> bootstrapLayoutServer(@Nonnull String endpoint, @Nonnull Layout layout) {
-        return getRuntimeLayout(layout).getLayoutClient(endpoint).bootstrapLayout(layout)
-                .exceptionally(throwable -> {
-                    try {
-                        CFUtils.unwrap(throwable, AlreadyBootstrappedException.class);
-                    } catch (AlreadyBootstrappedException e) {
-                        log.info("bootstrapLayoutServer: Layout Server {} already bootstrapped.", endpoint);
-                    }
-                    return true;
-                })
-                .thenApply(result -> {
-                    log.info("bootstrapLayoutServer: Layout Server {} bootstrap successful", endpoint);
-                    return true;
-                });
+    boolean bootstrapLayoutServer(@Nonnull String endpoint, @Nonnull Layout layout) throws TimeoutException {
+        try {
+            CFUtils.getUninterruptibly(getRuntimeLayout(layout)
+                    .getLayoutClient(endpoint)
+                    .bootstrapLayout(layout),
+                    AlreadyBootstrappedException.class,
+                    TimeoutException.class);
+            log.info("bootstrapLayoutServer: Layout Server {} bootstrap successful.",
+                    endpoint);
+            return true;
+        } catch (AlreadyBootstrappedException abe) {
+            log.warn("bootstrapLayoutServer: Layout Server {} already bootstrapped.",
+                    endpoint);
+            return false;
+        } catch (TimeoutException te) {
+            log.error("bootstrapLayoutServer: Timeout occurred.");
+            throw te;
+        }
     }
 }

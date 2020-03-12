@@ -1640,7 +1640,7 @@ public class ManagementViewTest extends AbstractViewTest {
         corfuRuntime.getLayoutView().getRuntimeLayout().getLayoutClient(SERVERS.ENDPOINT_1).bootstrapLayout(layout);
         // Attempt bootstrapping the node. The node should attempt bootstrapping both the components Layout Server and
         // Management Server.
-        assertThat(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1).get()).isTrue();
+        assertThat(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1).get()).isFalse();
     }
 
     /**
@@ -1662,6 +1662,6 @@ public class ManagementViewTest extends AbstractViewTest {
 
         addClientRule(corfuRuntime, new TestRule().matches(corfuMsg ->
                 corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST)).drop());
-        assertThat(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1).join()).isTrue();
+        assertThat(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1).join()).isFalse();
     }
 }

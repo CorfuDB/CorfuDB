@@ -19,6 +19,7 @@ import org.corfudb.util.Sleep;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Utility to bootstrap a cluster.
@@ -54,18 +55,22 @@ public class BootstrapUtil {
      * @param layout Layout to bootstrap with
      */
     private static void bootstrapLayoutServer(IClientRouter router, Layout layout)
-            throws ExecutionException, InterruptedException, AlreadyBootstrappedException {
+            throws ExecutionException, InterruptedException, AlreadyBootstrappedException, TimeoutException {
         LayoutClient layoutClient = new LayoutClient(router, layout.getEpoch());
 
         try {
             CFUtils.getUninterruptibly(layoutClient.bootstrapLayout(layout),
-                    AlreadyBootstrappedException.class);
+                    AlreadyBootstrappedException.class, TimeoutException.class);
         } catch (AlreadyBootstrappedException abe) {
             if (!layoutClient.getLayout().get().equals(layout)) {
                 log.error("BootstrapUtil: Layout Server {}:{} already bootstrapped with different "
                         + "layout.", router.getHost(), router.getPort());
                 throw abe;
             }
+        } catch (TimeoutException toe){
+            log.error("BootstrapUtil: Layout Server {}:{} timeout occurred.",
+                    router.getHost(), router.getPort());
+            throw toe;
         }
     }
 
@@ -76,19 +81,23 @@ public class BootstrapUtil {
      * @param layout Layout to bootstrap with
      */
     private static void bootstrapManagementServer(IClientRouter router, Layout layout)
-            throws ExecutionException, InterruptedException, AlreadyBootstrappedException {
+            throws ExecutionException, InterruptedException, AlreadyBootstrappedException, TimeoutException {
         ManagementClient managementClient
                 = new ManagementClient(router, layout.getEpoch());
 
         try {
             CFUtils.getUninterruptibly(managementClient.bootstrapManagement(layout),
-                    AlreadyBootstrappedException.class);
+                    AlreadyBootstrappedException.class, TimeoutException.class);
         } catch (AlreadyBootstrappedException abe) {
             if (!managementClient.getLayout().get().equals(layout)) {
                 log.error("BootstrapUtil: Management Server {}:{} already bootstrapped with "
                         + "different layout.", router.getHost(), router.getPort());
                 throw abe;
             }
+        } catch (TimeoutException toe) {
+            log.error("BootstrapUtil: Management Server {}:{} timeout occurred.",
+                    router.getHost(), router.getPort());
+            throw toe;
         }
     }
 
@@ -122,9 +131,11 @@ public class BootstrapUtil {
                         bootstrapManagementServer(router, layout);
                         break;
                     } catch (AlreadyBootstrappedException abe) {
-                        log.error("Bootstrapping node: {} failed with exception:", server, abe);
                         log.error("Cannot retry since already bootstrapped.");
                         throw new RuntimeException(abe);
+                    } catch (TimeoutException toe) {
+                        log.error("Timeout exception occurred while bootstrapping. " +
+                                        "Retrying: {} times.", retry);
                     } catch (Exception e) {
                         log.error("Bootstrapping node: {} failed with exception:", server, e);
                         if (retry == 0) {

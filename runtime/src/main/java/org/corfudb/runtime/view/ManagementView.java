@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -579,23 +580,28 @@ public class ManagementView extends AbstractView {
      *
      * @param endpoint Endpoint ot bootstrap.
      * @param layout   Layout to bootstrap with.
-     * @return Completable Future which completes with True when the management server is bootstrapped.
+     * @return True when the management server is bootstrapped, false otherwise.
+     * @throws TimeoutException If a timeout has occurred.
      */
-    public CompletableFuture<Boolean> bootstrapManagementServer(@Nonnull String endpoint, @Nonnull Layout layout) {
-        return runtime.getLayoutView().getRuntimeLayout(layout)
-                .getManagementClient(endpoint)
-                .bootstrapManagement(layout)
-                .exceptionally(throwable -> {
-                    try {
-                        CFUtils.unwrap(throwable, AlreadyBootstrappedException.class);
-                    } catch (AlreadyBootstrappedException e) {
-                        log.info("bootstrapManagementServer: Management Server {} already bootstrapped.", endpoint);
-                    }
-                    return true;
-                })
-                .thenApply(result -> {
-                    log.info("bootstrapManagementServer: Management Server {} bootstrap successful.", endpoint);
-                    return true;
-                });
+    public boolean bootstrapManagementServer(@Nonnull String endpoint, @Nonnull Layout layout) throws TimeoutException {
+        try {
+            CFUtils.getUninterruptibly(runtime
+                    .getLayoutView()
+                    .getRuntimeLayout(layout)
+                    .getManagementClient(endpoint)
+                    .bootstrapManagement(layout),
+                    AlreadyBootstrappedException.class,
+                    TimeoutException.class);
+            log.info("bootstrapManagementServer: Management Server {} bootstrap successful.",
+                    endpoint);
+            return true;
+        } catch (AlreadyBootstrappedException abe) {
+            log.warn("bootstrapManagementServer: Management Server {} already bootstrapped.",
+                    endpoint);
+            return false;
+        } catch (TimeoutException te) {
+            log.error("bootstrapManagementServer: Timeout occurred.");
+            throw te;
+        }
     }
 }

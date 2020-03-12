@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
@@ -99,17 +100,26 @@ public class LayoutManagementView extends AbstractView {
      * This bootstraps the Layout server with the existing layout.
      *
      * @param endpoint New node endpoint.
-     * @return Completable Future which completes when the node's layout is bootstrapped.
+     * @return Completable Future which completes with true if the node's layout is bootstrapped,
+     * false if it has already been bootstrapped. The future completes exceptionally if a time out
+     * has occurred.
      */
     public CompletableFuture<Boolean> bootstrapNewNode(String endpoint) {
 
         // Bootstrap the to-be added node with the old layout.
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
-        return runtime.getLayoutView().bootstrapLayoutServer(endpoint, layout)
-                .thenApply(result -> {
-                    log.info("bootstrapNewNode: New node {} bootstrapped.", endpoint);
-                    return true;
-                });
+
+        CompletableFuture<Boolean> future = new CompletableFuture<>();
+
+        try {
+            boolean bootstrapped = runtime.getLayoutView().bootstrapLayoutServer(endpoint, layout);
+            future.complete(bootstrapped);
+            return future;
+        }
+        catch (TimeoutException toe){
+            future.completeExceptionally(toe);
+            return future;
+        }
     }
 
     /**
