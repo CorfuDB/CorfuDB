@@ -37,7 +37,7 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
-        <revision>0.3.0.20200306220203.3650</revision>
+        <revision>0.3.0.20200313233648.4459</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <logback.classic.version>1.2.3</logback.classic.version>
