@@ -1,6 +1,6 @@
-package org.corfudb.logreplication.receive;
+package org.corfudb.infrastructure.logreplication;
 
-import org.corfudb.logreplication.message.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.List;
 

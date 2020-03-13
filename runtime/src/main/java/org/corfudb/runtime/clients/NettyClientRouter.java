@@ -148,6 +148,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     public NettyClientRouter(@Nonnull NodeLocator node,
                              @Nonnull EventLoopGroup eventLoopGroup,
                              @Nonnull RuntimeParameters parameters) {
+        log.info("Creating Client Router {} ", parameters);
         this.node = node;
         this.parameters = parameters;
 
@@ -258,6 +259,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
+                log.info("***** Init channel");
                 ch.pipeline().addLast(new IdleStateHandler(parameters.getIdleConnectionTimeout(),
                         parameters.getKeepAlivePeriod(), 0));
                 if (parameters.isTlsEnabled()) {
@@ -327,6 +329,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (shutdown) {
             return;
         }
+        log.info("Connect Async {}:{}", node.getHost(), node.getPort());
         // Use the bootstrap to create a new channel.
         ChannelFuture f = bootstrap.connect(node.getHost(), node.getPort());
         f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));
@@ -342,13 +345,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         if (future.isSuccess()) {
             // Register a future to reconnect in case we get disconnected
             addReconnectionOnCloseFuture(future.channel(), bootstrap);
-            log.debug("connectAsync[{}]: Channel connected.", node);
+            log.info("connectAsync[{}]: Channel connected.", node);
         } else {
             // Otherwise, the connection failed. If we're not shutdown, try reconnecting after
             // a sleep period.
             if (!shutdown) {
                 Sleep.sleepUninterruptibly(parameters.getConnectionRetryRate());
-                log.debug("connectAsync[{}]: Channel connection failed, reconnecting...", node);
+                log.info("connectAsync[{}]: Channel connection failed, reconnecting...", node);
                 // Call connect, which will retry the call again.
                 // Note that this is not recursive, because it is called in the
                 // context of the handler future.

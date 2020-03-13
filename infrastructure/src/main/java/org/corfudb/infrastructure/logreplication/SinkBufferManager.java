@@ -1,16 +1,12 @@
-package org.corfudb.logreplication;
+package org.corfudb.infrastructure.logreplication;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
-import org.corfudb.logreplication.message.MessageType;
+
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import java.util.HashMap;
-
-import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_MAX_RETRY;
-import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_READER_QUEUE_SIZE;
-import static org.corfudb.logreplication.send.LogEntrySender.DEFAULT_RESENT_TIMER;
 
 @Slf4j
 /**
@@ -30,10 +26,10 @@ public class SinkBufferManager {
     int size;
 
     // How frequent in time, the ack will be sent.
-    private int ackCycleTime = DEFAULT_RESENT_TIMER/DEFAULT_MAX_RETRY;
+    private int ackCycleTime;
 
     // If ackCycleCnt number of messages has been processed, it will trigger an ack too.
-    private int ackCycleCnt = DEFAULT_READER_QUEUE_SIZE;
+    private int ackCycleCnt;
 
     // Reset the ackCnt after sending an ACK
     private int ackCnt = 0;
@@ -55,21 +51,21 @@ public class SinkBufferManager {
         buffer = new HashMap<>();
     }
 
-    void receive(DataMessage dataMessage) {
-        LogReplicationEntry entry = LogReplicationEntry.deserialize(dataMessage.getData());
-        switch (entry.getMetadata().getMessageMetadataType()) {
+    LogReplicationEntry receive(LogReplicationEntry dataMessage) {
+        switch (dataMessage.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
                 sinkManager.receiveWithoutBuffering(dataMessage);
                 break;
             case LOG_ENTRY_MESSAGE:
-                processMsgAndBuffer(entry);
-                break;
+                return processMsgAndBuffer(dataMessage);
             default:
                 sinkManager.receiveWithoutBuffering(dataMessage);
         }
+
+        return null;
     }
 
-    long getKey(LogReplicationEntry entry) {
+    long getKey(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry) {
         switch (entry.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
                 return entry.getMetadata().getSnapshotSyncSeqNum();
@@ -81,7 +77,7 @@ public class SinkBufferManager {
         }
     }
 
-    long getNextKey(LogReplicationEntry entry) {
+    long getNextKey(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry) {
         switch (entry.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
                 return entry.getMetadata().getSnapshotSyncSeqNum() + 1;
@@ -95,10 +91,10 @@ public class SinkBufferManager {
 
     void processBuffer() {
         while (true) {
-            LogReplicationEntry dataMessage = (LogReplicationEntry) buffer.get(nextKey);
+            LogReplicationEntry dataMessage = buffer.get(nextKey);
             if (dataMessage == null)
                 return;
-            sinkManager.receiveWithoutBuffering(new DataMessage(dataMessage.serialize()));
+            sinkManager.receiveWithoutBuffering(dataMessage);
             nextKey = getNextKey(dataMessage);
         }
     }
@@ -144,16 +140,16 @@ public class SinkBufferManager {
      * At the end according to the ack policy, send ack.
      * @param dataMessage
      */
-    void processMsgAndBuffer(LogReplicationEntry dataMessage) {
+    LogReplicationEntry processMsgAndBuffer(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry dataMessage) {
         if (dataMessage.getMetadata().getMessageMetadataType() != type) {
             log.warn("Got msg type {} but expecting type {}", dataMessage.getMetadata().getMessageMetadataType(), type);
-            return;
+            return null;
         }
 
         long key = getKey(dataMessage);
 
         if (getKey(dataMessage) == nextKey) {
-            sinkManager.receiveWithoutBuffering(new DataMessage(dataMessage.serialize()));
+            sinkManager.receiveWithoutBuffering(dataMessage);
             nextKey = getNextKey(dataMessage);
             processBuffer();
         } else {
@@ -165,7 +161,9 @@ public class SinkBufferManager {
          */
         if (shouldAck()) {
             LogReplicationEntryMetadata metadata = makeAckMessage(dataMessage);
-            sinkManager.getDataSender().send(DataMessage.generateAck(metadata));
+            return new LogReplicationEntry(metadata, new byte[0]);
         }
+
+        return null;
     }
 }
