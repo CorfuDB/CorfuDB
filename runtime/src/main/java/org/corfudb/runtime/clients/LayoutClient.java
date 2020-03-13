@@ -42,7 +42,7 @@ public class LayoutClient extends AbstractClient {
      * @return A completable future which will return TRUE if the
      * bootstrap was successful, false otherwise.
      */
-    public CompletableFuture<Void> bootstrapLayout(Layout l) {
+    public CompletableFuture<Boolean> bootstrapLayout(Layout l) {
         return sendMessageWithFuture(CorfuMsgType.LAYOUT_BOOTSTRAP
                 .payloadMsg(new LayoutBootstrapRequest(l)));
     }

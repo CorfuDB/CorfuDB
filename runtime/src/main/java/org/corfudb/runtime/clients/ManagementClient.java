@@ -46,7 +46,7 @@ public class ManagementClient extends AbstractClient {
      * @return A completable future which will return TRUE if the
      * bootstrap was successful, false otherwise.
      */
-    public CompletableFuture<Void> bootstrapManagement(Layout l) {
+    public CompletableFuture<Boolean> bootstrapManagement(Layout l) {
         return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l));
     }
 
