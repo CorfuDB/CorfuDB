@@ -3,15 +3,15 @@ package org.corfudb.logreplication.send;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
-import org.corfudb.logreplication.fsm.ObservableValue;
-import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
-import org.corfudb.logreplication.message.MessageType;
+import org.corfudb.infrastructure.logreplication.ObservableValue;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
@@ -105,10 +105,10 @@ public class SnapshotSender {
                     break;
                 }
 
-                List<DataMessage> dataToSend = processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId);
+                List<LogReplicationEntry> dataToSend = processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, snapshotReadMessage.isEndRead());
 
                 // Send message to the application through the dataSender
-                if (!dataSender.send(dataToSend, snapshotSyncEventId, completed)) {
+                if (!dataSender.send(dataToSend)) {
                     // TODO: Optimize (back-off) retry on the failed send.
                     log.error("DataSender did not acknowledge next sent message(s). Notify error.");
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
@@ -138,26 +138,31 @@ public class SnapshotSender {
             log.info("Snapshot sync completed for {} as there is no data in the log.", snapshotSyncEventId);
             // Generate a special LogReplicationEntry with only metadata (used as start marker on receiver side
             // to complete snapshot sync and send the right ACK)
-            dataSender.send(getSnapshotSyncStartMarker(snapshotSyncEventId), snapshotSyncEventId, true);
+            List<LogReplicationEntry> snapshotSyncEntries = new ArrayList<>();
+            snapshotSyncEntries.add(getSnapshotSyncStartMarker(snapshotSyncEventId));
+            snapshotSyncEntries.add(getSnapshotSyncEndMarker(snapshotSyncEventId));
+            dataSender.send(snapshotSyncEntries);
             snapshotSyncComplete(snapshotSyncEventId);
         }
     }
 
-    private List<DataMessage> processReads(List<LogReplicationEntry> logReplicationEntries, UUID snapshotSyncEventId) {
+    private List<LogReplicationEntry> processReads(List<LogReplicationEntry> logReplicationEntries, UUID snapshotSyncEventId, boolean completed) {
 
-        List<DataMessage> dataToSend = new ArrayList<>();
+        List<LogReplicationEntry> dataToSend = new ArrayList<>();
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
-            DataMessage startDataMessage = getSnapshotSyncStartMarker(snapshotSyncEventId);
+            LogReplicationEntry startDataMessage = getSnapshotSyncStartMarker(snapshotSyncEventId);
             dataToSend.add(startDataMessage);
             startSnapshotSync = false;
         }
 
-        // Convert Log Replication Entry to DataMessage Format
-        for (LogReplicationEntry entry : logReplicationEntries) {
-            DataMessage dataMessage = new DataMessage(entry.serialize());
-            dataToSend.add(dataMessage);
+        dataToSend.addAll(logReplicationEntries);
+
+        // If Snapshot is complete, add end marker
+        if (completed) {
+            LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
+            dataToSend.add(endDataMessage);
         }
 
         return dataToSend;
@@ -168,13 +173,20 @@ public class SnapshotSender {
      * Prepare a Snapshot Sync Replication start marker.
      *
      * @param snapshotSyncEventId snapshot sync event identifier
-     * @return snapshot sync start marker as DataMessage
+     * @return snapshot sync start marker as LogReplicationEntry
      */
-    private DataMessage getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
+    private LogReplicationEntry getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START,
                 snapshotSyncEventId, Address.NON_ADDRESS, baseSnapshotTimestamp, snapshotSyncEventId);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
-        return new DataMessage(emptyEntry.serialize());
+        return emptyEntry;
+    }
+
+    private LogReplicationEntry getSnapshotSyncEndMarker(UUID snapshotSyncEventId) {
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END,
+                snapshotSyncEventId, Address.NON_ADDRESS, baseSnapshotTimestamp, snapshotSyncEventId);
+        LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
+        return emptyEntry;
     }
 
     /**
@@ -197,7 +209,7 @@ public class SnapshotSender {
      */
     private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error) {
         // Report error to the application through the dataSender
-        dataSender.onError(error, snapshotSyncEventId);
+        dataSender.onError(error);
 
         // Enqueue cancel event, this will cause a transition to the require snapshot sync request, which
         // will notify application through the data control about this request.

@@ -4,14 +4,15 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.runtime.clients.ClientHandler;
 import org.corfudb.runtime.clients.ClientMsgHandler;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.IHandler;
-import org.corfudb.runtime.clients.LayoutClient;
 
 import java.lang.invoke.MethodHandles;
 
@@ -20,7 +21,7 @@ import java.lang.invoke.MethodHandles;
  * A client to the Log Replication Server
  */
 @Slf4j
-public class LogReplicationHandler implements IClient, IHandler<LayoutClient> {
+public class LogReplicationHandler implements IClient, IHandler<LogReplicationClient> {
 
     @Setter
     @Getter
@@ -31,39 +32,28 @@ public class LogReplicationHandler implements IClient, IHandler<LayoutClient> {
             .generateHandlers(MethodHandles.lookup(), this);
 
     /**
-     * Handle a pong response from the server.
+     * Handle an ACK from Log Replication server.
      *
-     * @param msg The ping request message
+     * @param msg The ack message
      * @param ctx The context the message was sent under
      * @param r   A reference to the router
-     * @return Always True, since the ping message was successful.
      */
-    @ClientHandler(type = CorfuMsgType.PONG)
-    private static Object handlePong(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        log.info("PONG");
-        return true;
+    @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_ENTRY)
+    private static Object handleLogReplicationAck(CorfuPayloadMsg<LogReplicationEntry> msg,
+                                                  ChannelHandlerContext ctx, IClientRouter r) {
+        log.info("Handle log replication ACK");
+        return msg.getPayload();
     }
 
-    /**
-     * Handle a ping request from the server.
-     *
-     * @param msg The ping request message
-     * @param ctx The context the message was sent under
-     * @param r   A reference to the router
-     * @return The return value, null since this is a message from the server.
-     */
-    @ClientHandler(type = CorfuMsgType.PING)
-    private static Object handlePing(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        log.info("PING");
-        System.out.println("Ping received by Server!!!!!");
-        r.sendResponseToServer(ctx, msg, new CorfuMsg(CorfuMsgType.PONG));
-        return null;
+    @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE)
+    private static Object handleLogReplicationNegotiation(CorfuPayloadMsg<LogReplicationNegotiationResponse> msg,
+                                                          ChannelHandlerContext ctx, IClientRouter r) {
+        log.info("Handle log replication Negotiation Response");
+        return msg.getPayload();
     }
 
     @Override
-    public LayoutClient getClient(long epoch) {
-        return null;
+    public LogReplicationClient getClient(long epoch) {
+        return new LogReplicationClient(router, epoch);
     }
-
-
 }

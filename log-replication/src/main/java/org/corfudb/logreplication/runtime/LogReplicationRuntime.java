@@ -6,16 +6,19 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.logreplication.SourceManager;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.runtime.NodeRouterPool;
-import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
-import java.util.concurrent.CompletableFuture;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Function;
 
@@ -27,13 +30,22 @@ public class LogReplicationRuntime {
      * The parameters used to configure this {@link LogReplicationRuntime}.
      */
     @Getter
-    private final RuntimeParameters parameters;
+    private final LogReplicationRuntimeParameters parameters;
 
     /**
      * Node Router Pool.
      */
-    @Getter
     private NodeRouterPool nodeRouterPool;
+
+    /**
+     * Log Replication Client - to remote Log Replication Server
+     */
+    private LogReplicationClient client;
+
+    /**
+     * Log Replication Source Manager - to local Corfu Log Unit
+     */
+    private SourceManager sourceManager;
 
     /**
      * The {@link EventLoopGroup} provided to netty routers.
@@ -41,9 +53,8 @@ public class LogReplicationRuntime {
     @Getter
     private final EventLoopGroup nettyEventLoop;
 
-    public LogReplicationRuntime(@Nonnull RuntimeParameters parameters) {
+    public LogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters) {
 
-        // Set the local parameters field
         this.parameters = parameters;
 
         // Generate or set the NettyEventLoop
@@ -109,18 +120,22 @@ public class LogReplicationRuntime {
         }
     }
 
-    public void connect (String node) {
+    public void connect () {
         log.info("Connected");
-        IClientRouter router = getRouter(node);
+        IClientRouter router = getRouter(parameters.getRemoteLogReplicationServerEndpoint());
+        client = new LogReplicationClient(router);
 
-        // Temp
-        LogReplicationClient client = new LogReplicationClient(router);
-        try {
-            Boolean pongReceived = client.ping().get();
-            log.info("Pong {}", pongReceived);
-        } catch(Exception e) {
-            log.error("Pong ERROR", e);
-        }
+        // TODO (Anny) TEMP fix the tables to replicate
+        Set<String> tablesToReplicate = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, UUID.randomUUID());
+        log.info("Set Source Manager to connect to local Corfu on {}", parameters.getLocalCorfuEndpoint());
+        sourceManager = new SourceManager(parameters.getLocalCorfuEndpoint(),
+                client, config);
+    }
+
+    public LogReplicationNegotiationResponse startNegotiation() throws Exception {
+        log.info("Send Notification Request");
+        return client.sendNegotiationRequest().get();
     }
 
     /**
@@ -133,4 +148,12 @@ public class LogReplicationRuntime {
         return nodeRouterPool.getRouter(NodeLocator.parseString(address));
     }
 
+    public void startSnapshotSync() {
+        UUID snapshotSyncRequestId = sourceManager.startSnapshotSync();
+        log.info("Start Snapshot Sync[{}]", snapshotSyncRequestId);
+    }
+
+    public void startLogEntrySync() {
+        sourceManager.startReplication();
+    }
 }

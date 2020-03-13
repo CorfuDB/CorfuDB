@@ -1,21 +1,18 @@
 package org.corfudb.integration;
 
 import lombok.Getter;
-import org.corfudb.logreplication.DataSender;
-import org.corfudb.logreplication.SinkManager;
+import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.SinkManager;
 import org.corfudb.logreplication.SourceManager;
-import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.logreplication.fsm.ObservableValue;
-import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.send.LogReplicationError;
+import org.corfudb.infrastructure.logreplication.ObservableValue;
+import org.corfudb.infrastructure.logreplication.LogReplicationError;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 
-import static org.assertj.core.api.Assertions.fail;
-
 import java.util.List;
-import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -45,8 +42,6 @@ public class SourceForwardingDataSender implements DataSender {
      */
     final public static int DROP_MSG_ONCE = 1;
 
-    final public static int TRIGGER_TIMEOUT = 2;
-
     private int ifDropMsg = 0;
 
     final static int DROP_INCREMENT = 4;
@@ -62,72 +57,27 @@ public class SourceForwardingDataSender implements DataSender {
                 .connect();
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(false, 0));
-        this.destinationLogReplicationManager = new SinkManager(runtime, destinationDataSender, destinationDataControl);
-        this.destinationLogReplicationManager.setLogReplicationConfig(config);
+        this.destinationLogReplicationManager = new SinkManager(runtime.getLayoutServers().get(0), config);
         this.channelExecutorWorkers = Executors.newSingleThreadExecutor();
         this.ifDropMsg = ifDropMsg;
     }
 
-    /*
-     * ---------------------- SNAPSHOT SYNC METHODS --------------------------
-     */
     @Override
-    public boolean send(DataMessage message, UUID snapshotSyncId, boolean completed) {
-        // Emulate Channel by directly accepting from the destination, whatever is sent by the source manager
-        receivedMessages++;
-        if (receivedMessages == 1) {
-            channelExecutorWorkers.execute(() -> destinationLogReplicationManager.startSnapshotApply());
-        }
-
-        channelExecutorWorkers.execute(() -> destinationLogReplicationManager.receive(message));
-
-        if (completed) {
-            channelExecutorWorkers.execute(() -> destinationLogReplicationManager.completeSnapshotApply());
-        }
-        return completed;
-    }
-
-    @Override
-    public boolean send(List<DataMessage> messages, UUID snapshotSyncId, boolean completed) {
-        boolean lastComplete = false;
-        for (int i = 0; i < messages.size(); i++) {
-            if (i == messages.size() - 1) {
-                lastComplete = completed;
-            }
-            System.out.println("Send msg " + i + " " + lastComplete);
-            send(messages.get(i), snapshotSyncId, lastComplete);
-        }
-        return true;
-    }
-
-    @Override
-    public void onError(LogReplicationError error, UUID snapshotSyncId) {
-        errorCount++;
-        errors.setValue(errorCount);
-    }
-
-    /*
-     * ---------------------- LOG ENTRY SYNC METHODS --------------------------
-     */
-    @Override
-    public boolean send(DataMessage message) {
-        LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(message.getData());
-
-        if (ifDropMsg > 0 && logReplicationEntry.getMetadata().timestamp == firstDrop) {
-            System.out.println("****** Drop log entry " + logReplicationEntry.getMetadata().timestamp);
+    public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
+        if (ifDropMsg > 0 && message.getMetadata().timestamp == firstDrop) {
+            System.out.println("****** Drop log entry " + message.getMetadata().timestamp);
             if (ifDropMsg == DROP_MSG_ONCE) {
                 firstDrop += DROP_INCREMENT;
             }
-            return true;
         }
 
         // Emulate Channel by directly accepting from the destination, whatever is sent by the source manager
         channelExecutorWorkers.execute(() -> destinationLogReplicationManager.receive(message));
-        return true;
+        return new CompletableFuture<>();
     }
 
     @Override
-    public boolean send(List<DataMessage> messages) {
+    public boolean send(List<LogReplicationEntry> messages) {
         messages.forEach(msg -> send(msg));
         return true;
     }
