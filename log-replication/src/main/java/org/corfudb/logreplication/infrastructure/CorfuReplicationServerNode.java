@@ -238,11 +238,13 @@ public class CorfuReplicationServerNode implements AutoCloseable {
     private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
                                                                   @Nonnull NettyServerRouter router) {
 
+        log.info("****** get Server Channel Initializer");
+
         // Generate the initializer.
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
-
+                log.info("**** Init Corfu Replication Server Node Channel");
                 // Security variables
                 final SslContext sslContext;
                 final String[] enabledTlsProtocols;
@@ -324,6 +326,8 @@ public class CorfuReplicationServerNode implements AutoCloseable {
                         context.getServerConfig(String.class, "--HandshakeTimeout")));
                 // Route the message to the server class.
                 ch.pipeline().addLast(router);
+
+                log.info("***** Finished");
             }
         };
     }

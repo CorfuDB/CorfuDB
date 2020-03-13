@@ -4,19 +4,24 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.DataReceiver;
+import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.ObservableAckMsg;
-import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.message.MessageType;
+import org.corfudb.logreplication.runtime.LogReplicationClient;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
+import org.corfudb.logreplication.send.CorfuDataSender;
 import org.corfudb.logreplication.send.DefaultReadProcessor;
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
 import org.corfudb.logreplication.send.ReadProcessor;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -67,6 +72,21 @@ public class SourceManager implements DataReceiver {
 
         this(runtime, dataSender, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
+    }
+
+    public SourceManager(String localEndpoint, LogReplicationClient client, LogReplicationConfig config) {
+        this(CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder().build()).parseConfigurationString(localEndpoint).connect(),
+                client, config);
+    }
+
+    /**
+     * Constructor SourceManager
+     *
+     * @param runtime Corfu Runtime
+     * @param config Log Replication Configuration
+     */
+    public SourceManager(CorfuRuntime runtime, LogReplicationClient client, LogReplicationConfig config) {
+        this(runtime, new CorfuDataSender(client), config);
     }
 
     /**
@@ -201,13 +221,11 @@ public class SourceManager implements DataReceiver {
     }
 
     @Override
-    public void receive(DataMessage dataMessage) {
+    public LogReplicationEntry receive(LogReplicationEntry message) {
         log.trace("Data Message received on source");
-        // Convert from DataMessage to Corfu Internal (deserialize)
-        LogReplicationEntry message = LogReplicationEntry.deserialize(dataMessage.getData());
 
         countACKs++;
-        ackMessages.setValue(dataMessage);
+        ackMessages.setValue(message);
 
         // Process ACKs from Application, for both, log entry and snapshot sync.
         if(message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_REPLICATED) {
@@ -221,10 +239,14 @@ public class SourceManager implements DataReceiver {
         } else {
             log.debug("Received data message of type {} not an ACK", message.getMetadata().getMessageMetadataType());
         }
+
+        return null;
     }
 
     @Override
-    public void receive(List<DataMessage> messages) {
+    public List<LogReplicationEntry> receive(List<LogReplicationEntry> messages) {
         messages.forEach(message -> receive(message));
+
+        return Collections.emptyList();
     }
 }

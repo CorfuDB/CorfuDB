@@ -3,19 +3,17 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.SourceManager;
-import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.LogReplicationStateType;
 import org.corfudb.logreplication.fsm.ObservableAckMsg;
-import org.corfudb.logreplication.fsm.ObservableValue;
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.receive.PersistedWriterMetadata;
+import org.corfudb.infrastructure.logreplication.ObservableValue;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.infrastructure.logreplication.PersistedWriterMetadata;
 
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 
-import org.corfudb.logreplication.send.LogReplicationEventMetadata;
 import org.corfudb.logreplication.send.PersistedReaderMetadata;
 
 import org.corfudb.protocols.wireprotocol.Token;
@@ -40,16 +38,15 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
 
 import static java.lang.Thread.sleep;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
-import static org.corfudb.logreplication.receive.PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed;
-import static org.corfudb.logreplication.receive.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapApplyDone;
-import static org.corfudb.logreplication.receive.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart;
+import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed;
+import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapApplyDone;
+import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart;
 import static org.corfudb.logreplication.send.PersistedReaderMetadata.PersistedMetaDataType.LastLogSync;
 import static org.corfudb.logreplication.send.PersistedReaderMetadata.PersistedMetaDataType.LastSnapSync;
 
@@ -1280,7 +1277,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private void verifyExpectedAckMessage(ObservableAckMsg observableAckMsg) {
         // If expected a ackTs, release semaphore / unblock the wait
-        LogReplicationEntry logReplicationEntry = LogReplicationEntry.deserialize(observableAckMsg.getDataMessage().getData());
+        LogReplicationEntry logReplicationEntry = observableAckMsg.getDataMessage();
         System.out.println("ackMsg " + logReplicationEntry.getMetadata());
         switch (testConfig.waitOn) {
             case ON_ACK:

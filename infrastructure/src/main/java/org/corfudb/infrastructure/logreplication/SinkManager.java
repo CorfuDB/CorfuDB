@@ -1,29 +1,23 @@
-package org.corfudb.logreplication;
+package org.corfudb.infrastructure.logreplication;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.fsm.LogReplicationConfig;
-import org.corfudb.logreplication.fsm.ObservableValue;
-import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
-import org.corfudb.logreplication.message.MessageType;
-import org.corfudb.logreplication.receive.LogEntryWriter;
-import org.corfudb.logreplication.receive.PersistedWriterMetadata;
-import org.corfudb.logreplication.receive.ReplicationWriterException;
-import org.corfudb.logreplication.receive.StreamsSnapshotWriter;
+
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.io.File;
 import java.io.FileReader;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 
-import static org.corfudb.logreplication.message.MessageType.LOG_ENTRY_MESSAGE;
-import static org.corfudb.logreplication.message.MessageType.SNAPSHOT_MESSAGE;
-import static org.corfudb.logreplication.send.LogEntrySender.*;
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_MESSAGE;
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
 
 /**
  * This class represents the Log Replication Manager at the destination.
@@ -35,7 +29,11 @@ import static org.corfudb.logreplication.send.LogEntrySender.*;
 public class SinkManager implements DataReceiver {
     private static final String config_file = "/config/corfu/corfu_replication_config.properties";
 
-    private int ackCycleTime = DEFAULT_RESENT_TIMER/DEFAULT_MAX_RETRY;
+    public static final int DEFAULT_READER_QUEUE_SIZE = 1;
+    public static final int DEFAULT_RESENT_TIMER = 5000;
+    public static final int DEFAULT_MAX_RETRY = 5;
+
+    private int ackCycleTime = DEFAULT_RESENT_TIMER/ DEFAULT_MAX_RETRY;
     private int ackCycleCnt = DEFAULT_READER_QUEUE_SIZE;
     private int bufferSize = DEFAULT_READER_QUEUE_SIZE;
 
@@ -45,9 +43,7 @@ public class SinkManager implements DataReceiver {
     private LogEntryWriter logEntryWriter;
     private PersistedWriterMetadata persistedWriterMetadata;
     private RxState rxState;
-    @Getter
-    private DataSender dataSender;
-    private DataControl dataControl;
+
     private LogReplicationConfig config;
     private UUID snapshotRequestId = new UUID(0L, 0L);
 
@@ -60,32 +56,24 @@ public class SinkManager implements DataReceiver {
     /**
      * Constructor
      *
-     * @param rt Corfu Runtime
-     * @param config log replication configuration
-     */
-    public SinkManager(CorfuRuntime rt, DataSender dataSender, DataControl dataControl, LogReplicationConfig config) {
-        this(rt, dataSender, dataControl);
-        setLogReplicationConfig(config);
-    }
-
-    /**
-     * Constructor
-     *
      * This is temp to solve a dependency issue in application (to be removed as config is required)
      * This requires setLogReplicationConfig to be called.
      *
      * @param rt Corfu Runtime
      */
-    public SinkManager(CorfuRuntime rt, DataSender dataSender, DataControl dataControl) {
+    public SinkManager(CorfuRuntime rt, LogReplicationConfig config) {
         CorfuRuntime dedicatedRuntime = CorfuRuntime.fromParameters(rt.getParameters());
         dedicatedRuntime.parseConfigurationString(rt.getLayoutServers().get(0)).connect();
         this.runtime =  dedicatedRuntime;
         this.rxState = RxState.LOG_SYNC;
-        this.dataSender = dataSender;
-        this.dataControl = dataControl;
+        setLogReplicationConfig(config);
     }
 
-    public void setLogReplicationConfig(LogReplicationConfig config) {
+    public SinkManager(String localCorfuEndpoint, LogReplicationConfig config) {
+        this(CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build()).parseConfigurationString(localCorfuEndpoint), config);
+    }
+
+    private void setLogReplicationConfig(LogReplicationConfig config) {
         this.config = config;
         persistedWriterMetadata = new PersistedWriterMetadata(runtime, config.getRemoteSiteID());
 
@@ -131,7 +119,7 @@ public class SinkManager implements DataReceiver {
     /**
      * The end of snapshot sync
      */
-    public void completeSnapshotApply() {
+    public LogReplicationEntry completeSnapshotApply() {
         log.debug("Complete of a snapshot apply");
         //check if the all the expected message has received
         rxState = RxState.LOG_SYNC;
@@ -146,19 +134,23 @@ public class SinkManager implements DataReceiver {
 
         sinkBufferManager = new SinkBufferManager(LOG_ENTRY_MESSAGE, ackCycleTime, ackCycleCnt, bufferSize,
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(), this);
-        dataSender.send(DataMessage.generateAck(metadata), snapshotRequestId, true);
+
+        return LogReplicationEntry.generateAck(metadata);
     }
 
     @Override
-    public void receive(DataMessage dataMessage) {
+    public LogReplicationEntry receive(LogReplicationEntry dataMessage) {
         if (rxState == RxState.LOG_SYNC) {
-            sinkBufferManager.receive(dataMessage);
+            return sinkBufferManager.receive(dataMessage);
         } else {
             receiveWithoutBuffering(dataMessage);
         }
+
+        // TODO: change this
+        return LogReplicationEntry.generateAck(dataMessage.getMetadata());
     }
 
-    public void receiveWithoutBuffering(DataMessage dataMessage) {
+    public void receiveWithoutBuffering(LogReplicationEntry message) {
 
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
@@ -170,14 +162,16 @@ public class SinkManager implements DataReceiver {
         // Buffer data (out of order) and apply
         if (config != null) {
             try {
-                // Convert DataMessage to Corfu Internal Message
-                LogReplicationEntry message = LogReplicationEntry.deserialize(dataMessage.getData());
-
                 if (!receivedValidMessage(message)) {
-                    // Invalid message // Drop the message
-                    log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
-                            message.getMetadata().getMessageMetadataType());
-                    return;
+                    // If we received a start marker for snapshot sync, switch state
+                    if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_START)) {
+                        startSnapshotApply();
+                    } else {
+                        // Invalid message // Drop the message
+                        log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
+                                message.getMetadata().getMessageMetadataType());
+                        return;
+                    }
                 }
 
                 if (rxState == RxState.SNAPSHOT_SYNC) {
@@ -187,7 +181,7 @@ public class SinkManager implements DataReceiver {
                 }
             } catch (ReplicationWriterException e) {
                 log.error("Get an exception: ", e);
-                dataControl.requestSnapshotSync();
+                // TODO: Let ack time out which will kick off Snapshot Sync or send a NACK?
                 log.info("Requested Snapshot Sync.");
             }
         } else {
@@ -196,7 +190,7 @@ public class SinkManager implements DataReceiver {
         }
     }
 
-    private void applyLogEntrySync(LogReplicationEntry message) {
+    private void applyLogEntrySync(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message) {
         // Apply log entry sync message
         long ackTs = logEntryWriter.apply(message);
 
@@ -207,16 +201,24 @@ public class SinkManager implements DataReceiver {
     }
 
     private void applySnapshotSync(LogReplicationEntry message) {
-        // If the snapshot sync has just started, initialize snapshot sync metadata
-        if (message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_START) {
-            initializeSnapshotSync(message);
-        } else {
-            // For all other snapshot sync messages, apply
-            snapshotWriter.apply(message);
+
+        switch (message.getMetadata().getMessageMetadataType()) {
+            case SNAPSHOT_START:
+                initializeSnapshotSync(message);
+                break;
+            case SNAPSHOT_MESSAGE:
+                snapshotWriter.apply(message);
+                break;
+            case SNAPSHOT_END:
+                completeSnapshotApply();
+                break;
+            default:
+                log.warn("Message type {} should not be applied as snapshot sync.", message.getMetadata().getMessageMetadataType());
+                break;
         }
     }
 
-    private void initializeSnapshotSync(LogReplicationEntry entry) {
+    private void initializeSnapshotSync(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry) {
         long timestamp = entry.getMetadata().getSnapshotTimestamp();
 
         log.debug("Received snapshot sync start marker for {} on base snapshot timestamp {}",
@@ -232,9 +234,9 @@ public class SinkManager implements DataReceiver {
         snapshotRequestId = entry.getMetadata().getSyncRequestId();
     }
 
-    private boolean receivedValidMessage(LogReplicationEntry message) {
+    private boolean receivedValidMessage(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message) {
         return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE
-                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_START)
+                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_START || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END)
                 || rxState == RxState.LOG_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
 
@@ -243,10 +245,13 @@ public class SinkManager implements DataReceiver {
     }
 
     @Override
-    public void receive(List<DataMessage> messages) {
-        for (DataMessage msg : messages) {
+    public List<LogReplicationEntry> receive(List<LogReplicationEntry> messages) {
+        for (LogReplicationEntry msg : messages) {
             receive(msg);
         }
+
+        // TODO: fix this
+        return Collections.emptyList();
     }
 
     enum RxState {
