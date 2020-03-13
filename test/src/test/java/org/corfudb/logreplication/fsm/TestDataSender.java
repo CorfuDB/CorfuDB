@@ -1,15 +1,14 @@
 package org.corfudb.logreplication.fsm;
 
 import lombok.Getter;
-import org.corfudb.logreplication.DataSender;
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.send.LogReplicationError;
-import org.corfudb.logreplication.message.DataMessage;
+import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.LogReplicationError;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
-import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -18,51 +17,25 @@ import java.util.UUID;
 public class TestDataSender implements DataSender {
 
     @Getter
-    private Queue<LogReplicationEntry> snapshotQueue = new LinkedList<>();
+    private Queue<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> snapshotQueue = new LinkedList<>();
 
     @Getter
-    private Queue<DataMessage> logEntryQueue = new LinkedList<>();
+    private Queue<LogReplicationEntry> logEntryQueue = new LinkedList<>();
 
     public TestDataSender() {
     }
 
     @Override
-    public boolean send(DataMessage message, UUID snapshotSyncId, boolean completed) {
-        // Hack to bypass and write the snapshotSyncId
-        LogReplicationEntry entry = LogReplicationEntry.deserialize(message.getData());
-        entry.getMetadata().setSyncRequestId(snapshotSyncId);
-
-        if (entry.getPayload().length != 0) {
-            snapshotQueue.add(entry);
-            return true;
-        }
-
-        return false;
-    }
-
-    @Override
-    public boolean send(List<DataMessage> messages, UUID snapshotSyncId, boolean completed) {
-        if (messages != null && !messages.isEmpty()) {
-            // Add all received messages to the queue
-            messages.forEach(msg -> send(msg, snapshotSyncId, completed));
-            return true;
-        }
-
-        return false;
-    }
-
-    @Override
-    public boolean send(DataMessage message) {
-        if (message != null && message.getData() != null) {
+    public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
+        if (message != null && message.getPayload() != null) {
             logEntryQueue.add(message);
-            return true;
         }
 
-        return false;
+        return new CompletableFuture<>();
     }
 
     @Override
-    public boolean send(List<DataMessage> messages) {
+    public boolean send(List<LogReplicationEntry> messages) {
         if (messages != null && !messages.isEmpty()) {
             // Add all received messages to the queue
             messages.forEach(msg -> logEntryQueue.add(msg));
@@ -71,9 +44,6 @@ public class TestDataSender implements DataSender {
 
         return false;
     }
-
-    @Override
-    public void onError(LogReplicationError error, UUID snapshotSyncId) {}
 
     @Override
     public void onError(LogReplicationError error) {}
