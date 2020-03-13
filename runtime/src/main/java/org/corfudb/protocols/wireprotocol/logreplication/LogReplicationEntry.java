@@ -1,17 +1,17 @@
-package org.corfudb.logreplication.message;
+package org.corfudb.protocols.wireprotocol.logreplication;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import lombok.Getter;
+import lombok.Data;
+import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 
 import java.util.UUID;
 
-public class LogReplicationEntry {
+@Data
+public class LogReplicationEntry implements ICorfuPayload<LogReplicationEntry> {
 
-    @Getter
     private LogReplicationEntryMetadata metadata;
 
-    @Getter
     private byte[] payload;
 
     public LogReplicationEntry(LogReplicationEntryMetadata metadata, byte[] payload) {
@@ -23,6 +23,21 @@ public class LogReplicationEntry {
                                byte[] payload) {
         this.metadata = new LogReplicationEntryMetadata(type, syncRequestId, entryTS, preTS, snapshot, sequence);
         this.payload = payload;
+    }
+
+    public LogReplicationEntry(ByteBuf buf) {
+        metadata = ICorfuPayload.fromBuffer(buf, LogReplicationEntryMetadata.class);
+        payload = ICorfuPayload.fromBuffer(buf, byte[].class);
+    }
+
+    public static LogReplicationEntry generateAck(LogReplicationEntryMetadata metadata) {
+        return new LogReplicationEntry(metadata, new byte[0]);
+    }
+
+    @Override
+    public void doSerialize(ByteBuf buf) {
+        ICorfuPayload.serialize(buf, metadata);
+        ICorfuPayload.serialize(buf, payload);
     }
 
     public byte[] serialize() {

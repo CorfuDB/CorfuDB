@@ -8,8 +8,8 @@ public class LogReplicationPingClient {
     public static void main(String[] args) {
         try {
             System.out.println("Start Client!!!!");
-            LogReplicationRuntime runtime = new LogReplicationRuntime(RuntimeParameters.builder().build());
-            runtime.connect("localhost:9005");
+            //LogReplicationRuntime runtime = new LogReplicationRuntime(RuntimeParameters.builder().build());
+            //runtime.connect("localhost:9005");
         } catch (Exception e) {
             System.out.println("Error!!!! " + e);
         }

@@ -4,12 +4,11 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
-import org.corfudb.logreplication.message.DataMessage;
-import org.corfudb.logreplication.message.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -158,7 +157,7 @@ public class LogEntrySender {
                 }
 
                 entry.retry(getCurrentTime());
-                dataSender.send(new DataMessage(entry.getData().serialize()));
+                dataSender.send(entry.getData());
                 log.info("resend message " + entry.getData().getMetadata().getTimestamp());
             }
         }
@@ -183,7 +182,7 @@ public class LogEntrySender {
         }
 
         while (taskActive && pendingEntries.list.size() < readerBatchSize) {
-            LogReplicationEntry message;
+            org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message;
             // Read and Send Log Entries
             try {
                 message = logEntryReader.read(logEntrySyncEventId);
@@ -191,7 +190,7 @@ public class LogEntrySender {
 
                 if (message != null) {
                     pendingEntries.append(message, getCurrentTime());
-                    dataSender.send(new DataMessage(message.serialize()));
+                    dataSender.send(message);
                     log.trace("send message " + message.getMetadata().getTimestamp());
                 } else {
                     if (message == null) {
@@ -266,7 +265,7 @@ public class LogEntrySender {
     @Data
     public static class LogReplicationPendingEntry {
         // The address of the log entry
-        LogReplicationEntry data;
+        org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data;
 
         // The first time the log entry is sent over
         long time;
@@ -274,7 +273,7 @@ public class LogEntrySender {
         // The number of retries for this entry
         int retry;
 
-        public LogReplicationPendingEntry(LogReplicationEntry data, long time) {
+        public LogReplicationPendingEntry(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data, long time) {
             this.data = data;
             this.time = time;
             this.retry = 0;
@@ -315,7 +314,7 @@ public class LogEntrySender {
             list.removeIf(a->(a.data.getMetadata().getTimestamp() <= address));
         }
 
-        void append(LogReplicationEntry data, long timer) {
+        void append(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data, long timer) {
             LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data, timer);
             list.add(entry);
         }
