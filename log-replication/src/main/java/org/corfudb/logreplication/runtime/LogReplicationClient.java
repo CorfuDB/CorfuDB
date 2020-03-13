@@ -1,31 +1,42 @@
 package org.corfudb.logreplication.runtime;
 
-import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.runtime.clients.IClient;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.runtime.clients.AbstractClient;
 import org.corfudb.runtime.clients.IClientRouter;
 
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
-public class LogReplicationClient implements IClient {
+public class LogReplicationClient extends AbstractClient {
 
     @Getter
     @Setter
     private IClientRouter router;
 
-    public LogReplicationClient(IClientRouter router) {
+    public LogReplicationClient(IClientRouter router, long epoch) {
+        super(router, epoch);
         setRouter(router);
     }
 
-    public CompletableFuture<Boolean> ping() {
-        System.out.println("Ping!!!!!! ");
+    public LogReplicationClient(IClientRouter router) {
+        this(router, 0);
+    }
+
+    public CompletableFuture<LogReplicationNegotiationResponse> sendNegotiationRequest() {
         return getRouter().sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsgType.PING).setEpoch(0));
+                new CorfuMsg(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST).setEpoch(0));
+    }
+
+    public CompletableFuture<LogReplicationEntry> sendLogEntry(LogReplicationEntry logReplicationEntry) {
+        CorfuMsg msg = new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_ENTRY, logReplicationEntry).setEpoch(0);
+        return getRouter().sendMessageAndGetCompletable(msg);
     }
 
     @Override
@@ -37,4 +48,5 @@ public class LogReplicationClient implements IClient {
     public IClientRouter getRouter() {
         return router;
     }
+
 }

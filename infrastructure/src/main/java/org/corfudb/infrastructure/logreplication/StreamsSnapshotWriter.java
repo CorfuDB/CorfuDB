@@ -1,12 +1,11 @@
-package org.corfudb.logreplication.receive;
+package org.corfudb.infrastructure.logreplication;
 
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.logreplication.message.LogReplicationEntry;
-import org.corfudb.logreplication.message.LogReplicationEntryMetadata;
-import org.corfudb.logreplication.message.MessageType;
-import org.corfudb.logreplication.fsm.LogReplicationConfig;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -140,7 +139,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                             entry.getMetadata(), persistentSeqNum);
                 }
 
-                // We have succeed update successfull, don't need retry any more.
+                // We have succeed update successful, don't need retry any more.
                 doRetry = false;
             } catch (TransactionAbortedException e) {
                 log.warn("Caught an exception {}, will retry {}.", e, numRetry);
@@ -152,7 +151,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     @Override
     public void apply(LogReplicationEntry message) {
         verifyMetadata(message.getMetadata());
-        System.out.println("writer got recv seq " + message.getMetadata().getSnapshotSyncSeqNum());
+
         if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq ||
                 message.getMetadata().getMessageMetadataType() != MessageType.SNAPSHOT_MESSAGE) {
             log.error("Expecting sequencer {} != recvSeq {} or wrong message type {} expecting {}",
