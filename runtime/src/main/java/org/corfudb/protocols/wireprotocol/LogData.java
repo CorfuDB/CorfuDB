@@ -129,7 +129,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         if (serializedCache == null) {
             serializedCache = Unpooled.buffer();
             doSerializeInternal(serializedCache);
-            lastKnownSize = serializedCache.array().length;
         } else {
             serializedCache.retain();
         }
@@ -282,8 +281,10 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 buf.writerIndex(lengthIndex);
                 buf.writeInt(size);
                 buf.writerIndex(lengthIndex + size + 4);
+                lastKnownSize = size;
             } else {
                 ICorfuPayload.serialize(buf, data);
+                lastKnownSize = data.length;
             }
         }
 
