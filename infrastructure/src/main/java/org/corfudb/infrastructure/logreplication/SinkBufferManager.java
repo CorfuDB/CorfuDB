@@ -51,20 +51,6 @@ public class SinkBufferManager {
         buffer = new HashMap<>();
     }
 
-    LogReplicationEntry receive(LogReplicationEntry dataMessage) {
-        switch (dataMessage.getMetadata().getMessageMetadataType()) {
-            case SNAPSHOT_MESSAGE:
-                sinkManager.receiveWithoutBuffering(dataMessage);
-                break;
-            case LOG_ENTRY_MESSAGE:
-                return processMsgAndBuffer(dataMessage);
-            default:
-                sinkManager.receiveWithoutBuffering(dataMessage);
-        }
-
-        return null;
-    }
-
     long getKey(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry) {
         switch (entry.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
@@ -140,7 +126,7 @@ public class SinkBufferManager {
      * At the end according to the ack policy, send ack.
      * @param dataMessage
      */
-    LogReplicationEntry processMsgAndBuffer(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry dataMessage) {
+    public LogReplicationEntry processMsgAndBuffer(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry dataMessage) {
         if (dataMessage.getMetadata().getMessageMetadataType() != type) {
             log.warn("Got msg type {} but expecting type {}", dataMessage.getMetadata().getMessageMetadataType(), type);
             return null;

@@ -12,6 +12,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -41,8 +42,6 @@ public class SourceForwardingDataSender implements DataSender {
      */
     final public static int DROP_MSG_ONCE = 1;
 
-    final public static int TRIGGER_TIMEOUT = 2;
-
     private int ifDropMsg = 0;
 
     final static int DROP_INCREMENT = 4;
@@ -58,24 +57,23 @@ public class SourceForwardingDataSender implements DataSender {
                 .connect();
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(false, 0));
-        this.destinationLogReplicationManager = new SinkManager(runtime, config);
+        this.destinationLogReplicationManager = new SinkManager(runtime.getLayoutServers().get(0), config);
         this.channelExecutorWorkers = Executors.newSingleThreadExecutor();
         this.ifDropMsg = ifDropMsg;
     }
 
     @Override
-    public boolean send(LogReplicationEntry message) {
+    public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         if (ifDropMsg > 0 && message.getMetadata().timestamp == firstDrop) {
             System.out.println("****** Drop log entry " + message.getMetadata().timestamp);
             if (ifDropMsg == DROP_MSG_ONCE) {
                 firstDrop += DROP_INCREMENT;
             }
-            return true;
         }
 
         // Emulate Channel by directly accepting from the destination, whatever is sent by the source manager
         channelExecutorWorkers.execute(() -> destinationLogReplicationManager.receive(message));
-        return true;
+        return new CompletableFuture<>();
     }
 
     @Override

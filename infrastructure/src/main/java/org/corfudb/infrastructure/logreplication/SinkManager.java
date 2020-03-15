@@ -11,7 +11,6 @@ import org.corfudb.runtime.CorfuRuntime;
 
 import java.io.File;
 import java.io.FileReader;
-import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
@@ -48,35 +47,28 @@ public class SinkManager implements DataReceiver {
     private UUID snapshotRequestId = new UUID(0L, 0L);
 
     private int rxMessageCounter = 0;
+
     // Count number of received messages, used for testing purposes
     @VisibleForTesting
     @Getter
     private ObservableValue rxMessageCount = new ObservableValue(rxMessageCounter);
 
     /**
-     * Constructor
+     * Constructor Sink Manager
      *
-     * This is temp to solve a dependency issue in application (to be removed as config is required)
-     * This requires setLogReplicationConfig to be called.
-     *
-     * @param rt Corfu Runtime
+     * @param localCorfuEndpoint endpoint for local corfu server
+     * @param config log replication configuration
      */
-    public SinkManager(CorfuRuntime rt, LogReplicationConfig config) {
-        CorfuRuntime dedicatedRuntime = CorfuRuntime.fromParameters(rt.getParameters());
-        dedicatedRuntime.parseConfigurationString(rt.getLayoutServers().get(0)).connect();
-        this.runtime =  dedicatedRuntime;
-        this.rxState = RxState.LOG_SYNC;
-        setLogReplicationConfig(config);
-    }
-
     public SinkManager(String localCorfuEndpoint, LogReplicationConfig config) {
-        this(CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build()).parseConfigurationString(localCorfuEndpoint), config);
+        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
+                .parseConfigurationString(localCorfuEndpoint).connect();
+        this.rxState = RxState.LOG_ENTRY_SYNC;
+        this.config = config;
+        init();
     }
 
-    private void setLogReplicationConfig(LogReplicationConfig config) {
-        this.config = config;
+    private void init() {
         persistedWriterMetadata = new PersistedWriterMetadata(runtime, config.getRemoteSiteID());
-
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, persistedWriterMetadata);
         logEntryWriter = new LogEntryWriter(runtime, config, persistedWriterMetadata);
         logEntryWriter.setTimestamp(persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
@@ -100,29 +92,58 @@ public class SinkManager implements DataReceiver {
             ackCycleCnt = Integer.parseInt(props.getProperty("log_writer_ack_cycle_count", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
             ackCycleTime = Integer.parseInt(props.getProperty("log_writer_ack_cycle_time", Integer.toString(DEFAULT_RESENT_TIMER)));
             reader.close();
-            log.info("log writer config queue size {} ackCycleCnt {} ackCycleTime {}",
+            log.info("Log writer config queue size {} ackCycleCnt {} ackCycleTime {}",
                     bufferSize, ackCycleCnt, ackCycleTime);
         } catch (Exception e) {
             log.warn("Caught an exception while reading the config file: {}", e.getCause());
         }
     }
-    /**
-     * Signal the manager a snapshot sync is about to start. This is required to reset previous states.
-     */
-    public void startSnapshotApply() {
-        log.debug("Start of a snapshot apply");
-        rxState = RxState.SNAPSHOT_SYNC;
-        // If we don't use AR, we need our own buffer
-        // sinkBufferManager = new SinkBufferManager(SNAPSHOT_MESSAGE, ackCycleTime, ackCycleCnt, bufferSize);
+
+    @Override
+    public LogReplicationEntry receive(LogReplicationEntry message) {
+        log.info("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
+
+        if (!receivedValidMessage(message)) {
+            // If we received a start marker for snapshot sync while in LOG_ENTRY_SYNC, switch rxState
+            if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_START)) {
+                rxState = RxState.SNAPSHOT_SYNC;
+            } else {
+                // Invalid message // Drop the message
+                log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
+                        message.getMetadata().getMessageMetadataType());
+                return null;
+            }
+        }
+
+        if (rxState.equals(RxState.LOG_ENTRY_SYNC)) {
+            return sinkBufferManager.processMsgAndBuffer(message);
+        }
+
+        // Snapshot Sync (no buffering, out of order is allowed)
+        return receiveWithoutBuffering(message);
+    }
+
+    @Override
+    public LogReplicationEntry receive(List<LogReplicationEntry> messages) {
+        for (LogReplicationEntry msg : messages) {
+            receive(msg);
+        }
+
+        // Todo (hack): ACK should be controlled from the receive method
+        if (messages.size() > 0) {
+            return LogReplicationEntry.generateAck(messages.get(0).getMetadata());
+        }
+
+        return null;
     }
 
     /**
-     * The end of snapshot sync
+     * Signal the manager a snapshot sync is about to complete. This is required to transition to log sync.
      */
-    public LogReplicationEntry completeSnapshotApply() {
+    private LogReplicationEntry completeSnapshotApply() {
         log.debug("Complete of a snapshot apply");
         //check if the all the expected message has received
-        rxState = RxState.LOG_SYNC;
+        rxState = RxState.LOG_ENTRY_SYNC;
         persistedWriterMetadata.setSrcBaseSnapshotDone();
 
         // Prepare and Send Snapshot Sync ACK
@@ -138,19 +159,7 @@ public class SinkManager implements DataReceiver {
         return LogReplicationEntry.generateAck(metadata);
     }
 
-    @Override
-    public LogReplicationEntry receive(LogReplicationEntry dataMessage) {
-        if (rxState == RxState.LOG_SYNC) {
-            return sinkBufferManager.receive(dataMessage);
-        } else {
-            receiveWithoutBuffering(dataMessage);
-        }
-
-        // TODO: change this
-        return LogReplicationEntry.generateAck(dataMessage.getMetadata());
-    }
-
-    public void receiveWithoutBuffering(LogReplicationEntry message) {
+    public LogReplicationEntry receiveWithoutBuffering(LogReplicationEntry message) {
 
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
@@ -162,22 +171,12 @@ public class SinkManager implements DataReceiver {
         // Buffer data (out of order) and apply
         if (config != null) {
             try {
-                if (!receivedValidMessage(message)) {
-                    // If we received a start marker for snapshot sync, switch state
-                    if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_START)) {
-                        startSnapshotApply();
-                    } else {
-                        // Invalid message // Drop the message
-                        log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
-                                message.getMetadata().getMessageMetadataType());
-                        return;
-                    }
-                }
-
                 if (rxState == RxState.SNAPSHOT_SYNC) {
-                    applySnapshotSync(message);
-                } else if (rxState == RxState.LOG_SYNC) {
+                    return applySnapshotSync(message);
+                } else if (rxState == RxState.LOG_ENTRY_SYNC) {
                     applyLogEntrySync(message);
+                    // Log Entry ACK policy is handled by the caller
+                    return null;
                 }
             } catch (ReplicationWriterException e) {
                 log.error("Get an exception: ", e);
@@ -188,6 +187,8 @@ public class SinkManager implements DataReceiver {
             log.error("Required LogReplicationConfig for Sink Manager.");
             throw new IllegalArgumentException("Required LogReplicationConfig for Sink Manager.");
         }
+
+        return null;
     }
 
     private void applyLogEntrySync(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message) {
@@ -200,7 +201,7 @@ public class SinkManager implements DataReceiver {
         //}
     }
 
-    private void applySnapshotSync(LogReplicationEntry message) {
+    private LogReplicationEntry applySnapshotSync(LogReplicationEntry message) {
 
         switch (message.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_START:
@@ -210,12 +211,13 @@ public class SinkManager implements DataReceiver {
                 snapshotWriter.apply(message);
                 break;
             case SNAPSHOT_END:
-                completeSnapshotApply();
-                break;
+                return completeSnapshotApply();
             default:
                 log.warn("Message type {} should not be applied as snapshot sync.", message.getMetadata().getMessageMetadataType());
                 break;
         }
+
+        return null;
     }
 
     private void initializeSnapshotSync(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry) {
@@ -237,25 +239,15 @@ public class SinkManager implements DataReceiver {
     private boolean receivedValidMessage(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message) {
         return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE
                 || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_START || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END)
-                || rxState == RxState.LOG_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
+                || rxState == RxState.LOG_ENTRY_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
 
     public void shutdown() {
         this.runtime.shutdown();
     }
 
-    @Override
-    public List<LogReplicationEntry> receive(List<LogReplicationEntry> messages) {
-        for (LogReplicationEntry msg : messages) {
-            receive(msg);
-        }
-
-        // TODO: fix this
-        return Collections.emptyList();
-    }
-
     enum RxState {
         SNAPSHOT_SYNC,
-        LOG_SYNC
+        LOG_ENTRY_SYNC
     }
 }
