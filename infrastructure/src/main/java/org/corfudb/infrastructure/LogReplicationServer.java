@@ -40,32 +40,29 @@ public class LogReplicationServer extends AbstractServer {
 
     private final ExecutorService executor;
 
-    private SinkManager sinkManager;
+    private final SinkManager sinkManager;
 
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
-
-    @Override
-    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
-        return getState() == ServerState.READY;
-    }
 
     public LogReplicationServer(@Nonnull ServerContext context) {
         this.serverContext = context;
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
-        // Todo (hack): remove this if condition, can we always assume that Corfu's port is 9000
-        //  or will this be available through the Site Manager?
-        if (serverContext.getLocalEndpoint().equals("localhost:9020")) {
-            log.info("Initialize Sink Manager with Runtime to {}", serverContext.getNodeLocator().getHost() + ":9001");
-            LogReplicationConfig config = getLogReplicationConfig();
-            // TODO (hack): where can we obtain local corfu endpoint?
-            this.sinkManager = new SinkManager(serverContext.getNodeLocator().getHost() + ":9001", config);
-        }
+        LogReplicationConfig config = LogReplicationConfig.fromFile(configFilePath);
+
+        // TODO (hack): where can we obtain the local corfu endpoint? site manager? or can we always assume port is 9000?
+        String corfuPort = serverContext.getLocalEndpoint().equals("localhost:9020") ? ":9001" : ":9000";
+        String corfuEndpoint = serverContext.getNodeLocator().getHost() + corfuPort;
+        log.info("Initialize Sink Manager with CorfuRuntime to {}", corfuEndpoint);
+        this.sinkManager = new SinkManager(corfuEndpoint, config);
     }
 
-    private LogReplicationConfig getLogReplicationConfig() {
-        return LogReplicationConfig.fromFile(configFilePath);
+    /* ************ Override Methods ************ */
+
+    @Override
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        return getState() == ServerState.READY;
     }
 
     @Override
@@ -78,6 +75,8 @@ public class LogReplicationServer extends AbstractServer {
         super.shutdown();
         executor.shutdown();
     }
+
+    /* ************ Server Handlers ************ */
 
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_ENTRY)
     private void handleLogReplicationEntry(CorfuPayloadMsg<LogReplicationEntry> msg, ChannelHandlerContext ctx, IServerRouter r) {

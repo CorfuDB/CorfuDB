@@ -34,16 +34,9 @@ public class LogReplicationClient extends AbstractClient {
                 new CorfuMsg(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST).setEpoch(0));
     }
 
-    public boolean sendSnapshotSync(LogReplicationEntry logReplicationEntry) {
-        try {
-            log.info("Send log entry message...");
-            CorfuMsg msg = new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_ENTRY, logReplicationEntry).setEpoch(0);
-            getRouter().sendMessage(msg);
-            return true;
-        } catch (Exception e) {
-            log.error("Exception caught while sending snapshot sync message", e);
-            return false;
-        }
+    public CompletableFuture<LogReplicationEntry> sendLogEntry(LogReplicationEntry logReplicationEntry) {
+        CorfuMsg msg = new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_ENTRY, logReplicationEntry).setEpoch(0);
+        return getRouter().sendMessageAndGetCompletable(msg);
     }
 
     @Override

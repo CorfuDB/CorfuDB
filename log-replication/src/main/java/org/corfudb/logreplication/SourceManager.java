@@ -244,9 +244,8 @@ public class SourceManager implements DataReceiver {
     }
 
     @Override
-    public List<LogReplicationEntry> receive(List<LogReplicationEntry> messages) {
+    public LogReplicationEntry receive(List<LogReplicationEntry> messages) {
         messages.forEach(message -> receive(message));
-
-        return Collections.emptyList();
+        return null;
     }
 }

@@ -7,6 +7,7 @@ import org.corfudb.logreplication.runtime.LogReplicationRuntimeParameters;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -15,10 +16,7 @@ public class CorfuReplicationManager {
     // Keep map of remote site endpoints and the associated log replication client
     Map<String, LogReplicationRuntime> logReplicationRuntimes = new HashMap<>();
 
-    private final SiteToSiteConfiguration config;
-
-    public CorfuReplicationManager(SiteToSiteConfiguration config) {
-        this.config = config;
+    public CorfuReplicationManager() {
     }
 
     enum LogReplicationNegotiationResult {
@@ -33,46 +31,67 @@ public class CorfuReplicationManager {
     /**
      * Once determined this is a Lead Sender (on primary site), start log replication.
      */
-    public void startLogReplication() {
+    public void startLogReplication(CrossSiteConfiguration config) {
 
-        String remoteLRSEndpoint = config.backupSite.getRemoteLeaderEndpoint();
+        Map<String, String> remoteLRSEndpoints = config.getRemoteLeaderEndpoints();
+
+        log.info("Start log replication to remote site endpoints {}", remoteLRSEndpoints);
 
         // Add Client to Remote Endpoint
-        LogReplicationRuntime runtime = logReplicationRuntimes.computeIfAbsent(remoteLRSEndpoint, remote -> {
-            LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
-                    .localCorfuEndpoint(config.getLocalCorfuEndpoint())
-                    .remoteLogReplicationServerEndpoint(config.getRemoteLogReplicationServer()).build();
-            LogReplicationRuntime replicationRuntime = new LogReplicationRuntime(parameters);
-            replicationRuntime.connect();
-            return replicationRuntime;
-        });
+        for (Map.Entry<String, String> remoteSiteToEndpoint : remoteLRSEndpoints.entrySet()) {
+            String remoteSiteId = remoteSiteToEndpoint.getKey();
+            String remoteSiteEndpoint = remoteSiteToEndpoint.getValue();
+            log.info("Initialize runtime to {} in site {}", remoteSiteEndpoint, remoteSiteId);
 
-        // Initiate Log Replication Negotiation Protocol 
-        LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
+            LogReplicationRuntime runtime;
 
-        log.info("Log Replication Negotiation result {}", negotiationResult);
+            if(logReplicationRuntimes.get(remoteSiteId) != null) {
+                // If runtime exists for this remote site, verify the lead endpoint has not changed
+                LogReplicationRuntime rt = logReplicationRuntimes.get(remoteSiteId);
+                if (!rt.getParameters().getRemoteLogReplicationServerEndpoint().equals(remoteSiteEndpoint)) {
+                    // If remote lead endpoint changed
+                    // Todo: some shutdown / disconnect on the previous runtime
+                    // rt.disconnect();
+                    logReplicationRuntimes.remove(remoteSiteId);
+                }
+            }
+
+            runtime = logReplicationRuntimes.computeIfAbsent(remoteSiteId, remote -> {
+                    LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
+                            .localCorfuEndpoint(config.getLocalCorfuEndpoint())
+                            .remoteLogReplicationServerEndpoint(remoteSiteEndpoint).build();
+                    LogReplicationRuntime replicationRuntime = new LogReplicationRuntime(parameters);
+                    replicationRuntime.connect();
+                    return replicationRuntime;
+                });
+
+            // Initiate Log Replication Negotiation Protocol
+            LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
+
+            log.info("Log Replication Negotiation with {} result {}", remoteSiteEndpoint, negotiationResult);
+
+            startReplication(runtime, negotiationResult);
+        }
+    }
+
+    private void startReplication(LogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult) {
 
         switch (negotiationResult) {
             case SNAPSHOT_SYNC:
+                log.info("Start Snapshot Sync Replication");
                 runtime.startSnapshotSync();
                 break;
             case LOG_ENTRY_SYNC:
+                log.info("Start Log Entry Sync Replication");
                 runtime.startLogEntrySync();
                 break;
             case LEADERSHIP_LOST:
             case CONNECTION_LOST:
             case UNKNOWN:
+                log.info("Invalid Negotiation result. Re-trigger discvoery.");
                 // Re-Trigger Discovery Leader Receiver
                 break;
         }
-    }
-
-
-    /**
-     * Once determined this is a Lead Receiver (on standby site), start log receivers.
-     */
-    public void startLogReceive() {
-        //
     }
 
     private LogReplicationNegotiationResult startNegotiation(LogReplicationRuntime logReplicationRuntime) {

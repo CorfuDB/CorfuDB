@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * This Interface comprises Data Path send operations for both Source and Sink.
@@ -20,7 +21,7 @@ public interface DataSender {
      * @param message LogReplicationEntry representing the data to send across sites.
      * @return
      */
-    boolean send(LogReplicationEntry message);
+    CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message);
 
     /**
      * Application callback on next available messages for transmission to remote site.

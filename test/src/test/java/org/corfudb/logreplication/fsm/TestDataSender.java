@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
 
 
 /**
@@ -25,13 +26,12 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public boolean send(LogReplicationEntry message) {
+    public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         if (message != null && message.getPayload() != null) {
             logEntryQueue.add(message);
-            return true;
         }
 
-        return false;
+        return new CompletableFuture<>();
     }
 
     @Override

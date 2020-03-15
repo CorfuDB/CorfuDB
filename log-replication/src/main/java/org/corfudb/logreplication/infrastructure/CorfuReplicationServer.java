@@ -14,20 +14,23 @@ import java.util.Map;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
+/**
+ * This class represents the Corfu Replication Server. This Server will be running on both ends
+ * of the cross-site replication.
+ *
+ * A discovery mechanism will enable a site as Source (Sender) and another as Sink (Receiver).
+ */
 @Slf4j
 public class CorfuReplicationServer {
 
-        /**
-         * This string defines the command line arguments,
-         * in the docopt DSL (see http://docopt.org) for the executable.
-         * It also serves as the documentation for the executable.
-         *
-         * <p>Unfortunately, Java doesn't support multi-line string literals,
-         * so you must concatenate strings and terminate with newlines.
-         *
-         * <p>Note that the java implementation of docopt has a strange requirement
-         * that each option must be preceded with a space.
-         */
+    /**
+     * This string defines the command line arguments,
+     * in the docopt DSL (see http://docopt.org) for the executable.
+     * It also serves as the documentation for the executable.
+     *
+     * <p>Note that the java implementation of docopt has a strange requirement
+     * that each option must be preceded with a space.
+     */
     private static final String USAGE =
             "Log Replication Server, the server for the Log Replication.\n"
                     + "\n"
@@ -39,9 +42,9 @@ public class CorfuReplicationServer {
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-i <channel-implementation>] "
                     + "[-z <tls-protocols>]] [-H <seconds>] "
-                    + "[-T <threads>] [-B <size>]"
-                    + "[--metrics] [--metrics-port <metrics_port>]"
-                    + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
+                    + "[-T <threads>] [-B <size>] "
+                    + "[--metrics] [--metrics-port <metrics_port>] "
+                    + "[-P <prefix>] [-R <retention>] [--agent] <port> \n"
                     + "\n"
                     + "Options:\n"
                     + " -s, --single                                                             "
@@ -218,10 +221,10 @@ public class CorfuReplicationServer {
                     activeServer = new CorfuReplicationServerNode(serverContext);
 
                     // Start LogReplicationDiscovery Service, responsible for
-                    // acquiring lease, retrieving Site Manager Info and processing this info
-                    Runnable runnable = new CorfuReplicationDiscoveryService();
-                    ((CorfuReplicationDiscoveryService) runnable).setPort(Integer.toString(NodeLocator.parseString(serverContext.getLocalEndpoint()).getPort()));
-                    Thread replicationDiscoveryThread = new Thread(runnable);
+                    // acquiring lock, retrieving Site Manager Info and processing this info
+                    // so this node is initialized as Source (sender) or Sink (receiver)
+                    Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(NodeLocator.parseString(serverContext.getLocalEndpoint()));
+                    Thread replicationDiscoveryThread = new Thread(replicationDiscoveryRunnable);
                     replicationDiscoveryThread.start();
 
                     // Start Corfu Replication Server Node
