@@ -7,6 +7,7 @@ import org.corfudb.logreplication.runtime.LogReplicationClient;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 public class CorfuDataSender implements DataSender {
@@ -18,9 +19,10 @@ public class CorfuDataSender implements DataSender {
     }
 
     @Override
-    public boolean send(LogReplicationEntry message) {
+    public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         log.info("Send single log entry");
-        return client.sendSnapshotSync(message);
+        // Todo (hack): I believe we need to somehow keep these CF until any is completed...
+        return client.sendLogEntry(message);
     }
 
     @Override

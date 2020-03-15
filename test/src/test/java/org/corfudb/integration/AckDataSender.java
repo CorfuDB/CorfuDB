@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.fail;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -27,10 +28,10 @@ public class AckDataSender implements DataSender {
     }
 
     @Override
-    public boolean send(LogReplicationEntry message) {
+    public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         // Emulate it was sent over the wire and arrived on the source side
         channel.execute(() -> sourceManager.receive(message));
-        return true;
+        return new CompletableFuture<>();
     }
 
     @Override

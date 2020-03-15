@@ -12,5 +12,5 @@ public interface DataReceiver {
 
     LogReplicationEntry receive(LogReplicationEntry message);
 
-    List<LogReplicationEntry> receive(List<LogReplicationEntry> messages);
+    LogReplicationEntry receive(List<LogReplicationEntry> messages);
 }
