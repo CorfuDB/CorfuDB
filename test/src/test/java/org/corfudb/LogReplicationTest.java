@@ -90,6 +90,7 @@ public class LogReplicationTest {
 //                .open();
     }
 
+
     private void generateData() {
 
 //        runtime.getObjectsView().TXBegin();
