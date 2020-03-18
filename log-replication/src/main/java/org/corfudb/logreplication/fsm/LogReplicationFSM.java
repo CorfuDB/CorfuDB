@@ -244,6 +244,8 @@ public class LogReplicationFSM {
             //   Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
 
+            System.out.println("Process event::" + event.getType());
+
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
                 log.info("Log Replication FSM consume event {}", event);
             }
