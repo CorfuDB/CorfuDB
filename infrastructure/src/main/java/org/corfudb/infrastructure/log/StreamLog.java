@@ -78,14 +78,14 @@ public interface StreamLog {
     long getTrimMark();
 
     /**
-     * Returns the known addresses in this Log Unit in the specified consecutive
-     * range of addresses.
+     * Returns the written addresses in this Log Unit in the specified consecutive
+     * range of addresses, regardless of whether persisted on disk.
      *
      * @param rangeStart Start address of range.
      * @param rangeEnd   End address of range.
      * @return Set of known addresses.
      */
-    Set<Long> getKnownAddressesInRange(long rangeStart, long rangeEnd);
+    Set<Long> getWrittenAddressesInRange(long rangeStart, long rangeEnd);
 
     /**
      * Sync the stream log file to secondary storage.

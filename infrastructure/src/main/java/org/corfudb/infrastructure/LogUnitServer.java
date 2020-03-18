@@ -319,7 +319,7 @@ public class LogUnitServer extends AbstractServer {
         KnownAddressRequest request = msg.getPayload();
         try {
             Set<Long> knownAddresses = streamLog
-                    .getKnownAddressesInRange(request.getStartRange(), request.getEndRange());
+                    .getWrittenAddressesInRange(request.getStartRange(), request.getEndRange());
             r.sendResponse(ctx, msg,
                     CorfuMsgType.KNOWN_ADDRESS_RESPONSE.payloadMsg(knownAddresses));
         } catch (Exception e) {

@@ -50,7 +50,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testHigherRank() {
+    public void testHigherRank() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
         long address = 0;
         writeToLog(log, address, DataType.DATA, "v-1", 1);
@@ -63,7 +63,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testLowerRank() {
+    public void testLowerRank() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
         long address = 0;
         writeToLog(log, address, DataType.DATA, "v-1", 2);
@@ -81,7 +81,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testHigherRankAgainstProposal() {
+    public void testHigherRankAgainstProposal() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
         long address = 0;
         writeToLog(log, address, DataType.RANK_ONLY, "v-1", 1);
@@ -94,7 +94,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testLowerRankAgainstProposal() {
+    public void testLowerRankAgainstProposal() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
         long address = 0;
         writeToLog(log, address, DataType.RANK_ONLY, "v-1", 2);
@@ -112,7 +112,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testProposalWithHigherRankAgainstData() {
+    public void testProposalWithHigherRankAgainstData() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
         long address = 0;
         writeToLog(log, address, DataType.DATA, "v-1", 1);
@@ -132,7 +132,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
 
 
     @Test
-    public void testProposalWithLowerRankAgainstData() {
+    public void testProposalWithLowerRankAgainstData() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
         long address = 0;
         writeToLog(log, address, DataType.DATA, "v-1", 2);
@@ -151,7 +151,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
 
 
     @Test
-    public void testProposalsHigherRank() {
+    public void testProposalsHigherRank() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
         long address = 0;
         writeToLog(log, address, DataType.RANK_ONLY, "v-1", 1);
@@ -164,7 +164,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void testProposalsLowerRank() {
+    public void testProposalsLowerRank() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
         long address = 0;
         writeToLog(log, address, DataType.RANK_ONLY, "v-1", 2);
@@ -182,7 +182,7 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     }
 
     @Test
-    public void checkProposalIsIdempotent() {
+    public void checkProposalIsIdempotent() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
         long address = 0;
         IMetadata.DataRank sameRank = new IMetadata.DataRank(1);
@@ -194,17 +194,21 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
         assertTrue(new String(value2.getData()).contains("v-1"));
     }
 
-    private void writeToLog(StreamLog log, long address, DataType dataType, String payload, long rank) {
+    private void writeToLog(StreamLog log, long address, DataType dataType,
+                            String payload, long rank) throws Exception {
         this.writeToLog(log, address, dataType, payload, new IMetadata.DataRank(rank));
+        log.sync(true);
     }
 
-    private void writeToLog(StreamLog log, long address, DataType dataType, String payload, IMetadata.DataRank rank) {
+    private void writeToLog(StreamLog log, long address, DataType dataType,
+                            String payload, IMetadata.DataRank rank) throws Exception {
         ByteBuf b = Unpooled.buffer();
         byte[] streamEntry = payload.getBytes();
         Serializers.CORFU.serialize(streamEntry, b);
         LogData data = new LogData(dataType, b);
         data.setRank(rank);
         log.append(address, data);
+        log.sync(true);
     }
 
     private String getDirPath() {

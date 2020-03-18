@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.log;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 import com.google.protobuf.AbstractMessage;
@@ -11,13 +10,13 @@ import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -88,8 +87,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     private final StreamLogDataStore dataStore;
 
-    private ConcurrentMap<String, SegmentHandle> writeChannels;
-    private final Set<FileChannel> channelsToSync;
+    private ConcurrentMap<String, SegmentHandle> openSegments;
+    private final Set<SegmentHandle> segmentsToSync;
     private final MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
 
     //=================Log Metadata=================
@@ -115,8 +114,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
         logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
-        writeChannels = new ConcurrentHashMap<>();
-        channelsToSync = new HashSet<>();
+        openSegments = new ConcurrentHashMap<>();
+        segmentsToSync = new HashSet<>();
         this.verify = !noVerify;
         this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
 
@@ -219,8 +218,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
         }
 
-        // Open segment will add entries to the writeChannels map, therefore we need to clear it
-        writeChannels.clear();
+        // Open segment will add entries to the openSegments map, therefore we need to clear it
+        openSegments.clear();
         long end = System.currentTimeMillis();
         log.info("initializeStreamTails: took {} ms to load {}, log start {}", end - start, logMetadata, getTrimMark());
     }
@@ -376,13 +375,15 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public void sync(boolean force) throws IOException {
-        if (force) {
-            for (FileChannel ch : channelsToSync) {
-                ch.force(true);
+        for (SegmentHandle sh : segmentsToSync) {
+            if (force) {
+                sh.sync();
             }
+            sh.mergePendingAddresses();
         }
-        log.trace("Sync'd {} channels", channelsToSync.size());
-        channelsToSync.clear();
+
+        log.trace("Sync'd {} channels", segmentsToSync.size());
+        segmentsToSync.clear();
     }
 
     @Override
@@ -757,7 +758,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         filePath += segment;
         filePath += ".log";
 
-        SegmentHandle handle = writeChannels.computeIfAbsent(filePath, a -> {
+        SegmentHandle handle = openSegments.computeIfAbsent(filePath, a -> {
             FileChannel writeCh = null;
             FileChannel readCh = null;
 
@@ -765,7 +766,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 writeCh = getChannel(a, false);
                 readCh = getChannel(a, true);
 
-                SegmentHandle sh = new SegmentHandle(segment, writeCh, readCh, a);
+                SegmentHandle sh = new SegmentHandle(segment, a, writeCh, readCh);
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 // Once the segment address space is loaded, it should be ready to accept writes.
@@ -923,7 +924,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
             allRecordsBuf.flip();
             writeByteBuffer(segment.getWriteChannel(), allRecordsBuf);
-            channelsToSync.add(segment.getWriteChannel());
+            segmentsToSync.add(segment);
             // Sync the global and stream tail(s)
             // TODO(Maithem): on ioexceptions the StreamLogFiles needs to be reinitialized
             syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
@@ -971,7 +972,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                      segmentLocks.acquireWriteLock(segment.getSegment())) {
             channelOffset = segment.getWriteChannel().position() + METADATA_SIZE;
             writeByteBuffer(segment.getWriteChannel(), record);
-            channelsToSync.add(segment.getWriteChannel());
+            segmentsToSync.add(segment);
             syncTailSegment(address);
             logMetadata.update(entry, false);
         }
@@ -1044,19 +1045,18 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     /**
-     * This method requests for known addresses in this Log Unit in the specified consecutive
-     * range of addresses.
+     * Returns the written addresses in this Log Unit in the specified consecutive
+     * range of addresses, regardless of whether persisted on disk.
      *
      * @param rangeStart Start address of range.
      * @param rangeEnd   End address of range.
      * @return Set of known addresses.
      */
     @Override
-    public Set<Long> getKnownAddressesInRange(long rangeStart, long rangeEnd) {
-
+    public Set<Long> getWrittenAddressesInRange(long rangeStart, long rangeEnd) {
         Set<Long> result = new HashSet<>();
         for (long address = rangeStart; address <= rangeEnd; address++) {
-            if (getSegmentHandleForAddress(address).getKnownAddresses().containsKey(address)) {
+            if (getSegmentHandleForAddress(address).isAddressWritten(address)) {
                 result.add(address);
             }
         }
@@ -1089,24 +1089,20 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .map(ILogData::getGlobalAddress).collect(Collectors.toSet());
 
         // See if the provided range overlaps with any of the previously written entries.
-        Set<Long> segOneOverlap = Sets.intersection(pendingWrites,
-                firstSh.getKnownAddresses().keySet());
-        Set<Long> segTwoOverlap = Sets.intersection(pendingWrites,
-                lastSh.getKnownAddresses().keySet());
-        if (!segOneOverlap.isEmpty() || !segTwoOverlap.isEmpty()) {
-            log.error("Overlapping addresses detected: {}, {}", segOneOverlap, segTwoOverlap);
-            throw new OverwriteException(OverwriteCause.SAME_DATA);
+        for (long address : pendingWrites) {
+            if (firstSh.isAddressWritten(address) || lastSh.isAddressWritten(address)) {
+                log.error("range append: overlapping address detected: {}", address);
+                throw new OverwriteException(OverwriteCause.SAME_DATA);
+            }
         }
 
         List<LogData> segOneEntries = new ArrayList<>();
         List<LogData> segTwoEntries = new ArrayList<>();
 
         for (LogData curr : entries) {
-            if (getSegment(curr) == firstSh.getSegment() &&
-                    !firstSh.getKnownAddresses().containsKey(curr.getGlobalAddress())) {
+            if (getSegment(curr) == firstSh.getSegment()) {
                 segOneEntries.add(curr);
-            } else if (getSegment(curr) == lastSh.getSegment() &&
-                    !lastSh.getKnownAddresses().containsKey(curr.getGlobalAddress())) {
+            } else if (getSegment(curr) == lastSh.getSegment()) {
                 segTwoEntries.add(curr);
             }
         }
@@ -1114,12 +1110,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         try {
             if (!segOneEntries.isEmpty()) {
                 Map<Long, AddressMetaData> firstSegAddresses = writeRecords(firstSh, segOneEntries);
-                firstSh.getKnownAddresses().putAll(firstSegAddresses);
+                firstSh.getPendingAddresses().putAll(firstSegAddresses);
             }
 
             if (!segTwoEntries.isEmpty()) {
                 Map<Long, AddressMetaData> lastSegAddresses = writeRecords(lastSh, segTwoEntries);
-                lastSh.getKnownAddresses().putAll(lastSegAddresses);
+                lastSh.getPendingAddresses().putAll(lastSegAddresses);
             }
         } catch (IOException e) {
             log.error("Disk_write[{}-{}]: Exception", first.getGlobalAddress(),
@@ -1142,8 +1138,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         try {
             // make sure the entry doesn't currently exist...
             // (probably need a faster way to do this - high watermark?)
-            if (segment.getKnownAddresses().containsKey(address)
-                    || segment.getTrimmedAddresses().contains(address)) {
+            if (segment.isAddressWritten(address)) {
                 if (entry.getRank() == null) {
                     OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
                     log.trace("Disk_write[{}]: overwritten exception, cause: {}", address, overwriteCause);
@@ -1152,11 +1147,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                     // the method below might throw DataOutrankedException or ValueAdoptedException
                     assertAppendPermittedUnsafe(address, entry);
                     AddressMetaData addressMetaData = writeRecord(segment, address, entry);
-                    segment.getKnownAddresses().put(address, addressMetaData);
+                    segment.getPendingAddresses().put(address, addressMetaData);
                 }
             } else {
                 AddressMetaData addressMetaData = writeRecord(segment, address, entry);
-                segment.getKnownAddresses().put(address, addressMetaData);
+                segment.getPendingAddresses().put(address, addressMetaData);
             }
             log.trace("Disk_write[{}]: Written to disk.", address);
         } catch (IOException e) {
@@ -1175,9 +1170,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         SegmentHandle segment = getSegmentHandleForAddress(address);
 
         try {
-            if (segment.getPendingTrims().contains(address)) {
-                return LogData.getTrimmed(address);
-            }
             return readRecord(segment, address);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -1188,11 +1180,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public void close() {
-        for (SegmentHandle fh : writeChannels.values()) {
+        for (SegmentHandle fh : openSegments.values()) {
             fh.close();
         }
 
-        writeChannels = new ConcurrentHashMap<>();
+        openSegments = new ConcurrentHashMap<>();
     }
 
     /**
@@ -1201,7 +1193,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param endSegment The segment index of the last segment up to (including) the end segment.
      */
     private void closeSegmentHandlers(long endSegment) {
-        for (SegmentHandle sh : writeChannels.values()) {
+        for (SegmentHandle sh : openSegments.values()) {
             if (sh.getSegment() > endSegment) {
                 continue;
             }
@@ -1211,9 +1203,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                         sh.getSegment(), sh.getRefCount()
                 );
             }
-            channelsToSync.remove(sh.getWriteChannel());
+            segmentsToSync.remove(sh);
             sh.close();
-            writeChannels.remove(sh.getFileName());
+            openSegments.remove(sh.getFileName());
         }
     }
 
@@ -1275,19 +1267,19 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.resetStartingAddress();
         dataStore.resetTailSegment();
         logMetadata = new LogMetadata();
-        writeChannels.clear();
+        openSegments.clear();
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         log.info("reset: Completed, end segment {}", endSegment);
     }
 
     @VisibleForTesting
-    Set<FileChannel> getChannelsToSync() {
-        return channelsToSync;
+    Set<SegmentHandle> getSegmentsToSync() {
+        return segmentsToSync;
     }
 
     @VisibleForTesting
     Collection<SegmentHandle> getOpenSegmentHandles() {
-        return writeChannels.values();
+        return openSegments.values();
     }
 
     public static class Checksum {

@@ -134,8 +134,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
      * @return Set of known addresses.
      */
     @Override
-    public Set<Long> getKnownAddressesInRange(long rangeStart, long rangeEnd) {
-
+    public Set<Long> getWrittenAddressesInRange(long rangeStart, long rangeEnd) {
         Set<Long> result = new HashSet<>();
         for (long address = rangeStart; address <= rangeEnd; address++) {
             if (logCache.containsKey(address)) {
@@ -155,8 +154,8 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public void sync(boolean force){
-        //no-op
+    public void sync(boolean force) {
+        // No-op
     }
 
     @Override
