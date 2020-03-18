@@ -82,25 +82,25 @@ public class LogReplicationTest {
 
     private void generateData() {
 
-        runtime.getObjectsView().TXBegin();
-        table1.put("SPECIAL1" , "V_PRIME");
-        runtime.getObjectsView().TXEnd();
+//        runtime.getObjectsView().TXBegin();
+//        table1.put("SPECIAL1" , "V_PRIME");
+//        runtime.getObjectsView().TXEnd();
+//
+//        runtime.getObjectsView().TXBegin();
+//        table1.put("SPECIAL2" , "V_PRIME");
+//        runtime.getObjectsView().TXEnd();
 
-        runtime.getObjectsView().TXBegin();
-        table1.put("SPECIAL2" , "V_PRIME");
-        runtime.getObjectsView().TXEnd();
 
-
-//        for(int i=0; i < ITERATIONS; i++) {
-//            try {
-//                runtime.getObjectsView().TXBegin();
-//                table1.put("T1_K" + i, "T4_V" + i);
-//                table2.put("T2_K" + i, "T5_V" + i);
-//                table3.put("T3_K" + i, "T6_V" +i);
-//            } finally {
-//                runtime.getObjectsView().TXEnd();
-//            }
-//        }
+        for(int i=0; i < ITERATIONS; i++) {
+            try {
+                runtime.getObjectsView().TXBegin();
+                table1.put("T1_K" + i, "T4_V" + i);
+                table2.put("T2_K" + i, "T5_V" + i);
+                table3.put("T3_K" + i, "T6_V" +i);
+            } finally {
+                runtime.getObjectsView().TXEnd();
+            }
+        }
 
     }
 

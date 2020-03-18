@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -17,10 +18,7 @@ import java.util.concurrent.CompletableFuture;
 public class TestDataSender implements DataSender {
 
     @Getter
-    private Queue<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> snapshotQueue = new LinkedList<>();
-
-    @Getter
-    private Queue<LogReplicationEntry> logEntryQueue = new LinkedList<>();
+    private Queue<LogReplicationEntry> entryQueue = new LinkedList<>();
 
     public TestDataSender() {
     }
@@ -28,7 +26,11 @@ public class TestDataSender implements DataSender {
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         if (message != null && message.getPayload() != null) {
-            logEntryQueue.add(message);
+            if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_MESSAGE) ||
+                    message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
+                // Ignore, do not account Start and End Markers as messages
+                entryQueue.add(message);
+            }
         }
 
         return new CompletableFuture<>();
@@ -38,11 +40,21 @@ public class TestDataSender implements DataSender {
     public boolean send(List<LogReplicationEntry> messages) {
         if (messages != null && !messages.isEmpty()) {
             // Add all received messages to the queue
-            messages.forEach(msg -> logEntryQueue.add(msg));
+            messages.forEach(msg -> {
+                if (msg.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_MESSAGE) ||
+                        msg.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
+                    // Ignore, do not account Start and End Markers as messages
+                    entryQueue.add(msg);
+                }
+            });
             return true;
         }
 
         return false;
+    }
+
+    public void reset() {
+        entryQueue.clear();
     }
 
     @Override

@@ -211,7 +211,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
@@ -262,7 +262,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
 
-        ((TestDataSender) dataSender).getSnapshotQueue().clear();
+        ((TestDataSender) dataSender).reset();
 
         // Stop observing number of messages in snapshot sync, so this time it completes
         observeSnapshotSync = false;
@@ -273,7 +273,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
@@ -315,7 +315,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(LARGE_NUM_ENTRIES/StreamsSnapshotReader.MAX_NUM_SMR_ENTRY);
 
@@ -325,7 +325,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         int incrementalUpdates = 0;
 
         while(incrementalUpdates < NUM_ENTRIES) {
-           ((TestDataSender)dataSender).getLogEntryQueue().poll();
+           ((TestDataSender)dataSender).getEntryQueue().poll();
            incrementalUpdates++;
         }
 

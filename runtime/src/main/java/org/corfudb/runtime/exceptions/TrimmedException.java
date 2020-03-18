@@ -32,8 +32,8 @@ public class TrimmedException extends LogUnitException {
     }
 
     public TrimmedException(List<Long> trimmed) {
-        super(String.format("Trimmed addresses " + trimmed));
-        log.error("Trimmed adddresses {}", trimmed);
+        super(String.format("Trimmed addresses %s" + trimmed));
+        log.error("Trimmed addresses {}", trimmed);
         trimmedAddresses = trimmed;
     }
 
