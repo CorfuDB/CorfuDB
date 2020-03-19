@@ -204,6 +204,7 @@ public class CorfuStoreIT extends AbstractIT {
                     value.getMetadataTypeUrl(),
                     newMetaBuilder.build()));
         }
+
         assertThat(corfuTable.size()).isEqualTo(1);
         MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
 
