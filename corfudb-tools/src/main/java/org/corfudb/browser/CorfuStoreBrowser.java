@@ -1,18 +1,22 @@
 package org.corfudb.browser;
 
+import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
@@ -124,12 +128,18 @@ public class CorfuStoreBrowser {
 
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tablename);
         int size = table.size();
-        for (CorfuDynamicKey entry : table.keySet()) {
-            builder = new StringBuilder("\nKey:\n" + entry.getKey())
-                .append("\nPayload:\n" + table.get(entry).getPayload())
-                .append("\nMetadata:\n" + table.get(entry).getMetadata())
-                .append("\n====================\n");
-            log.info(builder.toString());
+        final int batchSize = 50;
+        Stream<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entryStream = table.entryStream();
+        final Iterable<List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>>> partitions =
+                Iterables.partition(entryStream::iterator, batchSize);
+        for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
+            for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
+                builder = new StringBuilder("\nKey:\n" + entry.getKey())
+                        .append("\nPayload:\n" + entry.getValue().getPayload())
+                        .append("\nMetadata:\n" + entry.getValue().getMetadata())
+                        .append("\n====================\n");
+                log.info(builder.toString());
+            }
         }
         return size;
     }
