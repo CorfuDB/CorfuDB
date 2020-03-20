@@ -81,6 +81,16 @@ public interface StateTransferBatchProcessor {
                 // Get all the addresses that were not written.
                 Set<Long> nonWrittenAddresses =
                         Sets.difference(new HashSet<>(totalAddressesInRequest), knownAddresses);
+                // If the delta is empty -> return with success.
+                if (nonWrittenAddresses.isEmpty()) {
+                    transferBatchResponse = Optional.of(TransferBatchResponse
+                            .builder()
+                            .transferBatchRequest(new TransferBatchRequest(totalAddressesInRequest,
+                                    readBatch.getDestination()))
+                            .status(SUCCEEDED)
+                            .build());
+                    break;
+                }
                 // Create a new read batch with the missing data and retry.
                 ImmutableList<LogData> nonWrittenData = readBatch.getData()
                         .stream()
