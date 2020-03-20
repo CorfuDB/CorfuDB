@@ -599,9 +599,6 @@ public class StateTransferTest extends AbstractViewTest {
                 .setPort(SERVERS.PORT_1).build();
         addServer(SERVERS.PORT_1, sc2);
 
-        getManagementServer(SERVERS.PORT_0).shutdown();
-        getManagementServer(SERVERS.PORT_1).shutdown();
-
         final long writtenAddressesBatch1 = 100;
         final long writtenAddressesBatch2 = 5;
 
@@ -628,6 +625,9 @@ public class StateTransferTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
         bootstrapAllServers(layout);
+
+        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.PORT_1).shutdown();
 
         CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
 
