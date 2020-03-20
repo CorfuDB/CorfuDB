@@ -7,6 +7,10 @@ import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
@@ -15,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 
 import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.SUCCEEDED;
 
@@ -43,54 +48,69 @@ public interface StateTransferBatchProcessor {
      */
     default TransferBatchResponse writeRecords(ReadBatch readBatch, LogUnitClient logUnitClient,
                                                int writeRetriesAllowed, Duration writeSleepDuration) {
-        List<Long> totalAddressesInRequest = readBatch.getAddresses();
-        Optional<String> destination = readBatch.getDestination();
+        if (readBatch == null || readBatch.getAddresses().isEmpty()) {
+            throw new IllegalArgumentException("The read batch is empty.");
+        }
+        ImmutableList<LogData> dataToTransfer = ImmutableList.copyOf(readBatch.getData());
+        ImmutableList<Long> addressesToTransfer = ImmutableList.copyOf(readBatch.getAddresses());
         Optional<Exception> lastWriteException = Optional.empty();
         Optional<TransferBatchResponse> transferBatchResponse = Optional.empty();
 
         for (int i = 0; i < writeRetriesAllowed; i++) {
             List<LogData> remainingDataToWrite = readBatch.getData();
             try {
-                boolean writeSucceeded = logUnitClient.writeRange(remainingDataToWrite).join();
-                if (!writeSucceeded) {
-                    throw new IllegalStateException("Failed to write to a log unit server.");
-                } else {
-                    lastWriteException = Optional.empty();
+                CFUtils.getUninterruptibly(logUnitClient.writeRange(remainingDataToWrite),
+                        OverwriteException.class,
+                        TimeoutException.class,
+                        NetworkException.class);
+                transferBatchResponse = Optional.of(TransferBatchResponse
+                        .builder()
+                        .transferBatchRequest(new TransferBatchRequest(addressesToTransfer,
+                                readBatch.getDestination()))
+                        .status(SUCCEEDED)
+                        .build());
+                break;
+            } catch (OverwriteException | TimeoutException | NetworkException e) {
+                lastWriteException = Optional.of(e);
+                Sleep.sleepUninterruptibly(writeSleepDuration);
+                // Get all the addresses that were supposed to be written to a stream log.
+                long start = addressesToTransfer.get(0);
+                long end = addressesToTransfer.get(addressesToTransfer.size() - 1);
+                Set<Long> knownAddresses = CFUtils
+                        .getUninterruptibly(logUnitClient.requestKnownAddresses(start, end))
+                        .getKnownAddresses();
+                // Get all the addresses that were not written.
+                Set<Long> nonWrittenAddresses =
+                        Sets.difference(new HashSet<>(addressesToTransfer), knownAddresses);
+                // If the delta is empty -> return with success.
+                if (nonWrittenAddresses.isEmpty()) {
                     transferBatchResponse = Optional.of(TransferBatchResponse
                             .builder()
-                            .transferBatchRequest(new TransferBatchRequest(totalAddressesInRequest, destination))
+                            .transferBatchRequest(new TransferBatchRequest(addressesToTransfer,
+                                    readBatch.getDestination()))
                             .status(SUCCEEDED)
                             .build());
                     break;
                 }
-            } catch (Exception e) {
-                lastWriteException = Optional.of(e);
-                Sleep.sleepUninterruptibly(writeSleepDuration);
-                List<Long> remainingAddressesToWrite = readBatch.getAddresses();
-                // Get all the addresses that were supposed to be written to a stream log.
-                long start = remainingAddressesToWrite.get(0);
-                long end = remainingAddressesToWrite.get(remainingAddressesToWrite.size() - 1);
-                Set<Long> knownAddresses =
-                        logUnitClient.requestKnownAddresses(start, end).join().getKnownAddresses();
-                // Get all the addresses that were not written.
-                Set<Long> nonWrittenAddresses =
-                        Sets.difference(new HashSet<>(remainingAddressesToWrite), knownAddresses);
                 // Create a new read batch with the missing data and retry.
-                ImmutableList<LogData> nonWrittenData = readBatch.getData()
+                ImmutableList<LogData> nonWrittenData = dataToTransfer
                         .stream()
                         .filter(data -> nonWrittenAddresses.contains(data.getGlobalAddress()))
                         .collect(ImmutableList.toImmutableList());
                 readBatch = readBatch.toBuilder().data(nonWrittenData).build();
+            } catch (RuntimeException re) {
+                // If it's some other exception, e.g. IllegalArgumentException,
+                // WrongEpochException -> Propagate it to the caller.
+                throw new IllegalStateException(re);
             }
         }
 
-        if (lastWriteException.isPresent()) {
-            throw new IllegalStateException(lastWriteException.get());
-        } else if (transferBatchResponse.isPresent()) {
-            return transferBatchResponse.get();
-        } else {
-            throw new IllegalStateException("Exhausted retries writing to the log unit server.");
-        }
+        final Optional<Exception> finalWriteException = lastWriteException;
+        String msg = "writeRecords: Retries are exhausted.";
+        return transferBatchResponse.orElseThrow(
+                () -> finalWriteException
+                        .map(ex -> new RetryExhaustedException(msg, ex))
+                        .orElse(new RetryExhaustedException(msg)));
     }
 
 }
