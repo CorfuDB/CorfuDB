@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.clients.ClientHandler;
 import org.corfudb.runtime.clients.ClientMsgHandler;
 import org.corfudb.runtime.clients.IClient;
@@ -49,6 +50,13 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     private static Object handleLogReplicationNegotiation(CorfuPayloadMsg<LogReplicationNegotiationResponse> msg,
                                                           ChannelHandlerContext ctx, IClientRouter r) {
         log.info("Handle log replication Negotiation Response");
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE)
+    private static Object handleLogReplicationQueryLeadershipResponse(CorfuPayloadMsg<LogReplicationQueryLeaderShipResponse> msg,
+                                                                      ChannelHandlerContext ctx, IClientRouter r) {
+        log.info("********Handle log replication query leadership response msg {}", msg);
         return msg.getPayload();
     }
 

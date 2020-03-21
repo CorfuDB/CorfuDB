@@ -2,8 +2,11 @@ package org.corfudb.logreplication.infrastructure;
 
 import lombok.Data;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.runtime.LogReplicationRuntime;
+import org.corfudb.logreplication.runtime.LogReplicationRuntimeParameters;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 
 import java.io.File;
 import java.io.FileReader;
@@ -12,25 +15,24 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 @Slf4j
 public class CrossSiteConfiguration {
-    private static final String config_file = "/Users/amartinezman/annym/workspace/CorfuDB/log-replication/resources/corfu_replication_config.properties";
+    public static final String config_file = "/config/corfu/corfu_replication_config.properties";
 
     private static final String DEFAULT_CORFU_PORT_NUM = "9000";
-    private static final String DEFAULT_PRIMARY_PORT_NUM = "9010";
-    private static final String DEFAULT_STANDBY_PORT_NUM = "9020";
-    private static final String DEFAULT_PRIMARY_IP = "localhost";
-    private static final String DEFAULT_STANDBY_IP = "localhost";
     private static final String DEFAULT_PRIMARY_SITE_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_SITE_NAME = "standby_site";
     private static final int NUM_NODES_PER_CLUSTER = 3;
 
     private static final String PRIMARY_SITE_NAME = "primary_site";
     private static final String STANDBY_SITE_NAME = "standby_site";
-    private static final String LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM = "LOG_REPLICATION_SERVICE_SENDER_PORT_NUM";
-    private static final String LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM = "LOG_REPLICATION_SERVICE_RECEIVER_PORT_NUM ";
+    private static final String PRIMARY_SITE_CORFU_PORTNUM = "primary_site_corfu_portnumber";
+    private static final String STANDBY_SITE_CORFU_PORTNUM = "standby_site_corfu_portnumber";
+    private static final String LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM = "primary_site_portnumber";
+    private static final String LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM = "standby_site_portnumber";
+
 
     private static final String PRIMARY_SITE_NODE = "primary_site_node";
     private static final String STANDBY_SITE_NODE = "standby_site_node";
@@ -53,106 +55,84 @@ public class CrossSiteConfiguration {
             Properties props = new Properties();
             props.load(reader);
 
-            /**
-             * PrimarySite string
-             * portnumber 20
-             * primarynode1 ip
-             * primarynode2 ip
-             * primarynode3 ip
-             *
-             * BackupSite string
-             * backupnode1 ip
-             * backupnode2 ip
-             * backupnode3 ip
-             */
+            Set<String> names = props.stringPropertyNames();
 
             // Setup primary site information
             primarySite = new SiteInfo(props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME));
-            String portNum = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM, DEFAULT_PRIMARY_PORT_NUM);
+            String corfuPortNum = props.getProperty(PRIMARY_SITE_CORFU_PORTNUM);
+            String portNum = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
+
+
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
-                String ipAddress = props.getProperty(PRIMARY_SITE_NODE +"i", DEFAULT_PRIMARY_IP);
-                NodeInfo nodeInfo = new NodeInfo(ipAddress, portNum, RoleType.PrimarySite);
+                String nodeName = PRIMARY_SITE_NODE + i;
+                log.info("primary site ipaddress for node {}", nodeName);
+                if (!names.contains(nodeName)) {
+                    continue;
+                }
+                String ipAddress = props.getProperty(nodeName);
+                log.info("primary site ipaddress {} for node {}", ipAddress, nodeName);
+                NodeInfo nodeInfo = new NodeInfo(ipAddress, portNum, RoleType.PrimarySite, corfuPortNum);
                 primarySite.nodesInfo.add(nodeInfo);
             }
 
             // Setup backup site information
             standbySites = new HashMap<>();
             standbySites.put(STANDBY_SITE_NAME, new SiteInfo(props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME)));
-            portNum = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM, DEFAULT_STANDBY_PORT_NUM);
-            for (int i = 0; i < 3; i++) {
-                String ipAddress = props.getProperty(STANDBY_SITE_NODE +"i", DEFAULT_STANDBY_IP);
-                NodeInfo nodeInfo = new NodeInfo(ipAddress, portNum, RoleType.BackupSite);
+            corfuPortNum = props.getProperty(STANDBY_SITE_CORFU_PORTNUM);
+            portNum = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
+            for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
+                String nodeName = STANDBY_SITE_NODE + i;
+                log.info("standby site ipaddress for node {}", nodeName);
+                if (!names.contains(nodeName)) {
+                    continue;
+                }
+                String ipAddress = props.getProperty(STANDBY_SITE_NODE + i);
+                log.info("standby site ipaddress {} for node {}", ipAddress, i);
+                NodeInfo nodeInfo = new NodeInfo(ipAddress, portNum, RoleType.StandbySite, corfuPortNum);
                 standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);
             }
 
             reader.close();
             log.info("Primary Site Info {}; Backup Site Info {}", primarySite, standbySites);
         } catch (Exception e) {
-            log.warn("Caught an exception while reading the config file: {}", e.getCause());
+            log.warn("Caught an exception while reading the config file: {}", e);
         }
     }
 
-    public NodeInfo getNodeInfo(String ipAddress) {
+    public NodeInfo getNodeInfo(String endpoint) {
         List<SiteInfo> sites = new ArrayList<>(standbySites.values());
+
         sites.add(primarySite);
-        NodeInfo nodeInfo = getNodeInfo(sites, ipAddress);
+        NodeInfo nodeInfo = getNodeInfo(sites, endpoint);
 
         if (nodeInfo == null) {
-            log.warn("No Site has node with IP  {} ", ipAddress);
+            log.warn("No Site has node with IP  {} ", endpoint);
         }
 
         return nodeInfo;
     }
 
-    private NodeInfo getNodeInfo(List<SiteInfo> sitesInfo, String ipAddress) {
+    private NodeInfo getNodeInfo(List<SiteInfo> sitesInfo, String endpoint) {
         for(SiteInfo site : sitesInfo) {
             for (NodeInfo nodeInfo : site.getNodesInfo()) {
-                if (nodeInfo.getIpAddress().equals(ipAddress)) {
+                if (nodeInfo.getEndpoint().equals(endpoint)) {
                     return nodeInfo;
                 }
             }
         }
 
-        log.warn("There is no nodeInfo for ipAddress {} ", ipAddress);
+        log.warn("There is no nodeInfo for ipAddress {} ", endpoint);
         return null;
-    }
-
-    public String getLocalCorfuEndpoint() {
-        // TODO (add logic here) for now hard-coding
-        if (primarySite.nodesInfo.size() > 0) {
-            return primarySite.nodesInfo.get(0).getIpAddress() + ":" + DEFAULT_CORFU_PORT_NUM;
-        }
-
-        return DEFAULT_PRIMARY_IP + ":" + DEFAULT_CORFU_PORT_NUM;
-    }
-
-    public String getRemoteLogReplicationServer(String site) {
-        return standbySites.get(site).getRemoteLeaderEndpoint();
-    }
-
-    public boolean isLocalSource() {
-        // TODO: add logic (temp)
-        return true;
-    }
-
-    /**
-     * Return all sites remote leader endpoints.
-     *
-     * For Multi-Site Replication, we'll have one remote leader per site.
-     */
-    public Map<String, String> getRemoteLeaderEndpoints() {
-        Map<String, String> remoteSiteToLeadEndpoint = new HashMap<>();
-        for (Map.Entry<String, SiteInfo> entry : standbySites.entrySet()) {
-            remoteSiteToLeadEndpoint.put(entry.getKey(), entry.getValue().getRemoteLeaderEndpoint());
-        }
-
-        return remoteSiteToLeadEndpoint;
     }
 
     static class SiteInfo {
 
         @Getter
         String siteId;
+
+        @Getter
+        @Setter
+        NodeInfo leader;
 
         @Getter
         List<NodeInfo> nodesInfo;
@@ -162,20 +142,42 @@ public class CrossSiteConfiguration {
             nodesInfo = new ArrayList<>();
         }
 
+        public void setupLogReplicationRemoteRuntime(NodeInfo localNode) {
+            for (NodeInfo nodeInfo : nodesInfo) {
+                LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
+                        .localCorfuEndpoint(localNode.getCorfuEndpoint())
+                        .remoteLogReplicationServerEndpoint(nodeInfo.getEndpoint()).build();
+                LogReplicationRuntime replicationRuntime = new LogReplicationRuntime(parameters);
+                replicationRuntime.connect();
+                nodeInfo.runtime = replicationRuntime;
+            }
+        }
+
         /**
          * Retrieve Remote Leader Endpoint
          **
          * @return remote leader endpoint.
          */
-        public String getRemoteLeaderEndpoint() {
-            // TODO (Add logic), for now, we'll assume the first node info is the leader endpoint in the remote site
-            // (lead LRS)
-            if (nodesInfo.size() > 0) {
-                log.info("Remote Leader Endpoint: " + nodesInfo.get(0).getEndpoint());
-                return nodesInfo.get(0).getEndpoint();
+        public NodeInfo getRemoteLeader() {
+            NodeInfo leaderNode = null;
+            try {
+                long epoch = -1;
+                LogReplicationQueryLeaderShipResponse resp;
+                for (NodeInfo nodeInfo : nodesInfo) {
+                    resp = nodeInfo.runtime.queryLeadership();
+                    if (resp.getEpoch() > epoch && resp.isLeader()) {
+                        leaderNode = nodeInfo;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Function getRemoteLeader caught an exception {}", e);
             }
 
-            return DEFAULT_STANDBY_IP + ":" + DEFAULT_STANDBY_PORT_NUM;
+            if (leaderNode != null) {
+                leaderNode.setLeader(true);
+            }
+            this.leader = leaderNode;
+            return leaderNode;
         }
 
         @Override
@@ -184,33 +186,39 @@ public class CrossSiteConfiguration {
         }
     }
 
+
     @Data
     public class NodeInfo {
         RoleType roleType;
         String ipAddress;
+        String corfuPortNum;
         String portNum;
-        boolean lockHolder;
+        boolean leader;
         LogReplicationRuntime runtime;
 
-        NodeInfo(String ipAddress, String portNum, RoleType type) {
+        NodeInfo(String ipAddress, String portNum, RoleType type, String corfuPortNum) {
             this.ipAddress = ipAddress;
             this.portNum = portNum;
             this.roleType = type;
-            this.lockHolder = false;
+            this.leader = false;
+            this.corfuPortNum = corfuPortNum;
         }
 
         public String getEndpoint() {
             return ipAddress + ":" + portNum;
         }
 
+        public String getCorfuEndpoint() {
+            return ipAddress + ":" + corfuPortNum;
+        }
         @Override
         public String toString() {
-            return String.format("Role Type: %s, %s:%s, %s", roleType, ipAddress, portNum, lockHolder);
+            return String.format("Role Type: %s, %s, %s", roleType, getEndpoint(), leader);
         }
     }
 
     enum RoleType {
         PrimarySite,
-        BackupSite
+        StandbySite
     }
 }
