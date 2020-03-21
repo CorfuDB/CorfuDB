@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.runtime.view.Layout;
@@ -118,7 +119,10 @@ public enum CorfuMsgType {
 
     LOG_REPLICATION_ENTRY(201, new TypeToken<CorfuPayloadMsg<LogReplicationEntry>>() {}, true, true),
     LOG_REPLICATION_NEGOTIATION_REQUEST(202, TypeToken.of(CorfuMsg.class)),
-    LOG_REPLICATION_NEGOTIATION_RESPONSE(203, new TypeToken<CorfuPayloadMsg<LogReplicationNegotiationResponse>>() {}, true, true);
+    LOG_REPLICATION_NEGOTIATION_RESPONSE(203, new TypeToken<CorfuPayloadMsg<LogReplicationNegotiationResponse>>() {}, true, true),
+    LOG_REPLICATION_QUERY_LEADERSHIP(204, TypeToken.of(CorfuMsg.class)),
+    LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE(205, new TypeToken<CorfuPayloadMsg<LogReplicationQueryLeaderShipResponse>>(){}, true, true),
+    ;
 
 
     public final int type;
