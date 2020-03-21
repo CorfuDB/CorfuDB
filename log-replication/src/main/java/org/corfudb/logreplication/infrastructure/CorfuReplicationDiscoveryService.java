@@ -3,6 +3,9 @@ package org.corfudb.logreplication.infrastructure;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.util.NodeLocator;
 
+import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.StandbySite;
+import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.PrimarySite;
+
 /**
  * This class represents the Replication Discovery Service.
  * It allows to discover all sites, acquire the lock and determine
@@ -10,39 +13,38 @@ import org.corfudb.util.NodeLocator;
  */
 @Slf4j
 public class CorfuReplicationDiscoveryService implements Runnable {
-
     private final CorfuReplicationManager replicationManager;
-
-    private String port;
+    private String localEndpoint;
 
     public CorfuReplicationDiscoveryService(NodeLocator localEndpoint) {
         this.replicationManager = new CorfuReplicationManager();
-        // Todo (remove) this is temporal (while site manager info logic is implemented)
-        this.port = Integer.toString(localEndpoint.getPort());
+        this.localEndpoint = localEndpoint.toEndpointUrl();
     }
 
     @Override
     public void run() {
         log.info("Initiate Corfu Replication Discovery");
 
-        // (1) Try to acquire the lock (Medhavi/Srinivas)
-        boolean lockAcquired = acquireLock();
+        // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
+        CrossSiteConfiguration crossSiteConfig = fetchSiteConfiguration();
 
-        // If lock is acquired by this node
-        if (lockAcquired) {
-            // (2) Initiate discovery protocol:
-            //      - Fetch Site Information (from Site Manager) = CrossSiteConfiguration
-            CrossSiteConfiguration crossSiteConfig = fetchSiteConfiguration();
+        // Get the current node information.
+        CrossSiteConfiguration.NodeInfo nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
 
-            // Todo: remove port comparison, temp for testing
-            if (crossSiteConfig.isLocalSource() && port.equals("9010")) {
-                // If current node is part of Primary Site (source) start log replication
-                log.info("Start as Source (sender/replicator).");
+        // Acquire lock and set it in the node information
+        nodeInfo.setLeader(acquireLock());
+
+        if (nodeInfo.isLeader()) {
+            if (nodeInfo.getRoleType() == PrimarySite) {
+                crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
+                log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
+                replicationManager.setupReplicationLeaderRuntime(nodeInfo, crossSiteConfig);
                 replicationManager.startLogReplication(crossSiteConfig);
-            } else {
+                return;
+            } else if (nodeInfo.getRoleType() == StandbySite) {
                 // Standby Site
                 // The LogReplicationServer (server handler) will initiate the SinkManager
-                log.info("Start as Sink (receiver)");
+                log.info("Start as Sink (receiver) on node {} ", nodeInfo);
             }
         }
 

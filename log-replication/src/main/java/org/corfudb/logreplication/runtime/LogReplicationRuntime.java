@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.SourceManager;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.NodeRouterPool;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.NettyClientRouter;
@@ -132,6 +133,12 @@ public class LogReplicationRuntime {
         sourceManager = new SourceManager(parameters.getLocalCorfuEndpoint(),
                 client, config);
     }
+
+    public LogReplicationQueryLeaderShipResponse queryLeadership() throws Exception {
+        log.info("*****Send QueryLeadership Request");
+        return client.sendQueryLeadership().get();
+    }
+
 
     public LogReplicationNegotiationResponse startNegotiation() throws Exception {
         log.info("Send Notification Request");

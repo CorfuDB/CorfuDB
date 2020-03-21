@@ -10,6 +10,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
@@ -95,5 +96,13 @@ public class LogReplicationServer extends AbstractServer {
         log.info("Log Replication Negotiation Request received by Server.");
         LogReplicationNegotiationResponse response = new LogReplicationNegotiationResponse(0, 0);
         r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE.payloadMsg(response));
+    }
+
+    @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP)
+    private void handleLogReplicationQueryLeadership(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.info("******Log Replication Query Leadership Request received by Server.");
+        //TODO: setup
+        LogReplicationQueryLeaderShipResponse resp = new LogReplicationQueryLeaderShipResponse(0, true);
+        r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE.payloadMsg(resp));
     }
 }
