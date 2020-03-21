@@ -3,11 +3,9 @@ package org.corfudb.logreplication.infrastructure;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.logreplication.runtime.LogReplicationRuntime;
-import org.corfudb.logreplication.runtime.LogReplicationRuntimeParameters;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -28,48 +26,27 @@ public class CorfuReplicationManager {
         UNKNOWN
     }
 
+    public void setupReplicationLeaderRuntime(CrossSiteConfiguration.NodeInfo nodeInfo, CrossSiteConfiguration config) {
+        log.info("setupREplicationLeaderRuntime config {}", config);
+        for(Map.Entry<String, CrossSiteConfiguration.SiteInfo> entry: config.getStandbySites().entrySet()) {
+            entry.getValue().setupLogReplicationRemoteRuntime(nodeInfo);
+            log.info("setupReplicationLeaderRuntime {}", entry);
+            CrossSiteConfiguration.NodeInfo leader = entry.getValue().getRemoteLeader();
+            logReplicationRuntimes.put(entry.getKey(), leader.runtime);
+        }
+    }
+
     /**
      * Once determined this is a Lead Sender (on primary site), start log replication.
      */
     public void startLogReplication(CrossSiteConfiguration config) {
+        log.info("Start Log Replication for Standby Sites {}", logReplicationRuntimes.keySet());
+        for(Map.Entry<String, LogReplicationRuntime> entry: logReplicationRuntimes.entrySet()) {
+            String endpoint = entry.getKey();
+            LogReplicationRuntime runtime = entry.getValue();
 
-        Map<String, String> remoteLRSEndpoints = config.getRemoteLeaderEndpoints();
-
-        log.info("Start log replication to remote site endpoints {}", remoteLRSEndpoints);
-
-        // Add Client to Remote Endpoint
-        for (Map.Entry<String, String> remoteSiteToEndpoint : remoteLRSEndpoints.entrySet()) {
-            String remoteSiteId = remoteSiteToEndpoint.getKey();
-            String remoteSiteEndpoint = remoteSiteToEndpoint.getValue();
-            log.info("Initialize runtime to {} in site {}", remoteSiteEndpoint, remoteSiteId);
-
-            LogReplicationRuntime runtime;
-
-            if(logReplicationRuntimes.get(remoteSiteId) != null) {
-                // If runtime exists for this remote site, verify the lead endpoint has not changed
-                LogReplicationRuntime rt = logReplicationRuntimes.get(remoteSiteId);
-                if (!rt.getParameters().getRemoteLogReplicationServerEndpoint().equals(remoteSiteEndpoint)) {
-                    // If remote lead endpoint changed
-                    // Todo: some shutdown / disconnect on the previous runtime
-                    // rt.disconnect();
-                    logReplicationRuntimes.remove(remoteSiteId);
-                }
-            }
-
-            runtime = logReplicationRuntimes.computeIfAbsent(remoteSiteId, remote -> {
-                    LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
-                            .localCorfuEndpoint(config.getLocalCorfuEndpoint())
-                            .remoteLogReplicationServerEndpoint(remoteSiteEndpoint).build();
-                    LogReplicationRuntime replicationRuntime = new LogReplicationRuntime(parameters);
-                    replicationRuntime.connect();
-                    return replicationRuntime;
-                });
-
-            // Initiate Log Replication Negotiation Protocol
             LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
-
-            log.info("Log Replication Negotiation with {} result {}", remoteSiteEndpoint, negotiationResult);
-
+            log.info("Log Replication Negotiation with {} result {}", endpoint, negotiationResult);
             startReplication(runtime, negotiationResult);
         }
     }
