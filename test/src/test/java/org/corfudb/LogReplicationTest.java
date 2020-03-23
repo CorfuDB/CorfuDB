@@ -17,7 +17,7 @@ public class LogReplicationTest {
 
     private final int ITERATIONS = 10;
 
-    CorfuTable<String, String> table1;
+    CorfuTable<String, Object> table1;
     CorfuTable<String, String> table2;
     CorfuTable<String, String> table3;
     CorfuRuntime runtime;
@@ -38,11 +38,11 @@ public class LogReplicationTest {
     private void setupEnv() throws IOException {
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters.builder()
-                //.trustStore("/config/cluster-manager/cluster-manager/public/truststore.jks")
-                //.tsPasswordFile("/config/cluster-manager/cluster-manager/public/truststore.password")
-                //.keyStore("/config/cluster-manager/cluster-manager/private/keystore.jks")
-                //.ksPasswordFile("/config/cluster-manager/cluster-manager/private/keystore.password")
-                //.tlsEnabled(true)
+                .trustStore("/config/cluster-manager/cluster-manager/public/truststore.jks")
+                .tsPasswordFile("/config/cluster-manager/cluster-manager/public/truststore.password")
+                .keyStore("/config/cluster-manager/cluster-manager/private/keystore.jks")
+                .ksPasswordFile("/config/cluster-manager/cluster-manager/private/keystore.password")
+                .tlsEnabled(true)
                 .layoutServers(Arrays.asList(NodeLocator.parseString(endpoint)))
                 .build();
 
@@ -56,28 +56,38 @@ public class LogReplicationTest {
 
         System.out.println("Connected to Corfu " + endpoint);
 
-        //Create tables
+
         table1 = runtime.getObjectsView()
                 .build()
-                .setStreamName("Table001")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                .setStreamName("nsx-shared.kvs.registered-stores")
+                .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {
                 })
-                .setSerializer(Serializers.PRIMITIVE)
+                .setSerializer(Serializers.JSON)
                 .open();
-        table2 = runtime.getObjectsView()
-                .build()
-                .setStreamName("Table002")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
-                .setSerializer(Serializers.PRIMITIVE)
-                .open();
-        table3 = runtime.getObjectsView()
-                .build()
-                .setStreamName("Table003")
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
-                .setSerializer(Serializers.PRIMITIVE)
-                .open();
+
+
+        //Create tables
+//        table1 = runtime.getObjectsView()
+//                .build()
+//                .setStreamName("Table001")
+//                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+//                })
+//                .setSerializer(Serializers.PRIMITIVE)
+//                .open();
+//        table2 = runtime.getObjectsView()
+//                .build()
+//                .setStreamName("Table002")
+//                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+//                })
+//                .setSerializer(Serializers.PRIMITIVE)
+//                .open();
+//        table3 = runtime.getObjectsView()
+//                .build()
+//                .setStreamName("Table003")
+//                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+//                })
+//                .setSerializer(Serializers.PRIMITIVE)
+//                .open();
     }
 
     private void generateData() {
@@ -105,22 +115,30 @@ public class LogReplicationTest {
     }
 
     private void verifyData() {
+        if (table1 != null) {
+            System.out.println("nsx-shared.kvs.registered-stores:: " + table1.size() + " entries");
 
-        if (table1.isEmpty() && table2.isEmpty() && table3.isEmpty()) {
-            System.out.println("All tables are EMPTY");
+            System.out.println("nsx-shared.kvs.registered-stores::keys:: " + table1.keySet());
         } else {
-            System.out.println("Table1: " + table1.keySet());
-            System.out.println("Table2: " + table2.keySet());
-            System.out.println("Table3: " + table3.keySet());
-
-            for (int i = 0; i < ITERATIONS; i++) {
-
-                if (!table1.isEmpty()) assertThat(table1.get("T1_K" + i).equals("T1_V" + i));
-                if (!table2.isEmpty()) assertThat(table2.get("T2_K" + i).equals("T2_V" + i));
-                if (!table3.isEmpty()) assertThat(table3.get("T3_K" + i).equals("T3_V" + i));
-
-            }
+            System.out.println("nsx-shared.kvs.registered-stores is NULL");
         }
+
+
+//        if (table1.isEmpty() && table2.isEmpty() && table3.isEmpty()) {
+//            System.out.println("All tables are EMPTY");
+//        } else {
+//            System.out.println("Table1: " + table1.keySet());
+//            System.out.println("Table2: " + table2.keySet());
+//            System.out.println("Table3: " + table3.keySet());
+//
+//            for (int i = 0; i < ITERATIONS; i++) {
+//
+//                if (!table1.isEmpty()) assertThat(table1.get("T1_K" + i).equals("T1_V" + i));
+//                if (!table2.isEmpty()) assertThat(table2.get("T2_K" + i).equals("T2_V" + i));
+//                if (!table3.isEmpty()) assertThat(table3.get("T3_K" + i).equals("T3_V" + i));
+//
+//            }
+//        }
     }
 
     public static void main(String[] args) throws Exception {

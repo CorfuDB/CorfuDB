@@ -11,17 +11,12 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
-import java.nio.file.Files;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.io.File;
 
 /**
  * This class represents the Log Replication Server, which is
@@ -86,7 +81,9 @@ public class LogReplicationServer extends AbstractServer {
         LogReplicationEntry ack = sinkManager.receive(msg.getPayload());
 
         if (ack != null) {
-            log.info("Sending ACK to Client");
+            long ts = ack.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_REPLICATED) ?
+                    ack.getMetadata().getTimestamp() : ack.getMetadata().getSnapshotTimestamp();
+            log.info("Sending ACK {} on {} to Client", ack.getMetadata().getMessageMetadataType(), ts);
             r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_ENTRY.payloadMsg(ack));
         }
     }

@@ -33,24 +33,32 @@ public class TestDataSender implements DataSender {
             }
         }
 
-        return new CompletableFuture<>();
+        CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
+        LogReplicationEntry ack = LogReplicationEntry.generateAck(message.getMetadata());
+        cf.complete(ack);
+
+        return cf;
     }
 
     @Override
-    public boolean send(List<LogReplicationEntry> messages) {
+    public CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages) {
+
+        CompletableFuture<LogReplicationEntry> lastSentMessage = new CompletableFuture<>();
+
         if (messages != null && !messages.isEmpty()) {
-            // Add all received messages to the queue
-            messages.forEach(msg -> {
-                if (msg.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_MESSAGE) ||
-                        msg.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
-                    // Ignore, do not account Start and End Markers as messages
-                    entryQueue.add(msg);
+
+            CompletableFuture<LogReplicationEntry> tmp;
+
+            for (LogReplicationEntry message : messages) {
+                tmp = send(message);
+                if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END) ||
+                        message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
+                    lastSentMessage = tmp;
                 }
-            });
-            return true;
+            }
         }
 
-        return false;
+        return lastSentMessage;
     }
 
     public void reset() {
