@@ -121,6 +121,7 @@ public class SequencerServerCache {
 
         int numEntries = 0;
         while (firstAddress() == firstEntry.txVersion) {
+            log.debug("evict items " + numEntries + " with address " + firstAddress());
             ConflictTxStream entry = cacheEntries.poll();
             conflictKeys.remove(entry);
             numEntries++;
@@ -183,12 +184,12 @@ public class SequencerServerCache {
             return false;
         }
 
-        if (conflictKeys.size() == cacheSize) {
-            invalidateSmallestTxVersion();
-        }
-
         cacheEntries.add(conflictStream);
         conflictKeys.put(conflictStream, conflictStream.txVersion);
+
+        while (conflictKeys.size() > cacheSize) {
+            invalidateSmallestTxVersion();
+        }
         return true;
     }
 

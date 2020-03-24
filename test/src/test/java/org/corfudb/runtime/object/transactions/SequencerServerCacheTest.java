@@ -12,7 +12,12 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.view.Address;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -90,14 +95,20 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
      */
     void generateData(HashMap recordMap, SequencerServerCache cache, long address, boolean verifyFirst) {
         final ConflictTxStream key = new ConflictTxStream(UUID.randomUUID(), new byte[]{}, address);
-        if (verifyFirst) {
-            log.debug("cache.firstAddress: " + cache.firstAddress() + " cacheSize: " + cache.size());
-            assertThat(cache.firstAddress() == address - cacheSize);
-        }
+        long firstAddress = cache.firstAddress();
+        long size = cache.size();
+
         cache.put(key);
-        assertThat(cache.get(key) != Address.NON_ADDRESS);
+
+        if (verifyFirst && cache.size() <= size) {
+            log.debug("cache.firstAddress: " + cache.firstAddress() + " cacheSize: " + cache.size() + " address:" + address);
+            assertThat(firstAddress).isLessThan(cache.firstAddress());
+        }
+
+        assertThat(cache.get(key)).isNotEqualTo(Address.NON_ADDRESS);
         recordMap.put(key, address);
-        assertThat(cache.size() <= cacheSize);
+        assertThat(cache.size()).isLessThanOrEqualTo(cacheSize);
+
     }
 
     /**
@@ -113,7 +124,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
             }
             ConflictTxStream key = new ConflictTxStream(oldKey.getStreamId(), oldKey.getConflictParam(), 0);
             log.debug("address " + cache.get(key) + " expected " + oldAddress);
-            assertThat(cache.get(key) == oldAddress);
+            assertThat(cache.get(key)).isEqualTo(oldAddress);
         }
     }
 
@@ -134,9 +145,10 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
             }
         }
 
-        assertThat(cache.size() == cacheSize);
+        assertThat(cache.size()).isEqualTo(cacheSize);
         verifyData(recordMap, cache);
 
+        address = cacheSize;
         // Each put should evict all streams with the same address
         for (int i = 0; i < iterations; i++, address++) {
             generateData(recordMap, cache, address, true);
@@ -145,9 +157,9 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         verifyData(recordMap, cache);
 
         cache.invalidateUpTo(address - 1);
-        assertThat(cache.size() == 1);
+        assertThat(cache.size()).isOne();
         cache.invalidateUpTo(address);
-        assertThat(cache.size() == 0);
+        assertThat(cache.size()).isZero();
     }
 
     @Test
@@ -168,7 +180,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
 
         verifyData(recordMap, cache);
 
-        assertThat(cache.size() == cacheSize);
+        assertThat(cache.size()).isEqualTo(cacheSize);
         // Each put should evict all streams with the same address
         for (int i = 0; i < iterations; i++, address++) {
             generateData(recordMap, cache, address, true);
@@ -179,16 +191,16 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         long entrySize = cache.byteSize() / cache.size();
 
         cache.invalidateUpTo(address - numRemains);
-        assertThat(cache.size() == numRemains);
+        assertThat(cache.size()).isEqualTo(numRemains);
 
         // this assume that the all conflickstreams has the same size of the parameters.
-        assertThat(entrySize == cache.byteSize() / cache.size());
+        assertThat(entrySize).isEqualTo(cache.byteSize() / cache.size());
         log.info("cacheSize {} cacheByteSize {} cacheEntriesBytes {} ", cache.size(), cache.byteSize(), cache.byteSize());
         cache.invalidateUpTo(address);
-        assertThat(cache.size() == 0);
+        assertThat(cache.size()).isZero();
     }
 
-    @Test
+      @Test
     /*
         Test the value regression for the same key
      */
@@ -196,20 +208,50 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         SequencerServerCache cache = new SequencerServerCache(cacheSize, Address.NOT_FOUND);
         long address = 0;
         HashMap<ConflictTxStream, Long> recordMap = new HashMap<>();
+        boolean result;
 
         // put entries to the cache, make it full, some entries have the same address
         while (cache.size() < cacheSize) {
-            for (int j = 0; j < entryPerAddress; j++) {
+            for (int j = 0; j < entryPerAddress && cache.size() < cacheSize; j++) {
                 generateData(recordMap, cache, address++, false);
             }
         }
 
-        for (ConflictTxStream entry : recordMap.keySet()) {
-            assertThat(cache.put(new ConflictTxStream(entry.getStreamId(), entry.getConflictParam(), entry.txVersion)) == false);
+
+        Comparator<Map.Entry<ConflictTxStream, Long>> valueComparator = new Comparator<Map.Entry<ConflictTxStream, Long>>() {
+            @Override public int compare(Map.Entry<ConflictTxStream, Long> e1, Map.Entry<ConflictTxStream, Long> e2)
+            { long v1 = e1.getValue(); long v2 = e2.getValue(); return (int)(v1 - v2); } };
+
+        List<Map.Entry<ConflictTxStream, Long>> listOfEntries = new ArrayList<Map.Entry<ConflictTxStream, Long>>(recordMap.entrySet());
+
+        Collections.sort(listOfEntries, valueComparator);
+
+        address = 0;
+        for (Map.Entry<ConflictTxStream, Long> entryVal : listOfEntries) {
+            ConflictTxStream entry = entryVal.getKey();
+            if (entry.txVersion != address++) {
+                log.debug("****txV " + entry.txVersion + " address " + address);
+            }
+            result = cache.put(new ConflictTxStream(entry.getStreamId(), entry.getConflictParam(), entry.txVersion));
+            assertThat(result).isTrue();
         }
 
-        for (ConflictTxStream entry : recordMap.keySet()) {
-            assertThat(cache.put(new ConflictTxStream(entry.getStreamId(), entry.getConflictParam(), entry.txVersion - 1)) == false);
+        int i = 0;
+        for (Map.Entry<ConflictTxStream, Long> entryVal : listOfEntries) {
+            ConflictTxStream entry = entryVal.getKey();
+            if (entry.txVersion != address++) {
+                log.debug("txV " + entry.txVersion + " address " + address);
+            }
+
+            ConflictTxStream txEle = new ConflictTxStream(entry.getStreamId(), entry.getConflictParam(), entry.txVersion - 1);
+            long txVersion = cache.get(txEle);
+            result = cache.put(txEle);
+
+            i++;
+            if (result != false) {
+                log.debug("\n not false  i " + i + " txV " + txVersion + " result " + result + " size " + recordMap.keySet().size() + " cacheSize " + cache.size()); ;
+            }
+            assertThat(result).isFalse();
         }
     }
 }
