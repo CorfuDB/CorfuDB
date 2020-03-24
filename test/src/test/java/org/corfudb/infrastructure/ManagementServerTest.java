@@ -3,13 +3,18 @@ package org.corfudb.infrastructure;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
 import org.junit.After;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
+
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Checks the various services and messages handled by the
@@ -33,7 +38,6 @@ public class ManagementServerTest extends AbstractServerTest {
         router.addServer(new LayoutServer(serverContext));
         router.addServer(new BaseServer(serverContext));
         // Required to fetch global tails while handling failures.
-        router.addServer(new LogUnitServer(serverContext));
         // Required for management server to bootstrap during initialization.
         router.addServer(new SequencerServer(serverContext));
         managementServer = new ManagementServer(serverContext);
@@ -64,10 +68,10 @@ public class ManagementServerTest extends AbstractServerTest {
     public void bootstrapManagementServer() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR);
+        CompletableFuture<Boolean> future = sendRequest(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
+        assertThat(future.join()).isEqualTo(true);
+        future = sendRequest(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
+        assertThatThrownBy(future::join).hasCauseExactlyInstanceOf(AlreadyBootstrappedException.class);
     }
 
     /**
@@ -77,13 +81,16 @@ public class ManagementServerTest extends AbstractServerTest {
     public void triggerFailureHandler() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
-        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
+        CompletableFuture<Boolean> future = sendRequest(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
                 new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR);
-        sendMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
-        sendMessage(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
+
+        assertThatThrownBy(future::join).hasCauseExactlyInstanceOf(NoBootstrapException.class);
+
+        future = sendRequest(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout));
+        assertThat(future.join()).isEqualTo(true);
+        future = sendRequest(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
                 new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())));
-        assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.ACK);
+        assertThat(future.join()).isEqualTo(true);
+
     }
 }

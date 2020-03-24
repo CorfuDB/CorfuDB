@@ -1,15 +1,18 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
-
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.infrastructure.datastore.DataStore;
+import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
+import org.corfudb.infrastructure.paxos.PaxosDataStore;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
@@ -18,8 +21,8 @@ import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.runtime.view.SequencerHealingPolicy;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
 
 import javax.annotation.Nonnull;
@@ -31,12 +34,15 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 /**
  * Server Context:
@@ -54,22 +60,15 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 public class ServerContext implements AutoCloseable {
+
     // Layout Server
     private static final String PREFIX_EPOCH = "SERVER_EPOCH";
     private static final String KEY_EPOCH = "CURRENT";
     private static final String PREFIX_LAYOUT = "LAYOUT";
     private static final String KEY_LAYOUT = "CURRENT";
-    private static final String PREFIX_PHASE_1 = "PHASE_1";
-    private static final String KEY_SUFFIX_PHASE_1 = "RANK";
-    private static final String PREFIX_PHASE_2 = "PHASE_2";
-    private static final String KEY_SUFFIX_PHASE_2 = "DATA";
     private static final String PREFIX_LAYOUTS = "LAYOUTS";
 
     // Sequencer Server
-    private static final String PREFIX_TAIL_SEGMENT = "TAIL_SEGMENT";
-    private static final String KEY_TAIL_SEGMENT = "CURRENT";
-    private static final String PREFIX_STARTING_ADDRESS = "STARTING_ADDRESS";
-    private static final String KEY_STARTING_ADDRESS = "CURRENT";
     private static final String KEY_SEQUENCER = "SEQUENCER";
     private static final String PREFIX_SEQUENCER_EPOCH = "EPOCH";
 
@@ -87,10 +86,32 @@ public class ServerContext implements AutoCloseable {
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
 
+    private static final KvRecord<String> NODE_ID_RECORD = KvRecord.of(NODE_ID, String.class);
+
+    private static final KvRecord<Layout> CURR_LAYOUT_RECORD = KvRecord.of(
+            PREFIX_LAYOUT, KEY_LAYOUT, Layout.class
+    );
+
+    private static final KvRecord<Long> SERVER_EPOCH_RECORD= KvRecord.of(
+            PREFIX_EPOCH, KEY_EPOCH, Long.class
+    );
+
+    private static final KvRecord<Long> SEQUENCER_RECORD = KvRecord.of(
+            KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH, Long.class
+    );
+
+    private static final KvRecord<Layout> MANAGEMENT_LAYOUT_RECORD = KvRecord.of(
+            PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, Layout.class
+    );
+
+    private static final KvRecord<Long> LOG_UNIT_WATERMARK_RECORD = KvRecord.of(
+            PREFIX_LOGUNIT, EPOCH_WATER_MARK, Long.class
+    );
+
+
     /**
      * various duration constants.
      */
-    public static final Duration SMALL_INTERVAL = Duration.ofMillis(60_000);
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
 
 
@@ -109,10 +130,6 @@ public class ServerContext implements AutoCloseable {
     private IReconfigurationHandlerPolicy failureHandlerPolicy;
 
     @Getter
-    @Setter
-    private IReconfigurationHandlerPolicy healingHandlerPolicy;
-
-    @Getter
     private final EventLoopGroup clientGroup;
 
     @Getter
@@ -121,16 +138,18 @@ public class ServerContext implements AutoCloseable {
     @Getter
     private final EventLoopGroup workerGroup;
 
+    @Getter (AccessLevel.PACKAGE)
+    private final NodeLocator nodeLocator;
+
     @Getter
-    @Setter
-    private boolean bindToAllInterfaces = false;
+    private final String localEndpoint;
 
     @Getter
     private static final MetricRegistry metrics = new MetricRegistry();
 
     @Getter
     private final Set<String> dsFilePrefixesForCleanup =
-            Sets.newHashSet(PREFIX_PHASE_1, PREFIX_PHASE_2, PREFIX_LAYOUTS);
+            Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
 
     /**
      * Returns a new ServerContext.
@@ -142,7 +161,6 @@ public class ServerContext implements AutoCloseable {
         this.dataStore = new DataStore(serverConfig, this::dataStoreFileCleanup);
         generateNodeId();
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
-        this.healingHandlerPolicy = new SequencerHealingPolicy();
 
         // Setup the netty event loops. In tests, these loops may be provided by
         // a test framework to save resources.
@@ -159,14 +177,14 @@ public class ServerContext implements AutoCloseable {
             bossGroup = getNewBossGroup();
         }
 
+        nodeLocator = NodeLocator
+                .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
+        localEndpoint = nodeLocator.toEndpointUrl();
+
         // Metrics setup & reporting configuration
         if (!isMetricsReportingSetUp(metrics)) {
             MetricsUtils.metricsReportingSetup(metrics);
         }
-    }
-
-    String getLocalEndpoint() {
-        return serverConfig.get("--address") + ":" + serverConfig.get("<port>");
     }
 
     int getBaseServerThreadCount() {
@@ -179,17 +197,12 @@ public class ServerContext implements AutoCloseable {
         return threadCount == null ? 1 : threadCount;
     }
 
-    int getSequencerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--sequencer-threads");
-        return threadCount == null ? 1 : threadCount;
-    }
-
-    int getLogunitThreadCount() {
+    public int getLogunitThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--logunit-threads");
-        return threadCount == null ? BatchWriter.BATCH_SIZE + Runtime.getRuntime().availableProcessors() : threadCount;
+        return threadCount == null ? Runtime.getRuntime().availableProcessors() * 2 : threadCount;
     }
 
-    int getManagementServerThreadCount() {
+    public int getManagementServerThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--management-server-threads");
         return threadCount == null ? 4 : threadCount;
     }
@@ -253,8 +266,9 @@ public class ServerContext implements AutoCloseable {
      *
      * @return an instance of {@link CorfuRuntimeParameters}
      */
-    public CorfuRuntimeParameters getDefaultRuntimeParameters() {
+    public CorfuRuntimeParameters getManagementRuntimeParameters() {
         return CorfuRuntime.CorfuRuntimeParameters.builder()
+                .priorityLevel(PriorityLevel.HIGH)
                 .nettyEventLoop(clientGroup)
                 .shutdownNettyEventLoop(false)
                 .tlsEnabled((Boolean) serverConfig.get("--enable-tls"))
@@ -265,7 +279,7 @@ public class ServerContext implements AutoCloseable {
                 .saslPlainTextEnabled((Boolean) serverConfig.get("--enable-sasl-plain-text-auth"))
                 .usernameFile((String) serverConfig.get("--sasl-plain-text-username-file"))
                 .passwordFile((String) serverConfig.get("--sasl-plain-text-password-file"))
-                .bulkReadSize(Integer.valueOf((String) serverConfig.get("--batch-size")))
+                .bulkReadSize(Integer.parseInt((String) serverConfig.get("--batch-size")))
                 .build();
     }
 
@@ -273,11 +287,11 @@ public class ServerContext implements AutoCloseable {
      * Generate a Node Id if not present.
      */
     private void generateNodeId() {
-        String currentId = getDataStore().get(String.class, "", ServerContext.NODE_ID);
+        String currentId = getDataStore().get(NODE_ID_RECORD);
         if (currentId == null) {
             String idString = UuidUtils.asBase64(UUID.randomUUID());
             log.info("No Node Id, setting to new Id={}", idString);
-            getDataStore().put(String.class, "", ServerContext.NODE_ID, idString);
+            getDataStore().put(NODE_ID_RECORD, idString);
         } else {
             log.info("Node Id = {}", currentId);
         }
@@ -297,7 +311,7 @@ public class ServerContext implements AutoCloseable {
      * @return A node ID for this node, as a base64 string.
      */
     public String getNodeIdBase64() {
-        return getDataStore().get(String.class, "", ServerContext.NODE_ID);
+        return getDataStore().get(NODE_ID_RECORD);
     }
 
     /**
@@ -377,7 +391,7 @@ public class ServerContext implements AutoCloseable {
      * @return The current stored {@link Layout}
      */
     public Layout getCurrentLayout() {
-        return getDataStore().get(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT);
+        return getDataStore().get(CURR_LAYOUT_RECORD);
     }
 
     /**
@@ -386,7 +400,7 @@ public class ServerContext implements AutoCloseable {
      * @param layout The {@link Layout} to set in the {@link DataStore}.
      */
     public void setCurrentLayout(Layout layout) {
-        getDataStore().put(Layout.class, PREFIX_LAYOUT, KEY_LAYOUT, layout);
+        getDataStore().put(CURR_LAYOUT_RECORD, layout);
     }
 
     /**
@@ -402,7 +416,7 @@ public class ServerContext implements AutoCloseable {
      * The epoch of this router. This is managed by the base server implementation.
      */
     public synchronized long getServerEpoch() {
-        Long epoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
+        Long epoch = dataStore.get(SERVER_EPOCH_RECORD);
         return epoch == null ? 0 : epoch;
     }
 
@@ -412,9 +426,9 @@ public class ServerContext implements AutoCloseable {
      * @param serverEpoch the epoch to set
      */
     public synchronized void setServerEpoch(long serverEpoch, IServerRouter r) {
-        Long lastEpoch = dataStore.get(Long.class, PREFIX_EPOCH, KEY_EPOCH);
+        Long lastEpoch = dataStore.get(SERVER_EPOCH_RECORD);
         if (lastEpoch == null || lastEpoch < serverEpoch) {
-            dataStore.put(Long.class, PREFIX_EPOCH, KEY_EPOCH, serverEpoch);
+            dataStore.put(SERVER_EPOCH_RECORD, serverEpoch);
             r.setServerEpoch(serverEpoch);
             getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
         } else if (serverEpoch == lastEpoch) {
@@ -425,52 +439,11 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    public Rank getPhase1Rank() {
-        return dataStore.get(Rank.class, PREFIX_PHASE_1,
-                getServerEpoch() + KEY_SUFFIX_PHASE_1);
-    }
-
-    public void setPhase1Rank(Rank rank) {
-        dataStore.put(Rank.class, PREFIX_PHASE_1,
-                getServerEpoch() + KEY_SUFFIX_PHASE_1, rank);
-    }
-
-    public Phase2Data getPhase2Data() {
-        return dataStore.get(Phase2Data.class, PREFIX_PHASE_2,
-                getServerEpoch() + KEY_SUFFIX_PHASE_2);
-    }
-
-    public void setPhase2Data(Phase2Data phase2Data) {
-        dataStore.put(Phase2Data.class, PREFIX_PHASE_2,
-                getServerEpoch() + KEY_SUFFIX_PHASE_2, phase2Data);
-    }
-
     public void setLayoutInHistory(Layout layout) {
-        dataStore.put(Layout.class, PREFIX_LAYOUTS, String.valueOf(layout.getEpoch()), layout);
-    }
-
-    public long getTailSegment() {
-        Long tailSegment = dataStore.get(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT);
-        return tailSegment == null ? 0 : tailSegment;
-    }
-
-    public void setTailSegment(long tailSegment) {
-        dataStore.put(Long.class, PREFIX_TAIL_SEGMENT, KEY_TAIL_SEGMENT, tailSegment);
-    }
-
-    /**
-     * Returns the dataStore starting address.
-     *
-     * @return the starting address
-     */
-    public long getStartingAddress() {
-        Long startingAddress = dataStore.get(Long.class, PREFIX_STARTING_ADDRESS,
-                KEY_STARTING_ADDRESS);
-        return startingAddress == null ? 0 : startingAddress;
-    }
-
-    public void setStartingAddress(long startingAddress) {
-        dataStore.put(Long.class, PREFIX_STARTING_ADDRESS, KEY_STARTING_ADDRESS, startingAddress);
+        KvRecord<Layout> currLayoutRecord = KvRecord.of(
+                PREFIX_LAYOUTS, String.valueOf(layout.getEpoch()), Layout.class
+        );
+        dataStore.put(currLayoutRecord, layout);
     }
 
     /**
@@ -480,7 +453,7 @@ public class ServerContext implements AutoCloseable {
      * @param sequencerEpoch Epoch to persist.
      */
     public void setSequencerEpoch(long sequencerEpoch) {
-        dataStore.put(Long.class, KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH, sequencerEpoch);
+        dataStore.put(SEQUENCER_RECORD, sequencerEpoch);
     }
 
     /**
@@ -489,33 +462,34 @@ public class ServerContext implements AutoCloseable {
      * @return Sequencer epoch.
      */
     public long getSequencerEpoch() {
-        Long epoch = dataStore.get(Long.class, KEY_SEQUENCER, PREFIX_SEQUENCER_EPOCH);
+        Long epoch = dataStore.get(SEQUENCER_RECORD);
         return epoch == null ? Layout.INVALID_EPOCH : epoch;
     }
 
     /**
      * Sets the management layout in the persistent datastore.
      *
-     * @param layout Layout to be persisted
+     * @param newLayout Layout to be persisted
      */
-    public synchronized void saveManagementLayout(Layout layout) {
+    public synchronized Layout saveManagementLayout(Layout newLayout) {
+        Layout currentLayout = copyManagementLayout();
+
         // Cannot update with a null layout.
-        if (layout == null) {
-            log.warn("saveManagementLayout: Attempted to update with null layout");
-            return;
+        if (newLayout == null) {
+            log.warn("Attempted to update with null. Current layout: {}", currentLayout);
+            return currentLayout;
         }
-        Layout currentLayout = getManagementLayout();
+
         // Update only if new layout has a higher epoch than the existing layout.
-        if (currentLayout == null || layout.getEpoch() > currentLayout.getEpoch()) {
-            // Persisting this new updated layout
-            dataStore.put(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT, layout);
-            log.info("saveManagementLayout: Updated to new layout at epoch {}",
-                    getManagementLayout().getEpoch());
-        } else {
-            log.trace("saveManagementLayout: "
-                            + "Ignoring layout because new epoch {} <= old epoch {}",
-                    layout.getEpoch(), currentLayout.getEpoch());
+        if (currentLayout == null || newLayout.getEpoch() > currentLayout.getEpoch()) {
+            dataStore.put(MANAGEMENT_LAYOUT_RECORD, newLayout);
+            currentLayout = copyManagementLayout();
+            log.info("Update to new layout at epoch {}", currentLayout.getEpoch());
+            return currentLayout;
         }
+
+        return currentLayout;
+
     }
 
     /**
@@ -530,12 +504,13 @@ public class ServerContext implements AutoCloseable {
             return;
         }
 
-        dataStore.put(
-                FailureDetectorMetrics.class,
+        KvRecord<FailureDetectorMetrics> fdRecord = KvRecord.of(
                 PREFIX_FAILURE_DETECTOR,
                 String.valueOf(getManagementLayout().getEpoch()),
-                detector
+                FailureDetectorMetrics.class
         );
+
+        dataStore.put(fdRecord, detector);
     }
 
     /**
@@ -549,17 +524,15 @@ public class ServerContext implements AutoCloseable {
             return getDefaultFailureDetectorMetric(getManagementLayout());
         }
 
-        FailureDetectorMetrics failureMetrics = dataStore.get(
-                FailureDetectorMetrics.class, PREFIX_FAILURE_DETECTOR, String.valueOf(getManagementLayout().getEpoch())
+        KvRecord<FailureDetectorMetrics> fdRecord = KvRecord.of(
+                PREFIX_FAILURE_DETECTOR,
+                String.valueOf(getManagementLayout().getEpoch()),
+                FailureDetectorMetrics.class
         );
 
-        if (failureMetrics == null){
-            Layout layout = getManagementLayout();
-
-            return getDefaultFailureDetectorMetric(layout);
-        }
-
-        return failureMetrics;
+        return Optional
+                .ofNullable(dataStore.get(fdRecord))
+                .orElseGet(() -> getDefaultFailureDetectorMetric(getManagementLayout()));
     }
 
     /**
@@ -582,7 +555,7 @@ public class ServerContext implements AutoCloseable {
      * @return The last persisted layout
      */
     public Layout getManagementLayout() {
-        return dataStore.get(Layout.class, PREFIX_MANAGEMENT, MANAGEMENT_LAYOUT);
+        return dataStore.get(MANAGEMENT_LAYOUT_RECORD);
     }
 
     /**
@@ -591,7 +564,7 @@ public class ServerContext implements AutoCloseable {
      * @param resetEpoch Epoch at which the reset command was received.
      */
     public synchronized void setLogUnitEpochWaterMark(long resetEpoch) {
-        dataStore.put(Long.class, PREFIX_LOGUNIT, EPOCH_WATER_MARK, resetEpoch);
+        dataStore.put(LOG_UNIT_WATERMARK_RECORD, resetEpoch);
     }
 
     /**
@@ -600,7 +573,7 @@ public class ServerContext implements AutoCloseable {
      * @return Reset epoch.
      */
     public synchronized long getLogUnitEpochWaterMark() {
-        Long resetEpoch = dataStore.get(Long.class, PREFIX_LOGUNIT, EPOCH_WATER_MARK);
+        Long resetEpoch = dataStore.get(LOG_UNIT_WATERMARK_RECORD);
         return resetEpoch == null ? Layout.INVALID_EPOCH : resetEpoch;
     }
 
@@ -701,7 +674,7 @@ public class ServerContext implements AutoCloseable {
      */
     @Override
     public void close() {
-        CorfuRuntimeParameters params = getDefaultRuntimeParameters();
+        CorfuRuntimeParameters params = getManagementRuntimeParameters();
         // Shutdown the active event loops unless they were provided to us
         if (!getChannelImplementation().equals(ChannelImplementation.LOCAL)) {
             clientGroup.shutdownGracefully(

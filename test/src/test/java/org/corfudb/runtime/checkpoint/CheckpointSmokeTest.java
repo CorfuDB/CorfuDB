@@ -14,18 +14,20 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
@@ -51,30 +53,36 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
     @Test
     public void testEmptyMapCP() throws Exception {
-        SMRMap<String, String> map = r.getObjectsView().build()
-                .setType(SMRMap.class)
+        CorfuTable<String, String> map = r.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("Map1")
                 .open();
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(map);
 
-        // Verify that a CP wasn't generated
+        // Verify that a CP was generated
         long address = mcw.appendCheckpoints(r, "A1").getSequence();
-        assertThat(address).isEqualTo(-1);
+        assertThat(address).isEqualTo(0L);
 
         // Verify that nothing was written
         IStreamView sv = r.getStreamsView().get(CorfuRuntime.getStreamID("S1"));
         final int objSize = 100;
         long a1 = sv.append(new byte[objSize]);
-        final long cpEndAddress = 2L;
+        // 0 - Hole for Map1 - 1/2 Start/End Record for Empty Checkpoint (no continuation records)
+        final long cpEndAddress = 3L;
         // Verify that the start/end records have been written for empty maps
         assertThat(a1).isEqualTo(cpEndAddress);
+        // Verify that checkpoint start address is the enforced hole (0L)
+        LogEntry cpStart = (CheckpointEntry) r.getAddressSpaceView().read(1L)
+                .getPayload(r);
+        assertThat(((CheckpointEntry) cpStart).getDict()
+                .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("0");
     }
 
     /** First smoke test, steps:
      *
-     * 1. Put a couple of keys into an SMRMap "m"
+     * 1. Put a couple of keys into an CorfuTable "m"
      * 2. Write a checkpoint (3 records total) into "m"'s stream.
      *    The SMREntry records in the checkpoint will *not* match
      *    the keys written by step #1.
@@ -141,7 +149,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
     /** Second smoke test, steps:
      *
-     * 1. Put a few keys into an SMRMap "m" with prefix keyPrefixFirst.
+     * 1. Put a few keys into an CorfuTable "m" with prefix keyPrefixFirst.
      * 2. Write a checkpoint (3 records total) into "m"'s stream.
      *    The SMREntry records in the checkpoint will *not* match
      *    the keys written by step #1.
@@ -149,7 +157,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      *    with prefixes keyPrefixMiddle1 & keyPrefixMiddle2.
      *    As with the first smoke test, the checkpoint contains fake
      *    keys & values (key7 and key8).
-     * 3. Put a few keys into an SMRMap "m" with prefix keyPrefixLast
+     * 3. Put a few keys into an CorfuTable "m" with prefix keyPrefixLast
      * 4. Write an incomplete checkpoint (START and CONTINUATION but
      *    no END).
      *
@@ -234,7 +242,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final Long fudgeFactor = 75L;
         final int smallBatchSize = 4;
 
-        Map<String, Long> m = instantiateMap(streamName);
+        StreamingMap<String, Long> m = instantiateMap(streamName);
         for (int i = 0; i < numKeys; i++) {
             m.put(keyPrefix + Integer.toString(i), (long) i);
         }
@@ -251,7 +259,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Set up CP writer.  Add fudgeFactor to all CP data,
         // also used for assertion checks later.
-        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
+        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (CorfuTable) m);
         cpw.setSerializer(serializer);
         cpw.setValueMutator((l) -> (Long) l + fudgeFactor);
         cpw.setBatchSize(smallBatchSize);
@@ -264,10 +272,9 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         Token snapshot = TransactionalContext
                 .getCurrentContext()
                 .getSnapshotTimestamp();
-        Token streamTail = r.getSequencerView().query(streamId).getToken();
         try {
-            cpw.startCheckpoint(snapshot, streamTail.getSequence());
-            cpw.appendObjectState(m.entrySet());
+            cpw.startCheckpoint(snapshot);
+            cpw.appendObjectState(m.entryStream());
             cpw.finishCheckpoint();
 
             // Instantiate new runtime & map.  All map entries (except 'just one more')
@@ -300,6 +307,19 @@ public class CheckpointSmokeTest extends AbstractViewTest {
      *  destroyed (logically, not physically) by the CP, so we have
      *  to use a different position 'history' for our assertion
      *  check.
+     *
+     * +-----------------------------------------------------------------+
+     * | 0  | 1  | 2  | 3 | 4 | 5  | 6 | 7  | 8 | 9  | 10 | 11 | 12 | 13 |
+     * +-----------------------------------------------------------------+
+     * | F0 | F1 | F2 | S | C | M0 | C | M1 | C | M2 | E  | L0 | L1 | L2 |
+     * +-----------------------------------------------------------------+
+     * F : First batch of entries.
+     * S : Start of checkpoint.
+     * C : Continuation of checkpoints
+     * M : Middle batch of entries.
+     * E : End of checkpoints
+     * L : Last batch of entries.
+     *
      */
     @Test
     public void checkpointWriterInterleavedTest() throws Exception {
@@ -329,7 +349,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
 
         // Set up CP writer, with interleaved writes for middle keys
         middleTracker = -1;
-        CheckpointWriter<SMRMap> cpw = new CheckpointWriter(getRuntime(), streamId, author, (SMRMap) m);
+        CheckpointWriter<CorfuTable> cpw = new CheckpointWriter(getRuntime(), streamId, author, (CorfuTable) m);
         cpw.setSerializer(serializer);
         cpw.setBatchSize(1);
         cpw.setPostAppendFunc((cp, pos) -> {
@@ -353,14 +373,16 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             }
         });
 
+        // Represents the checkpoint NO_OP entry write
+        history.add(ImmutableMap.copyOf(snapshot));
+
         // Write all CP data + interleaving middle map updates
-        Token globalTail = r.getSequencerView().query().getToken();
-        cpw.appendCheckpoint();
+        Token cpToken = cpw.appendCheckpoint();
         // First write after the current tail should be the start address entry
         // for the checkpoint. Since regular writes are being interleaved with
         // the checkpointer perfectly, the checkpointer will write on every other
         // address (i.e. odd offsets from the base, startAddress)
-        long startAddress = globalTail.getSequence() + 1;
+        long startAddress = cpToken.getSequence() + 1;
         assertThat(r.getAddressSpaceView().read(startAddress).getCheckpointType())
                 .isEqualTo(CheckpointEntry.CheckpointEntryType.START);
         final long contRecordffset = startAddress + 1;
@@ -425,19 +447,19 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                         .begin();
 
                 assertThat(m2.entrySet())
-                        .describedAs("Snapshot at global log address " + globalAddr)
+                        .describedAs("Snapshot at global log address " + globalAddr + 1)
                         .isEqualTo(expectedHistory.entrySet());
                 r.getObjectsView().TXEnd();
             }
         }
     }
 
-    private Map<String, Long> instantiateMap(String streamName) {
+    private StreamingMap<String, Long> instantiateMap(String streamName) {
         Serializers.registerSerializer(serializer);
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<SMRMap<String, Long>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {})
                 .setSerializer(serializer)
                 .open();
     }
@@ -450,23 +472,29 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 l, l, true, true, true);
     }
 
+    long startAddress;
+
     private void writeCheckpointRecords(UUID streamId, String checkpointAuthor, UUID checkpointId,
                                         Object[] objects, Runnable l1, Runnable l2,
                                         boolean write1, boolean write2, boolean write3)
             throws Exception {
         final UUID checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
-        BackpointerStreamView sv = new BackpointerStreamView(r, checkpointStreamID);
+        IStreamView sv;
+        if (r.getParameters().isFollowBackpointersEnabled()) {
+            sv = new BackpointerStreamView(r, checkpointStreamID);
+        } else {
+            sv = new AddressMapStreamView(r, checkpointStreamID);
+        }
         Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
         mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, "The perfect time");
 
         // Write cp #1 of 3
         if (write1) {
-            TokenResponse tokResp1 = r.getSequencerView().query(streamId);
-            long addr1 = tokResp1.getToken().getSequence();
+            long addr1 = r.getSequencerView().query(streamId);
             mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(addr1 + 1));
             CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                     checkpointAuthor, checkpointId, streamId, mdKV, null);
-            sv.append(cp1, null, null);
+            startAddress = sv.append(cp1, null, null);
         }
 
         // Interleaving opportunity #1
@@ -526,13 +554,12 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         mB.put("one more", 1L);
 
         MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-        mcw1.addMap((SMRMap) mA);
-        mcw1.addMap((SMRMap) mB);
+        mcw1.addMap((CorfuTable) mA);
+        mcw1.addMap((CorfuTable) mB);
         long firstGlobalAddress1 = mcw1.appendCheckpoints(r, author).getSequence();
         assertThat(firstGlobalAddress1).isGreaterThan(-1);
 
         setRuntime();
-        Map<String, Long> m2c = instantiateMap(streamNameA);
 
         // A bug was once here when 2 checkpoints were adjacent to
         // each other without any regular entries in between.
@@ -542,10 +569,10 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
 
         MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
-        mcw2.addMap((SMRMap) mA);
-        mcw2.addMap((SMRMap) mB);
+        mcw2.addMap((CorfuTable) mA);
+        mcw2.addMap((CorfuTable) mB);
         long firstGlobalAddress2 = mcw2.appendCheckpoints(r, author).getSequence();
-        assertThat(firstGlobalAddress2).isGreaterThan(firstGlobalAddress1);
+        assertThat(firstGlobalAddress2).isGreaterThanOrEqualTo(firstGlobalAddress1);
 
         setRuntime();
         Map<String, Long> m2A = instantiateMap(streamNameA);
@@ -577,8 +604,8 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
 
         MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
-        mcw1.addMap((SMRMap) mA);
-        mcw1.addMap((SMRMap) mB);
+        mcw1.addMap((CorfuTable) mA);
+        mcw1.addMap((CorfuTable) mB);
         Token trimAddress = mcw1.appendCheckpoints(r, author);
 
         r.getAddressSpaceView().prefixTrim(trimAddress);
@@ -591,7 +618,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         Map<String, Long> mA2 = rt2.getObjectsView()
                 .build()
                 .setStreamName(streamA)
-                .setTypeToken(new TypeToken<SMRMap<String, Long>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                 })
                 .setSerializer(serializer)
                 .open();
@@ -599,6 +626,114 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         rt2.getObjectsView().TXBegin();
         mA2.put("a", 2l);
         rt2.getObjectsView().TXEnd();
+    }
+
+
+    /**
+     * This test verifies that a stream is rebuilt from a checkpoint, whenever two valid checkpoints exist, but the
+     * latest checkpoint is performed on an earlier snapshot, while the log is trimmed on the snapshot of the earliest
+     * checkpoint.
+     *
+     * 1. Write 25 entries to stream A.
+     * 2. Start a checkpoint (CP2) at snapshot 15, complete it.
+     * 3. Start a checkpoint (CP1) at snapshot 10, complete it.
+     * 4. Trim on token for CP2 (snapshot = 15).
+     * 5. New runtime instantiate stream A (do a mutation to force to load from checkpoint).
+     */
+    @Test
+    public void testUnorderedCheckpoints() throws Exception {
+        final int numEntries = 25;
+        final int snapshotAddress1 = 10;
+        final int snapshotAddress2 = 15;
+
+        // Open map.
+        final String streamA = "streamA";
+        StreamingMap<String, Long> mA = instantiateMap(streamA);
+
+        // (1) Write 25 Entries
+        for (int i = 0; i < numEntries; i++) {
+            mA.put(String.valueOf(i), (long) i);
+        }
+
+        // Checkpoint Writer 2 @15
+        CheckpointWriter cpw2 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-2", mA);
+        Token cp2Token = cpw2.appendCheckpoint(new Token(0, snapshotAddress2 - 1));
+
+        // Checkpoint Writer 1 @10
+        CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-1", mA);
+        cpw1.appendCheckpoint(new Token(0, snapshotAddress1 - 1));
+
+        // Trim @snapshotAddress=15
+        r.getAddressSpaceView().prefixTrim(cp2Token);
+
+        // New Runtime
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
+        Map<String, Long> mA2 = rt2.getObjectsView()
+                .build()
+                .setStreamName(streamA)
+                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
+                })
+                .setSerializer(serializer)
+                .open();
+
+        // Access / Mutate map - It should be built from the earliest checkpoint (CP2)
+        // without throwing a TransactionAbortedException - Cause TRIM
+        rt2.getObjectsView().TXBegin();
+        mA2.put("a", 1l);
+        rt2.getObjectsView().TXEnd();
+
+        assertThat(mA2).hasSize(numEntries + 1);
+    }
+
+    /**
+     * Test that the checkpoint writer token is progressing despite the fact that a stream
+     * has not been updated for some time. This will guarantee that trim will continue progressing
+     * even in scenarios where some streams are not constantly updated.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testCheckpointTokenProgressesForNonWrittenStreams() throws Exception {
+        final int numEntries = 5;
+
+        // Open map A
+        final String streamA = "streamA";
+        StreamingMap<String, Long> mA = instantiateMap(streamA);
+
+        // Open map B
+        final String streamB = "streamB";
+        StreamingMap<String, Long> mB = instantiateMap(streamB);
+
+        // Write numEntries Entries to mA
+        for (int i = 0; i < numEntries; i++) {
+            mA.put(String.valueOf(i), (long) i);
+        }
+
+        // Write numEntries Entries to mB
+        for (int i = 0; i < numEntries; i++) {
+            mB.put(String.valueOf(i), (long) i);
+        }
+
+        // MultiCheckpointWriter when both streams have experienced updates
+        MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+        mcw1.addMap(mA);
+        mcw1.addMap(mB);
+        Token minSnapshot1 = mcw1.appendCheckpoints(r, "test-author");
+
+        // Let mA not perceive any updates and only update mB
+        // Write numEntries Entries to mB
+        for (int i = numEntries; i < numEntries*2; i++) {
+            mB.put(String.valueOf(i), (long) i);
+        }
+
+        // MultiCheckpointWriter when one stream has progressed and the other
+        // has no new updates after last checkpoint.
+        MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
+        mcw2.addMap(mA);
+        mcw2.addMap(mB);
+        Token minSnapshot2 = mcw2.appendCheckpoints(r, "test-author");
+
+        assertThat(minSnapshot2).isGreaterThan(minSnapshot1);
     }
 }
 

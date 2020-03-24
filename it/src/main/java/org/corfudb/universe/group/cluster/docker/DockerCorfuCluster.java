@@ -12,6 +12,7 @@ import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.logging.LoggingParams;
+import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.server.docker.DockerCorfuServer;
@@ -27,25 +28,26 @@ import java.util.stream.Collectors;
  * Provides Docker implementation of {@link CorfuCluster}.
  */
 @Slf4j
-public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams, UniverseParams> {
+public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuServerParams, UniverseParams> {
+
     @NonNull
     private final DockerClient docker;
+
     @NonNull
-    private final LoggingParams loggingParams;
     private final DockerManager dockerManager;
 
     @Builder
-    public DockerCorfuCluster(DockerClient docker, CorfuClusterParams params, UniverseParams universeParams,
-                              LoggingParams loggingParams) {
-        super(params, universeParams);
+    public DockerCorfuCluster(DockerClient docker, CorfuClusterParams<CorfuServerParams> params,
+                              UniverseParams universeParams, LoggingParams loggingParams) {
+        super(params, universeParams, loggingParams);
         this.docker = docker;
-        this.loggingParams = loggingParams;
         this.dockerManager = DockerManager.builder().docker(docker).build();
+
+        init();
     }
 
     @Override
-    protected CorfuServer buildCorfuServer(CorfuServerParams nodeParams) {
-
+    protected Node buildServer(CorfuServerParams nodeParams) {
         return DockerCorfuServer.builder()
                 .universeParams(universeParams)
                 .clusterParams(params)
@@ -58,7 +60,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
 
     @Override
     protected ImmutableSortedSet<String> getClusterLayoutServers() {
-        List<String> servers = nodes
+        List<String> servers = nodes()
                 .values()
                 .stream()
                 .map(CorfuServer::getEndpoint)
@@ -72,7 +74,7 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuClusterParams,
         Layout layout = getLayout();
         log.info("Bootstrap docker corfu cluster. Cluster: {}. layout: {}", params.getName(), layout.asJSONString());
 
-        BootstrapUtil.bootstrap(layout, params.getBootStrapRetries(), params.getRetryTimeout());
+        BootstrapUtil.bootstrap(layout, params.getBootStrapRetries(), params.getRetryDuration());
     }
 
     private Layout getLayout() {

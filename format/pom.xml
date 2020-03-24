@@ -5,11 +5,15 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.2.2.20190222082048.796</version>
+        <version>${revision}</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>format</artifactId>
+
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <dependencies>
         <!-- external dependencies -->
@@ -25,7 +29,7 @@
             <plugin>
                 <groupId>com.github.os72</groupId>
                 <artifactId>protoc-jar-maven-plugin</artifactId>
-                <version>3.1.0.2</version>
+                <version>3.7.0.1</version>
                 <executions>
                     <execution>
                         <phase>generate-sources</phase>
@@ -34,6 +38,11 @@
                         </goals>
                         <configuration>
                             <protocVersion>3.1.0</protocVersion>
+                            <includeStdTypes>true</includeStdTypes>
+                            <addProtoSources>inputs</addProtoSources>
+                            <includeDirectories>
+                                <includeDirectory>proto</includeDirectory>
+                            </includeDirectories>
                             <inputDirectories>
                                 <include>proto</include>
                             </inputDirectories>

@@ -12,6 +12,8 @@ import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Represents a degree of a node (the number of connections it has to other nodes)
@@ -29,6 +31,7 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
     @Getter
     @NonNull
     private final String endpoint;
+
     @Getter
     @NonNull
     private final NodeConnectivityType type;
@@ -40,6 +43,9 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
     @NonNull
     private final ImmutableMap<String, ConnectionStatus> connectivity;
 
+    @Getter
+    private final long epoch;
+
     public NodeConnectivity(ByteBuf buf) {
         endpoint = ICorfuPayload.fromBuffer(buf, String.class);
         type = NodeConnectivityType.valueOf(ICorfuPayload.fromBuffer(buf, String.class));
@@ -50,6 +56,7 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
                 //transform map of strings to map of ConnectionStatus-es
                 .forEach((node, status) -> connectivityMap.put(node, ConnectionStatus.valueOf(status)));
         connectivity = ImmutableMap.copyOf(connectivityMap);
+        epoch = ICorfuPayload.fromBuffer(buf, Long.class);
     }
 
     @Override
@@ -61,6 +68,30 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
         connectivity.forEach((node, state) -> connectivityStrings.put(node, state.name()));
 
         ICorfuPayload.serialize(buf, connectivityStrings);
+        ICorfuPayload.serialize(buf, epoch);
+    }
+
+    /**
+     * Contains list of servers successfully connected with current node.
+     */
+    public Set<String> getConnectedNodes() {
+        return connectivity
+                .keySet()
+                .stream()
+                .filter(adjacent -> connectivity.get(adjacent) == ConnectionStatus.OK)
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Contains list of servers disconnected from this node.
+     * If the node A can't ping node B then node B will be added to failedNodes list.
+     */
+    public Set<String> getFailedNodes() {
+        return connectivity
+                .keySet()
+                .stream()
+                .filter(adjacent -> connectivity.get(adjacent) == ConnectionStatus.FAILED)
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -71,11 +102,18 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
      */
     public ConnectionStatus getConnectionStatus(String node) {
         if (type == NodeConnectivityType.UNAVAILABLE) {
-            throw new IllegalStateException("Incorrect configuration");
+
+            String error = String.format(
+                    "%s: failed to get connection status for %s. Connectivity: %s",
+                    endpoint, node, connectivity);
+            throw new IllegalStateException(error);
         }
 
         if (!connectivity.containsKey(node)) {
-            throw new IllegalStateException("Opposite node not found");
+            String error = String.format(
+                    "%s: opposite node not found for %s. Connectivity: %s",
+                    endpoint, node, connectivity);
+            throw new IllegalStateException(error);
         }
 
         return connectivity.get(node);
@@ -172,9 +210,5 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
          * Two nodes disconnected form each other
          */
         FAILED;
-
-        public static ConnectionStatus fromBool(boolean connected) {
-            return connected ? OK : FAILED;
-        }
     }
 }

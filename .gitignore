@@ -221,4 +221,8 @@ pip-log.txt
 target
 *.dat
 
-/it/src/test/resources/vm.properties
+/it/src/test/resources/vm.credentials.properties
+
+test/.jqwik-database
+.flattened-pom.xml
+/*/.flattened-pom.xml

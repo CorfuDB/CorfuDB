@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.management;
 
+import com.google.common.collect.ImmutableList;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.protocols.wireprotocol.ClusterState;
@@ -23,7 +25,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
 
     private final String localEndpoint;
 
-    public CompleteGraphAdvisor(String localEndpoint) {
+    public CompleteGraphAdvisor(@NonNull String localEndpoint) {
         this.localEndpoint = localEndpoint;
     }
 
@@ -47,18 +49,14 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      *
      * @param clusterState        represents the state of connectivity amongst the Corfu cluster
      *                            nodes from a node's perspective.
-     * @param unresponsiveServers list of unresponsive servers.
      * @return a server considered as failed according to the underlying strategy.
      */
     @Override
-    public Optional<NodeRank> failedServer(
-            ClusterState clusterState, List<String> unresponsiveServers) {
+    public Optional<NodeRank> failedServer(ClusterState clusterState) {
 
-        log.trace("Detecting failed nodes for: ClusterState= {} unresponsive servers= {}",
-                clusterState, unresponsiveServers
-        );
+        log.trace("Detecting failed nodes for: ClusterState= {}", clusterState);
 
-        ClusterGraph graph = ClusterGraph.toClusterGraph(clusterState, localEndpoint);
+        ClusterGraph graph = ClusterGraph.toClusterGraph(clusterState);
 
         ClusterGraph symmetric = graph.toSymmetric();
         Optional<NodeRank> maybeDecisionMaker = symmetric.getDecisionMaker();
@@ -87,8 +85,9 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
             return Optional.empty();
         }
 
-        if (unresponsiveServers.contains(failedNode.getEndpoint())) {
-            log.trace("Failed node already in the list of unresponsive servers: {}", unresponsiveServers);
+        ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
+        if (unresponsiveNodes.contains(failedNode.getEndpoint())) {
+            log.trace("Failed node already in the list of unresponsive nodes: {}", unresponsiveNodes);
             return Optional.empty();
         }
 
@@ -108,42 +107,40 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
      *
      * @param clusterState        represents the state of connectivity amongst the Corfu cluster
      *                            nodes from a node's perspective.
-     * @param unresponsiveServers unresponsive servers in a layout.
      * @return a {@link List} of servers considered as healed according to the underlying
      * {@link ClusterType}.
      */
     @Override
-    public Optional<NodeRank> healedServer(
-            ClusterState clusterState, List<String> unresponsiveServers) {
+    public Optional<NodeRank> healedServer(ClusterState clusterState) {
 
-        log.trace("Detecting the healed nodes for: ClusterState: {} unresponsive servers: {}",
-                clusterState, unresponsiveServers
-        );
+        log.trace("Detecting the healed nodes for: ClusterState: {}", clusterState);
 
-        if (unresponsiveServers.isEmpty()) {
+        ImmutableList<String> unresponsiveNodes = clusterState.getUnresponsiveNodes();
+        if (unresponsiveNodes.isEmpty()) {
             log.trace("All nodes responsive. Nothing to heal");
             return Optional.empty();
         }
 
-        if (!unresponsiveServers.contains(localEndpoint)) {
+        if (!unresponsiveNodes.contains(localEndpoint)) {
             log.trace("Local node is responsive. Nothing to heal");
             return Optional.empty();
         }
 
         //Transform a ClusterState to the ClusterGraph and make it symmetric (symmetric failures)
-        ClusterGraph symmetricGraph = ClusterGraph.toClusterGraph(clusterState, localEndpoint).toSymmetric();
+        ClusterGraph symmetricGraph = ClusterGraph.toClusterGraph(clusterState).toSymmetric();
 
         //See if local node is healed.
-        return symmetricGraph.findFullyConnectedNode(localEndpoint, unresponsiveServers);
+        return symmetricGraph.findFullyConnectedNode(localEndpoint);
     }
 
     /**
      * Returns a new cluster graph from the cluster state
+     *
      * @param clusterState a cluster state
      * @return a transformed cluster graph
      */
     @Override
     public ClusterGraph getGraph(ClusterState clusterState) {
-        return ClusterGraph.toClusterGraph(clusterState, localEndpoint).toSymmetric();
+        return ClusterGraph.toClusterGraph(clusterState).toSymmetric();
     }
 }

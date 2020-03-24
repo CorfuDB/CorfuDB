@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -9,11 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
-import org.corfudb.runtime.exceptions.ShutdownException;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 
@@ -28,11 +28,12 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Integration tests.
@@ -53,9 +54,12 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
+    public CorfuRuntime runtime;
+
     public static final Properties PROPERTIES = new Properties();
 
     public static final String TEST_SEQUENCE_LOG_PATH = CORFU_LOG_PATH + File.separator + "testSequenceLog";
+
 
     public AbstractIT() {
         CorfuRuntime.overrideGetRouterFunction = null;
@@ -76,6 +80,7 @@ public class AbstractIT extends AbstractCorfuTest {
      */
     @Before
     public void setUp() throws Exception {
+        runtime = null;
         forceShutdownAllCorfuServers();
         FileUtils.cleanDirectory(new File(CORFU_LOG_PATH));
     }
@@ -88,6 +93,9 @@ public class AbstractIT extends AbstractCorfuTest {
     @After
     public void cleanUp() throws Exception {
         forceShutdownAllCorfuServers();
+        if (runtime != null) {
+            runtime.shutdown();
+        }
     }
 
     public static String getCorfuServerLogPath(String host, int port) {
@@ -143,7 +151,9 @@ public class AbstractIT extends AbstractCorfuTest {
         }
     }
 
-    public void restartServer(CorfuRuntime corfuRuntime, String endpoint) {
+    public void restartServer(
+            CorfuRuntime corfuRuntime, String endpoint) throws InterruptedException {
+
         corfuRuntime.invalidateLayout();
         RuntimeLayout runtimeLayout = corfuRuntime.getLayoutView().getRuntimeLayout();
         try {
@@ -156,17 +166,12 @@ public class AbstractIT extends AbstractCorfuTest {
         // the newer runtime may also connect to the older corfu server (before restart).
         // Hence the while loop.
         while (true) {
-            try {
-                if (corfuRuntime.getLayoutView().getLayout().getEpoch()
-                        == (runtimeLayout.getLayout().getEpoch() + 1)) {
-                    break;
-                }
-                Sleep.MILLISECONDS.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
-                corfuRuntime.invalidateLayout();
-            } catch (ShutdownException se) {
-                log.error("Shutdown Exception thrown connecting to server:{} ignored, {}",
-                        endpoint, se);
+            if (corfuRuntime.getLayoutView().getLayout().getEpoch()
+                    == (runtimeLayout.getLayout().getEpoch() + 1)) {
+                break;
             }
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_SHORT.toMillis());
+            corfuRuntime.invalidateLayout();
         }
     }
 
@@ -177,7 +182,9 @@ public class AbstractIT extends AbstractCorfuTest {
      * @param verifier     Layout predicate to test the refreshed layout.
      * @param corfuRuntime corfu runtime.
      */
-    public static void waitForLayoutChange(Predicate<Layout> verifier, CorfuRuntime corfuRuntime) {
+    public static void waitForLayoutChange(
+            Predicate<Layout> verifier, CorfuRuntime corfuRuntime) throws InterruptedException {
+
         corfuRuntime.invalidateLayout();
         Layout refreshedLayout = corfuRuntime.getLayoutView().getLayout();
 
@@ -187,9 +194,20 @@ public class AbstractIT extends AbstractCorfuTest {
             }
             corfuRuntime.invalidateLayout();
             refreshedLayout = corfuRuntime.getLayoutView().getLayout();
-            Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_VERY_SHORT);
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
         assertThat(verifier.test(refreshedLayout)).isTrue();
+    }
+
+    /**
+     * Wait for the Supplier (some condition) to return true.
+     *
+     * @param supplier Supplier to test condition
+     */
+    public static void waitFor(Supplier<Boolean> supplier) throws InterruptedException {
+        while (!supplier.get()) {
+            TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+        }
     }
 
     /**
@@ -279,11 +297,22 @@ public class AbstractIT extends AbstractCorfuTest {
         return rt;
     }
 
-    public static Map<String, Integer> createMap(CorfuRuntime rt, String streamName) {
-        Map<String, Integer> map = rt.getObjectsView()
+    public static CorfuRuntime createRuntimeWithCache() {
+        return createRuntimeWithCache(DEFAULT_ENDPOINT);
+    }
+
+    public static CorfuRuntime createRuntimeWithCache(String endpoint) {
+        CorfuRuntime rt = new CorfuRuntime(endpoint)
+                .setCacheDisabled(false)
+                .connect();
+        return rt;
+    }
+
+    public static StreamingMap<String, Integer> createMap(CorfuRuntime rt, String streamName) {
+        StreamingMap<String, Integer> map = rt.getObjectsView()
                 .build()
                 .setStreamName(streamName)
-                .setType(SMRMap.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {})
                 .open();
         return map;
     }
@@ -337,7 +366,9 @@ public class AbstractIT extends AbstractCorfuTest {
         private String logLevel = "INFO";
         private String logPath = null;
         private String trustStore = null;
+        private String logSizeLimitPercentage = null;
         private String trustStorePassword = null;
+        private String compressionCodec = null;
 
 
         /**
@@ -355,6 +386,10 @@ public class AbstractIT extends AbstractCorfuTest {
             }
             if (single) {
                 command.append(" -s");
+            }
+
+            if (logSizeLimitPercentage != null) {
+                command.append(" --log-size-quota-percentage ").append(logSizeLimitPercentage);
             }
 
             if (tlsEnabled) {

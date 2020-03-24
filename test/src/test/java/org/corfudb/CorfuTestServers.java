@@ -49,19 +49,4 @@ public class CorfuTestServers {
 
     /** The endpoint name for test server 4. */
     public final String ENDPOINT_4 = "test:" + PORT_4;
-
-    /** The endpoint name for test server 5. */
-    public final String ENDPOINT_5 = "test:" + PORT_5;
-
-    /** The endpoint name for test server 6. */
-    public final String ENDPOINT_6 = "test:" + PORT_6;
-
-    /** The endpoint name for test server 7. */
-    public final String ENDPOINT_7 = "test:" + PORT_7;
-
-    /** The endpoint name for test server 8. */
-    public final String ENDPOINT_8 = "test:" + PORT_8;
-
-    /** The endpoint name for test server 9. */
-    public final String ENDPOINT_9 = "test:" + PORT_9;
 }

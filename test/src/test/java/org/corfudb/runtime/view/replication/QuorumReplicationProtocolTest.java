@@ -4,15 +4,14 @@ import java.util.UUID;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.view.Layout;
+import org.junit.Ignore;
 
 /** Test the chain replication protocol.
  *
  * Created by mwei on 4/11/17.
  */
+@Ignore
 public class QuorumReplicationProtocolTest extends AbstractReplicationProtocolTest {
-
-
-    public static final UUID testClientId = UUID.nameUUIDFromBytes("TEST_CLIENT".getBytes());
 
     /** {@inheritDoc} */
     @Override

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import java.util.UUID;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -44,14 +45,6 @@ public class LayoutViewTest extends AbstractViewTest {
                 runtime.getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
             }
         });
-    }
-
-    //@Test
-    public void canGetLayout() {
-        CorfuRuntime r = getDefaultRuntime().connect();
-        Layout l = r.getLayoutView().getCurrentLayout();
-        assertThat(l.asJSONString())
-                .isNotNull();
     }
 
     @Test
@@ -658,6 +651,5 @@ public class LayoutViewTest extends AbstractViewTest {
         final long rank3 = 3L;
         Layout alreadyProposedLayout3 = corfuRuntime1.getLayoutView().prepare(l.getEpoch(), rank3);
         assertThat(alreadyProposedLayout3).isEqualTo(l2);
-
     }
 }

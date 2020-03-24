@@ -16,9 +16,19 @@ else
     update-rc.d corfu-server defaults
 fi
 
+# enable corfu-server service at boot time
+if [[ -n $(which systemctl) ]]; then
+    systemctl enable corfu-nonconfig-server
+else
+    update-rc.d corfu-nonconfig-server defaults
+fi
+
 # create necessary directories
 mkdir -p /config/corfu
 mkdir -p /var/log/corfu
+
+mkdir -p /nonconfig/corfu
+mkdir -p /var/log/corfu-nonconfig
 
 # if user "corfu" exists, drop root privilege
 CORFU_USER=corfu
@@ -28,4 +38,8 @@ if [ "$corfu_user_exist" = 0 ]; then
     chown -R $CORFU_USER:$CORFU_USER /usr/share/corfu
     chown -R $CORFU_USER:$CORFU_USER /var/log/corfu
     sed -i -e "s/#RUN_AS_USER=/RUN_AS_USER=$CORFU_USER/" /usr/tanuki/bin/corfu-server-wrapper
+
+    chown -R $CORFU_USER:$CORFU_USER /nonconfig/corfu
+    chown -R $CORFU_USER:$CORFU_USER /var/log/corfu-nonconfig
+    sed -i -e "s/#RUN_AS_USER=/RUN_AS_USER=$CORFU_USER/" /usr/tanuki/bin/corfu-nonconfig-server-wrapper
 fi

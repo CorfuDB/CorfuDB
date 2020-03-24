@@ -1,11 +1,13 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 
 import org.ehcache.sizeof.SizeOf;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -19,13 +21,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ViewsGarbageCollectorTest extends AbstractViewTest {
 
     @Test
+    @Ignore
     public void testRuntimeGC() throws Exception {
 
         CorfuRuntime rt = getDefaultRuntime();
 
         CorfuTable<String, String> table = rt.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName("table1")
                 .open();
 

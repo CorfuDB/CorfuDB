@@ -5,11 +5,15 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.2.2.20190222082048.796</version>
+        <version>${revision}</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>annotationProcessor</artifactId>
+
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <dependencies>
         <dependency>

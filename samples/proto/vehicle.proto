@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package samples.protobuf;
+option java_package = "samples.protobuf";
+
+message Car {
+    string company = 1;
+    string model = 2;
+    string color = 3;
+}

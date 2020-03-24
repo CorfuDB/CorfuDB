@@ -43,18 +43,6 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
         return this;
     }
 
-    public LogUnitServerAssertions containsFilledHoleAtAddress(long address) {
-        isNotNull();
-
-        if (actual.getDataCache().get(address) == null) {
-            failWithMessage("Expected address <%d> to contain filled hole but was empty!", address);
-        } else if (!actual.getDataCache().get(address).isHole()) {
-            failWithMessage("Expected address <%d> to contain filled hole but was data!", address);
-        }
-
-        return this;
-    }
-
     public LogUnitServerAssertions matchesDataAtAddress(long address, Object data) {
         isNotNull();
 
@@ -75,7 +63,7 @@ public class LogUnitServerAssertions extends AbstractAssert<LogUnitServerAsserti
         return this;
     }
 
-    public LogUnitServerAssertions hasCorrectCacheSize(double ratio) {
+    public LogUnitServerAssertions hasMaxCorrectCacheSize(double ratio) {
         long maxHeapSize = Runtime.getRuntime().maxMemory();
         if(actual.getMaxCacheSize() != (long) (maxHeapSize * ratio)) {
             failWithMessage("Expected cache size <%d> doesn't match allocated cache size <%d>",

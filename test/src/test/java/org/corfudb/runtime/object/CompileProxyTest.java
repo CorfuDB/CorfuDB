@@ -3,7 +3,7 @@ package org.corfudb.runtime.object;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
@@ -27,7 +27,7 @@ public class CompileProxyTest extends AbstractViewTest {
         Map<String, String> map = getDefaultRuntime()
                                     .getObjectsView().build()
                                     .setStreamName("my stream")
-                                    .setTypeToken(new TypeToken<SMRMap<String,String>>() {})
+                                    .setTypeToken(new TypeToken<CorfuTable<String,String>>() {})
                                     .open();
 
         getDefaultRuntime().getObjectsView().TXBegin();
@@ -59,10 +59,12 @@ public class CompileProxyTest extends AbstractViewTest {
 
         Map<String, String> map = rt.getObjectsView().build()
                 .setStreamName(streamName)
-                .setTypeToken(new TypeToken<SMRMap<String,String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String,String>>() {})
                 .open();
-        assertThatThrownBy(() -> map.get("key1"))
-                .isInstanceOf(TrimmedException.class);
+        // Note: because we trimmed and no CP covers these changes we throw a trimmedException, is this right? we would never recover from this...
+        assertThatThrownBy(() -> {
+            map.get("key1");
+        }).isInstanceOf(TrimmedException.class);
     }
 
     @Test
@@ -117,14 +119,14 @@ public class CompileProxyTest extends AbstractViewTest {
         int beforeSync, afterSync;
 
         // before sync'ing the in-memory object, the in-memory copy does not get updated
-        assertThat(beforeSync = proxy_CORFUSMR.getUnderlyingObject().object.getValue())
+        assertThat(beforeSync = proxy_CORFUSMR.getUnderlyingObject().getObject().getValue())
                 .isEqualTo(INITIAL);
 
         // sync with the stream entry by entry
         for (int timestamp = 1; timestamp <= concurrency; timestamp++) {
             proxy_CORFUSMR.getUnderlyingObject()
                     .syncObjectUnsafe(timestamp);
-            assertThat((afterSync = proxy_CORFUSMR.getUnderlyingObject().object.getValue()))
+            assertThat((afterSync = proxy_CORFUSMR.getUnderlyingObject().getObject().getValue()))
                     .isBetween(0, concurrency);
             assertThat(beforeSync)
                     .isNotEqualTo(afterSync);
@@ -263,7 +265,7 @@ public class CompileProxyTest extends AbstractViewTest {
             } else {
                 // before sync'ing the in-memory object, the in-memory copy does not get updated
                 // check that the in-memory copy is only as up-to-date as the latest 'get()'
-                assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getValue())
+                assertThat(proxy_CORFUSMR.getUnderlyingObject().getObject().getValue())
                         .isEqualTo(lastRead.get());
 
                 // now read, expect to get the latest written
@@ -295,7 +297,7 @@ public class CompileProxyTest extends AbstractViewTest {
         Map<String, String> map = getDefaultRuntime()
                 .getObjectsView().build()
                 .setStreamName("my stream")
-                .setTypeToken(new TypeToken<SMRMap<String, String>>() {
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
                 })
                 .open();
         int concurrency = PARAMETERS.CONCURRENCY_LOTS;
@@ -433,9 +435,9 @@ public class CompileProxyTest extends AbstractViewTest {
         // step 2: check the unsync'ed in-memory object state
         addTestStep((ignored_task_num) -> {
             // before sync'ing the in-memory object, the in-memory copy does not get updated
-            assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getUser().getFirstName())
+            assertThat(proxy_CORFUSMR.getUnderlyingObject().getObject().getUser().getFirstName())
                     .startsWith("E");
-            assertThat(proxy_CORFUSMR.getUnderlyingObject().object.getUser().getLastName())
+            assertThat(proxy_CORFUSMR.getUnderlyingObject().getObject().getUser().getLastName())
                     .startsWith("F");
         });
 

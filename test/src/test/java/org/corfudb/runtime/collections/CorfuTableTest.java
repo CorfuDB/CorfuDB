@@ -5,10 +5,16 @@ import com.google.common.reflect.TypeToken;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.ConcurrentModificationException;
 import java.util.Map;
+import java.util.Random;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
+import org.assertj.core.api.Assertions;
 import org.assertj.core.data.MapEntry;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
@@ -141,6 +147,51 @@ public class CorfuTableTest extends AbstractViewTest {
     }
 
 
+    /**
+     * Ensure that issues that arise due to incorrect index function implementations are
+     * percolated all the way to the client.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    public void problematicIndexFunction() {
+
+        CorfuTable<String, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setArguments(new StringIndexer.FailingIndex())
+                .setStreamName("failing-index")
+                .open();
+
+        Assertions.assertThatExceptionOfType(UnrecoverableCorfuError.class)
+                .isThrownBy(() -> corfuTable.put(this.getClass().getCanonicalName(),
+                        this.getClass().getCanonicalName()))
+                .withCauseInstanceOf(ConcurrentModificationException.class);
+    }
+
+    /**
+     * Ensure that issues that arise due to incorrect index function implementations are
+     * percolated all the way to the client (TX flavour).
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    public void problematicIndexFunctionTx() {
+        CorfuTable<String, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setArguments(new StringIndexer.FailingIndex())
+                .setStreamName("failing-index")
+                .open();
+
+        getDefaultRuntime().getObjectsView().TXBegin();
+
+        Assertions.assertThatExceptionOfType(UnrecoverableCorfuError.class)
+                .isThrownBy(() -> corfuTable.put(this.getClass().getCanonicalName(),
+                        this.getClass().getCanonicalName()))
+                .withCauseInstanceOf(ConcurrentModificationException.class);
+
+        Assertions.assertThat(getDefaultRuntime().getObjectsView().TXActive()).isTrue();
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     public void canReadWithoutIndexes() {
@@ -181,4 +232,17 @@ public class CorfuTableTest extends AbstractViewTest {
                 .containsExactly("a");
     }
 
+    /**
+     * Ensure that {@link StreamingMap#entryStream()} always operates on a snapshot.
+     * If it does not, this test will throw {@link ConcurrentModificationException}.
+     */
+    @Test
+    public void snapshotInvariant() {
+        final int NUM_WRITES = 10;
+        final ContextAwareMap<Integer, Integer> map = new StreamingMapDecorator<>();
+        IntStream.range(0, NUM_WRITES).forEach(num -> map.put(num, num));
+
+        final Stream<Map.Entry<Integer, Integer>> result = map.entryStream();
+        result.forEach(e -> map.put(new Random().nextInt(), 0));
+    }
 }

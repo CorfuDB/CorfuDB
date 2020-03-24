@@ -95,7 +95,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
         } catch (ClassCastException e) {
             log.warn("channelRead: Non-handshake message received by handshake handler. " +
-                    "Send upstream only if handshake succeeded.");
+                    "Send upstream only if handshake succeeded.", e);
             if (this.handshakeState.completed()) {
                 // Only send upstream if handshake is complete.
                 super.channelRead(ctx, m);
@@ -156,7 +156,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE
             .payloadMsg(new HandshakeMsg(this.clientId, this.nodeId));
 
-        log.info("channelActive: Initiate handshake. Send handshake message.");
+        log.debug("channelActive: Initiate handshake. Send handshake message.");
         ctx.writeAndFlush(handshake);
         log.debug("channelActive: Add {} to channel pipeline.", READ_TIMEOUT_HANDLER);
         ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER, new ReadTimeoutHandler(this.handshakeTimeout));

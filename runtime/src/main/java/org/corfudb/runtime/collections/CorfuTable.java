@@ -1,23 +1,35 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.reflect.TypeToken;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.annotations.Accessor;
+import org.corfudb.annotations.ConflictParameter;
+import org.corfudb.annotations.CorfuObject;
+import org.corfudb.annotations.DontInstrument;
+import org.corfudb.annotations.Mutator;
+import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.annotations.PassThrough;
+import org.corfudb.annotations.TransactionalMethod;
+import org.corfudb.runtime.object.ICorfuExecutionContext;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.ICorfuVersionPolicy;
+import org.corfudb.util.ImmutableListSetWrapper;
 
-import java.util.AbstractMap;
+import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -25,20 +37,6 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import javax.annotation.Nonnull;
-
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.annotations.Accessor;
-import org.corfudb.annotations.ConflictParameter;
-import org.corfudb.annotations.CorfuObject;
-import org.corfudb.annotations.DontInstrument;
-import org.corfudb.annotations.Mutator;
-import org.corfudb.annotations.MutatorAccessor;
-import org.corfudb.annotations.TransactionalMethod;
-import org.corfudb.util.ImmuableListSetWrapper;
 
 /** The CorfuTable implements a simple key-value store.
  *
@@ -59,140 +57,102 @@ import org.corfudb.util.ImmuableListSetWrapper;
  */
 @Slf4j
 @CorfuObject
-public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
+public class CorfuTable<K, V> implements
+        ICorfuTable<K, V>, ICorfuSMR<CorfuTable<K, V>> {
 
-    /**
-     * Denotes a function that supplies the unique name of an index registered to
-     * {@link CorfuTable}.
-     */
-    @FunctionalInterface
-    public interface IndexName extends Supplier<String> {
+    // Accessor/Mutator threads can interleave in a way that create a deadlock because they can create a
+    // circular dependency between the VersionLockedObject(VLO) lock and the common forkjoin thread pool. In order
+    // to break the dependency, parallel stream operations have to execute on a separate pool that applications
+    // cant use. For example, if there are 4 accessor threads all using the common forkjoin pool, one of the threads
+    // can acquire the VLO lock and cause the other 3 threads to wait, but after acquiring the VLO lock, the thread
+    // gets block on parallel stream, because the pool is exhausted with threads that are trying to acquire the VLO
+    // look, which creates a circular dependency. In other words, a deadlock.
+
+    private final static ForkJoinPool pool = new ForkJoinPool(Math.max(Runtime.getRuntime().availableProcessors() - 1, 1),
+            pool -> {
+                final ForkJoinWorkerThread worker = ForkJoinPool.defaultForkJoinWorkerThreadFactory.newThread(pool);
+                worker.setName("CorfuTable-Forkjoin-pool-" + worker.getPoolIndex());
+                return worker;
+            }, null, true);
+
+    // The "main" map which contains the primary key-value mappings.
+    private final ContextAwareMap<K, V> mainMap;
+    private final Set<Index.Spec<K, V, ? extends Comparable>> indexSpec;
+    private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes;
+    private final CorfuTable<K, V> optimisticTable;
+    private final VersionPolicy versionPolicy;
+
+    public CorfuTable(ContextAwareMap<K, V> mainMap,
+                      Set<Index.Spec<K, V, ? extends Comparable>> indexSpec,
+                      Map<String, Map<Comparable, Map<K, V>>> secondaryIndexe,
+                      CorfuTable<K, V> optimisticTable) {
+        this.mainMap = mainMap;
+        this.indexSpec = indexSpec;
+        this.secondaryIndexes = secondaryIndexe;
+        this.optimisticTable = optimisticTable;
+        this.versionPolicy = ICorfuVersionPolicy.DEFAULT;
     }
 
     /**
-     * Denotes a function that takes as input the key and value of an {@link CorfuTable}
-     * record, and computes the associated index value for the record.
-     *
-     * @param <K> type of the record key.
-     * @param <V> type of the record value.
-     * @param <I> type of the index value computed.
+     * The main constructor that generates a table with a given implementation of the
+     * {@link StreamingMap} along with {@link Index.Registry} and {@link VersionPolicy}
+     * specification.
      */
-    @FunctionalInterface
-    public interface IndexFunction<K, V, I extends Comparable<?>> extends BiFunction<K, V, I> {
-    }
+    public CorfuTable(Index.Registry<K, V> indices,
+                      Supplier<ContextAwareMap<K, V>> streamingMapSupplier,
+                      VersionPolicy versionPolicy) {
+        this.indexSpec = new HashSet<>();
+        this.secondaryIndexes = new HashMap<>();
+        this.mainMap = streamingMapSupplier.get();
+        this.versionPolicy = versionPolicy;
 
-    @FunctionalInterface
-    public interface MultiValueIndexFunction<K, V, I extends Comparable<?>>
-            extends BiFunction<K, V, Iterable<I>> {
-    }
+        this.optimisticTable = new CorfuTable<>(this.mainMap.getOptimisticMap(), this.indexSpec,
+                this.secondaryIndexes, null);
 
-    /**
-     * Descriptor of named indexing function entry. The indexing function can
-     * be single indexer {@link CorfuTable.IndexFunction} mapping a value to single
-     * secondary index value, or a multi indexer {@link CorfuTable.MultiValueIndexFunction}
-     * mapping a value to multiple secondary index values.
-     *
-     * @param <K> type of the record key associated with {@code IndexKey}.
-     * @param <V> type of the record value associated with {@code IndexKey}.
-     * @param <I> type of the index value computed using the {@code IndexKey}.
-     */
-    public static class Index<K, V, I extends Comparable<?>> {
-        private final CorfuTable.IndexName name;
-        private final CorfuTable.IndexFunction<K, V, I> indexFunction;
-        private final CorfuTable.MultiValueIndexFunction<K, V, I> multiValueIndexFunction;
+        indices.forEach(index -> {
+            secondaryIndexes.put(index.getName().get(), new HashMap<>());
+            indexSpec.add(index);
+        });
 
-        // A flag representing whether a single indexer or a multi indexer
-        private final boolean monoIndex;
-
-        public Index(CorfuTable.IndexName name, CorfuTable.IndexFunction<K, V, I> indexFunction) {
-            this.name = name;
-            this.indexFunction = indexFunction;
-            this.multiValueIndexFunction =
-                    (k, v) -> Collections.singletonList(indexFunction.apply(k, v));
-            monoIndex = true;
-        }
-
-        public Index(CorfuTable.IndexName name,
-                     CorfuTable.MultiValueIndexFunction<K, V, I> indexFunction) {
-            this.name = name;
-            this.indexFunction = (k, v) -> indexFunction.apply(k, v).iterator().next();
-            this.multiValueIndexFunction = indexFunction;
-            monoIndex = false;
-        }
-
-        public CorfuTable.IndexName getName() {
-            return name;
-        }
-
-        public CorfuTable.IndexFunction<K, V, I> getIndexFunction() {
-            return indexFunction;
-        }
-
-        public CorfuTable.MultiValueIndexFunction<K, V, I> getMultiValueIndexFunction() {
-            return multiValueIndexFunction;
-        }
-
-        private boolean isMonoIndex() {
-            return monoIndex;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof CorfuTable.Index)) return false;
-            CorfuTable.Index<?, ?, ?> index = (CorfuTable.Index<?, ?, ?>) o;
-            return Objects.equals(name.get(), index.name.get());
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(name.get());
+        if (!secondaryIndexes.isEmpty()) {
+            log.info(
+                "CorfuTable: creating CorfuTable with the following indexes: {}",
+                secondaryIndexes.keySet()
+            );
         }
     }
 
     /**
-     * Registry hosting of a collection of {@link CorfuTable.Index}.
-     *
-     * @param <K> type of the record key associated with {@code Index}.
-     * @param <V> type of the record value associated with {@code Index}.
+     * Generate a table with a given implementation for the {@link StreamingMap} and
+     * {@link Index.Registry}.
      */
-    public interface IndexRegistry<K, V>
-            extends Iterable<CorfuTable.Index<K, V, ? extends Comparable<?>>> {
+    public CorfuTable(Index.Registry<K, V> indices,
+                      Supplier<ContextAwareMap<K, V>> streamingMapSupplier) {
+        this(indices, streamingMapSupplier, ICorfuVersionPolicy.DEFAULT);
+    }
 
-        CorfuTable.IndexRegistry<?, ?> EMPTY = new CorfuTable.IndexRegistry<Object, Object>() {
-            @Override
-            public <I extends Comparable<?>> Optional<CorfuTable.Index<Object, Object, I>> get(CorfuTable.IndexName name) {
-                return Optional.empty();
-            }
+    /**
+     * Generate a table with a given implementation for the {@link StreamingMap},
+     * and {@link VersionPolicy}.
+     */
+    public CorfuTable(Supplier<ContextAwareMap<K, V>> streamingMapSupplier,
+                      VersionPolicy versionPolicy) {
+        this(Index.Registry.empty(), streamingMapSupplier, versionPolicy);
+    }
 
-            @Override
-            public Iterator<CorfuTable.Index<Object, Object, ? extends Comparable<?>>> iterator() {
-                return Collections.emptyIterator();
-            }
-        };
+    /**
+     * Generate a table with the given {@link Index.Registry}.
+     */
+    public CorfuTable(Index.Registry<K, V> indexRegistry) {
+        this(indexRegistry, () -> new StreamingMapDecorator<>(new HashMap<>()),
+                ICorfuVersionPolicy.DEFAULT);
+    }
 
-        /**
-         * Obtain the {@link CorfuTable.IndexFunction} via its registered {@link CorfuTable.IndexName}.
-         *
-         * @param name name of the {@code IndexKey} previously registered.
-         * @return the instance of {@link CorfuTable.IndexFunction} registered to the lookup name.
-         */
-        <I extends Comparable<?>> Optional<CorfuTable.Index<K, V, I>> get(CorfuTable.IndexName name);
-
-        /**
-         * Obtain a static {@link CorfuTable.IndexRegistry} with no registered {@link CorfuTable.IndexFunction}s.
-         *
-         * @param <K> type of the record key associated with {@code Index}.
-         * @param <V> type of the record value associated with {@code Index}.
-         * @return a static instance of {@link CorfuTable.IndexRegistry}.
-         */
-        static <K, V> CorfuTable.IndexRegistry<K, V> empty() {
-            @SuppressWarnings("unchecked")
-            CorfuTable.IndexRegistry<K, V> result = (CorfuTable.IndexRegistry<K, V>) EMPTY;
-            return result;
-        }
-
-
+    /**
+     * Default constructor. Generates a table without any secondary indexes.
+     */
+    public CorfuTable() {
+        this(Index.Registry.empty());
     }
 
     /** Helper function to get a map (non-secondary index) Corfu table.
@@ -201,9 +161,8 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      * @param <V>           Value type
      * @return              A type token to pass to the builder.
      */
-    static <K, V> TypeToken<CorfuTable<K, V>>
-        getMapType() {
-            return new TypeToken<CorfuTable<K, V>>() {};
+    static <K, V> TypeToken<CorfuTable<K, V>> getMapType() {
+        return new TypeToken<CorfuTable<K, V>>() {};
     }
 
     /** Helper function to get a Corfu Table.
@@ -212,81 +171,8 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      * @param <V>                   Value type
      * @return                      A type token to pass to the builder.
      */
-    static <K, V>
-    TypeToken<CorfuTable<K, V>>
-        getTableType() {
-            return new TypeToken<CorfuTable<K, V>>() {};
-    }
-
-    /**
-     * The interface for a projection function.
-     *
-     * <p> NOTE: The projection function MUST return a new (preferably immutable) collection,
-     * the collection of entries passed during this function are NOT safe to use
-     * outside the context of this function.
-     *
-     * @param <K>   The type of the key used in projection.
-     * @param <V>   The type of the value used in projection.
-     * @param <I>   The type of the index used in projection.
-     * @param <P>   The type of the projection returned.
-     */
-    @FunctionalInterface
-    public interface ProjectionFunction<K, V, I, P> {
-        @Nonnull
-        Stream<P> generateProjection(I index,
-                                     @Nonnull Stream<Map.Entry<K, V>> entryStream);
-    }
-
-    /**
-     * The interface for a index specification, which consists of a indexing function
-     * and a projection function.
-     * @param <K>   The type of the primary key on the map.
-     * @param <V>   The type of the value on the map.
-     * @param <I>   The type of the index.
-     * @param <P>   The type returned by the projection function.
-     */
-    public interface IndexSpecification<K, V, I extends Comparable<?>, P> {
-        IndexFunction<K, V, I> getIndexFunction();
-        ProjectionFunction<K, V, I, P> getProjectionFunction();
-    }
-
-    /** An index specification enumeration which has no index specifications.
-     *  Using this enumeration effectively disables secondary indexes.
-     */
-    enum NoSecondaryIndex implements IndexSpecification {
-        ;
-
-        @Override
-        public IndexFunction getIndexFunction() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public ProjectionFunction getProjectionFunction() {
-            throw new UnsupportedOperationException();
-        }
-    }
-
-    /** The "main" map which contains the primary key-value mappings. */
-    private final Map<K,V> mainMap = new HashMap<>();
-    private Set<Index<K, V, ? extends Comparable>> indexSpec = new HashSet<>();
-    private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes = new HashMap<>();
-
-    @Getter
-    boolean indexGenerationFailed = false;
-
-    /** Generate a table with the given set of indexes. */
-    public CorfuTable(IndexRegistry<K, V> indices) {
-        indices.forEach(index -> {
-            secondaryIndexes.put(index.getName().get(), new HashMap<>());
-            indexSpec.add(index);
-        });
-        log.info("CorfuTable: creating CorfuTable with the following indexes: {}", secondaryIndexes.keySet().toString());
-    }
-
-    /** Default constructor. Generates a table without any secondary indexes. */
-    public CorfuTable() {
-        this(IndexRegistry.empty());
+    static <K, V> TypeToken<CorfuTable<K, V>> getTableType() {
+        return new TypeToken<CorfuTable<K, V>>() {};
     }
 
     /** {@inheritDoc} */
@@ -344,7 +230,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @Accessor
     public @Nonnull
     <I extends Comparable<I>>
-    Collection<Entry<K, V>> getByIndex(@Nonnull IndexName indexName, I indexKey) {
+    Collection<Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
         String secondaryIndex = indexName.get();
         Map<Comparable, Map<K, V>> secondaryMap;
         if (secondaryIndexes.containsKey(secondaryIndex) &&
@@ -373,7 +259,7 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @Accessor
     public @Nonnull
     <I extends Comparable<I>>
-    Collection<Map.Entry<K, V>> getByIndexAndFilter(@Nonnull IndexName indexName,
+    Collection<Map.Entry<K, V>> getByIndexAndFilter(@Nonnull Index.Name indexName,
                                                     @Nonnull Predicate<? super Entry<K, V>>
                                                             entryPredicate,
                                                     I indexKey) {
@@ -442,9 +328,9 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      */
     @DontInstrument
     @SuppressWarnings("unchecked")
-    Map<K,V> undoPutAllRecord(CorfuTable<K, V> previousState,
+    Map<K, V> undoPutAllRecord(CorfuTable<K, V> previousState,
                               Map<? extends K, ? extends V> m) {
-        ImmutableMap.Builder<K,V> builder = ImmutableMap.builder();
+        ImmutableMap.Builder<K, V> builder = ImmutableMap.builder();
         m.keySet().forEach(k -> builder.put(k,
                 (previousState.get(k) == null
                         ? (V) CorfuTable.UndoNullable.NULL
@@ -459,8 +345,8 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      * @param undoRecord    The undo record generated by undoRemoveRecord
      */
     @DontInstrument
-     void undoPutAll(CorfuTable<K, V> table, Map<K,V> undoRecord,
-                            Map<? extends K, ? extends V> m) {
+    void undoPutAll(CorfuTable<K, V> table, Map<K, V> undoRecord,
+                    Map<? extends K, ? extends V> m) {
         undoRecord.entrySet().forEach(e -> {
                     if (e.getValue() == CorfuTable.UndoNullable.NULL) {
                         undoRemove(table, null, e.getKey());
@@ -475,43 +361,38 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @Override
     @Mutator(name = "put", noUpcall = true)
     public void insert(@ConflictParameter K key, V value) {
-        V previous = mainMap.put(key, value);
-        // If we have index functions, update the secondary indexes.
-        if (!secondaryIndexes.isEmpty()) {
-            unmapSecondaryIndexes(key, previous);
-            mapSecondaryIndexes(key, value);
-        }
-    }
-
-    /**
-     * Returns a filtered {@link List} view of the values contained in this map.
-     * This method has a memory/CPU advantage over the map iterators as no deep copy
-     * is actually performed.
-     *
-     * @param p java predicate (function to evaluate)
-     * @return a view of the values contained in this map meeting the predicate condition.
-     */
-    @Accessor
-    public List<V> scanAndFilter(Predicate<? super V> p) {
-        return mainMap.values().parallelStream()
-                                    .filter(p)
-                                    .collect(Collectors.toCollection(ArrayList::new));
+        // This is just a stub, the annotation processor will generate an update with
+        // put(key, value), since this method doesn't require an upcall therefore no
+        // operations are needed to be executed on the internal data structure
     }
 
     /** {@inheritDoc} */
     @Override
     @Accessor
-    public Collection<Map.Entry<K, V>> scanAndFilterByEntry(Predicate<? super Map.Entry<K, V>>
-                                                                    entryPredicate) {
-        return mainMap.entrySet().parallelStream()
-                                    .filter(entryPredicate)
-                                    .collect(Collectors.toCollection(ArrayList::new));
+    public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
+        try (Stream<Map.Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
+            return pool.submit(() -> entries
+                    .map(Entry::getValue).filter(valuePredicate)
+                    .collect(Collectors.toCollection(ArrayList::new))).join();
+        }
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    @Accessor
+    public Collection<Map.Entry<K, V>> scanAndFilterByEntry(
+            Predicate<? super Map.Entry<K, V>> entryPredicate) {
+        try (Stream<Map.Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
+            return pool.submit(() -> entries
+                    .filter(entryPredicate)
+                    .collect(Collectors.toCollection(ArrayList::new))).join();
+        }
     }
 
     /** {@inheritDoc} */
     @Override
     @MutatorAccessor(name = "remove", undoFunction = "undoRemove",
-                                undoRecordFunction = "undoRemoveRecord")
+            undoRecordFunction = "undoRemoveRecord")
     @SuppressWarnings("unchecked")
     public V remove(@ConflictParameter Object key) {
         V previous =  mainMap.remove(key);
@@ -542,8 +423,9 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @Override
     @Mutator(name = "remove", noUpcall = true)
     public void delete(@ConflictParameter K key) {
-        V previous =  mainMap.remove(key);
-        unmapSecondaryIndexes(key, previous);
+        // This is just a stub, the annotation processor will generate an update with
+        // remove(key), since this method doesn't require an upcall therefore no
+        // operations are needed to be executed on the internal data structure
     }
 
     /** {@inheritDoc} */
@@ -580,14 +462,18 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @Override
     @Accessor
     public @Nonnull Set<K> keySet() {
-        return ImmutableSet.copyOf(mainMap.keySet());
+        return mainMap.keySet()
+                .stream()
+                .collect(ImmutableSet.toImmutableSet());
     }
 
     /** {@inheritDoc} */
     @Override
     @Accessor
     public @Nonnull Collection<V> values() {
-        return ImmutableList.copyOf(mainMap.values());
+        return mainMap.values()
+                .stream()
+                .collect(ImmutableSet.toImmutableSet());
     }
 
     /**
@@ -597,13 +483,21 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
     @Override
     @Accessor
     public @Nonnull Set<Entry<K, V>> entrySet() {
-        List<Entry<K, V>> copy = new ArrayList<>(mainMap.size());
-        for (Map.Entry<K, V> entry : mainMap.entrySet()) {
-            copy.add(new AbstractMap.SimpleImmutableEntry<>(entry.getKey(),
-                    entry.getValue()));
-        }
-        return new ImmuableListSetWrapper<>(copy);
+        return ImmutableListSetWrapper.fromMap(mainMap);
     }
+
+    /**
+     * Present the content of a {@link CorfuTable} via the {@link Stream} interface.
+     * Because the stream can point to other resources managed off-heap, its necessary
+     * to explicitly close it after consumption.
+     *
+     * @return stream of entries
+     */
+    @Accessor
+    public @Nonnull Stream<Entry<K, V>> entryStream() {
+        return mainMap.entryStream();
+    }
+
 
     /** {@inheritDoc} */
     @Override
@@ -746,38 +640,34 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      * @param key   The primary key (index) for the mapping.
      * @param value The value to unmap.
      */
+    @DontInstrument
     @SuppressWarnings("unchecked")
     protected void unmapSecondaryIndexes(K key, V value) {
+        if (value == null) {
+            return;
+        }
+
         try {
-            if (value != null) {
-                // Map entry into secondary indexes
-                for (Index<K, V, ? extends Comparable> index : indexSpec) {
-                    String indexName = index.getName().get();
-                    Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
-                    if (index.isMonoIndex()) {
-                        Comparable indexKey = index.indexFunction.apply(key, value);
-                        Map<K, V> slot = secondaryIndex.get(indexKey);
-                        if (slot != null) {
-                            slot.remove(key, value);
-                        }
-                    } else {
-                        for (Comparable<?> indexKey
-                                : index.getMultiValueIndexFunction().apply(key, value)) {
-                            Map<K, V> slot = secondaryIndex.get(indexKey);
-                            if (slot != null) {
-                                slot.remove(key, value);
-                            }
-                        }
+            // Map entry into secondary indexes
+            for (Index.Spec<K, V, ? extends Comparable> index : indexSpec) {
+                String indexName = index.getName().get();
+                Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
+                for (Comparable indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
+                    Map<K, V> slot = secondaryIndex.get(indexKey);
+                    if (slot != null) {
+                        slot.remove(key, value);
                     }
                 }
             }
         } catch (Exception e) {
-            indexSpec.clear();
-            secondaryIndexes.clear();
-            indexGenerationFailed = true;
-            log.error("unmapSecondaryIndexes: Exception unmapping {}, {},"
-                            + " UNMAPPING ALL INDEXES, indexing is disabled",
-                    key, value, e);
+            log.error("Received an exception while computing the index. " +
+                    "This is most likely an issue with the client's indexing function. {}", e);
+            // The index might be corrupt, and the only way to ensure safety is to disable
+            // indexing for this table.
+            clearIndex();
+            // In case of both a transactional and non-transactional operation, the client
+            // is going to receive UnrecoverableCorfuError along with the appropriate cause.
+            throw e;
         }
     }
 
@@ -787,35 +677,82 @@ public class CorfuTable<K ,V> implements ICorfuMap<K, V> {
      * @param key   the primary key associated with the indexing.
      * @param value the value to map.
      */
+    @DontInstrument
     @SuppressWarnings("unchecked")
     protected void mapSecondaryIndexes(K key, V value) {
+        if (value == null) {
+            log.warn("Attempting to build an index with a null value, skipping.");
+            return;
+        }
+
         try {
-            if (value != null) {
-                // Map entry into secondary indexes
-                for (Index<K, V, ? extends Comparable> index : indexSpec) {
-                    String indexName = index.getName().get();
-                    Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
-                    if (index.isMonoIndex()) {
-                        Comparable indexKey = index.getIndexFunction().apply(key, value);
-                        Map<K, V> slot = secondaryIndex.computeIfAbsent(indexKey, k -> new HashMap<>());
-                        slot.put(key, value);
-                    } else {
-                        for (Comparable<?> indexKey
-                                : index.getMultiValueIndexFunction().apply(key, value)) {
-                            Map<K, V> slot = secondaryIndex
-                                    .computeIfAbsent(indexKey, k -> new HashMap<>());
-                            slot.put(key, value);
-                        }
-                    }
+            // Map entry into secondary indexes
+            for (Index.Spec<K, V, ? extends Comparable> index : indexSpec) {
+                String indexName = index.getName().get();
+                Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
+                for (Comparable indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
+                    Map<K, V> slot = secondaryIndex.computeIfAbsent(indexKey, k -> new HashMap<>());
+                    slot.put(key, value);
                 }
             }
         } catch (Exception e) {
-            indexSpec.clear();
-            secondaryIndexes.clear();
-            indexGenerationFailed = true;
-            log.error("mapSecondaryIndexes: Exception mapping {}, {},"
-                    + " UNMAPPING ALL INDEXES, indexing is disabled", key, value, e);
+            log.error("Received an exception while computing the index. " +
+                    "This is most likely an issue with the client's indexing function.", e);
+            // The index might be corrupt, and the only way to ensure safety is to disable
+            // indexing for this table.
+            clearIndex();
+            // In case of both a transactional and non-transactional operation, the client
+            // is going to receive UnrecoverableCorfuError along with the appropriate cause.
+            throw e;
         }
     }
 
+    /**
+     *  Disable all secondary indices for this table. Only used during error-recovery.
+     */
+    @DontInstrument
+    protected void clearIndex() {
+        indexSpec.clear();
+        secondaryIndexes.clear();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @PassThrough
+    @Override
+    public CorfuTable<K, V> getContext(ICorfuExecutionContext.Context context) {
+        if (context == OPTIMISTIC) {
+            return optimisticTable;
+        } else {
+            return this;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @DontInstrument
+    @Override
+    public VersionPolicy getVersionPolicy() {
+        return versionPolicy;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @PassThrough
+    @Override
+    public void close() {
+        this.mainMap.close();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @DontInstrument
+    @Override
+    public void closeWrapper() {
+        this.mainMap.close();
+    }
 }

@@ -4,6 +4,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
@@ -34,8 +35,7 @@ public abstract class BaseCorfuAppUtils {
      * @return a CorfuRuntime object, with which Corfu applications perform all Corfu operations
      */
     private CorfuRuntime getRuntimeAndConnect(String configurationString) {
-        CorfuRuntime corfuRuntime = new CorfuRuntime(configurationString).connect();
-        return corfuRuntime;
+        return new CorfuRuntime(configurationString).connect();
     }
 
     private static final String USAGE = "Usage: HelloCorfu [-c <conf>]\n"
@@ -74,25 +74,6 @@ public abstract class BaseCorfuAppUtils {
         action();
     }
 
-    /**
-     * Utility method to instantiate a Corfu object
-     *
-     * A Corfu Stream is a log dedicated specifically to the history of updates of one object.
-     * This method will instantiate a stream by giving it a name,
-     * and then instantiate an object by specifying its class
-     *
-     * @param tClass is the object class
-     * @param name is the name of the stream backing up the object
-     * @param <T> the return class
-     * @return an object instance of type T backed by a stream named 'name'
-     */
-    protected <T> T instantiateCorfuObject(Class<T> tClass, String name) {
-        return getCorfuRuntime().getObjectsView()
-                .build()
-                .setStreamName(name)     // stream name
-                .setType(tClass)        // object class backed by this stream
-                .open();                // instantiate the object!
-    }
 
     /**
      * Utility method to instantiate a Corfu object
@@ -106,7 +87,8 @@ public abstract class BaseCorfuAppUtils {
      * @param <T> the return class
      * @return an object instance of type T backed by a stream named 'name'
      */
-    protected <T> Object instantiateCorfuObject(TypeToken<T> tType, String name) {
+    protected <T extends ICorfuSMR<T>> T instantiateCorfuObject(
+            TypeToken<T> tType, String name) {
         return getCorfuRuntime().getObjectsView()
                 .build()
                 .setStreamName(name)     // stream name

@@ -47,4 +47,6 @@ else
       byteman=""
 fi
 
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.infrastructure.CorfuServer $*
+COMMAND_LINE="$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.infrastructure.CorfuServer $*
+eval echo `gettext '$COMMAND_LINE '`
+eval $COMMAND_LINE

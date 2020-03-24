@@ -4,16 +4,17 @@ import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.messages.NetworkConfig;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group.GroupParams;
-import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
-import org.corfudb.universe.group.cluster.CorfuClusterParams;
+import org.corfudb.universe.group.cluster.Cluster;
 import org.corfudb.universe.group.cluster.docker.DockerCorfuCluster;
+import org.corfudb.universe.group.cluster.docker.DockerSupportCluster;
 import org.corfudb.universe.logging.LoggingParams;
+import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
-import org.corfudb.universe.util.ClassUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Represents Docker implementation of a {@link Universe}.
  */
 @Slf4j
-public class DockerUniverse extends AbstractUniverse<UniverseParams> {
+public class DockerUniverse extends AbstractUniverse<NodeParams, UniverseParams> {
     /**
      * Docker parameter --network=host doesn't work in mac machines,
      * FakeDns is used to solve the issue, it resolves a dns record (which is a node name) to loopback address always.
@@ -34,15 +35,13 @@ public class DockerUniverse extends AbstractUniverse<UniverseParams> {
     private final DockerClient docker;
     private final DockerNetwork network = new DockerNetwork();
     private final AtomicBoolean initialized = new AtomicBoolean();
-    private final LoggingParams loggingParams;
     private final AtomicBoolean destroyed = new AtomicBoolean();
 
     @Builder
     public DockerUniverse(UniverseParams universeParams, DockerClient docker, LoggingParams loggingParams) {
-        super(universeParams);
+        super(universeParams, loggingParams);
         this.docker = docker;
-        this.loggingParams = loggingParams;
-        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+        init();
     }
 
     /**
@@ -71,6 +70,11 @@ public class DockerUniverse extends AbstractUniverse<UniverseParams> {
     public void shutdown() {
         log.info("Shutdown docker universe: {}", universeId.toString());
 
+        if (!universeParams.isCleanUpEnabled()) {
+            log.info("Shutdown is disabled");
+            return;
+        }
+
         if (destroyed.getAndSet(true)) {
             log.warn("Docker universe already destroyed");
             return;
@@ -94,9 +98,11 @@ public class DockerUniverse extends AbstractUniverse<UniverseParams> {
     }
 
     @Override
-    protected AbstractCorfuCluster<CorfuClusterParams, UniverseParams> buildGroup(GroupParams groupParams) {
-        switch (groupParams.getNodeType()) {
-            case CORFU_SERVER:
+    protected Cluster buildGroup(GroupParams<NodeParams> groupParams) {
+
+        switch (groupParams.getType()) {
+
+            case CORFU_CLUSTER:
                 groupParams.getNodesParams().forEach(node ->
                         FAKE_DNS.addForwardResolution(node.getName(), InetAddress.getLoopbackAddress())
                 );
@@ -107,8 +113,16 @@ public class DockerUniverse extends AbstractUniverse<UniverseParams> {
                         .loggingParams(loggingParams)
                         .docker(docker)
                         .build();
-            case CORFU_CLIENT:
-                throw new UniverseException("Not implemented corfu client. Group config: " + groupParams);
+            case SUPPORT_CLUSTER:
+                groupParams.getNodesParams().forEach(node ->
+                        FAKE_DNS.addForwardResolution(node.getName(), InetAddress.getLoopbackAddress())
+                );
+
+                return DockerSupportCluster.builder()
+                        .universeParams(universeParams)
+                        .supportParams(ClassUtils.cast(groupParams))
+                        .docker(docker)
+                        .build();
             default:
                 throw new UniverseException("Unknown node type");
         }

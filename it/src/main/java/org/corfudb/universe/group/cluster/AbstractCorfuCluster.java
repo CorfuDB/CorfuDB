@@ -2,47 +2,46 @@ package org.corfudb.universe.group.cluster;
 
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.universe.group.Group;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.Node;
-import org.corfudb.universe.node.Node.NodeParams;
-import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.client.LocalCorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
-import org.corfudb.universe.util.ClassUtils;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-import static lombok.Builder.Default;
-
 @Slf4j
-public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U extends UniverseParams>
-        implements CorfuCluster {
-    @Default
-    protected final ConcurrentNavigableMap<String, CorfuServer> nodes = new ConcurrentSkipListMap<>();
-    @Getter
-    @NonNull
-    protected final P params;
-    @NonNull
-    protected final U universeParams;
-    private final ExecutorService executor;
+public abstract class AbstractCorfuCluster<P extends CorfuServerParams, U extends UniverseParams>
+        extends AbstractCluster<CorfuServer, P, CorfuClusterParams<P>, U>
+        implements CorfuCluster<CorfuServer, CorfuClusterParams<P>> {
 
-    protected AbstractCorfuCluster(P params, U universeParams) {
-        this.params = params;
-        this.universeParams = universeParams;
-        this.executor = Executors.newCachedThreadPool();
+    private final ConcurrentNavigableMap<String, CorfuServer> nodes = new ConcurrentSkipListMap<>();
+
+    @NonNull
+    protected final LoggingParams loggingParams;
+
+    public AbstractCorfuCluster(CorfuClusterParams<P> params, U universeParams,
+                                LoggingParams loggingParams) {
+        super(params, universeParams);
+        this.loggingParams = loggingParams;
+    }
+
+    protected void init() {
+        params.getNodesParams().forEach(serverParams -> {
+            CorfuServer server = (CorfuServer) buildServer(serverParams);
+            nodes.put(server.getEndpoint(), server);
+        });
     }
 
     /**
@@ -56,20 +55,15 @@ public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U exten
     public AbstractCorfuCluster<P, U> deploy() {
         log.info("Deploy corfu cluster. Params: {}", params);
 
-        List<CompletableFuture<CorfuServer>> asyncDeployment = params
-                .getNodesParams()
-                .stream()
-                .map(serverParams -> {
-                    CorfuServer server = buildCorfuServer(serverParams);
-                    nodes.put(serverParams.getName(), server);
-                    return server;
-                })
-                .map(this::deployCorfuServerAsync)
+        List<CompletableFuture<Node>> asyncDeployment = nodes.values().stream()
+                .map(this::deployAsync)
                 .collect(Collectors.toList());
 
         asyncDeployment.stream()
                 .map(CompletableFuture::join)
-                .forEach(server -> log.debug("Corfu server has deployed: {}", server.getParams().getName()));
+                .forEach(server ->
+                        log.debug("Corfu server was deployed: {}", server.getParams().getName())
+                );
 
         try {
             bootstrap();
@@ -80,93 +74,29 @@ public abstract class AbstractCorfuCluster<P extends CorfuClusterParams, U exten
         return this;
     }
 
-    private CompletableFuture<CorfuServer> deployCorfuServerAsync(CorfuServer corfuServer) {
-        return CompletableFuture.supplyAsync(corfuServer::deploy, executor);
-    }
-
-    protected abstract CorfuServer buildCorfuServer(CorfuServerParams nodeParams);
-
-    /**
-     * Stop the cluster
-     *
-     * @param timeout allowed time to gracefully stop the {@link Group}
-     */
-    @Override
-    public void stop(Duration timeout) {
-        log.info("Stop corfu cluster: {}", params.getName());
-
-        nodes.values().forEach(node -> {
-            try {
-                node.stop(timeout);
-            } catch (Exception e) {
-                log.warn("Can't stop node: {} in group: {}", node.getParams().getName(), getParams().getName(), e);
-            }
-        });
-    }
-
-    /**
-     * Attempt to kills all the nodes in arbitrary order.
-     */
-    @Override
-    public void kill() {
-        nodes.values().forEach(node -> {
-            try {
-                node.kill();
-            } catch (Exception e) {
-                log.warn("Can't kill node: {} in group: {}", node.getParams().getName(), getParams().getName(), e);
-            }
-        });
-    }
-
-    @Override
-    public void destroy() {
-        log.info("Destroy group: {}", params.getName());
-
-        nodes.values().forEach(node -> {
-            try {
-                node.destroy();
-            } catch (NodeException e) {
-                log.warn("Can't destroy node: {} in group: {}", node.getParams().getName(), getParams().getName(), e);
-            }
-        });
-    }
-
-    @Override
-    public Node add(NodeParams nodeParams) {
-        CorfuServerParams corfuServerParams = ClassUtils.cast(nodeParams);
-        params.add(corfuServerParams);
-
-        return deployCorfuServerAsync(buildCorfuServer(corfuServerParams))
-                .join();
-    }
-
-    @Override
-    public <T extends Node> T getNode(String nodeNameSuffix) {
-        String fullNodeName = params.getFullNodeName(nodeNameSuffix);
-        Node node = nodes.get(fullNodeName);
-
-        if (node == null) {
-            throw new NodeException(String.format(
-                    "Node not found. Node name: %s, cluster: %s, cluster nodes: %s",
-                    fullNodeName, params.getName(), nodes.keySet())
-            );
-        }
-
-        return ClassUtils.cast(node);
-    }
-
-    @Override
-    public <T extends Node> ImmutableSortedMap<String, T> nodes() {
-        return ClassUtils.cast(ImmutableSortedMap.copyOf(nodes));
-    }
-
     @Override
     public LocalCorfuClient getLocalCorfuClient() {
         return LocalCorfuClient.builder()
+                .serverEndpoints(getClusterLayoutServers())
+                .corfuRuntimeParams(CorfuRuntime.CorfuRuntimeParameters.builder())
+                .build()
+                .deploy();
+    }
+
+    @Override
+    public LocalCorfuClient getLocalCorfuClient(
+            CorfuRuntimeParametersBuilder runtimeParametersBuilder) {
+        return LocalCorfuClient.builder()
+                .corfuRuntimeParams(runtimeParametersBuilder)
                 .serverEndpoints(getClusterLayoutServers())
                 .build()
                 .deploy();
     }
 
     protected abstract ImmutableSortedSet<String> getClusterLayoutServers();
+
+    @Override
+    public ImmutableSortedMap<String, CorfuServer> nodes() {
+        return ImmutableSortedMap.copyOf(nodes);
+    }
 }

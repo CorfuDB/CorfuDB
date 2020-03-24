@@ -11,9 +11,8 @@ import org.corfudb.util.serializer.ISerializer;
  *
  * <p>Created by mwei on 11/15/16.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-public interface ICorfuSMRProxyInternal<T> extends ICorfuSMRProxy<T> {
+@SuppressWarnings("checkstyle:abbreviation")
+public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSMRProxy<T> {
 
     /**
      * Directly get the state of the object the proxy is managing,

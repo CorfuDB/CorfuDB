@@ -1,53 +1,23 @@
 package org.corfudb.infrastructure;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-import static org.fusesource.jansi.Ansi.Color.BLUE;
-import static org.fusesource.jansi.Ansi.Color.MAGENTA;
-import static org.fusesource.jansi.Ansi.Color.RED;
-import static org.fusesource.jansi.Ansi.Color.WHITE;
-import static org.fusesource.jansi.Ansi.ansi;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
-import com.google.common.collect.ImmutableList;
-import io.netty.bootstrap.ServerBootstrap;
-import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.ServerChannel;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
-import io.netty.handler.codec.LengthFieldPrepender;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
-import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
-import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.common.metrics.MetricsServer;
+import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
-import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.Version;
 import org.docopt.Docopt;
-import org.fusesource.jansi.AnsiConsole;
 import org.slf4j.LoggerFactory;
 
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.regex.Pattern;
+
 
 /**
  * This is the new Corfu server single-process executable.
@@ -75,14 +45,15 @@ public class CorfuServer {
                     + "\n"
                     + "Usage:\n"
                     + "\tcorfu_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
-                    + "[-t <token>] [-c <ratio>] [-d <level>] [-p <seconds>] "
+                    + "[-c <ratio>] [-d <level>] [-p <seconds>] "
                     + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
-                    + "[--sequencer-threads=<sequencer_threads>] [--logunit-threads=<logunit_threads>] "
-                    + "[--management-server-threads=<management_server_threads>]"
+                    + "[--log-size-quota-percentage=<max_log_size_percentage>]"
+                    + "[--logunit-threads=<logunit_threads>] [--management-server-threads=<management_server_threads>]"
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
+                    + "[--metrics] [--metrics-port <metrics_port>]"
                     + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
@@ -125,8 +96,6 @@ public class CorfuServer {
                     + "                evicted entries will be auto-trimmed. [default: 0.5].\n"
                     + " -H <seconds>, --HandshakeTimeout=<seconds>                               "
                     + "              Handshake timeout in seconds [default: 10].\n               "
-                    + " -t <token>, --initial-token=<token>                                      "
-                    + "              The first token the sequencer will issue, or -1 to recover\n"
                     + "                                                                          "
                     + "              from the log. [default: -1].\n                              "
                     + "                                                                          "
@@ -180,13 +149,14 @@ public class CorfuServer {
                     + "                                                                          "
                     + "              [default: TLSv1.1,TLSv1.2].\n"
                     + " --base-server-threads=<base_server_threads>                              "
-                    + "              Number of threads dedicated for the base server.\n"
+                    + "              Number of threads dedicated for the base server.\n          "
+                    + " --log-size-quota-percentage=<max_log_size_percentage>                    "
+                    + "              The max size as percentage of underlying file-store size.\n "
+                    + "              If this limit is exceeded "
+                    + "              write requests will be rejected [default: 100.0].\n         "
                     + "                                                                          "
                     + " --layout-server-threads=<layout_server_threads>                          "
-                    + "              Number of threads dedicated for the layout server.\n"
-                    + "                                                                          "
-                    + " --sequencer-threads=<sequencer_threads>                              "
-                    + "              Number of threads dedicated for the sequencer server.\n"
+                    + "              Number of threads dedicated for the layout server.\n        "
                     + "                                                                          "
                     + " --management-server-threads=<management_server_threads>                  "
                     + "              Number of threads dedicated for the management server.\n"
@@ -195,14 +165,23 @@ public class CorfuServer {
                     + "              Number of threads dedicated for the logunit server.\n"
                     + "                                                                          "
                     + " --agent      Run with byteman agent to enable runtime code injection.\n  "
+                    + " --metrics                                                                "
+                    + "              Enable metrics provider.\n                                  "
+                    + " --metrics-port=<metrics_port>                                            "
+                    + "              Metrics provider server port [default: 9999].\n             "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
                     + "              Show version\n";
 
-    private static volatile Thread corfuServerThread;
-    private static volatile Thread shutdownThread;
+    // Active Corfu Server.
+    private static volatile CorfuServerNode activeServer;
 
+    // Flag if set to true - causes the Corfu Server to shutdown.
+    private static volatile boolean shutdownServer = false;
+    // If set to true - triggers a reset of the server by wiping off all the data.
+    private static volatile boolean cleanupServer = false;
+    // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
     /**
@@ -210,72 +189,82 @@ public class CorfuServer {
      *
      * @param args command line argument strings
      */
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) {
+        try {
+            startServer(args);
+        } catch (Throwable err) {
+            log.error("Exit. Unrecoverable error", err);
+            throw err;
+        }
+    }
 
+    private static void startServer(String[] args) {
         // Parse the options given, using docopt.
         Map<String, Object> opts = new Docopt(USAGE)
                 .withVersion(GitRepositoryState.getRepositoryState().describe)
                 .parse(args);
         // Print a nice welcome message.
-        AnsiConsole.systemInstall();
         printStartupMsg(opts);
+        configureLogger(opts);
 
         log.debug("Started with arguments: {}", opts);
 
         // Bind to all interfaces only if no address or interface specified by the user.
-        final boolean bindToAllInterfaces;
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
-            opts.put("--address",
-                    getAddressFromInterfaceName((String) opts.get("--network-interface")));
-            bindToAllInterfaces = false;
+            opts.put("--address", getAddressFromInterfaceName((String) opts.get("--network-interface")));
+            opts.put("--bind-to-all-interfaces", false);
         } else if (opts.get("--address") == null) {
             // Default the address to localhost and set the bind to all interfaces flag to true,
             // if the address and interface is not specified.
-            bindToAllInterfaces = true;
+            opts.put("--bind-to-all-interfaces", true);
             opts.put("--address", "localhost");
         } else {
             // Address is specified by the user.
-            bindToAllInterfaces = false;
+            opts.put("--bind-to-all-interfaces", false);
         }
 
-        configureLogger(opts);
-
-        // Create the service directory if it does not exist.
-        if (!(Boolean) opts.get("--memory")) {
-            File serviceDir = new File((String) opts.get("--log-path"));
-
-            if (!serviceDir.isDirectory()) {
-                log.error("Service directory {} does not point to a directory. Aborting.",
-                        serviceDir);
-                throw new UnrecoverableCorfuError("Service directory must be a directory!");
-            } else {
-                String corfuServiceDirPath = serviceDir.getAbsolutePath()
-                        + File.separator
-                        + "corfu";
-                File corfuServiceDir = new File(corfuServiceDirPath);
-                // Update the new path with the dedicated child service directory.
-                opts.put("--log-path", corfuServiceDirPath);
-                if (!corfuServiceDir.exists() && corfuServiceDir.mkdirs()) {
-                    log.info("Created new service directory at {}.", corfuServiceDir);
-                }
-            }
-        }
+        createServiceDirectory(opts);
 
         // Check the specified number of datastore files to retain
         if (Integer.parseInt((String) opts.get("--metadata-retention")) < 1) {
             throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
         }
 
-        corfuServerThread = new Thread(() -> startServer(opts, bindToAllInterfaces));
-        corfuServerThread.setName("CorfuServer");
-        corfuServerThread.start();
+        // Register shutdown handler
+        Thread shutdownThread = new Thread(CorfuServer::cleanShutdown);
+        shutdownThread.setName("ShutdownThread");
+        Runtime.getRuntime().addShutdownHook(shutdownThread);
+
+        // Manages the lifecycle of the Corfu Server.
+        while (!shutdownServer) {
+            final ServerContext serverContext = new ServerContext(opts);
+            try {
+                setupMetrics(opts);
+                activeServer = new CorfuServerNode(serverContext);
+                activeServer.startAndListen();
+            } catch (Throwable th) {
+                log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
+                System.exit(EXIT_ERROR_CODE);
+            }
+
+            if (cleanupServer) {
+                clearDataFiles(serverContext);
+                cleanupServer = false;
+            }
+
+            if (!shutdownServer) {
+                log.info("main: Server restarting.");
+            }
+        }
+
+        log.info("main: Server exiting due to shutdown");
     }
 
     /**
      * Setup logback logger
-     *  - pick the correct logging level before outputting error messages
-     *  - add serverEndpoint information
+     * - pick the correct logging level before outputting error messages
+     * - add serverEndpoint information
      *
      * @param opts command line parameters
      * @throws JoranException logback exception
@@ -287,303 +276,81 @@ public class CorfuServer {
     }
 
     /**
-     * Creates all the components of the Corfu Server.
-     * Starts the Server Router.
+     * Create the service directory if it does not exist.
      *
-     * @param opts Options passed by the user.
+     * @param opts Server options map.
      */
-    public static void startServer(Map<String, Object> opts, boolean bindToAllInterfaces) {
+    private static void createServiceDirectory(Map<String, Object> opts) {
+        if ((Boolean) opts.get("--memory")) {
+            return;
+        }
 
-        int port = Integer.parseInt((String) opts.get("<port>"));
+        File serviceDir = new File((String) opts.get("--log-path"));
 
-        // Create a common Server Context for all servers to access.
-        try (ServerContext serverContext = new ServerContext(opts)) {
-            List<AbstractServer> servers = ImmutableList.<AbstractServer>builder()
-                    .add(new BaseServer(serverContext))
-                    .add(new SequencerServer(serverContext))
-                    .add(new LayoutServer(serverContext))
-                    .add(new LogUnitServer(serverContext))
-                    .add(new ManagementServer(serverContext))
-                    .build();
+        if (!serviceDir.isDirectory()) {
+            log.error("Service directory {} does not point to a directory. Aborting.",
+                    serviceDir);
+            throw new UnrecoverableCorfuError("Service directory must be a directory!");
+        }
 
-            NettyServerRouter router = new NettyServerRouter(servers);
-            serverContext.setServerRouter(router);
-            serverContext.setBindToAllInterfaces(bindToAllInterfaces);
-
-            // Register shutdown handler
-            shutdownThread = new Thread(() -> cleanShutdown(servers));
-            shutdownThread.setName("ShutdownThread");
-            Runtime.getRuntime().addShutdownHook(shutdownThread);
-
-            startAndListen(serverContext.getBossGroup(),
-                    serverContext.getWorkerGroup(),
-                    b -> configureBootstrapOptions(serverContext, b),
-                    serverContext,
-                    router,
-                    (String) opts.get("--address"),
-                    port).channel().closeFuture().syncUninterruptibly();
-        } catch (Exception e) {
-            log.error("CorfuServer: Server exiting due to unrecoverable error: ", e);
-            System.exit(EXIT_ERROR_CODE);
+        String corfuServiceDirPath = serviceDir.getAbsolutePath()
+                + File.separator
+                + "corfu";
+        File corfuServiceDir = new File(corfuServiceDirPath);
+        // Update the new path with the dedicated child service directory.
+        opts.put("--log-path", corfuServiceDirPath);
+        if (!corfuServiceDir.exists() && corfuServiceDir.mkdirs()) {
+            log.info("Created new service directory at {}.", corfuServiceDir);
         }
     }
 
-    /** A functional interface for receiving and configuring a {@link ServerBootstrap}.
-     */
-    @FunctionalInterface
-    public interface BootstrapConfigurer {
-
-        /** Configure a {@link ServerBootstrap}.
-         *
-         * @param serverBootstrap   The {@link ServerBootstrap} to configure.
-         */
-        void configure(ServerBootstrap serverBootstrap);
-    }
-
-    /** Start the Corfu server and bind it to the given {@code port} using the provided
-     * {@code channelType}. It is the callers' responsibility to shutdown the
-     * {@link EventLoopGroup}s. For implementations which listen on multiple ports,
-     * {@link EventLoopGroup}s may be reused.
+    /**
+     * Clear all data files to reset the server.
      *
-     * @param bossGroup             The "boss" {@link EventLoopGroup} which services incoming
-     *                              connections.
-     * @param workerGroup           The "worker" {@link EventLoopGroup} which services incoming
-     *                              requests.
-     * @param bootstrapConfigurer   A {@link BootstrapConfigurer} which will receive the
-     *                              {@link ServerBootstrap} to set options.
-     * @param context               A {@link ServerContext} which will be used to configure the
-     *                              server.
-     * @param router                A {@link NettyServerRouter} which will process incoming
-     *                              messages.
-     * @param port                  The port the {@link ServerChannel} will be created on.
-     * @return                      A {@link ChannelFuture} which can be used to wait for the server
-     *                              to be shutdown.
+     * @param serverContext Server context.
      */
-    public static
-            ChannelFuture startAndListen(@Nonnull EventLoopGroup bossGroup,
-                          @Nonnull EventLoopGroup workerGroup,
-                          @Nonnull BootstrapConfigurer bootstrapConfigurer,
-                          @Nonnull ServerContext context,
-                          @Nonnull NettyServerRouter router,
-                          String address,
-                          int port) {
-        try {
-            ServerBootstrap bootstrap = new ServerBootstrap();
-            bootstrap.group(bossGroup, workerGroup)
-                .channel(context.getChannelImplementation().getServerChannelClass());
-            bootstrapConfigurer.configure(bootstrap);
-
-            bootstrap.childHandler(getServerChannelInitializer(context, router));
-            if (context.isBindToAllInterfaces()) {
-                log.info("Corfu Server listening on all interfaces on port:{}", port);
-                return bootstrap.bind(port).sync();
-            } else {
-                log.info("Corfu Server listening on {}:{}", address, port);
-                return bootstrap.bind(address, port).sync();
+    private static void clearDataFiles(ServerContext serverContext) {
+        log.warn("main: cleanup requested, DELETE server data files");
+        if (!serverContext.getServerConfig(Boolean.class, "--memory")) {
+            File serviceDir = new File(serverContext.getServerConfig(String.class, "--log-path"));
+            try {
+                FileUtils.cleanDirectory(serviceDir);
+            } catch (IOException ioe) {
+                throw new UnrecoverableCorfuError(ioe);
             }
-        } catch (InterruptedException ie) {
-            throw new UnrecoverableCorfuInterruptedError(ie);
         }
-    }
-
-    /** Configure server bootstrap per-channel options, such as TCP options, etc.
-     *
-     * @param context       The {@link ServerContext} to use.
-     * @param bootstrap     The {@link ServerBootstrap} to be configured.
-     */
-    public static void configureBootstrapOptions(@Nonnull ServerContext context,
-            @Nonnull ServerBootstrap bootstrap) {
-        bootstrap.option(ChannelOption.SO_BACKLOG, 100)
-            .childOption(ChannelOption.SO_KEEPALIVE, true)
-            .childOption(ChannelOption.SO_REUSEADDR, true)
-            .childOption(ChannelOption.TCP_NODELAY, true)
-            .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
-    }
-
-
-    /** Obtain a {@link ChannelInitializer} which initializes the channel pipeline
-     *  for a new {@link ServerChannel}.
-     *
-     * @param context   The {@link ServerContext} to use.
-     * @param router    The {@link NettyServerRouter} to initialize the channel with.
-     * @return          A {@link ChannelInitializer} to intialize the channel.
-     */
-    private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
-            @Nonnull NettyServerRouter router) {
-
-        // Generate the initializer.
-        return new ChannelInitializer() {
-            @Override
-            protected void initChannel(@Nonnull Channel ch) throws Exception {
-
-                // Security variables
-                final SslContext sslContext;
-                final String[] enabledTlsProtocols;
-                final String[] enabledTlsCipherSuites;
-
-                // Security Initialization
-                Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
-                Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
-                        "--enable-tls-mutual-auth");
-                if (tlsEnabled) {
-                    // Get the TLS cipher suites to enable
-                    String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
-                    if (ciphs != null) {
-                        enabledTlsCipherSuites = Pattern.compile(",")
-                                .splitAsStream(ciphs)
-                                .map(String::trim)
-                                .toArray(String[]::new);
-                    } else {
-                        enabledTlsCipherSuites = new String[]{};
-                    }
-
-                    // Get the TLS protocols to enable
-                    String protos = context.getServerConfig(String.class, "--tls-protocols");
-                    if (protos != null) {
-                        enabledTlsProtocols = Pattern.compile(",")
-                                .splitAsStream(protos)
-                                .map(String::trim)
-                                .toArray(String[]::new);
-                    } else {
-                        enabledTlsProtocols = new String[]{};
-                    }
-
-                    try {
-                        sslContext = SslContextConstructor.constructSslContext(true,
-                                context.getServerConfig(String.class, "--keystore"),
-                                context.getServerConfig(String.class, "--keystore-password-file"),
-                                context.getServerConfig(String.class, "--truststore"),
-                                context.getServerConfig(String.class,
-                                        "--truststore-password-file"));
-                    } catch (SSLException e) {
-                        log.error("Could not build the SSL context", e);
-                        throw new RuntimeException("Couldn't build the SSL context", e);
-                    }
-                } else {
-                    enabledTlsCipherSuites = new String[]{};
-                    enabledTlsProtocols = new String[]{};
-                    sslContext = null;
-                }
-
-                Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
-                        "--enable-sasl-plain-text-auth");
-
-                // If TLS is enabled, setup the encryption pipeline.
-                if (tlsEnabled) {
-                    SSLEngine engine = sslContext.newEngine(ch.alloc());
-                    engine.setEnabledCipherSuites(enabledTlsCipherSuites);
-                    engine.setEnabledProtocols(enabledTlsProtocols);
-                    if (tlsMutualAuthEnabled) {
-                        engine.setNeedClientAuth(true);
-                    }
-                    ch.pipeline().addLast("ssl", new SslHandler(engine));
-                }
-                // Add/parse a length field
-                ch.pipeline().addLast(new LengthFieldPrepender(4));
-                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
-                        .MAX_VALUE, 0, 4,
-                        0, 4));
-                // If SASL authentication is requested, perform a SASL plain-text auth.
-                if (saslPlainTextAuth) {
-                    ch.pipeline().addLast("sasl/plain-text", new
-                            PlainTextSaslNettyServer());
-                }
-                // Transform the framed message into a Corfu message.
-                ch.pipeline().addLast(new NettyCorfuMessageDecoder());
-                ch.pipeline().addLast(new NettyCorfuMessageEncoder());
-                ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
-                        Version.getVersionString() + "("
-                                + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
-                        context.getServerConfig(String.class, "--HandshakeTimeout")));
-                // Route the message to the server class.
-                ch.pipeline().addLast(router);
-            }
-        };
+        log.warn("main: cleanup completed, expect clean startup");
     }
 
     /**
      * Cleanly shuts down the server and restarts.
      *
-     * @param serverContext Server Context.
-     * @param resetData     Resets and clears all data if True.
+     * @param resetData Resets and clears all data if True.
      */
-    public static void restartServer(ServerContext serverContext, boolean resetData) {
+    static void restartServer(boolean resetData) {
 
-        final Thread previousServerThread = corfuServerThread;
-        final Map<String, Object> opts = serverContext.getServerConfig();
-        final boolean bindToAllInterfaces = serverContext.isBindToAllInterfaces();
+        if (resetData) {
+            cleanupServer = true;
+        }
 
-        corfuServerThread = new Thread(() -> {
-            cleanShutdown(serverContext.getServers());
-            if (resetData && !(Boolean) serverContext.getServerConfig().get("--memory")) {
-                File serviceDir = new File((String) serverContext.getServerConfig()
-                        .get("--log-path"));
-                try {
-                    FileUtils.cleanDirectory(serviceDir);
-                } catch (IOException ioe) {
-                    throw new UnrecoverableCorfuError(ioe);
-                }
-            }
-            serverContext.close();
-
-            // Wait for previous server thread to join.
-            try {
-                previousServerThread.join();
-                Runtime.getRuntime().removeShutdownHook(shutdownThread);
-            } catch (InterruptedException ie) {
-                throw new UnrecoverableCorfuInterruptedError(ie);
-            }
-
-            Runtime.getRuntime().removeShutdownHook(shutdownThread);
-
-            // Restart the server.
-            log.info("RestartServer: Restarting corfu server");
-            printStartupMsg(opts);
-            startServer(opts, bindToAllInterfaces);
-        });
-        corfuServerThread.setName("CorfuServer");
-        corfuServerThread.start();
+        log.info("RestartServer: Shutting down corfu server");
+        activeServer.close();
+        log.info("RestartServer: Starting corfu server");
     }
 
     /**
      * Attempt to cleanly shutdown all the servers.
      */
-    public static void cleanShutdown(@Nonnull List<AbstractServer> servers) {
+    private static void cleanShutdown() {
         log.info("CleanShutdown: Starting Cleanup.");
-
-        // A executor service to create the shutdown threads
-        // plus name the threads correctly.
-        final ExecutorService shutdownService =
-                Executors.newFixedThreadPool(servers.size());
-
-        // Turn into a list of futures on the shutdown, returning
-        // generating a log message to inform of the result.
-        CompletableFuture[] shutdownFutures = servers.stream()
-                .map(s -> CompletableFuture.runAsync(() -> {
-                    try {
-                        Thread.currentThread().setName(s.getClass().getSimpleName()
-                                + "-shutdown");
-                        log.info("CleanShutdown: Shutting down {}",
-                                s.getClass().getSimpleName());
-                        s.shutdown();
-                        log.info("CleanShutdown: Cleanly shutdown {}",
-                                s.getClass().getSimpleName());
-                    } catch (Exception e) {
-                        log.error("CleanShutdown: Failed to cleanly shutdown {}",
-                                s.getClass().getSimpleName(), e);
-                    }
-                }, shutdownService))
-                .toArray(CompletableFuture[]::new);
-
-        CompletableFuture.allOf(shutdownFutures).join();
-        log.info("CleanShutdown: Shutdown Complete.");
+        shutdownServer = true;
+        activeServer.close();
     }
 
     /**
      * Print the corfu logo.
      */
     private static void printLogo() {
-        println(ansi().fg(WHITE).toString());
         println("▄████████  ▄██████▄     ▄████████    ▄████████ ███    █▄");
         println("███    ███ ███    ███   ███    ███   ███    ██████    ███");
         println("███    █▀  ███    ███   ███    ███   ███    █▀ ███    ███");
@@ -593,17 +360,18 @@ public class CorfuServer {
         println("███    ███ ███    ███   ███    ███   ███       ███    ███");
         println("████████▀   ▀██████▀    ███    ███   ███       ████████▀ ");
         println("                        ███    ███");
-        println(ansi().reset().toString());
     }
 
-    /** Print an object to the console, followed by a newline.
-     *  Call this method instead of calling System.out.println().
+    /**
+     * Print an object to the console, followed by a newline.
+     * Call this method instead of calling System.out.println().
      *
-     * @param line  The object to print.
+     * @param line The object to print.
      */
     @SuppressWarnings("checkstyle:printLine")
     private static void println(Object line) {
         System.out.println(line);
+        log.info(line.toString());
     }
 
     /**
@@ -613,13 +381,25 @@ public class CorfuServer {
      */
     private static void printStartupMsg(Map<String, Object> opts) {
         printLogo();
-        int port = Integer.parseInt((String) opts.get("<port>"));
-        println(ansi().a("Welcome to ").fg(RED).a("CORFU ").fg(MAGENTA).a("SERVER").reset());
-        println(ansi().a("Version ").a(Version.getVersionString()).a(" (").fg(BLUE)
-                .a(GitRepositoryState.getRepositoryState().commitIdAbbrev).reset().a(")"));
-        println(ansi().a("Serving on port ").fg(WHITE).a(port).reset());
-        println(ansi().a("Service directory: ").fg(WHITE).a(
-                (Boolean) opts.get("--memory") ? "MEMORY mode" :
-                        opts.get("--log-path")).reset());
+        println("Welcome to CORFU SERVER");
+        println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
+
+        final int port = Integer.parseInt((String) opts.get("<port>"));
+        final String dataLocation = (Boolean) opts.get("--memory") ? "MEMORY mode" :
+                opts.get("--log-path").toString();
+
+        println("Serving on port " + port);
+        println("Data location: " + dataLocation);
+    }
+
+    /**
+     * Generate metrics server config and start server.
+     *
+     * @param opts Command line parameters.
+     */
+    private static void setupMetrics(Map<String, Object> opts) {
+        PrometheusMetricsServer.Config config = PrometheusMetricsServer.Config.parse(opts);
+        MetricsServer server = new PrometheusMetricsServer(config, ServerContext.getMetrics());
+        server.start();
     }
 }

@@ -32,12 +32,12 @@ public class ClientMsgHandler {
     /**
      * The handler map.
      */
-    private Map<CorfuMsgType, ClientMsgHandler.Handler> handlerMap;
+    private final Map<CorfuMsgType, ClientMsgHandler.Handler> handlerMap;
 
     /**
      * The client.
      */
-    private IClient client;
+    private final IClient client;
 
     /**
      * Construct a new instance of ClientMsgHandler.
@@ -77,8 +77,8 @@ public class ClientMsgHandler {
                 if (ret != null) {
                     client.getRouter().completeRequest(message.getRequestID(), ret);
                 }
-            } catch (Exception ex) {
-                client.getRouter().completeExceptionally(message.getRequestID(), ex);
+            } catch (Throwable e) {
+                client.getRouter().completeExceptionally(message.getRequestID(), e);
             }
             return true;
         }

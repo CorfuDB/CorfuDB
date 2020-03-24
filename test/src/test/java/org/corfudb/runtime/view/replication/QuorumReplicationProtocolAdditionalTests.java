@@ -18,7 +18,6 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.WriteMode;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -113,7 +112,6 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
         WriteRequest m = WriteRequest.builder()
-                .writeMode(WriteMode.NORMAL)
                 .data(new LogData(DataType.DATA, b))
                 .build();
         m.setGlobalAddress(ADDRESS_0);
@@ -121,7 +119,6 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         m.setBackpointerMap(Collections.emptyMap());
         sendMessage(u1, CorfuMsgType.WRITE.payloadMsg(m));
         sendMessage(u2, CorfuMsgType.WRITE.payloadMsg(m));
-        u2.setShutdown(true);
         u2.shutdown();
 
         LogUnitServerAssertions.assertThat(u0)

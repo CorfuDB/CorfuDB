@@ -27,16 +27,6 @@ public interface IClientRouter {
     IClientRouter addClient(IClient client);
 
     /**
-     * Gets a client that matches a particular type.
-     *
-     * @param clientType The class of the client to match.
-     * @param <T>        The type of the client to match.
-     * @return The first client that matches that type.
-     * @throws NoSuchElementException If there are no clients matching that type.
-     */
-    <T extends IClient> T getClient(Class<T> clientType);
-
-    /**
      * Send a message and get a completable future to be fulfilled by the reply.
      *
      * @param ctx     The channel handler context to send the message under.

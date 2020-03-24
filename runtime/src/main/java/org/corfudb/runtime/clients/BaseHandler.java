@@ -15,7 +15,6 @@ import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
-import org.corfudb.runtime.exceptions.ShutdownException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
 /**

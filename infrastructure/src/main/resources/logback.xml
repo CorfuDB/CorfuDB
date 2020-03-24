@@ -4,7 +4,7 @@
     <appender name="std" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>
-                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %highlight(%-5level) | %30.30thread | %30.30logger{30} | %msg%n%xException
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %30.30thread | %30.30logger{30} | %msg%n%xException
             </pattern>
         </encoder>
     </appender>

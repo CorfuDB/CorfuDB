@@ -1,7 +1,6 @@
 package org.corfudb.runtime.exceptions;
 
 import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 

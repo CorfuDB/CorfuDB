@@ -1,7 +1,7 @@
 package org.corfudb.runtime.concurrent;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.junit.Test;
 
@@ -29,7 +29,7 @@ public class MapsAsMQsTest extends AbstractTransactionsTest {
     @Test
     public void useMapsAsMQs() throws Exception {
         String mapName1 = "testMapA";
-        Map<Long, Long> testMap1 = instantiateCorfuObject(SMRMap.class, mapName1);
+        Map<Long, Long> testMap1 = instantiateCorfuObject(CorfuTable.class, mapName1);
 
         final int nThreads = 4;
         CountDownLatch barrier = new CountDownLatch(nThreads-1);

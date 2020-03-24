@@ -3,6 +3,9 @@ package org.corfudb.runtime.view;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Lists;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
@@ -12,9 +15,10 @@ import org.corfudb.util.MetricsUtils;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-
 
 /**
  * Created by mwei on 12/10/15.
@@ -29,7 +33,7 @@ public class SequencerView extends AbstractView {
     private Timer sequencerDeprecatedNextOneStream;
     private Timer sequencerDeprecatedNextMultipleStream;
     private Timer sequencerTrimCache;
-    private static MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
 
     public SequencerView(CorfuRuntime runtime) {
         super(runtime);
@@ -76,15 +80,53 @@ public class SequencerView extends AbstractView {
     }
 
     /**
+     * Return the tail of a specific stream.
+     *
+     * @param streamId the stream to query
+     * @return the stream tail
+     */
+    public long query(UUID streamId) {
+        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)) {
+                return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                        .nextToken(Arrays.asList(streamId), 0))).getStreamTail(streamId);
+        }
+    }
+
+    /**
      * Return the next token in the sequencer for a particular stream.
      *
      * @param streamIds The stream IDs to retrieve from.
      * @return The first token retrieved.
      */
     public TokenResponse next(UUID ... streamIds) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)){
+        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {
             return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                     .nextToken(Arrays.asList(streamIds), 1)));
+        }
+    }
+
+    /**
+     * Retrieve a stream's address space from sequencer server.
+     *
+     * @param streamsAddressesRange range of streams address space to request.
+     * @return address space composed of the trim mark and collection of all addresses belonging to this stream.
+     */
+    public StreamAddressSpace getStreamAddressSpace(StreamAddressRange streamsAddressesRange) {
+        return getStreamsAddressSpace(Arrays.asList(streamsAddressesRange)).get(streamsAddressesRange.getStreamID());
+    }
+
+    /**
+     * Retrieve multiple streams address space.
+     *
+     * @param streamsAddressesRange list of streams and ranges to be requested.
+     * @return address space for each stream in the request.
+     */
+    public Map<UUID, StreamAddressSpace> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
+        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {
+            StreamsAddressResponse streamsAddressResponse = layoutHelper(e ->
+                    CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                            .getStreamsAddressSpace(streamsAddressesRange)));
+            return streamsAddressResponse.getAddressMap();
         }
     }
 

@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableSet;
 
 import org.corfudb.infrastructure.AbstractServer;
@@ -7,6 +8,7 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -25,6 +27,7 @@ public class SequencerHandlerTest extends AbstractClientTest {
 
     @Override
     Set<AbstractServer> getServersForTest() {
+        MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(new SequencerServer(defaultServerContext()))
                 .build();
@@ -36,12 +39,14 @@ public class SequencerHandlerTest extends AbstractClientTest {
         client = new SequencerClient(router, 0L);
         return new ImmutableSet.Builder<IClient>()
                 .add(sequencerHandler)
+                .add(new BaseHandler())
                 .build();
     }
 
     @Before
     public void bootstrapSequencer() {
-        client.bootstrap(0L, Collections.emptyMap(), 0L, false);
+        client.bootstrap(0L, Collections.emptyMap(), 0L,
+                false).join();
     }
 
     @Test
@@ -82,17 +87,17 @@ public class SequencerHandlerTest extends AbstractClientTest {
         UUID streamB = UUID.nameUUIDFromBytes("streamB".getBytes());
         client.nextToken(Collections.singletonList(streamA), 1).get();
         Token tokenA = client.nextToken(Collections.singletonList(streamA), 1).get().getToken();
-        Token tokenA2 = client.nextToken(Collections.singletonList(streamA), 0).get().getToken();
-        assertThat(tokenA)
+        long tokenA2 = client.nextToken(Collections.singletonList(streamA), 0).get().getStreamTail(streamA);
+        assertThat(tokenA.getSequence())
                 .isEqualTo(tokenA2);
-        Token tokenB = client.nextToken(Collections.singletonList(streamB), 0).get().getToken();
+        long tokenB = client.nextToken(Collections.singletonList(streamB), 0).get().getStreamTail(streamB);
         assertThat(tokenB)
                 .isNotEqualTo(tokenA2);
         Token tokenB2 = client.nextToken(Collections.singletonList(streamB), 1).get().getToken();
-        Token tokenB3 = client.nextToken(Collections.singletonList(streamB), 0).get().getToken();
-        assertThat(tokenB2)
+        long tokenB3 = client.nextToken(Collections.singletonList(streamB), 0).get().getStreamTail(streamB);
+        assertThat(tokenB2.getSequence())
                 .isEqualTo(tokenB3);
-        Token tokenA3 = client.nextToken(Collections.singletonList(streamA), 0).get().getToken();
+        long tokenA3 = client.nextToken(Collections.singletonList(streamA), 0).get().getStreamTail(streamA);
         assertThat(tokenA3)
                 .isEqualTo(tokenA2);
     }

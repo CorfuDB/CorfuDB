@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
@@ -39,14 +40,14 @@ public class LargeWriteIT extends AbstractIT {
                 .maxWriteSize(maxWriteSize)
                 .build();
 
-        CorfuRuntime rt = CorfuRuntime.fromParameters(params);
-        rt.parseConfigurationString(DEFAULT_ENDPOINT);
-        rt.connect();
+        runtime = CorfuRuntime.fromParameters(params);
+        runtime.parseConfigurationString(DEFAULT_ENDPOINT);
+        runtime.connect();
 
         final int bufSize = maxWriteSize * 2;
 
         // Attempt to write a payload that is greater than the configured limit.
-        assertThatThrownBy(() -> rt.getStreamsView()
+        assertThatThrownBy(() -> runtime.getStreamsView()
                 .get(CorfuRuntime.getStreamID(streamName))
                 .append(new byte[bufSize]))
                 .isInstanceOf(WriteSizeException.class);
@@ -72,24 +73,24 @@ public class LargeWriteIT extends AbstractIT {
                 .maxWriteSize(maxWriteSize)
                 .build();
 
-        CorfuRuntime rt = CorfuRuntime.fromParameters(params);
-        rt.parseConfigurationString(DEFAULT_ENDPOINT);
-        rt.connect();
+        runtime = CorfuRuntime.fromParameters(params);
+        runtime.parseConfigurationString(DEFAULT_ENDPOINT);
+        runtime.connect();
 
         String largePayload = new String(new byte[maxWriteSize * 2]);
 
-        Map<String, String> map = rt.getObjectsView()
+        Map<String, String> map = runtime.getObjectsView()
                 .build()
-                .setType(CorfuTable.class)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setStreamName(tableName)
                 .open();
 
 
-        rt.getObjectsView().TXBegin();
+        runtime.getObjectsView().TXBegin();
         map.put("key1", largePayload);
         boolean aborted = false;
         try {
-            rt.getObjectsView().TXEnd();
+            runtime.getObjectsView().TXEnd();
         } catch (TransactionAbortedException e) {
             aborted = true;
             assertThat(e.getCause()).isInstanceOf(WriteSizeException.class);

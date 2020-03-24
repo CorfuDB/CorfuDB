@@ -7,14 +7,16 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.Serializers;
 
+import static com.google.common.base.Preconditions.checkState;
 
 
 /**
@@ -22,10 +24,10 @@ import org.corfudb.util.serializer.Serializers;
  * Its primary use case is to allow a single log entry to
  * hold a sequence of updates made by a transaction, which are applied atomically.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 @ToString
 @Slf4j
+@EqualsAndHashCode
 public class MultiSMREntry extends LogEntry implements ISMRConsumable {
 
     @Getter
@@ -65,6 +67,23 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         }
     }
 
+    /**
+     * Given a buffer with the reader index pointing to a serialized MultiSMREntry, this method will
+     * seek the buffer's reader index to the end of the entry.
+     */
+    public static void seekToEnd(ByteBuf b) {
+        // Magic
+        byte magicByte = b.readByte();
+        checkState(magicByte == CorfuSerializer.corfuPayloadMagic, "Not a ICorfuSerializable object");
+        // container type
+        byte type = b.readByte();
+        checkState(type == LogEntryType.MULTISMR.asByte(), "Not a MULTISMR!");
+        int numUpdates = b.readInt();
+        for (int i = 0; i < numUpdates; i++) {
+            SMREntry.seekToEnd(b);
+        }
+    }
+
     @Override
     public void serialize(ByteBuf b) {
         super.serialize(b);
@@ -74,9 +93,9 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
     }
 
     @Override
-    public void setEntry(ILogData entry) {
-        super.setEntry(entry);
-        this.getUpdates().forEach(x -> x.setEntry(entry));
+    public void setGlobalAddress(long address) {
+        super.setGlobalAddress(address);
+        this.getUpdates().forEach(x -> x.setGlobalAddress(address));
     }
 
     @Override

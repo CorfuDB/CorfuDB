@@ -1,15 +1,19 @@
 package org.corfudb.universe.universe.vm;
 
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
+import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.group.cluster.vm.VmCorfuCluster;
+import org.corfudb.universe.logging.LoggingParams;
+import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
-import org.corfudb.universe.util.ClassUtils;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -23,16 +27,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * SHUTDOWN: stops the {@link Universe}, i.e. stops the existing {@link Group} gracefully within the provided timeout
  */
 @Slf4j
-public class VmUniverse extends AbstractUniverse<VmUniverseParams> {
+public class VmUniverse extends AbstractUniverse<NodeParams, VmUniverseParams> {
+
     private final AtomicBoolean destroyed = new AtomicBoolean(false);
+
     @NonNull
+    @Getter
     private final ApplianceManager applianceManager;
 
     @Builder
-    public VmUniverse(VmUniverseParams universeParams, ApplianceManager applianceManager) {
-        super(universeParams);
+    public VmUniverse(VmUniverseParams universeParams, ApplianceManager applianceManager,
+                      LoggingParams loggingParams) {
+        super(universeParams, loggingParams);
         this.applianceManager = applianceManager;
-        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+
+        applianceManager.deploy();
+        init();
     }
 
     /**
@@ -45,7 +55,6 @@ public class VmUniverse extends AbstractUniverse<VmUniverseParams> {
     public VmUniverse deploy() {
         log.info("Deploy the universe: {}", universeId);
 
-        applianceManager.deploy();
         deployGroups();
 
         return this;
@@ -56,18 +65,17 @@ public class VmUniverse extends AbstractUniverse<VmUniverseParams> {
      */
     @Override
     protected Group buildGroup(GroupParams groupParams) {
-        switch (groupParams.getNodeType()) {
-            case CORFU_SERVER:
-                return VmCorfuCluster.builder()
-                        .universeParams(universeParams)
-                        .params(ClassUtils.cast(groupParams))
-                        .vms(applianceManager.getVms())
-                        .build();
-            case CORFU_CLIENT:
-                throw new UniverseException("Not implemented corfu client. Group config: " + groupParams);
-            default:
-                throw new UniverseException("Unknown node type");
+        if (groupParams.getType() != ClusterType.CORFU_CLUSTER) {
+            throw new UniverseException("Unknown node type: " + groupParams.getType());
         }
+
+        return VmCorfuCluster.builder()
+                .universeParams(universeParams)
+                .corfuClusterParams(ClassUtils.cast(groupParams))
+                .vms(applianceManager.getVms())
+                .loggingParams(loggingParams)
+                .build();
+
     }
 
     /**
@@ -75,6 +83,11 @@ public class VmUniverse extends AbstractUniverse<VmUniverseParams> {
      */
     @Override
     public void shutdown() {
+        if (!universeParams.isCleanUpEnabled()) {
+            log.info("Shutdown is disabled");
+            return;
+        }
+
         if (destroyed.getAndSet(true)) {
             log.info("Can't shutdown vm universe. Already destroyed");
             return;

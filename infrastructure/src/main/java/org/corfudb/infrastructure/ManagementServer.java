@@ -1,11 +1,11 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext;
-import org.corfudb.infrastructure.management.ClusterStateContext.HeartbeatCounter;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
@@ -27,7 +27,6 @@ import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -48,10 +47,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ManagementServer extends AbstractServer {
 
-    /**
-     * The options map.
-     */
-    private final Map<String, Object> opts;
     private final ServerContext serverContext;
 
     /**
@@ -59,21 +54,24 @@ public class ManagementServer extends AbstractServer {
      */
     private final SingletonResource<CorfuRuntime> corfuRuntime =
             SingletonResource.withInitial(this::getNewCorfuRuntime);
+
     /**
      * Policy to be used to handle failures/healing.
      */
-    private IReconfigurationHandlerPolicy failureHandlerPolicy;
-    private IReconfigurationHandlerPolicy healingPolicy;
+    private final IReconfigurationHandlerPolicy failureHandlerPolicy;
 
     private final ClusterStateContext clusterContext;
 
     @Getter
     private final ManagementAgent managementAgent;
 
-    @Getter
-    private final String localEndpoint;
+    private final Orchestrator orchestrator;
 
-    private Orchestrator orchestrator;
+    /**
+     * HandlerMethod for this server.
+     */
+    @Getter
+    private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     /**
      * System down handler to break out of live-locks if the runtime cannot reach the cluster for a
@@ -102,8 +100,33 @@ public class ManagementServer extends AbstractServer {
     private final Lock healingLock = new ReentrantLock();
 
     @Override
-    public ExecutorService getExecutor() {
-        return executor;
+    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        return getState() == ServerState.READY;
+    }
+
+    @Override
+    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        if (msg.getMsgType() == CorfuMsgType.NODE_STATE_REQUEST) {
+            // Execute this request on the io thread
+            getHandler().handle(msg, ctx, r);
+        } else {
+            executor.submit(() -> getHandler().handle(msg, ctx, r));
+        }
+    }
+
+    /**
+     * Management Server shutdown:
+     * Shuts down the fault detector service.
+     */
+    @Override
+    public void shutdown() {
+        super.shutdown();
+        executor.shutdown();
+        orchestrator.shutdown();
+        managementAgent.shutdown();
+
+        // Shut down the Corfu Runtime.
+        corfuRuntime.cleanup(CorfuRuntime::shutdown);
     }
 
     /**
@@ -112,31 +135,31 @@ public class ManagementServer extends AbstractServer {
      * @param serverContext context object providing parameters and objects
      */
     public ManagementServer(ServerContext serverContext) {
-
-        this.opts = serverContext.getServerConfig();
-        this.localEndpoint = this.opts.get("--address") + ":" + this.opts.get("<port>");
         this.serverContext = serverContext;
 
-        executor = Executors.newFixedThreadPool(serverContext.getManagementServerThreadCount(),
+        this.executor = Executors.newFixedThreadPool(serverContext.getManagementServerThreadCount(),
                 new ServerThreadFactory("management-", new ServerThreadFactory.ExceptionHandler()));
 
         this.failureHandlerPolicy = serverContext.getFailureHandlerPolicy();
-        this.healingPolicy = serverContext.getHealingHandlerPolicy();
 
-        HeartbeatCounter counter = new HeartbeatCounter();
 
-        FailureDetector failureDetector = new FailureDetector(counter, serverContext.getLocalEndpoint());
+        FailureDetector failureDetector = new FailureDetector(serverContext.getLocalEndpoint());
 
         // Creating a management agent.
         ClusterState defaultView = ClusterState.builder()
+                .localEndpoint(serverContext.getLocalEndpoint())
                 .nodes(ImmutableMap.of())
+                .unresponsiveNodes(ImmutableList.of())
                 .build();
         clusterContext =  ClusterStateContext.builder()
-                .counter(counter)
                 .clusterView(new AtomicReference<>(defaultView))
                 .build();
 
-        managementAgent = new ManagementAgent(corfuRuntime, serverContext, clusterContext, failureDetector);
+        Layout managementLayout = serverContext.copyManagementLayout();
+        managementAgent = new ManagementAgent(
+                corfuRuntime, serverContext, clusterContext, failureDetector,managementLayout
+        );
+
         orchestrator = new Orchestrator(corfuRuntime, serverContext);
     }
 
@@ -147,7 +170,7 @@ public class ManagementServer extends AbstractServer {
      */
     private CorfuRuntime getNewCorfuRuntime() {
         final CorfuRuntime.CorfuRuntimeParameters params =
-                serverContext.getDefaultRuntimeParameters();
+                serverContext.getManagementRuntimeParameters();
         params.setSystemDownHandlerTriggerLimit(SYSTEM_DOWN_HANDLER_TRIGGER_LIMIT);
         final CorfuRuntime runtime = CorfuRuntime.fromParameters(params);
         final Layout managementLayout = serverContext.copyManagementLayout();
@@ -161,14 +184,7 @@ public class ManagementServer extends AbstractServer {
         return runtime;
     }
 
-    /**
-     * Handler for this server.
-     */
-    @Getter
-    private final CorfuMsgHandler handler =
-            CorfuMsgHandler.generateHandler(MethodHandles.lookup(), this);
-
-    private boolean checkBootstrap(CorfuMsg msg) {
+    private boolean isBootstrapped(CorfuMsg msg) {
         if (serverContext.getManagementLayout() == null) {
             log.warn("Received message but not bootstrapped! Message={}", msg);
             return false;
@@ -204,8 +220,8 @@ public class ManagementServer extends AbstractServer {
                                                        ChannelHandlerContext ctx, IServerRouter r) {
         if (serverContext.getManagementLayout() != null) {
             // We are already bootstrapped, bootstrap again is not allowed.
-            log.warn("Got a request to bootstrap a server which is already bootstrapped, "
-                    + "rejecting!");
+            log.warn("Got a request to bootstrap a server with {} which is already bootstrapped, "
+                    + "rejecting!", msg.getPayload());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR));
         } else {
             log.info("Received Bootstrap Layout : {}", msg.getPayload());
@@ -228,7 +244,7 @@ public class ManagementServer extends AbstractServer {
                                          ChannelHandlerContext ctx, IServerRouter r) {
 
         // This server has not been bootstrapped yet, ignore all requests.
-        if (!checkBootstrap(msg)) {
+        if (!isBootstrapped(msg)) {
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));
             return;
         }
@@ -294,7 +310,7 @@ public class ManagementServer extends AbstractServer {
                                          ChannelHandlerContext ctx, IServerRouter r) {
 
         // This server has not been bootstrapped yet, ignore all requests.
-        if (!checkBootstrap(msg)) {
+        if (!isBootstrapped(msg)) {
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));
             return;
         }
@@ -360,23 +376,6 @@ public class ManagementServer extends AbstractServer {
     }
 
     /**
-     * Handles the heartbeat request.
-     * It accumulates the metrics required to build
-     * and send the response.
-     * The response comprises of the local nodeMetrics and
-     * this node's view of the cluster (ClusterView).
-     *
-     * @param msg corfu message containing HEARTBEAT_REQUEST
-     * @param ctx netty ChannelHandlerContext
-     * @param r   server router
-     */
-    @ServerHandler(type = CorfuMsgType.HEARTBEAT_REQUEST)
-    public void handleHeartbeatRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        r.sendResponse(ctx, msg, CorfuMsgType.HEARTBEAT_RESPONSE
-                .payloadMsg(clusterContext.getClusterView()));
-    }
-
-    /**
      * Returns current {@link NodeState} provided by failure detector.
      * The detector periodically collects current cluster state and saves it in {@link ClusterStateContext}.
      * Servers periodically inspect cluster and ask each other of the connectivity/node state
@@ -423,7 +422,7 @@ public class ManagementServer extends AbstractServer {
         //Node state is connected by default.
         //We believe two servers are connected if another servers is able to send command NODE_STATE_REQUEST
         // and get a response. If we are able to provide NodeState we believe that the state is CONNECTED.
-        return NodeState.getNotReadyNodeState(localEndpoint, epoch, clusterContext.getCounter().get());
+        return NodeState.getNotReadyNodeState(serverContext.getLocalEndpoint());
     }
 
     /**
@@ -436,25 +435,11 @@ public class ManagementServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.MANAGEMENT_LAYOUT_REQUEST)
     public void handleLayoutRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         // This server has not been bootstrapped yet, ignore all requests.
-        if (!checkBootstrap(msg)) {
+        if (!isBootstrapped(msg)) {
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_NOBOOTSTRAP_ERROR));
             return;
         }
         r.sendResponse(ctx, msg,
                 CorfuMsgType.LAYOUT_RESPONSE.payloadMsg(serverContext.getManagementLayout()));
-    }
-
-    /**
-     * Management Server shutdown:
-     * Shuts down the fault detector service.
-     */
-    @Override
-    public void shutdown() {
-        super.shutdown();
-        orchestrator.shutdown();
-        managementAgent.shutdown();
-
-        // Shut down the Corfu Runtime.
-        corfuRuntime.cleanup(CorfuRuntime::shutdown);
     }
 }

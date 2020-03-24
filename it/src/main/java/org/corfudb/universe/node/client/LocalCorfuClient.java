@@ -6,12 +6,11 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.universe.node.stress.Stress;
 import org.corfudb.util.NodeLocator;
 
 import java.time.Duration;
@@ -27,13 +26,18 @@ import static org.corfudb.runtime.CorfuRuntime.fromParameters;
 @Slf4j
 public class LocalCorfuClient implements CorfuClient {
     private final CorfuRuntime runtime;
+
     @Getter
     private final ClientParams params;
+
     @Getter
     private final ImmutableSortedSet<String> serverEndpoints;
 
     @Builder
-    public LocalCorfuClient(ClientParams params, ImmutableSortedSet<String> serverEndpoints) {
+    public LocalCorfuClient(
+            ClientParams params, ImmutableSortedSet<String> serverEndpoints,
+            CorfuRuntimeParametersBuilder corfuRuntimeParams) {
+
         this.params = params;
         this.serverEndpoints = serverEndpoints;
 
@@ -42,19 +46,17 @@ public class LocalCorfuClient implements CorfuClient {
                 .map(NodeLocator::parseString)
                 .collect(Collectors.toList());
 
-        CorfuRuntimeParameters runtimeParams = CorfuRuntimeParameters
-                .builder()
+        corfuRuntimeParams
                 .layoutServers(layoutServers)
-                .systemDownHandler(this::systemDownHandler)
-                .build();
+                .systemDownHandler(this::systemDownHandler);
 
-        this.runtime = fromParameters(runtimeParams);
+        this.runtime = fromParameters(corfuRuntimeParams.build());
     }
 
     /**
      * Connect corfu runtime to the server
      *
-     * @return
+     * @return LocalCorfuClient
      */
     @Override
     public LocalCorfuClient deploy() {
@@ -89,11 +91,6 @@ public class LocalCorfuClient implements CorfuClient {
     }
 
     @Override
-    public Stress getStress() {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    @Override
     public <K, V> CorfuTable<K, V> createDefaultCorfuTable(String streamName) {
         return runtime.getObjectsView()
                 .build()
@@ -106,6 +103,11 @@ public class LocalCorfuClient implements CorfuClient {
     @Override
     public void connect() {
         runtime.connect();
+    }
+
+    @Override
+    public CorfuRuntime getRuntime() {
+        return runtime;
     }
 
     @Override

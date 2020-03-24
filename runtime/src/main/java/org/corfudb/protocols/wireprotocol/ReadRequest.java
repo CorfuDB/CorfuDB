@@ -1,22 +1,22 @@
 package org.corfudb.protocols.wireprotocol;
 
-import com.google.common.collect.Range;
 
 import io.netty.buffer.ByteBuf;
-
-import java.util.UUID;
-
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 
 /**
  * Created by mwei on 8/11/16.
  */
-@Data
+@Getter
 @AllArgsConstructor
 public class ReadRequest implements ICorfuPayload<ReadRequest> {
 
-    final Range<Long> range;
+    // Requested address to read.
+    private final long address;
+
+    // Whether the read result should be cached on server.
+    private final boolean cacheReadResult;
 
     /**
      * Deserialization Constructor from ByteBuf to ReadRequest.
@@ -24,16 +24,14 @@ public class ReadRequest implements ICorfuPayload<ReadRequest> {
      * @param buf The buffer to deserialize
      */
     public ReadRequest(ByteBuf buf) {
-        range = ICorfuPayload.rangeFromBuffer(buf, Long.class);
-    }
-
-    public ReadRequest(Long address) {
-        range = Range.singleton(address);
+        address = buf.readLong();
+        cacheReadResult = buf.readBoolean();
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, range);
+        buf.writeLong(address);
+        buf.writeBoolean(cacheReadResult);
     }
 
 }

@@ -13,9 +13,6 @@ import org.corfudb.test.concurrent.TestThreadGroups;
 // Disable magic number check to make defaults readable
 @SuppressWarnings("checkstyle:magicnumber")
 public class ServerContextBuilder {
-
-    long initialToken = 0L; // for testing, we want to reset the sequencer on each test
-
     boolean single = true;
     boolean memory = true;
     String logPath = null;
@@ -38,6 +35,7 @@ public class ServerContextBuilder {
     String address = "test";
     int port = 9000;
     String seqCache = "1000";
+    String logSizeLimitPercentage = "100.0";
     String batchSize = "100";
     String managementBootstrapEndpoint = null;
     IServerRouter serverRouter;
@@ -56,12 +54,12 @@ public class ServerContextBuilder {
     public ServerContext build() {
         ImmutableMap.Builder<String,Object> builder =
                 new ImmutableMap.Builder<String, Object>()
-                .put("--initial-token", initialToken)
                 .put("--single", single)
                 .put("--memory", memory)
                 .put("--Threads", numThreads)
                 .put("--HandshakeTimeout", handshakeTimeout)
                 .put("--sequencer-cache-size", seqCache)
+                .put("--log-size-quota-percentage", logSizeLimitPercentage)
                 .put("--batch-size", batchSize)
                 .put("--metadata-retention", retention);
         if (logPath != null) {
@@ -86,7 +84,7 @@ public class ServerContextBuilder {
                  .put("--enable-sasl-plain-text-auth", saslPlainTextAuth)
                  .put("--cluster-id", clusterId)
                  .put("--implementation", implementation)
-                 .put("<port>", port);
+                 .put("<port>", Integer.toString(port));
 
         // Set the prefix to the port number
         if (prefix.equals("")) {
@@ -111,7 +109,8 @@ public class ServerContextBuilder {
      * @return      A {@link ServerContext} with a {@link TestServerRouter} installed.
      */
     public static ServerContext defaultTestContext(int port) {
-        ServerContext sc = new ServerContextBuilder().setPort(port).build();
+        ServerContext sc = new ServerContextBuilder()
+            .setPort(port).build();
         sc.setServerRouter(new TestServerRouter());
         return sc;
     }
@@ -122,14 +121,10 @@ public class ServerContextBuilder {
      * @return      A non-test {@link ServerContext}
      */
     public static ServerContext defaultContext(int port) {
-        ServerContext sc = new ServerContextBuilder().setPort(port)
+        ServerContext sc = new ServerContextBuilder()
+            .setPort(port)
             .setImplementation("auto")
             .build();
         return sc;
     }
-
-    public static ServerContext emptyContext() {
-        return new ServerContextBuilder().build();
-    }
-
 }

@@ -13,33 +13,36 @@ import org.corfudb.runtime.view.RuntimeLayout;
 @Slf4j
 public abstract class AbstractReplicationProtocol implements IReplicationProtocol {
 
-    /** The hole fill policy to apply. */
+    /**
+     * The hole fill policy to apply.
+     */
     protected final IHoleFillPolicy holeFillPolicy;
 
-    /** Build the replication protocol using the given hole filling policy.
+    /**
+     * Build the replication protocol using the given hole filling policy.
      *
-     * @param holeFillPolicy    The hole filling policy to be applied when
-     *                          a read returns uncommitted data.
+     * @param holeFillPolicy The hole filling policy to be applied when
+     *                       a read returns uncommitted data.
      */
     public AbstractReplicationProtocol(IHoleFillPolicy holeFillPolicy) {
         this.holeFillPolicy = holeFillPolicy;
     }
 
-    /** {@inheritDoc}
+    /**
+     * {@inheritDoc}
      *
-     *  <p>In the base implementation, we attempt to read data
-     *  using the peek method. If data is returned by peek,
-     *  we use it. Otherwise, we invoke the hole filling
-     *  protocol.
-     *
+     * <p>In the base implementation, we attempt to read data
+     * using the peek method. If data is returned by peek,
+     * we use it. Otherwise, we invoke the hole filling
+     * protocol.
      **/
     @Nonnull
     @Override
     public ILogData read(RuntimeLayout runtimeLayout, long globalAddress) {
         try {
             return holeFillPolicy
-                .peekUntilHoleFillRequired(globalAddress,
-                        a -> peek(runtimeLayout, a));
+                    .peekUntilHoleFillRequired(globalAddress,
+                            a -> peek(runtimeLayout, a));
         } catch (HoleFillRequiredException e) {
             log.debug("HoleFill[{}] due to {}", globalAddress, e.getMessage());
             holeFill(runtimeLayout, globalAddress);
@@ -55,7 +58,7 @@ public abstract class AbstractReplicationProtocol implements IReplicationProtoco
      * has committed (you WILL need to -read- the
      * address to find out which write was adopted).
      *
-     * @param globalAddress  The address to hole fill.
+     * @param globalAddress The address to hole fill.
      */
     protected abstract void holeFill(RuntimeLayout runtimeLayout, long globalAddress);
 }

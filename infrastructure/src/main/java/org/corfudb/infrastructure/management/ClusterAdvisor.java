@@ -5,7 +5,6 @@ import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -35,10 +34,9 @@ public interface ClusterAdvisor {
      * {@link Layout}.
      *
      * @param clusterState view of the Corfu server cluster from a client node's perspective.
-     * @param unresponsiveServers unresponsive servers in a layout.
      * @return a node considered to have been failed according to the underlying {@link ClusterType}.
      */
-    Optional<NodeRank> failedServer(ClusterState clusterState, List<String> unresponsiveServers);
+    Optional<NodeRank> failedServer(ClusterState clusterState);
 
     /**
      * Provide a server in the Corfu cluster which according to the underlying algorithm
@@ -47,11 +45,10 @@ public interface ClusterAdvisor {
      * {@link Layout}.
      *
      * @param clusterState view of the Corfu server cluster from a client node's perspective.
-     * @param unresponsiveServers unresponsive servers in a layout.
      * @return a server considered to have been healed according to the underlying
      * {@link ClusterType}.
      */
-    Optional<NodeRank> healedServer(ClusterState clusterState, List<String> unresponsiveServers);
+    Optional<NodeRank> healedServer(ClusterState clusterState);
 
     /**
      * Provides a cluster graph generated from the {@link ClusterState}

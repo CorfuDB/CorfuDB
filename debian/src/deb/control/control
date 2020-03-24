@@ -3,7 +3,7 @@ Version: [[version]]
 Section: misc
 Priority: optional
 Architecture: all
-Depends: oracle-java8-jre, wrapper-linux-x86-64
+Depends: oracle-java8-jre, wrapper-linux-x86-64, libapr1
 Maintainer: Michael Wei <mwei@cs.ucsd.edu>
 Description: Corfu is a consistency platform designed around the abstraction of a shared log.
 Distribution: development

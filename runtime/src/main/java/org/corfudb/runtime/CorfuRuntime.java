@@ -5,13 +5,56 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Data;
+import lombok.Getter;
+import lombok.Singular;
+import lombok.ToString;
+import lombok.experimental.Accessors;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.common.compression.Codec;
+import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
+import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.IClientRouter;
+import org.corfudb.runtime.clients.LayoutClient;
+import org.corfudb.runtime.clients.LayoutHandler;
+import org.corfudb.runtime.clients.LogUnitHandler;
+import org.corfudb.runtime.clients.ManagementHandler;
+import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.clients.SequencerHandler;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.view.AddressSpaceView;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.SequencerView;
+import org.corfudb.runtime.view.StreamsView;
+import org.corfudb.runtime.view.ManagementView;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.LayoutView;
+import org.corfudb.runtime.view.LayoutManagementView;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.GitRepositoryState;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.NodeLocator;
+import org.corfudb.util.Sleep;
+import org.corfudb.util.UuidUtils;
+import org.corfudb.util.Version;
 
+import javax.annotation.Nonnull;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -23,49 +66,6 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
-import lombok.Builder;
-import lombok.Builder.Default;
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.Singular;
-import lombok.experimental.Accessors;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
-import org.corfudb.protocols.wireprotocol.VersionInfo;
-import org.corfudb.recovery.FastObjectLoader;
-import org.corfudb.runtime.clients.BaseClient;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.clients.LayoutHandler;
-import org.corfudb.runtime.clients.LogUnitHandler;
-import org.corfudb.runtime.clients.ManagementHandler;
-import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.clients.SequencerHandler;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.ShutdownException;
-import org.corfudb.runtime.exceptions.WrongClusterException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.view.AddressSpaceView;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.LayoutManagementView;
-import org.corfudb.runtime.view.LayoutView;
-import org.corfudb.runtime.view.ManagementView;
-import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.SequencerView;
-import org.corfudb.runtime.view.StreamsView;
-import org.corfudb.util.CFUtils;
-import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.MetricsUtils;
-import org.corfudb.util.NodeLocator;
-import org.corfudb.util.Sleep;
-import org.corfudb.util.UuidUtils;
-import org.corfudb.util.Version;
 
 /**
  * Created by mwei on 12/9/15.
@@ -79,6 +79,7 @@ public class CorfuRuntime {
      */
     @Builder
     @Data
+    @ToString
     public static class CorfuRuntimeParameters {
         @Default
         private final long nettyShutdownQuitePeriod = 100;
@@ -86,33 +87,12 @@ public class CorfuRuntime {
         private final long nettyShutdownTimeout = 300;
 
         // region Object Layer Parameters
-        /**
-         * True, if undo logging is disabled.
-         */
-        @Default
-        boolean undoDisabled = false;
-
-        /**
-         * True, if optimistic undo logging is disabled.
-         */
-        @Default
-        boolean optimisticUndoDisabled = false;
 
         /**
          * Max size for a write request.
          */
         @Default
         int maxWriteSize = 0;
-
-        /**
-         * Use fast loader to restore objects on connection.
-         *
-         * <p>If using this utility, you need to be sure that no one
-         * is accessing objects until the tables are loaded
-         * (i.e. when connect returns)
-         */
-        @Default
-        boolean useFastLoader = false;
 
         /**
          * Set the bulk read size.
@@ -153,10 +133,25 @@ public class CorfuRuntime {
         boolean cacheDisabled = false;
 
         /**
-         * The maximum size of the cache, in bytes.
+         * The maximum number of entries in the cache.
          */
         @Default
-        long numCacheEntries = 5000;
+        long maxCacheEntries;
+
+        /**
+         * The max in-memory size of the cache in bytes
+         */
+        @Default
+        long maxCacheWeight;
+
+        /**
+         * This is a hint to size the AddressSpaceView cache, a higher concurrency
+         * level allows for less lock contention at the cost of more memory overhead.
+         * The default value of zero will result in using the cache's internal default
+         * concurrency level (i.e. 4). 
+         */
+        @Default
+        int cacheConcurrencyLevel = 0;
 
         /**
          * Sets expireAfterAccess and expireAfterWrite in seconds.
@@ -175,10 +170,11 @@ public class CorfuRuntime {
 
         // region Stream Parameters
         /**
-         * Whether or not to disable backpointers.
+         * True, if strategy to discover the address space of a stream relies on the follow backpointers.
+         * False, if strategy to discover the address space of a stream relies on the get stream address map.
          */
         @Default
-        boolean backpointersDisabled = false;
+        boolean followBackpointersEnabled = false;
 
         /**
          * Whether or not hole filling should be disabled.
@@ -199,6 +195,27 @@ public class CorfuRuntime {
          */
         @Default
         int trimRetry = 2;
+
+        /**
+         * The total number of retries the checkpointer will attempt on sequencer failover to
+         * prevent epoch regressions. This is independent of the number of streams to be checkpointed.
+         */
+        @Default
+        int checkpointRetries = 5;
+
+        /**
+         * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
+         * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
+         */
+        @Default
+        int streamBatchSize = 10;
+
+        /**
+         * Checkpoint read Batch Size: number of checkpoint addresses to fetch in batch when stream
+         * address discovery mechanism relies on address maps instead of follow backpointers;
+         */
+        @Default
+        int checkpointReadBatchSize = 5;
         // endregion
 
         //region        Security parameters
@@ -373,19 +390,8 @@ public class CorfuRuntime {
         static final Map<ChannelOption, Object> DEFAULT_CHANNEL_OPTIONS =
                 ImmutableMap.<ChannelOption, Object>builder()
                         .put(ChannelOption.TCP_NODELAY, true)
-                        .put(ChannelOption.SO_KEEPALIVE, true)
                         .put(ChannelOption.SO_REUSEADDR, true)
                         .build();
-
-        /**
-         * Get the netty channel options to be used by the netty client implementation.
-         *
-         * @return A map containing options which should be applied to each netty channel.
-         */
-        public Map<ChannelOption, Object> getNettyChannelOptions() {
-            return customNettyChannelOptions.size() == 0
-                    ? DEFAULT_CHANNEL_OPTIONS : customNettyChannelOptions;
-        }
 
         /**
          * A {@link UncaughtExceptionHandler} which handles threads that have an uncaught
@@ -409,6 +415,27 @@ public class CorfuRuntime {
          */
         @Default
         List<MsgHandlingFilter> nettyClientInboundMsgFilters = null;
+
+        /**
+         * The default priority of the requests made by this client.
+         * Under resource constraints non-high priority requests
+         * are dropped.
+         */
+        @Default
+        private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
+
+        /**
+         * Port at which the {@link CorfuRuntime} will allow third-party
+         * collectors to pull for metrics.
+         */
+        @Default
+        private int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
+
+        /**
+         * The compression codec to use to encode a write's payload
+         */
+        @Default
+        private Codec.Type codecType = Codec.Type.ZSTD;
 
         // Register handlers region
 
@@ -435,6 +462,17 @@ public class CorfuRuntime {
         volatile Runnable beforeRpcHandler = () -> {
         };
         //endregion
+
+        /**
+         * Get the netty channel options to be used by the netty client implementation.
+         *
+         * @return A map containing options which should be applied to each netty channel.
+         */
+        public Map<ChannelOption, Object> getNettyChannelOptions() {
+            return customNettyChannelOptions.size() == 0
+                    ? DEFAULT_CHANNEL_OPTIONS : customNettyChannelOptions;
+        }
+
     }
 
     /**
@@ -485,6 +523,9 @@ public class CorfuRuntime {
      */
     @Getter(lazy = true)
     private final ManagementView managementView = new ManagementView(this);
+
+    @Getter(lazy = true)
+    private final TableRegistry tableRegistry = new TableRegistry(this);
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
@@ -543,17 +584,6 @@ public class CorfuRuntime {
 
     @Getter
     private static final MetricRegistry defaultMetrics = new MetricRegistry();
-    @Getter
-    @Setter
-    private MetricRegistry metrics = new MetricRegistry();
-
-    /** Initialize a default static registry which through that different metrics
-     * can be registered and reported */
-    static {
-        synchronized (defaultMetrics) {
-            MetricsUtils.metricsReportingSetup(defaultMetrics);
-        }
-    }
 
     /**
      * Register SystemDownHandler.
@@ -653,9 +683,14 @@ public class CorfuRuntime {
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
-        synchronized (metrics) {
-            MetricsUtils.metricsReportingSetup(metrics);
+        // Try to expose metrics via Dropwizard CsvReporter JmxReporter and Slf4jReporter.
+        MetricsUtils.metricsReportingSetup(defaultMetrics);
+        if (parameters.getPrometheusMetricsPort() != MetricsUtils.NO_METRICS_PORT) {
+            // Try to expose metrics via Prometheus.
+            MetricsUtils.metricsReportingSetup(
+                    defaultMetrics,parameters.getPrometheusMetricsPort());
         }
+
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
 
@@ -824,14 +859,17 @@ public class CorfuRuntime {
      * If the layout has been previously invalidated and a new layout has not yet been retrieved,
      * this function does nothing.
      */
-    public synchronized void invalidateLayout() {
+    public synchronized CompletableFuture<Layout> invalidateLayout() {
         // Is there a pending request to retrieve the layout?
-        if (!layout.isDone()) {
-            // Don't create a new request for a layout if there is one pending.
-            return;
+        if (layout.isDone()) {
+            List<String> servers = Optional.ofNullable(latestLayout)
+                    .map(Layout::getLayoutServers)
+                    .orElse(bootstrapLayoutServers);
+
+            layout = fetchLayout(servers);
         }
-        layout = fetchLayout(latestLayout == null
-                ? bootstrapLayoutServers : latestLayout.getLayoutServers());
+
+        return layout;
     }
 
     /**
@@ -871,11 +909,15 @@ public class CorfuRuntime {
                 .filter(endpoint -> !layout.getAllServers()
                         // Converting to legacy endpoint format as the layout only contains
                         // legacy format - host:port.
-                        .contains(NodeLocator.getLegacyEndpoint(endpoint)))
+                        .contains(endpoint.toEndpointUrl()))
                 .forEach(endpoint -> {
                     try {
-                        nodeRouterPool.getNodeRouters().get(endpoint).stop();
-                        nodeRouterPool.getNodeRouters().remove(endpoint);
+                        IClientRouter router = nodeRouterPool.getNodeRouters().remove(endpoint);
+                        if (router != null) {
+                            // Stop the channel from keeping connecting/reconnecting to server.
+                            // Also if channel is not closed properly, router will be garbage collected.
+                            router.stop();
+                        }
                     } catch (Exception e) {
                         log.warn("fetchLayout: Exception in stopping and removing "
                                 + "router connection to node {} :", endpoint, e);
@@ -904,7 +946,7 @@ public class CorfuRuntime {
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
                 for (String s : layoutServersCopy) {
-                    log.debug("Trying connection to layout server {}", s);
+                    log.trace("Trying connection to layout server {}", s);
                     try {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
@@ -940,6 +982,10 @@ public class CorfuRuntime {
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(
                                 "Interrupted during layout fetch", ie);
+                    } catch (WrongClusterException we) {
+                        // It is futile trying to re-connect to the wrong cluster
+                        log.warn("Giving up since cluster is incorrect or reconfigured!");
+                        throw we;
                     } catch (ExecutionException ee){
                         if (ee.getCause() instanceof TimeoutException) {
                             log.warn("Tried to get layout from {} but failed by timeout", s);
@@ -982,7 +1028,7 @@ public class CorfuRuntime {
 
             for (CompletableFuture<VersionInfo> versionCf : versions) {
                 final VersionInfo version = CFUtils.getUninterruptibly(versionCf,
-                        TimeoutException.class, NetworkException.class, ShutdownException.class);
+                        TimeoutException.class, NetworkException.class);
                 if (version.getVersion() == null) {
                     log.error("Unexpected server version, server is too old to return"
                             + " version information");
@@ -994,7 +1040,7 @@ public class CorfuRuntime {
                             getVersionString(), version.getVersion());
                 }
             }
-        } catch (TimeoutException | NetworkException | ShutdownException e) {
+        } catch (TimeoutException | NetworkException e) {
             log.error("connect: failed to get version. Couldn't connect to server.", e);
         } catch (Exception ex) {
             // Because checkVersion is just an informational step (log purpose), we don't need to retry
@@ -1009,6 +1055,9 @@ public class CorfuRuntime {
      * When this function returns, the Corfu server is ready to be accessed.
      */
     public synchronized CorfuRuntime connect() {
+
+        log.info("connect: runtime parameters {}", getParameters());
+
         if (layout == null) {
             log.info("Connecting to Corfu server instance, layout servers={}", bootstrapLayoutServers);
             // Fetch the current layout and save the future.
@@ -1023,13 +1072,6 @@ public class CorfuRuntime {
         }
 
         checkVersion();
-
-        if (parameters.isUseFastLoader()) {
-            FastObjectLoader fastLoader = new FastObjectLoader(this)
-                    .setBatchReadSize(parameters.getBulkReadSize())
-                    .setTimeoutInMinutesForLoading((int) parameters.fastLoaderTimeout.toMinutes());
-            fastLoader.loadMaps();
-        }
 
         garbageCollector.start();
 
@@ -1098,20 +1140,6 @@ public class CorfuRuntime {
     }
 
     /**
-     * Whether or not to disable backpointers
-     *
-     * @param disable True, if the cache should be disabled, false otherwise.
-     * @return A CorfuRuntime to support chaining.
-     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
-     */
-    @Deprecated
-    public CorfuRuntime setBackpointersDisabled(boolean disable) {
-        log.warn("setBackpointersDisabled: Deprecated, please set parameters instead");
-        parameters.setBackpointersDisabled(disable);
-        return this;
-    }
-
-    /**
      * Whether or not to disable the cache
      *
      * @param disable True, if the cache should be disabled, false otherwise.
@@ -1126,20 +1154,6 @@ public class CorfuRuntime {
     }
 
     /**
-     * Whether or not to use the fast loader.
-     *
-     * @param enable True, if the fast loader should be used, false otherwise.
-     * @return A CorfuRuntime to support chaining.
-     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
-     */
-    @Deprecated
-    public CorfuRuntime setLoadSmrMapsAtConnect(boolean enable) {
-        log.warn("setLoadSmrMapsAtConnect: Deprecated, please set parameters instead");
-        parameters.setUseFastLoader(enable);
-        return this;
-    }
-
-    /**
      * Whether or not hole filling is disabled
      *
      * @param disable True, if hole filling should be disabled
@@ -1150,19 +1164,6 @@ public class CorfuRuntime {
     public CorfuRuntime setHoleFillingDisabled(boolean disable) {
         log.warn("setHoleFillingDisabled: Deprecated, please set parameters instead");
         parameters.setHoleFillingDisabled(disable);
-        return this;
-    }
-
-    /**
-     * Set the number of cache entries.
-     *
-     * @param numCacheEntries The number of cache entries.
-     * @deprecated Deprecated, set using {@link CorfuRuntimeParameters} instead.
-     */
-    @Deprecated
-    public CorfuRuntime setNumCacheEntries(long numCacheEntries) {
-        log.warn("setNumCacheEntries: Deprecated, please set parameters instead");
-        parameters.setNumCacheEntries(numCacheEntries);
         return this;
     }
 

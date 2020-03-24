@@ -1,115 +1,113 @@
 package org.corfudb.universe.group.cluster.vm;
 
-import com.jcraft.jsch.Channel;
-import com.jcraft.jsch.ChannelExec;
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.JSchException;
-import com.jcraft.jsch.Session;
+import lombok.Builder;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tools.ant.Project;
 import org.apache.tools.ant.taskdefs.optional.ssh.SSHExec;
 import org.apache.tools.ant.taskdefs.optional.ssh.Scp;
+import org.corfudb.universe.universe.vm.VmUniverseParams.Credentials;
+import org.corfudb.universe.util.IpAddress;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.Properties;
+import java.nio.file.Path;
+import java.util.UUID;
 
 
 /**
  * Provides the helper functions that do operations (copy file/execute command) on a remote machine.
  */
 @Slf4j
+@Builder
 public class RemoteOperationHelper {
     private static final Project PROJECT = new Project();
-    private static final RemoteOperationHelper INSTANCE = new RemoteOperationHelper();
 
-    private RemoteOperationHelper() {
-        //prevent creating class instances
-    }
+    @NonNull
+    private final Credentials credentials;
 
-    public static RemoteOperationHelper getInstance() {
-        return INSTANCE;
-    }
+    @NonNull
+    private final IpAddress ipAddress;
 
     /**
      * Copy a file from local computer to a remote computer
      *
-     * @param vmIpAddress remote computer ip address
-     * @param userName    remote user
-     * @param password    remote password
-     * @param localFile   local file
-     * @param remoteDir   remote directory
+     * @param localFile local file
+     * @param remoteDir remote directory
      */
-    public void copyFile(String vmIpAddress, String userName, String password, String localFile, String remoteDir) {
+    public void copyFile(Path localFile, Path remoteDir) {
         Scp scp = new Scp();
-
-        scp.setLocalFile(localFile);
-        scp.setTodir(userName + ":" + password + "@" + vmIpAddress + ":" + remoteDir);
         scp.setProject(PROJECT);
         scp.setTrust(true);
-        log.info("Copying {} to {} on {}", localFile, remoteDir, vmIpAddress);
+
+        scp.setLocalFile(localFile.toString());
+
+        String remoteDirUrl = String.format(
+                "%s:%s@%s:%s",
+                credentials.getUsername(), credentials.getPassword(), ipAddress, remoteDir
+        );
+        scp.setTodir(remoteDirUrl);
+
+        log.info("Copying {} to {} on {}", localFile, remoteDir, ipAddress);
+        scp.execute();
+    }
+
+    /**
+     * Download a file from a remote computer to the local computer
+     *
+     * @param localPath local path
+     * @param remotePath remote path
+     */
+    public void downloadFile(Path localPath, Path remotePath) {
+        Scp scp = new Scp();
+        scp.setProject(PROJECT);
+        scp.setTrust(true);
+
+        String remoteFileUrl = String.format(
+                "%s:%s@%s:%s",
+                credentials.getUsername(), credentials.getPassword(), ipAddress, remotePath
+        );
+
+        scp.setRemoteFile(remoteFileUrl);
+        scp.setLocalTofile(localPath.toString());
+
+        log.info("Downloading {} to {} from {} to local host", remotePath, localPath, ipAddress);
         scp.execute();
     }
 
     /**
      * Execute a shell command on a remote vm
      *
-     * @param vmIpAddress remote vm ip address
-     * @param userName    user name
-     * @param password    password
-     * @param command     shell command
+     * @param command shell command
      */
-    public void executeCommand(String vmIpAddress, String userName, String password, String command) {
+    public String executeCommand(String command) {
+        String commandId = "universe-framework-command-" + UUID.randomUUID().toString();
+
         SSHExec sshExec = new SSHExec();
 
-        sshExec.setUsername(userName);
-        sshExec.setPassword(password);
-        sshExec.setHost(vmIpAddress);
+        sshExec.setUsername(credentials.getUsername());
+        sshExec.setPassword(credentials.getPassword());
+        sshExec.setHost(ipAddress.getIp());
         sshExec.setCommand(command);
         sshExec.setProject(PROJECT);
         sshExec.setTrust(true);
-        log.info("Executing command: {}, on {}", command, vmIpAddress);
+
+        sshExec.setOutputproperty(commandId);
+
+        log.info("Executing command: {}, on {}", command, ipAddress);
         sshExec.execute();
+
+        return PROJECT.getProperty(commandId);
     }
 
     /**
      * Execute a shell command in sudo mode on a remote vm
      *
-     * @param vmIpAddress remote vm ip address
-     * @param userName    user name
-     * @param password    password
-     * @param command     shell command
+     * @param command shell command
      */
-    public void executeSudoCommand(String vmIpAddress, String userName, String password, String command)
-            throws JSchException, IOException {
-        Properties config = new Properties();
-        config.put("StrictHostKeyChecking", "no");
-        JSch jsch = new JSch();
-        Session session = null;
-        try {
-            session = jsch.getSession(userName, vmIpAddress, 22);
-            session.setPassword(password);
-            session.setConfig(config);
-            session.connect();
-            Channel channel = session.openChannel("exec");
-            log.info("Executing sudo command: {}, on {}", command, vmIpAddress);
-            ((ChannelExec) channel).setCommand("sudo -S -p '' " + command);
-            try (OutputStream out = channel.getOutputStream()) {
-
-                ((ChannelExec) channel).setPty(true);
-
-                channel.connect();
-                out.write((password + "\n").getBytes());
-                out.flush();
-            }
-        } finally {
-            if (session != null) {
-                try {
-                    session.disconnect();
-                } catch (Exception e) {
-                    //ignore
-                }
-            }
-        }
+    public String executeSudoCommand(String command) {
+        String cmdLine = String.format(
+                "echo %s | sudo -S -p '' %s",
+                credentials.getPassword(), command
+        );
+        return executeCommand(cmdLine);
     }
 }

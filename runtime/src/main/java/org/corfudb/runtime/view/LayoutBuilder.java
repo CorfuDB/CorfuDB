@@ -1,18 +1,17 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.LayoutModificationException;
+import org.corfudb.runtime.view.Layout.LayoutSegment;
+import org.corfudb.runtime.view.Layout.LayoutStripe;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.runtime.view.Layout.LayoutStripe;
 
 /**
  * A builder that allows us to make modifications to a layout and construct
@@ -53,12 +52,12 @@ public class LayoutBuilder {
     }
 
     /**
-     * Clears the existing unresponsive servers.
-     *
-     * @return this builder
+     * Set layout's segments.
+     * @param segments List of segments.
+     * @return This builder.
      */
-    public LayoutBuilder clearUnResponsiveServers() {
-        layout.getUnresponsiveServers().clear();
+    public LayoutBuilder setSegments(@NonNull List<LayoutSegment> segments){
+        layout.setSegments(segments);
         return this;
     }
 
@@ -188,11 +187,14 @@ public class LayoutBuilder {
     }
 
     /**
-     * Adds a new logunit server.
-     * For every segment the start address is inclusive and the end is exclusive.
-     * The latest open segment (which has its end address as infinity) is now closed at address
-     * 'globalLogTail' (exclusive).
-     * A new segment is opened for all future writes. The segment starts at 'globalLogTail' and
+     * Adds a new log unit server.
+     * If the last segment's start address is equal to 'globalLogTail' + 1,
+     * this segment does not have any new data, so it does not need to be split.
+     * Add a new log unit endpoint to this segment's specified stripe index.
+     * Otherwise, split the latest open segment, such that the the latest open segment
+     * (which has its end address as infinity) is now closed at address
+     * 'globalLogTail' + 1 and a new segment is opened for all the future writes.
+     * This new open segment starts at exclusive 'globalLogTail' + 1 and
      * ends at infinity. This new segment contains the new logunit server to be added in the
      * specified stripe.
      *
@@ -204,30 +206,47 @@ public class LayoutBuilder {
     public LayoutBuilder addLogunitServer(int stripeIndex, long globalLogTail,
                                           @NonNull String newLogunitEndpoint) {
         List<LayoutSegment> layoutSegmentList = layout.getSegments();
-        LayoutSegment segmentToSplit = layoutSegmentList.remove(layoutSegmentList.size() - 1);
+        LayoutSegment lastSegment = layoutSegmentList.remove(layoutSegmentList.size() - 1);
+
+        // No need to split the segment, just add the new log unit endpoint at the specified index.
+        if (lastSegment.getStart() == globalLogTail + 1) {
+            ImmutableList<String> logServers = new ImmutableList.Builder<String>()
+                    .addAll(lastSegment.getStripes().get(stripeIndex).getLogServers())
+                    .add(newLogunitEndpoint)
+                    .build();
+            LayoutStripe newStripe = new LayoutStripe(logServers);
+            List<LayoutStripe> newStripeList = new ArrayList<>(lastSegment.getStripes());
+            newStripeList.remove(stripeIndex);
+            newStripeList.add(stripeIndex, newStripe);
+            LayoutSegment openSegment = new LayoutSegment(lastSegment.getReplicationMode(),
+                    lastSegment.getStart(),
+                    lastSegment.getEnd(),
+                    newStripeList);
+            layoutSegmentList.add(layoutSegmentList.size(), openSegment);
+            return this;
+        }
 
         // Close the existing segment with the provided globalLogTail.
-        LayoutSegment closedSegment = new LayoutSegment(segmentToSplit.getReplicationMode(),
-                segmentToSplit.getStart(),
+        LayoutSegment closedSegment = new LayoutSegment(lastSegment.getReplicationMode(),
+                lastSegment.getStart(),
                 globalLogTail + 1,
-                segmentToSplit.getStripes());
+                lastSegment.getStripes());
 
-        List<String> logunitServerList = new ArrayList<>();
-        logunitServerList.addAll(segmentToSplit.getStripes()
-                .get(stripeIndex)
-                .getLogServers());
+        List<String> logunitServerList = new ArrayList<>(
+                lastSegment.getStripes()
+                        .get(stripeIndex)
+                        .getLogServers());
         logunitServerList.add(newLogunitEndpoint);
 
         // Create new stripe list with the new logunit server added.
         LayoutStripe newStripe = new LayoutStripe(logunitServerList);
-        List<LayoutStripe> newStripeList = new ArrayList<>();
-        newStripeList.addAll(segmentToSplit.getStripes());
+        List<LayoutStripe> newStripeList = new ArrayList<>(lastSegment.getStripes());
         newStripeList.remove(stripeIndex);
         newStripeList.add(stripeIndex, newStripe);
 
-        LayoutSegment openSegment = new LayoutSegment(segmentToSplit.getReplicationMode(),
+        LayoutSegment openSegment = new LayoutSegment(lastSegment.getReplicationMode(),
                 globalLogTail + 1,
-                segmentToSplit.getEnd(),
+                lastSegment.getEnd(),
                 newStripeList);
         layoutSegmentList.add(layoutSegmentList.size(), closedSegment);
         layoutSegmentList.add(layoutSegmentList.size(), openSegment);

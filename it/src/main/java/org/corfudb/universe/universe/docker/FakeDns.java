@@ -2,6 +2,7 @@ package org.corfudb.universe.universe.docker;
 
 import com.google.common.base.Throwables;
 import com.google.common.net.InetAddresses;
+import org.corfudb.util.Utils;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
@@ -30,7 +31,7 @@ import java.util.NoSuchElementException;
  * DNS-related scenarios.
  */
 public class FakeDns {
-    private static FakeDns instance = new FakeDns();
+    private static final FakeDns instance = new FakeDns();
 
     private final Map<String, InetAddress> forwardResolutions = new HashMap<>();
 
@@ -50,10 +51,6 @@ public class FakeDns {
 
     public synchronized void addForwardResolution(String hostname, InetAddress ip) {
         forwardResolutions.put(hostname, ip);
-    }
-
-    public synchronized void addReverseResolution(InetAddress ip, String hostname) {
-        reverseResolutions.put(ip, hostname);
     }
 
     /**
@@ -141,7 +138,7 @@ public class FakeDns {
                 method.setAccessible(true);
                 return (InetAddress[]) method.invoke(fallbackNameService, host);
             } catch (ReflectiveOperationException | NoSuchElementException | SecurityException e) {
-                Throwables.propagateIfPossible(e.getCause(), UnknownHostException.class);
+                Throwables.propagateIfPossible(Utils.extractCauseWithCompleteStacktrace(e), UnknownHostException.class);
                 throw new AssertionError("unexpected reflection issue", e);
             }
         }
@@ -167,7 +164,7 @@ public class FakeDns {
                 method.setAccessible(true);
                 return (String) method.invoke(fallbackNameService, (Object) addr);
             } catch (ReflectiveOperationException | NoSuchElementException | SecurityException e) {
-                Throwables.propagateIfPossible(e.getCause(), UnknownHostException.class);
+                Throwables.propagateIfPossible(Utils.extractCauseWithCompleteStacktrace(e), UnknownHostException.class);
                 throw new AssertionError("unexpected reflection issue", e);
             }
         }

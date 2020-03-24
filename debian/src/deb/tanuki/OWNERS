@@ -2,9 +2,9 @@ matchers:
 - suffix: .conf
   owners:
   - group/Tanuki Owners
-- exact: debian/src/deb/tanuki/corfu-server-inmem-wrapper
+- exact: debian/src/deb/tanuki/corfu-nonconfig-server-inmem-wrapper
   owners:
   - group/Tanuki Owners
-- exact: debian/src/deb/tanuki/corfu-server-wrapper
+- exact: debian/src/deb/tanuki/corfu-nonconfig-server-wrapper
   owners:
   - group/Tanuki Owners

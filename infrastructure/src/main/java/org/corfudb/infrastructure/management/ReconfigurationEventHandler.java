@@ -71,8 +71,8 @@ public class ReconfigurationEventHandler {
 
         // Try to estimate a reasonable timeout to rebuild the logging unit
         Token trimMark = runtime.getAddressSpaceView().getTrimMark();
-        // TODO: Consider requesting just the global tail from sequencer than fetching all the stream tails.
-        long tail = runtime.getAddressSpaceView().getAllTails().getLogTail();
+
+        long tail = runtime.getAddressSpaceView().getLogTail();
 
         long rangeToReplicate = tail - trimMark.getSequence();
         // Since the orchestrator client and the fault detector client use
@@ -122,20 +122,21 @@ public class ReconfigurationEventHandler {
     }
 
     /**
-     * Launches a workflow to restore redundancy and merge all segments.
-     * This method sends an orchestrator request to restore redundancy and merge all segments. This task is run
-     * asynchronously by the failure detector if it detects multiple segments in the layout.
+     * Launches a workflow to restore redundancy and merge all the segments for the current endpoint.
+     * This task sends an orchestrator request to the current endpoint orchestrator to run this workflow.
+     * The task is run asynchronously by the failure detector if it detects that:
+     * 1. The current node is not present in the unresponsive list.
+     * 2. The current node requires state transfer or the segments of the layout can be merged.
      * This is a blocking task and will complete if the workflow completes with a success or a failure.
-     * To avoid multiple workflow being submitted by different management agents, the management agents need to
-     * deterministically provide the same identifiable endpoint to the orchestrator. In this case, we choose the
-     * last added endpoint in the first stripe.
      *
+     * @param currentEndpoint   A current endpoint.
      * @param runtime           Connected corfu runtime instance.
      * @param layout            Latest known layout.
      * @param retryQueryTimeout Timeout to poll for workflow status.
      * @return True if workflow completed successfully. False otherwise.
      */
-    public static boolean handleMergeSegments(@Nonnull CorfuRuntime runtime,
+    public static boolean handleMergeSegments(@Nonnull String currentEndpoint,
+                                              @Nonnull CorfuRuntime runtime,
                                               @Nonnull Layout layout,
                                               @Nonnull Duration retryQueryTimeout) {
 
@@ -146,11 +147,8 @@ public class ReconfigurationEventHandler {
             log.info("handleMergeSegments: Workflow to merge segments for layout {} timeout set to {} ms",
                     layout, workflowTimeout);
 
-            // Multiple invocations of this workflow can be avoided if the workflow are mapped to the same endpoint.
-            // Thus to deterministically choose an endpoint we always choose the last added log unit in the first
-            // stripe.
             runtime.getManagementView().mergeSegments(
-                    layout.getLastAddedNodeInLastSegment(),
+                    currentEndpoint,
                     workflowRetries,
                     workflowTimeout,
                     retryQueryTimeout);

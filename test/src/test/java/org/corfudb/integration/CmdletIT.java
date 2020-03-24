@@ -3,7 +3,7 @@ package org.corfudb.integration;
 import java.util.UUID;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.SMRMap;
+import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Ignore;
@@ -126,14 +126,12 @@ public class CmdletIT extends AbstractIT {
 
         final String command = CORFU_PROJECT_DIR + "bin/corfu_query " + ENDPOINT;
         final String expectedLogPath = "--log-path=" + CORFU_LOG_PATH;
-        final String expectedInitialToken = "--initial-token=-1";
         final String expectedStartupArgs = new CorfuServerRunner()
                 .setPort(PORT)
                 .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, PORT))
                 .getOptionsString();
         String output = runCmdletGetOutput(command);
         assertThat(output.contains(expectedLogPath)).isTrue();
-        assertThat(output.contains(expectedInitialToken)).isTrue();
         assertThat(output.contains(expectedStartupArgs)).isTrue();
         shutdownCorfuServer(corfuServerProcess);
     }
@@ -148,7 +146,7 @@ public class CmdletIT extends AbstractIT {
 
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
         final String streamA = "streamA";
-        CorfuRuntime runtime = createRuntime(ENDPOINT);
+        runtime = createRuntime(ENDPOINT);
         IStreamView streamViewA = runtime.getStreamsView().get(CorfuRuntime.getStreamID(streamA));
 
         String payload1 = "Hello";
@@ -178,13 +176,12 @@ public class CmdletIT extends AbstractIT {
 
         corfuServerProcess = new CorfuServerRunner().setPort(PORT).runServer();
         final String streamA = "streamA";
-        CorfuRuntime runtime = createRuntime(ENDPOINT);
+        runtime = createRuntime(ENDPOINT);
 
         String commandNextToken = CORFU_PROJECT_DIR + "bin/corfu_sequencer -i " + streamA + " -c " + ENDPOINT + " next-token 3";
         runCmdletGetOutput(commandNextToken);
 
-        Token token = runtime.getSequencerView()
-                .query(CorfuRuntime.getStreamID(streamA)).getToken();
+        Token token = runtime.getSequencerView().query().getToken();
 
         String commandLatest = CORFU_PROJECT_DIR + "bin/corfu_sequencer -i " + streamA + " -c " + ENDPOINT + " latest";
         String output = runCmdletGetOutput(commandLatest);
@@ -273,7 +270,7 @@ public class CmdletIT extends AbstractIT {
 
         assertThat(runCmdletGetOutput(command).contains(expectedOutput)).isTrue();
 
-        CorfuRuntime runtime = createRuntime(ENDPOINT);
+        runtime = createRuntime(ENDPOINT);
         IStreamView streamViewA = runtime.getStreamsView().get(CorfuRuntime.getStreamID("streamA"));
         assertThat(streamViewA.hasNext())
                 .isFalse();
@@ -308,13 +305,13 @@ public class CmdletIT extends AbstractIT {
         final String commandPut = CORFU_PROJECT_DIR + "bin/corfu_smrobject" +
                 " -i " + streamA +
                 " -c " + ENDPOINT +
-                " " + SMRMap.class.getCanonicalName() + " putIfAbsent x " + payload;
+                " " + CorfuTable.class.getCanonicalName() + " putIfAbsent x " + payload;
         runCmdletGetOutput(commandPut);
 
         final String commandGet = CORFU_PROJECT_DIR + "bin/corfu_smrobject" +
                 " -i " + streamA +
                 " -c " + ENDPOINT +
-                " " + SMRMap.class.getCanonicalName() + " getOrDefault x none";
+                " " + CorfuTable.class.getCanonicalName() + " getOrDefault x none";
 
         assertThat(runCmdletGetOutput(commandGet).contains(payload)).isTrue();
 

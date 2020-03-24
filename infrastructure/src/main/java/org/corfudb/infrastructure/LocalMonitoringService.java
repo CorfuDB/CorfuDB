@@ -38,7 +38,7 @@ class LocalMonitoringService implements MonitoringService {
                            @NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource) {
         this.serverContext = serverContext;
         this.runtimeSingletonResource = runtimeSingletonResource;
-        sequencerMetricsHolder = new AtomicReference<>();
+        sequencerMetricsHolder = new AtomicReference<>(UNKNOWN);
 
         this.pollingService = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
@@ -73,7 +73,7 @@ class LocalMonitoringService implements MonitoringService {
                 .requestMetrics()
                 //Handle possible exceptions and transform to the sequencer status
                 .exceptionally(ex -> {
-                    if (ex instanceof ServerNotReadyException) {
+                    if (ex.getCause() instanceof ServerNotReadyException) {
                         return SequencerMetrics.NOT_READY;
                     }
 

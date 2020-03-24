@@ -1,18 +1,16 @@
 package org.corfudb.runtime.view.replication;
 
-import java.util.AbstractMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-import javax.annotation.Nonnull;
-
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.RuntimeLayout;
 
+import javax.annotation.Nonnull;
+import java.util.List;
+import java.util.Map;
 
-/** The public interface to a replication protocol.
+
+/**
+ * The public interface to a replication protocol.
  *
  * <p>A replication protocol exposes three public functions, which
  * permit reading and writing to the log.
@@ -21,7 +19,8 @@ import org.corfudb.runtime.view.RuntimeLayout;
  */
 public interface IReplicationProtocol {
 
-    /** Write data to the log at the given address.
+    /**
+     * Write data to the log at the given address.
      *
      * <p>This function blocks until -a- write at the global address
      * is committed to the log.
@@ -32,29 +31,30 @@ public interface IReplicationProtocol {
      * <p>If the write which was committed to the log was not the result
      * of this call, an OverwriteException is thrown.
      *
-     * @param  runtimeLayout        The RuntimeLayout stamped with layout to use for the write.
-     * @param  data                 The ILogData to write to the log.
-     * @throws OverwriteException   If a write was committed to the log and
-     *                              it was not the result of this call.
+     * @param runtimeLayout the RuntimeLayout stamped with layout to use for the write.
+     * @param data          the ILogData to write to the log.
+     * @throws OverwriteException If a write was committed to the log and
+     *                            it was not the result of this call.
      */
     void write(RuntimeLayout runtimeLayout, ILogData data) throws OverwriteException;
 
-    /** Read data from a given address.
+    /**
+     * Read data from a given address.
      *
      * <p>This function only returns committed data. If the
      * address given has not committed, the implementation may
      * either block until it is committed, or commit a hole filling
      * entry to that address.
      *
-     * @param runtimeLayout        The RuntimeLayout stamped with layout to use for the read.
-     * @param globalAddress        The global address to read the data from.
-     * @return                     The data that was committed at the
-     *                             given global address, committing a hole
-     *                             filling entry if necessary.
+     * @param runtimeLayout the RuntimeLayout stamped with layout to use for the read.
+     * @param globalAddress the global address to read the data from.
+     * @return the data committed at the given global address, hole filling if necessary.
      */
-    @Nonnull ILogData read(RuntimeLayout runtimeLayout, long globalAddress);
+    @Nonnull
+    ILogData read(RuntimeLayout runtimeLayout, long globalAddress);
 
-    /** Read data from all the given addresses.
+    /**
+     * Read data from all the given addresses.
      *
      * <p>This method functions exactly like a read, except
      * that it returns the result for multiple addresses.
@@ -63,73 +63,30 @@ public interface IReplicationProtocol {
      * bulk request, but the default implementation
      * just performs multiple reads (possible in parallel).
      *
-     * @param runtimeLayout         The RuntimeLayout stamped with layout to use for the readAll.
-     * @param globalAddresses       A list of addresses to read from.
-     * @return                      A map of addresses to committed
-     *                              addresses, hole filling if necessary.
+     * @param runtimeLayout the RuntimeLayout stamped with layout to use for the read.
+     * @param addresses     a list of addresses to read from.
+     * @param waitForWrite  flag whether wait for write is required or hole fill directly.
+     * @param cacheOnServer whether the fetch results should be cached on log unit server.
+     * @return a map of addresses to data commit at these address, hole filling if necessary.
      */
-    default @Nonnull
-            Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout, List<Long> globalAddresses) {
-        return globalAddresses.parallelStream()
-                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(runtimeLayout, a)))
-                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
-    }
+    @Nonnull
+    Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout,
+                                List<Long> addresses,
+                                boolean waitForWrite,
+                                boolean cacheOnServer);
 
-    /** Read data from a range.
-     *
-     * <p>This method functions exactly like a readAll, except
-     * that it returns the result for a range of addresses.
-     *
-     * <p>An implementation may optimize for this type of
-     * bulk request, but the default implementation
-     * just performs multiple reads (possible in parallel).
-     *
-     * @param runtimeLayout         The RuntimeLayout stamped with layout to use for the readRange.
-     * @param globalAddresses       A list of addresses to read from.
-     * @return                      A map of addresses to committed
-     *                              addresses, hole filling if necessary.
-     */
-    default @Nonnull
-    Map<Long, ILogData> readRange(RuntimeLayout runtimeLayout, Set<Long> globalAddresses) {
-        return globalAddresses.parallelStream()
-                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, read(runtimeLayout, a)))
-                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
-    }
-
-    /** Peek data from a given address.
+    /**
+     * Peek data from a given address.
      *
      * <p>This function -may- return null if there was no entry
      * committed at the given global address, otherwise it
      * returns committed data at the given global address. It
      * does not attempt to hole fill if there was no entry.
      *
-     * @param runtimeLayout        The RuntimeLayout stamped with layout to use for the peek.
-     * @param globalAddress        The global address to peek from.
-     * @return                     The data that was committed at the
-     *                             given global address, or NULL, if
-     *                             there was no entry committed.
+     * @param runtimeLayout the RuntimeLayout stamped with layout to use for the peek.
+     * @param globalAddress the global address to peek from.
+     * @return the data that was committed at the given global address, or NULL, if
+     * there was no entry committed.
      */
     ILogData peek(RuntimeLayout runtimeLayout, long globalAddress);
-
-    /** Peek data from all the given addresses.
-     *
-     * <p>This method functions exactly like a peek, except
-     * that it returns the result for multiple addresses.
-     *
-     * <p>An implementation may optimize for this type of
-     * bulk request, but the default implementation
-     * just performs multiple peeks (possibly in parallel).
-     *
-     * @param runtimeLayout         The RuntimeLayout stamped with layout to use for the peekAll.
-     * @param globalAddresses       A set of addresses to read from.
-     * @return                      A map of addresses to uncommitted
-     *                              addresses, without hole filling.
-     */
-    default @Nonnull Map<Long, ILogData> peekAll(RuntimeLayout runtimeLayout,
-                                                 Set<Long> globalAddresses) {
-        return globalAddresses.parallelStream()
-                .map(a -> new AbstractMap.SimpleImmutableEntry<>(a, peek(runtimeLayout, a)))
-                .collect(Collectors.toMap(r -> r.getKey(), r -> r.getValue()));
-    }
-
 }

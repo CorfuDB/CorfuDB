@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -10,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -24,7 +26,7 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
 
     private Map<Long, LogData> logCache;
-    private Set<Long> trimmed;
+    private final Set<Long> trimmed;
     private volatile long startingAddress;
     private volatile LogMetadata logMetadata;
 
@@ -32,7 +34,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
      * Returns an object that stores a stream log in memory.
      */
     public InMemoryStreamLog() {
-        logCache = new ConcurrentHashMap();
+        logCache = new ConcurrentHashMap<>();
         trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
         logMetadata = new LogMetadata();
@@ -46,7 +48,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             }
 
             logCache.put(entry.getGlobalAddress(), entry);
-            logMetadata.update(entry);
+            logMetadata.update(entry, false);
         }
     }
 
@@ -60,7 +62,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             throwLogUnitExceptionsIfNecessary(address, entry);
         }
         logCache.put(address, entry);
-        logMetadata.update(entry);
+        logMetadata.update(entry, false);
     }
 
     private boolean isTrimmed(long address) {
@@ -73,16 +75,38 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
             log.warn("prefixTrim: Ignoring repeated trim {}", address);
         } else {
             startingAddress = address + 1;
+
+            // Trim address space maps.
+            logMetadata.prefixTrim(address);
         }
     }
 
     @Override
-    public synchronized TailsResponse getTails() {
+    public synchronized TailsResponse getTails(List<UUID> streams) {
+        Map<UUID, Long> tails = new HashMap<>(streams.size());
+        for(UUID stream: streams) {
+            tails.put(stream, logMetadata.getStreamTails().get(stream));
+        }
+        return new TailsResponse(logMetadata.getGlobalTail(), tails);
+    }
+
+    @Override
+    public synchronized long getLogTail() {
+        return logMetadata.getGlobalTail();
+    }
+
+    @Override
+    public synchronized TailsResponse getAllTails() {
         Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails().size());
         for (Map.Entry<UUID, Long> entry : logMetadata.getStreamTails().entrySet()) {
             tails.put(entry.getKey(), entry.getValue());
         }
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
+    }
+
+    @Override
+    public synchronized StreamsAddressResponse getStreamsAddressSpace() {
+        return new StreamsAddressResponse(logMetadata.getGlobalTail(), logMetadata.getStreamsAddressSpaceMap());
     }
 
     @Override
@@ -101,6 +125,26 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         }
     }
 
+    /**
+     * Returns the known addresses in this Log Unit in the specified consecutive
+     * range of addresses.
+     *
+     * @param rangeStart Start address of range.
+     * @param rangeEnd   End address of range.
+     * @return Set of known addresses.
+     */
+    @Override
+    public Set<Long> getKnownAddressesInRange(long rangeStart, long rangeEnd) {
+
+        Set<Long> result = new HashSet<>();
+        for (long address = rangeStart; address <= rangeEnd; address++) {
+            if (logCache.containsKey(address)) {
+                result.add(address);
+            }
+        }
+        return result;
+    }
+
     @Override
     public LogData read(long address) {
         if (isTrimmed(address)) {
@@ -117,12 +161,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
 
     @Override
     public void close() {
-        logCache = new HashMap();
-    }
-
-    @Override
-    public void release(long address, LogData entry) {
-        // in memory, do nothing
+        logCache = new HashMap<>();
     }
 
     @Override

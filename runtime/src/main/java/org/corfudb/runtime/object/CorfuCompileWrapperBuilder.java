@@ -1,9 +1,10 @@
 package org.corfudb.runtime.object;
 
-import java.lang.reflect.Constructor;
 import java.util.UUID;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.SMRObject;
+import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.serializer.ISerializer;
 
 /**
@@ -12,6 +13,7 @@ import org.corfudb.util.serializer.ISerializer;
  * <p>Created by mwei on 11/11/16.
  */
 public class CorfuCompileWrapperBuilder {
+
 
     /**
      * Returns a wrapper for the underlying SMR Object
@@ -27,44 +29,23 @@ public class CorfuCompileWrapperBuilder {
      * @throws IllegalAccessException Illegal Access to the Object.
      * @throws InstantiationException Cannot instantiate the object using the arguments and class.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
-    public static <T> T getWrapper(Class<T> type, CorfuRuntime rt,
-                                   UUID streamID, Object[] args,
-                                   ISerializer serializer)
-            throws ClassNotFoundException, IllegalAccessException,
-            InstantiationException {
+    @SuppressWarnings("checkstyle:abbreviation")
+    public static <T extends ICorfuSMR<T>> T getWrapper(Class<T> type, CorfuRuntime rt,
+                                                         UUID streamID, Object[] args,
+                                                         ISerializer serializer)
+            throws Exception {
         // Do we have a compiled wrapper for this type?
         Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>)
                 Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);
 
         // Instantiate a new instance of this class.
-        ICorfuSMR<T> wrapperObject = null;
-        if (args == null || args.length == 0) {
-            wrapperObject = wrapperClass.newInstance();
-        } else {
-            // This loop is not ideal, but the easiest way to get around Java
-            // boxing, which results in primitive constructors not matching.
-            for (Constructor<?> constructor : wrapperClass
-                    .getDeclaredConstructors()) {
-                try {
-                    wrapperObject = (ICorfuSMR<T>) constructor
-                            .newInstance(args);
-                    break;
-                } catch (Exception e) {
-                    // just keep trying until one works.
-                }
-            }
-        }
+        ICorfuSMR<T> wrapperObject = (ICorfuSMR<T>) ReflectionUtils.
+                findMatchingConstructor(wrapperClass.getDeclaredConstructors(), args);
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
-        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
-                type, args, serializer,
-                wrapperObject.getCorfuSMRUpcallMap(),
-                wrapperObject.getCorfuUndoMap(),
-                wrapperObject.getCorfuUndoRecordMap(),
-                wrapperObject.getCorfuResetSet()));
+        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<T>(rt, streamID,
+                type, args, serializer, wrapperObject));
 
         if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
             ((ICorfuSMRProxyWrapper) wrapperObject)
@@ -72,5 +53,13 @@ public class CorfuCompileWrapperBuilder {
         }
 
         return (T) wrapperObject;
+    }
+
+    public static <T extends ICorfuSMR<T>> T getWrapper(SMRObject<T> smrObject) throws Exception {
+        return getWrapper(smrObject.getType(),
+                smrObject.getRuntime(),
+                smrObject.getStreamID(),
+                smrObject.getArguments(),
+                smrObject.getSerializer());
     }
 }

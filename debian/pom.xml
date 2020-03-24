@@ -5,11 +5,15 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.2.2.20190222082048.796</version>
+        <version>${revision}</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>nsx-corfu</artifactId>
+
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -20,6 +24,11 @@
         <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>cmdlets</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.corfudb</groupId>
+            <artifactId>corfudb-tools</artifactId>
             <version>${project.version}</version>
         </dependency>
         <!-- make debian the last module in maven lifecycle -->
@@ -58,9 +67,29 @@
                                         <filemode>750</filemode>
                                     </mapper>
                                 </data>
+                                <data>
+                                    <src>src/deb/init.d/corfu-nonconfig-server</src>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/etc/init.d</prefix>
+                                        <group>corfu</group>
+                                        <filemode>750</filemode>
+                                    </mapper>
+                                </data>
                                 <!-- systemd service script -->
                                 <data>
                                     <src>src/deb/systemd/corfu-server.service</src>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/lib/systemd/system</prefix>
+                                        <group>corfu</group>
+                                        <filemode>644</filemode>
+                                    </mapper>
+                                </data>
+                                <data>
+                                    <src>src/deb/systemd/corfu-nonconfig-server.service</src>
                                     <type>file</type>
                                     <mapper>
                                         <type>perm</type>
@@ -82,6 +111,27 @@
                                 </data>
                                 <data>
                                     <src>${session.executionRootDirectory}/infrastructure/src/main/resources/logback.prod.xml</src>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/usr/share/corfu/conf</prefix>
+                                        <group>corfu</group>
+                                        <filemode>750</filemode>
+                                    </mapper>
+                                </data>
+                                <!-- dependency of corfudb-tools is included -->
+                                <data>
+                                    <src>${session.executionRootDirectory}/corfudb-tools/target/corfudb-tools-${project.version}-shaded.jar</src>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/usr/share/corfu/lib</prefix>
+                                        <group>corfu</group>
+                                        <filemode>750</filemode>
+                                    </mapper>
+                                </data>
+                                <data>
+                                    <src>${session.executionRootDirectory}/infrastructure/src/main/resources/corfu-nonconfig-logback.prod.xml</src>
                                     <type>file</type>
                                     <mapper>
                                         <type>perm</type>
@@ -134,6 +184,16 @@
                                         <filemode>750</filemode>
                                     </mapper>
                                 </data>
+                                <data>
+                                    <src>${session.executionRootDirectory}/debian/src/deb/tanuki/corfu-nonconfig-server-wrapper</src>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/usr/tanuki/bin</prefix>
+                                        <group>corfu</group>
+                                        <filemode>750</filemode>
+                                    </mapper>
+                                </data>
                                 <!-- tanuki configure -->
                                 <data>
                                     <src>${session.executionRootDirectory}/debian/src/deb/tanuki/corfu-server-wrapper.conf</src>
@@ -156,7 +216,7 @@
                                     </mapper>
                                 </data>
                                 <data>
-                                    <src>${session.executionRootDirectory}/debian/src/deb/tanuki/corfu-server-wrapper_multirole.conf</src>
+                                    <src>${session.executionRootDirectory}/debian/src/deb/tanuki/corfu-server-wrapper_converged_app.conf</src>
                                     <type>file</type>
                                     <mapper>
                                         <type>perm</type>
@@ -166,7 +226,27 @@
                                     </mapper>
                                 </data>
                                 <data>
-                                    <src>${session.executionRootDirectory}/debian/src/deb/tanuki/corfu-server-wrapper_converged_app.conf</src>
+                                    <src>${session.executionRootDirectory}/debian/src/deb/tanuki/corfu-server-wrapper_converged_app_24gb.conf</src>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/usr/tanuki/conf</prefix>
+                                        <group>corfu</group>
+                                        <filemode>644</filemode>
+                                    </mapper>
+                                </data>
+                                <data>
+                                    <src>${session.executionRootDirectory}/debian/src/deb/tanuki/corfu-nonconfig-server-wrapper.conf</src>
+                                    <type>file</type>
+                                    <mapper>
+                                        <type>perm</type>
+                                        <prefix>/usr/tanuki/conf</prefix>
+                                        <group>corfu</group>
+                                        <filemode>644</filemode>
+                                    </mapper>
+                                </data>
+                                <data>
+                                    <src>${session.executionRootDirectory}/debian/src/deb/tanuki/corfu-nonconfig-server-wrapper_profile.conf</src>
                                     <type>file</type>
                                     <mapper>
                                         <type>perm</type>

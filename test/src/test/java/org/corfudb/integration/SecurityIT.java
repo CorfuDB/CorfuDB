@@ -112,7 +112,7 @@ public class SecurityIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServerTls();
 
         // Start a Corfu runtime
-        CorfuRuntime corfuRuntime = new CorfuRuntime(singleNodeEndpoint)
+        runtime = new CorfuRuntime(singleNodeEndpoint)
                                     .enableTls(runtimePathToKeyStore,
                                                runtimePathToKeyStorePassword,
                                                runtimePathToTrustStore,
@@ -121,7 +121,7 @@ public class SecurityIT extends AbstractIT {
                                     .connect();
 
         // Create CorfuTable
-        CorfuTable testTable = corfuRuntime
+        CorfuTable testTable = runtime
                 .getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
@@ -173,12 +173,12 @@ public class SecurityIT extends AbstractIT {
                 .build();
 
         // Start a Corfu runtime from parameters
-        CorfuRuntime corfuRuntime = CorfuRuntime
+        runtime = CorfuRuntime
                 .fromParameters(runtimeParameters)
                 .connect();
 
         // Create CorfuTable
-        CorfuTable testTable = corfuRuntime
+        CorfuTable testTable = runtime
                 .getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
@@ -214,7 +214,7 @@ public class SecurityIT extends AbstractIT {
     @Test(expected = UnrecoverableCorfuError.class)
     public void testIncorrectKeyStoreException() throws Exception {
         // Run a corfu server with incorrect truststore
-        Process corfuServer = runSinglePersistentServerTls();
+        runSinglePersistentServerTls();
 
         // Start a Corfu runtime with incorrect truststore
         final CorfuRuntime.CorfuRuntimeParameters runtimeParameters = CorfuRuntime.CorfuRuntimeParameters
@@ -228,8 +228,6 @@ public class SecurityIT extends AbstractIT {
                 .build();
 
         // Connecting to runtime
-        CorfuRuntime corfuRuntime = CorfuRuntime
-                .fromParameters(runtimeParameters)
-                .connect();
+        runtime = CorfuRuntime.fromParameters(runtimeParameters).connect();
     }
 }

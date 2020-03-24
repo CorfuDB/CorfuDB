@@ -1,9 +1,12 @@
 package org.corfudb.infrastructure;
 
-import org.assertj.core.api.Assertions;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.junit.Test;
+
+import java.util.concurrent.CompletableFuture;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 12/14/15.
@@ -22,15 +25,8 @@ public class BaseServerTest extends AbstractServerTest {
 
     @Test
     public void testPing() {
-        sendMessage(new CorfuMsg(CorfuMsgType.PING));
-        Assertions.assertThat(getLastMessage().getMsgType())
-                .isEqualTo(CorfuMsgType.PONG);
+        CompletableFuture<Boolean> res = sendRequest(new CorfuMsg(CorfuMsgType.PING));
+        assertThat(res.join()).isTrue();
     }
 
-    @Test
-    public void shutdownServerDoesNotRespond() {
-        getDefaultServer().shutdown();
-        sendMessage(new CorfuMsg(CorfuMsgType.PING));
-        Assertions.assertThat(getLastMessage()).isNull();
-    }
 }

@@ -19,7 +19,8 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public class ReloadableTrustManager implements X509TrustManager {
-    private String trustStorePath, trustPasswordPath;
+    private final String trustStorePath;
+    private final String trustPasswordPath;
     private X509TrustManager trustManager;
 
     /**

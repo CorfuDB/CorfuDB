@@ -20,9 +20,11 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
+import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.management.NetworkStretcher;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
-import org.corfudb.protocols.wireprotocol.SequencerTailsRecoveryMsg;
+import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.BaseHandler;
@@ -33,11 +35,14 @@ import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.exceptions.OutrankedException;
+
 import org.corfudb.util.NodeLocator;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -92,11 +97,16 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     /** Initialize the AbstractViewTest. */
     public AbstractViewTest() {
+        this(false);
+    }
+
+    public AbstractViewTest(boolean followBackpointers) {
         // Force all new CorfuRuntimes to override the getRouterFn
         CorfuRuntime.overrideGetRouterFunction = this::getRouterFunction;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
-            .nettyEventLoop(NETTY_EVENT_LOOP)
-            .build());
+                .followBackpointersEnabled(followBackpointers)
+                .nettyEventLoop(NETTY_EVENT_LOOP)
+                .build());
         // Default number of times to read before hole filling to 0
         // (most aggressive, to surface concurrency issues).
         runtime.getParameters().setHoleFillRetry(0);
@@ -169,9 +179,12 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     @After
     public void cleanupBuffers() {
-        testServerMap.values().forEach(x -> {
-            x.getLogUnitServer().shutdown();
-            x.getManagementServer().shutdown();
+        testServerMap.values().forEach(server -> {
+            server.getLogUnitServer().shutdown();
+            server.getManagementServer().shutdown();
+            server.getLayoutServer().shutdown();
+            server.getSequencerServer().shutdown();
+            server.getBaseServer().shutdown();
         });
         // Abort any active transactions...
         while (runtime.getObjectsView().TXActive()) {
@@ -181,17 +194,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtimeRouterMap.keySet().forEach(CorfuRuntime::shutdown);
         runtimeRouterMap.clear();
         testServerMap.clear();
-    }
-
-    /** Add a server at a specific port, using the given configuration options.
-     *
-     * @param port      The port to use.
-     * @param config    The configuration to use for the server.
-     */
-    public void addServer(int port, Map<String, Object> config) {
-        ServerContext sc = new ServerContext(config);
-        sc.setServerRouter(new TestServerRouter(port));
-        addServer(port, sc);
+        runtime.shutdown();
     }
 
     /**
@@ -208,7 +211,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param port      The port to use.
      */
     public void addServer(int port) {
-        new TestServer(new ServerContextBuilder().setSingle(false).setServerRouter(new TestServerRouter(port)).setPort(port).build()).addToTest(port, this);
+        new TestServer(new ServerContextBuilder().setSingle(false)
+            .setServerRouter(new TestServerRouter(port))
+            .setPort(port).build())
+            .addToTest(port, this);
     }
 
 
@@ -217,7 +223,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param port      The port to use.
      */
     public void addSingleServer(int port) {
-        new TestServer(port).addToTest(port, this);
+        TestServer testServer = new TestServer(port);
+        testServer.addToTest(port, this);
+        Layout layout = testServer.getLayoutServer().getCurrentLayout();
+        bootstrapAllServers(layout);
     }
 
 
@@ -267,15 +276,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return getServer(port).getManagementServer();
     }
 
-    /** Get a instance of base server, given a port.
-     *
-     * @param port      The port of the base server to retrieve.
-     * @return          A base server instance.
-     */
-    public BaseServer getBaseServer(int port) {
-        return getServer(port).getBaseServer();
-    }
-
     public IServerRouter getServerRouter(int port) {
         return getServer(port).getServerRouter();
     }
@@ -297,9 +297,46 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                 });
         TestServer primarySequencerNode = testServerMap.get(l.getSequencers().get(0));
         primarySequencerNode.sequencerServer
-                .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerTailsRecoveryMsg(0L,
+                .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(0L,
                         Collections.emptyMap(), l.getEpoch(), false)), null,
                         primarySequencerNode.serverRouter);
+    }
+
+
+    /**
+     * Set aggressive timeouts for the detectors.
+     *
+     * @param managementServersPorts Management server endpoints.
+     */
+    void setAggressiveDetectorTimeouts(int... managementServersPorts) {
+        Arrays.stream(managementServersPorts).forEach(port -> {
+            NetworkStretcher stretcher = NetworkStretcher.builder()
+                    .periodDelta(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .maxPeriod(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .initialPollInterval(PARAMETERS.TIMEOUT_VERY_SHORT)
+                    .build();
+
+            FailureDetector failureDetector = getManagementServer(port)
+                    .getManagementAgent()
+                    .getRemoteMonitoringService()
+                    .getFailureDetector();
+            failureDetector.setNetworkStretcher(stretcher);
+        });
+    }
+
+    /**
+     * Increment the cluster layout epoch by 1.
+     *
+     * @return New committed layout
+     * @throws OutrankedException If layout proposal is outranked.
+     */
+    Layout incrementClusterEpoch(CorfuRuntime corfuRuntime) throws OutrankedException {
+        corfuRuntime.invalidateLayout();
+        Layout layout = new Layout(corfuRuntime.getLayoutView().getLayout());
+        layout.setEpoch(layout.getEpoch() + 1);
+        corfuRuntime.getLayoutView().getRuntimeLayout(layout).sealMinServerSet();
+        corfuRuntime.getLayoutView().updateLayout(layout, 1L);
+        return layout;
     }
 
     /** Get a default CorfuRuntime. The default CorfuRuntime is connected to a single-node
@@ -352,11 +389,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         return runtime;
     }
 
-    /** Clear installed rules for the default runtime.
-     */
-    public void clearClientRules() {
-        clearClientRules(getRuntime());
-    }
 
     /** Clear installed rules for a given runtime.
      *
@@ -433,16 +465,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      */
     public String getEndpoint(int port) {
         return "test:" + port;
-    }
-
-    /**
-     * Get the port from the endpoint.
-     *
-     * @param endpoint The endpoint string.
-     * @return The port in the endpoint.
-     */
-    public Integer getPort(String endpoint) {
-        return Integer.parseInt(endpoint.split(":")[1]);
     }
 
     // Private

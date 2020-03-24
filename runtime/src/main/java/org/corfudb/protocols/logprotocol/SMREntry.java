@@ -7,36 +7,38 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
+
+import static com.google.common.base.Preconditions.checkState;
 
 /**
  * Created by mwei on 1/8/16.
  */
-@Deprecated // TODO: Add replacement method that conforms to style
-@SuppressWarnings("checkstyle:abbreviation") // Due to deprecation
+@SuppressWarnings("checkstyle:abbreviation")
 @ToString(callSuper = true)
 @NoArgsConstructor
+@EqualsAndHashCode
 public class SMREntry extends LogEntry implements ISMRConsumable {
 
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:MemberName") // Due to deprecation
+    @SuppressWarnings("checkstyle:MemberName")
     @Getter
     private String SMRMethod;
 
     /**
      * The arguments to the SMR method, which could be 0.
      */
-    @Deprecated // TODO: Add replacement method that conforms to style
-    @SuppressWarnings("checkstyle:MemberName") // Due to deprecation
+    @SuppressWarnings("checkstyle:MemberName")
     @Getter
     private Object[] SMRArguments;
 
@@ -116,6 +118,30 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
             b.skipBytes(len);
         }
         SMRArguments = arguments;
+    }
+
+    /**
+     * Given a buffer with the reader index pointing to a serialized SMREntry, this method will
+     * seek the buffer's reader index to the end of the entry.
+     */
+    public static void seekToEnd(ByteBuf b) {
+        // Magic
+        byte magicByte = b.readByte();
+        checkState(magicByte == CorfuSerializer.corfuPayloadMagic, "Not a ICorfuSerializable object");
+        // container type
+        byte type = b.readByte();
+        checkState(type == LogEntryType.SMR.asByte(), "Not a SMREntry!");
+        // Method name
+        short methodLength = b.readShort();
+        b.skipBytes(methodLength);
+        // Serializer type
+        b.readByte();
+        // num args
+        int numArgs = b.readByte();
+        for (int arg = 0; arg < numArgs; arg++) {
+            int len = b.readInt();
+            b.skipBytes(len);
+        }
     }
 
     @Override

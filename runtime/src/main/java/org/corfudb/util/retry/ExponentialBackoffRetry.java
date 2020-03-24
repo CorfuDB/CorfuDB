@@ -80,7 +80,7 @@ public class ExponentialBackoffRetry<E extends Exception, F extends Exception,
             sleepTime = base + extraWait;
             sleepTime -= sleepTime * randomPart;
         }
-        Sleep.MILLISECONDS.sleepUninterruptibly(sleepTime);
+        Sleep.sleepUninterruptibly(Duration.ofMillis(sleepTime));
     }
 
 }

@@ -3,26 +3,37 @@ package org.corfudb.util;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.CsvReporter;
 import com.codahale.metrics.Gauge;
-import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.jmx.JmxReporter;
 import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.MetricSet;
+import com.codahale.metrics.RatioGauge;
 import com.codahale.metrics.Slf4jReporter;
 import com.codahale.metrics.Timer;
+import com.codahale.metrics.jvm.BufferPoolMetricSet;
+import com.codahale.metrics.jvm.ClassLoadingGaugeSet;
 import com.codahale.metrics.jvm.FileDescriptorRatioGauge;
 import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
 import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
 import com.github.benmanes.caffeine.cache.Cache;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
+
+import io.netty.buffer.PooledByteBufAllocator;
+
+import java.io.File;
+import java.lang.management.ManagementFactory;
+import java.lang.ref.WeakReference;
+import java.util.concurrent.TimeUnit;
+
+import org.corfudb.common.metrics.MetricsServer;
+import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
+import org.corfudb.common.metrics.servers.PrometheusMetricsServer.Config;
 import org.ehcache.sizeof.SizeOf;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.lang.ref.WeakReference;
-import java.util.concurrent.TimeUnit;
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class MetricsUtils {
@@ -31,8 +42,12 @@ public class MetricsUtils {
         // Preventing instantiation of this utility class
     }
 
-    private static final FileDescriptorRatioGauge metricsJVMFdGauge =
-            new FileDescriptorRatioGauge();
+    private static final Gauge<Long> metricsJVMUptime =
+            () -> ManagementFactory.getRuntimeMXBean().getUptime();
+    private static final RatioGauge metricsJVMFdGauge = new FileDescriptorRatioGauge();
+    private static final MetricSet metricsBuffPooled =
+            new BufferPoolMetricSet(ManagementFactory.getPlatformMBeanServer());
+    private static final MetricSet metricsClassLoadingGauge = new ClassLoadingGaugeSet();
     private static final MetricSet metricsJVMGC = new GarbageCollectorMetricSet();
     private static final MetricSet metricsJVMMem = new MemoryUsageGaugeSet();
     private static final MetricSet metricsJVMThread = new ThreadStatesGaugeSet();
@@ -46,7 +61,8 @@ public class MetricsUtils {
     private static final String PROPERTY_JMX_REPORTING = "corfu.metrics.jmxreporting";
     private static final String PROPERTY_JVM_METRICS_COLLECTION = "corfu.metrics.jvm";
     private static final String PROPERTY_LOG_INTERVAL = "corfu.metrics.log.interval";
-    private static final String PROPERTY_METRICS_COLLECTION = "corfu.metrics.collection";
+    private static final String PROPERTY_LOCAL_METRICS_COLLECTION =
+            "corfu.local.metrics.collection";
 
     private static final String ADDRESS_SPACE_METRIC_PREFIX = "corfu.runtime.as-view";
     private static final MetricFilter ADDRESS_SPACE_FILTER =
@@ -57,13 +73,15 @@ public class MetricsUtils {
     private static String metricsCsvFolder;
     @Getter
     private static boolean metricsCollectionEnabled = false;
+    private static boolean metricsLocalCollectionEnabled = false;
     private static boolean metricsCsvReportingEnabled = false;
     private static boolean metricsJmxReportingEnabled = false;
     private static boolean metricsJvmCollectionEnabled = false;
     private static boolean metricsSlf4jReportingEnabled = false;
-    private static String mpTrigger = "filter-trigger"; // internal use only
+    private static final String mpTrigger = "filter-trigger"; // internal use only
 
-    private static final SizeOf sizeOf = SizeOf.newInstance();
+    public static final SizeOf sizeOf = SizeOf.newInstance();
+    public static final int NO_METRICS_PORT = -1;
 
     /**
      * Load metrics properties.
@@ -104,7 +122,8 @@ public class MetricsUtils {
      * -Dcorfu.metrics.log.interval=60}
      */
     private static void loadVmProperties() {
-        metricsCollectionEnabled = Boolean.valueOf(System.getProperty(PROPERTY_METRICS_COLLECTION));
+        metricsLocalCollectionEnabled = Boolean.valueOf(System.getProperty(
+                PROPERTY_LOCAL_METRICS_COLLECTION));
 
         metricsJmxReportingEnabled = Boolean.valueOf(System.getProperty(PROPERTY_JMX_REPORTING));
         metricsJvmCollectionEnabled = Boolean.valueOf(System.getProperty(PROPERTY_JVM_METRICS_COLLECTION));
@@ -137,29 +156,47 @@ public class MetricsUtils {
      * @param metrics Metrics registry
      */
     public static void metricsReportingSetup(@NonNull MetricRegistry metrics) {
-        if (isMetricsReportingSetUp(metrics)) return;
+        if (isMetricsReportingSetUp(metrics)) {
+            return;
+        }
 
         metrics.counter(mpTrigger);
 
         loadVmProperties();
 
-        if (metricsCollectionEnabled) {
+        if (metricsLocalCollectionEnabled) {
             setupCsvReporting(metrics);
             setupJvmMetrics(metrics);
             setupJmxReporting(metrics);
             setupSlf4jReporting(metrics);
-            log.info("Corfu metrics collection and all reporting types are enabled");
-        } else {
-            log.info("Corfu metrics collection and all reporting types are disabled");
+
+            metricsCollectionEnabled = true;
+            log.info("Corfu CSV metrics collection and all reporting types are enabled");
         }
+    }
+    /**
+     * Start metrics reporting via Prometheus.
+     *
+     * @param metricRegistry Metrics registry
+     * @param prometheusMetricsPort port on which statistics should be exported
+     */
+    public static void metricsReportingSetup(@NonNull MetricRegistry metricRegistry,
+                                              int prometheusMetricsPort) {
+        Config config = new Config(prometheusMetricsPort, Config.ENABLED);
+        MetricsServer server = new PrometheusMetricsServer(config, metricRegistry);
+        server.start();
+
+        metricsCollectionEnabled = true;
+        log.info("Metrics exporting via Prometheus has been enabled at port {}.",
+                prometheusMetricsPort);
     }
 
     // If enabled, setup jmx reporting
-    private static void setupJmxReporting(MetricRegistry metrics) {
+    private static void setupJmxReporting(MetricRegistry metricRegistry) {
         if (!metricsJmxReportingEnabled) return;
 
         // This filters noisy addressSpace metrics to have a clean JMX reporting
-        JmxReporter jmxReporter = JmxReporter.forRegistry(metrics)
+        JmxReporter jmxReporter = JmxReporter.forRegistry(metricRegistry)
                 .convertDurationsTo(TimeUnit.MICROSECONDS)
                 .convertRatesTo(TimeUnit.SECONDS)
                 .inDomain(CORFU_METRICS)
@@ -207,26 +244,28 @@ public class MetricsUtils {
     }
 
     // If enabled, setup reporting of JVM metrics including garbage collection,
-    // memory, and thread statistics.
+    // memory, thread statistics, buffer, uptime, class loading, netty's direct and heap
+    // allocations.
     private static void setupJvmMetrics(@NonNull MetricRegistry metrics) {
         if (!metricsJvmCollectionEnabled) return;
 
         try {
+            metrics.register("jvm.buffers", metricsBuffPooled);
+            metrics.register("jvm.class-loading", metricsClassLoadingGauge);
+            metrics.register("jvm.file-descriptors-used", metricsJVMFdGauge);
             metrics.register("jvm.gc", metricsJVMGC);
             metrics.register("jvm.memory", metricsJVMMem);
             metrics.register("jvm.thread", metricsJVMThread);
-            metrics.register("jvm.file-descriptors-used", metricsJVMFdGauge);
+            metrics.register("jvm.uptime", metricsJVMUptime);
+            metrics.register("corfu.netty.mem.pooled-byte-buf.direct", getNettyPooledDirectMemGauge());
+            metrics.register("corfu.netty.mem.pooled-byte-buf.heap", getNettyPooledHeapMemGauge());
         } catch (IllegalArgumentException e) {
             // Re-registering metrics during test runs, not a problem
         }
     }
 
     public static Timer.Context getConditionalContext(@NonNull Timer t) {
-        return getConditionalContext(metricsCollectionEnabled, t);
-    }
-
-    public static Timer.Context getConditionalContext(boolean enabled, @NonNull Timer t) {
-        return enabled ? t.time() : null;
+        return metricsCollectionEnabled ? t.time() : null;
     }
 
     public static void stopConditionalContext(Timer.Context context) {
@@ -235,10 +274,24 @@ public class MetricsUtils {
         }
     }
 
-    public static void incConditionalCounter(boolean enabled, @NonNull Counter counter, long amount) {
-        if (enabled) {
+    public static void incConditionalCounter(@NonNull Counter counter, long amount) {
+        if (metricsCollectionEnabled) {
             counter.inc(amount);
         }
+    }
+
+    /**
+     * return a gauge on direct memory used by netty's PooledByteBufAllocator
+     */
+    private static Gauge<Long> getNettyPooledDirectMemGauge() {
+        return () -> PooledByteBufAllocator.DEFAULT.metric().usedDirectMemory();
+    }
+
+    /**
+     * return a gauge on heap memory used by netty's PooledByteBufAllocator
+     */
+    private static Gauge<Long> getNettyPooledHeapMemGauge() {
+        return () -> PooledByteBufAllocator.DEFAULT.metric().usedHeapMemory();
     }
 
     /**
@@ -280,14 +333,11 @@ public class MetricsUtils {
     private static Gauge<Long> getSizeGauge(Object object) {
         WeakReference<Object> toBeMeasuredObject = new WeakReference<>(object);
 
-        return new Gauge<Long>() {
-            @Override
-            public Long getValue() {
-                final Object objectOfInterest = toBeMeasuredObject.get();
-                return (objectOfInterest != null) ?
-                        sizeOf.deepSizeOf(objectOfInterest) :
-                        0L;
-            }
+        return () -> {
+            final Object objectOfInterest = toBeMeasuredObject.get();
+            return (objectOfInterest != null) ?
+                    sizeOf.deepSizeOf(objectOfInterest) :
+                    0L;
         };
     }
 

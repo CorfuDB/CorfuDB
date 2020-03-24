@@ -9,6 +9,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -18,11 +19,13 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
+import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -49,7 +52,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             .setMemory(false)
             .build();
     }
-
+    
     @Test
     public void testWriteReadWithChecksum() {
         // Enable checksum, then append and read the same entry
@@ -200,11 +203,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Write the same range twice
         log.append(entries);
         log.sync(true);
-        long logSize = FileUtils.sizeOfDirectory(file);
-        log.append(entries);
-        log.sync(true);
-        long logSize2 = FileUtils.sizeOfDirectory(file);
-        assertThat(logSize2).isEqualTo(logSize);
+
+        Assertions.assertThatExceptionOfType(OverwriteException.class)
+                .isThrownBy(() -> log.append(entries));
     }
 
     @Test
@@ -420,54 +421,53 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     public void testGetGlobalTail() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
-        assertThat(log.getTails().getLogTail()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(log.getLogTail()).isEqualTo(Address.NON_ADDRESS);
 
         // Write to multiple segments
         final int segments = 3;
         long lastAddress = segments * StreamLogFiles.RECORDS_PER_LOG_FILE;
         for (long x = 0; x <= lastAddress; x++){
             writeToLog(log, x);
-            assertThat(log.getTails().getLogTail()).isEqualTo(x);
+            assertThat(log.getLogTail()).isEqualTo(x);
         }
 
         // Restart and try to retrieve the global tail
         log = new StreamLogFiles(getContext(), false);
-        assertThat(log.getTails().getLogTail()).isEqualTo(lastAddress);
+        assertThat(log.getLogTail()).isEqualTo(lastAddress);
 
         // Advance the tail some more
         final long tailDelta = 5;
         for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++){
             writeToLog(log, x);
-            assertThat(log.getTails().getLogTail()).isEqualTo(x);
+            assertThat(log.getLogTail()).isEqualTo(x);
         }
 
         // Restart and try to retrieve the global tail one last time
         log = new StreamLogFiles(getContext(), false);
-        assertThat(log.getTails().getLogTail()).isEqualTo(lastAddress + tailDelta);
+        assertThat(log.getLogTail()).isEqualTo(lastAddress + tailDelta);
     }
 
     @Test
     public void testPrefixTrim() {
         String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
-        StreamLog log = new StreamLogFiles(getContext(), false);
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
 
         // Write 50 segments and trim the first 25
         final long numSegments = 50;
-        final long filesPerSegment = 1;
         for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
             writeToLog(log, x);
         }
 
         File logs = new File(logDir);
 
-        assertThat((long) logs.list().length).isEqualTo(numSegments * filesPerSegment);
+        assertThat((long) logs.list().length).isEqualTo(numSegments);
 
         final long endSegment = 25;
         long trimAddress = endSegment * StreamLogFiles.RECORDS_PER_LOG_FILE + 1;
 
         // Get references to the segments that will be trimmed
-        Set<SegmentHandle> trimmedHandles = new HashSet();
-        for (SegmentHandle sh : ((StreamLogFiles)log).getSegmentHandles()) {
+        Set<SegmentHandle> trimmedHandles = new HashSet<>();
+        for (SegmentHandle sh : log.getOpenSegmentHandles()) {
             if (sh.getSegment() < endSegment) {
                 trimmedHandles.add(sh);
             }
@@ -477,13 +477,13 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.compact();
 
         // Verify that the segments have been removed
-        assertThat(((StreamLogFiles)log).getSegmentHandles().size()).isEqualTo((int) endSegment);
+        assertThat(log.getOpenSegmentHandles().size()).isEqualTo((int) endSegment);
 
         // Verify that first 25 segments have been deleted
         String[] afterTrimFiles = logs.list();
-        assertThat(afterTrimFiles).hasSize((int)((numSegments - endSegment + 1) * filesPerSegment));
+        assertThat(afterTrimFiles).hasSize((int) (numSegments - endSegment));
 
-        Set<String> fileNames = new HashSet(Arrays.asList(afterTrimFiles));
+        Set<String> fileNames = new HashSet<>(Arrays.asList(afterTrimFiles));
         for (long x = endSegment + 1; x < numSegments; x++) {
             String logFile = Long.toString(x) + ".log";
             assertThat(fileNames).contains(logFile);
@@ -523,7 +523,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.compact();
         log = new StreamLogFiles(getContext(), false);
 
-        assertThat(log.getTails().getLogTail()).isEqualTo(midSegmentAddress);
+        assertThat(log.getLogTail()).isEqualTo(midSegmentAddress);
         assertThat(log.getTrimMark()).isEqualTo(midSegmentAddress + 1);
     }
 
@@ -533,7 +533,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         StreamLog log = new StreamLogFiles(getContext(), false);
 
         final long numSegments = 3;
-        for (long x  = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+        for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
             writeToLog(log, x);
         }
 
@@ -545,8 +545,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.compact();
 
         File logs = new File(logDir);
-        final int lastTwoSegmentsFiles = 2;
-        assertThat(logs.list()).hasSize(lastTwoSegmentsFiles);
+        final int numFilesLeft = 1;
+        assertThat(logs.list()).hasSize(numFilesLeft);
     }
 
     /**
@@ -563,16 +563,16 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             writeToLog(log, x);
         }
         final long filesToBeTrimmed = 1;
-        log.prefixTrim(RECORDS_PER_LOG_FILE * (filesToBeTrimmed + 1));
+        log.prefixTrim(RECORDS_PER_LOG_FILE * filesToBeTrimmed);
         log.compact();
 
         File logsDir = new File(logDir);
 
         final int expectedFilesBeforeReset = (int) (numSegments - filesToBeTrimmed);
         final long globalTailBeforeReset = (RECORDS_PER_LOG_FILE * numSegments) - 1;
-        final long trimMarkBeforeReset = (RECORDS_PER_LOG_FILE * (filesToBeTrimmed + 1)) + 1;
+        final long trimMarkBeforeReset = RECORDS_PER_LOG_FILE * filesToBeTrimmed + 1;
         assertThat(logsDir.list()).hasSize(expectedFilesBeforeReset);
-        assertThat(log.getTails().getLogTail()).isEqualTo(globalTailBeforeReset);
+        assertThat(log.getLogTail()).isEqualTo(globalTailBeforeReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeReset);
 
         log.reset();
@@ -581,7 +581,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final long globalTailAfterReset = Address.NON_ADDRESS;
         final long trimMarkAfterReset = 0L;
         assertThat(logsDir.list()).hasSize(expectedFilesAfterReset);
-        assertThat(log.getTails().getLogTail()).isEqualTo(globalTailAfterReset);
+        assertThat(log.getLogTail()).isEqualTo(globalTailAfterReset);
         assertThat(log.getTrimMark()).isEqualTo(trimMarkAfterReset);
     }
 
@@ -660,8 +660,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         final int serializedEntrySize = 100;
         byte[] entryBytes = new byte[serializedEntrySize];
         Metadata metadata = Metadata.newBuilder()
-                .setPayloadChecksum(StreamLogFiles.getChecksum(serializedEntrySize))
-                .setLengthChecksum(StreamLogFiles.getChecksum(entryBytes.length))
+                .setPayloadChecksum(Checksum.getChecksum(serializedEntrySize))
+                .setLengthChecksum(Checksum.getChecksum(entryBytes.length))
                 .setLength(entryBytes.length)
                 .build();
 
@@ -701,5 +701,39 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         log = new StreamLogFiles(getContext(), false);
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+    }
+
+    @Test
+    public void estimateSizeTest() throws IOException {
+        // Create two nested directories and create files in each,
+        // the estimated size should reflect the total sum of all file sizes
+        File parentDir = com.google.common.io.Files.createTempDir();
+        File childDir = new File(parentDir.getAbsolutePath() + File.separator + "logs");
+
+        childDir.mkdir();
+
+        RandomAccessFile parentDirFile = new RandomAccessFile(parentDir.getAbsolutePath()
+                + File.separator + "file1", "rw");
+
+        RandomAccessFile childDirFile = new RandomAccessFile(childDir.getAbsolutePath()
+                + File.separator + "file2", "rw");
+
+        final int parentDirFilePayloadSize = 4300;
+        final int childDirFilePayloadSize = 3200;
+
+        byte[] parentDirFilePayload = new byte[parentDirFilePayloadSize];
+        byte[] childDirFilePayload = new byte[childDirFilePayloadSize];
+
+        parentDirFile.write(parentDirFilePayload);
+        childDirFile.write(childDirFilePayload);
+
+        parentDirFile.close();
+        childDirFile.close();
+
+        long parentSize = StreamLogFiles.estimateSize(parentDir.toPath());
+        long childDirSize = StreamLogFiles.estimateSize(childDir.toPath());
+
+        assertThat(parentSize).isEqualTo(parentDirFilePayloadSize + childDirFilePayloadSize);
+        assertThat(childDirSize).isEqualTo(childDirFilePayloadSize);
     }
 }

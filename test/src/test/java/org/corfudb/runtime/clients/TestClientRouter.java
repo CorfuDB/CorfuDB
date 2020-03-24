@@ -166,21 +166,6 @@ public class TestClientRouter implements IClientRouter {
     }
 
     /**
-     * Gets a client that matches a particular type.
-     *
-     * @param clientType The class of the client to match.
-     * @return The first client that matches that type.
-     * @throws NoSuchElementException If there are no clients matching that type.
-     */
-    @Override
-    @SuppressWarnings("unchecked")
-    public <T extends IClient> T getClient(Class<T> clientType) {
-        return (T) clientList.stream()
-                .filter(clientType::isInstance)
-                .findFirst().get();
-    }
-
-    /**
      * Send a message and get a completable future to be fulfilled by the reply.
      *
      * @param ctx     The channel handler context to send the message under.
@@ -191,7 +176,6 @@ public class TestClientRouter implements IClientRouter {
     @Override
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
                                                                  @NonNull CorfuMsg message) {
-        boolean isEnabled = MetricsUtils.isMetricsCollectionEnabled();
         // Simulate a "disconnected endpoint"
         if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
@@ -203,7 +187,7 @@ public class TestClientRouter implements IClientRouter {
         // Set up the timer and context to measure request
         final Timer roundTripMsgTimer = getTimer(message);
         final Timer.Context roundTripMsgContext = MetricsUtils
-                .getConditionalContext(isEnabled, roundTripMsgTimer);
+                .getConditionalContext(roundTripMsgTimer);
 
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
@@ -214,12 +198,10 @@ public class TestClientRouter implements IClientRouter {
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequest, cf);
         // Evaluate rules.
-        if (rules.stream()
-                .map(x -> x.evaluate(message, this))
-                .allMatch(x -> x)) {
+        if (rules.stream().allMatch(x -> x.evaluate(message, this))) {
             // Write the message out to the channel
-                log.trace(Thread.currentThread().getId() + ":Sent message: {}", message);
-                routeMessage(message);
+            log.trace(Thread.currentThread().getId() + ":Sent message: {}", message);
+            routeMessage(message);
         }
 
         // Generate a benchmarked future to measure the underlying request

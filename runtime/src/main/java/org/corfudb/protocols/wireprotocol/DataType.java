@@ -35,7 +35,7 @@ public enum DataType implements ICorfuPayload<DataType> {
         buf.writeByte(asByte());
     }
 
-    public static Map<Byte, DataType> typeMap =
+    public static final Map<Byte, DataType> typeMap =
             Arrays.stream(DataType.values())
                     .collect(Collectors.toMap(DataType::asByte, Function.identity()));
 

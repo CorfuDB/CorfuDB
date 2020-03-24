@@ -1,21 +1,24 @@
 package org.corfudb.universe.node.server.vm;
 
-import com.jcraft.jsch.JSchException;
-import com.vmware.vim25.GuestInfo;
-import com.vmware.vim25.mo.VirtualMachine;
 import lombok.Builder;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.cluster.vm.RemoteOperationHelper;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.NodeException;
 import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
-import org.corfudb.universe.node.stress.Stress;
+import org.corfudb.universe.node.server.process.CorfuProcessManager;
+import org.corfudb.universe.node.server.process.CorfuServerPath;
 import org.corfudb.universe.node.stress.vm.VmStress;
+import org.corfudb.universe.universe.vm.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
+import org.corfudb.universe.util.IpAddress;
 import org.corfudb.universe.util.IpTablesUtil;
 
-import java.io.IOException;
+import java.io.File;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 
@@ -24,25 +27,38 @@ import java.util.List;
  */
 @Slf4j
 public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUniverseParams> {
-    private static final String CORFU_INFRASTRUCTURE_JAR = String.format(
-            "./target/corfu/infrastructure-%s-shaded.jar", getAppVersion()
-    );
 
     @NonNull
-    private final VirtualMachine vm;
+    @Getter
+    private final VmManager vmManager;
+
     @NonNull
-    private final String ipAddress;
-    private final RemoteOperationHelper commandHelper;
+    private final IpAddress ipAddress;
+
+    @Getter
+    @NonNull
+    private final RemoteOperationHelper remoteOperationHelper;
+
     @NonNull
     private final VmStress stress;
 
+    @NonNull
+    private final CorfuProcessManager processManager;
+
+    @NonNull
+    private final CorfuServerPath serverPath;
+
     @Builder
-    public VmCorfuServer(VmCorfuServerParams params, VirtualMachine vm, VmUniverseParams universeParams, VmStress stress) {
-        super(params, universeParams);
-        this.vm = vm;
+    public VmCorfuServer(
+            VmCorfuServerParams params, VmManager vmManager, VmUniverseParams universeParams,
+            VmStress stress, RemoteOperationHelper remoteOperationHelper, LoggingParams loggingParams) {
+        super(params, universeParams, loggingParams);
+        this.vmManager = vmManager;
         this.ipAddress = getIpAddress();
         this.stress = stress;
-        commandHelper = RemoteOperationHelper.getInstance();
+        this.remoteOperationHelper = remoteOperationHelper;
+        this.serverPath = new CorfuServerPath(params);
+        this.processManager = new CorfuProcessManager(serverPath, params);
     }
 
     /**
@@ -52,15 +68,14 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      */
     @Override
     public CorfuServer deploy() {
-        executeCommand("mkdir -p ./" + params.getName());
-        executeCommand("mkdir -p ./" + params.getStreamLogDir());
+        log.info("Deploy vm server: {}", params.getVmName());
 
-        commandHelper.copyFile(
-                ipAddress,
-                universeParams.getVmUserName(),
-                universeParams.getVmPassword(),
-                CORFU_INFRASTRUCTURE_JAR,
-                "./" + params.getName() + "/corfu-server.jar"
+        executeCommand(processManager.createServerDirCommand());
+        executeCommand(processManager.createStreamLogDirCommand());
+
+        remoteOperationHelper.copyFile(
+                params.getInfrastructureJar(),
+                serverPath.getServerJar()
         );
 
         start();
@@ -110,8 +125,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     public void pause() {
         log.info("Pausing the VM Corfu server: {}", params.getName());
 
-        String cmd = "ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -STOP";
-        executeCommand(cmd);
+        executeCommand(processManager.pauseCommand());
     }
 
     /**
@@ -120,12 +134,11 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     @Override
     public void start() {
         // Compose command line for starting Corfu
-        StringBuilder cmdLine = new StringBuilder();
-        cmdLine.append("sh -c 'nohup java -cp ./" + params.getName() + "/*.jar org.corfudb.infrastructure.CorfuServer ");
-        cmdLine.append(getCommandLineParams());
-        cmdLine.append(" > /tmp/corfu.log 2>&1 &'");
-
-        executeCommand(cmdLine.toString());
+        String cmd = String.format(
+                "sh -c '%s'",
+                processManager.startCommand(getCommandLineParams())
+        );
+        executeCommand(cmd);
     }
 
     /**
@@ -146,6 +159,11 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
 
         executeSudoCommand(String.join(" ", IpTablesUtil.cleanInput()));
         executeSudoCommand(String.join(" ", IpTablesUtil.cleanOutput()));
+    }
+
+    @Override
+    public String execute(String command) {
+        return executeCommand(command);
     }
 
     /**
@@ -170,48 +188,29 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     @Override
     public void resume() {
         log.info("Resuming the corfu server: {}", params.getName());
-
-        String cmd = "ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -CONT";
-        executeCommand(cmd);
+        executeCommand(processManager.resumeCommand());
     }
 
     /**
      * Executes a certain command on the VM.
      */
-    private void executeCommand(String cmdLine) {
-        String ipAddress = getIpAddress();
-
-        commandHelper.executeCommand(ipAddress,
-                universeParams.getVmUserName(),
-                universeParams.getVmPassword(),
-                cmdLine
-        );
+    private String executeCommand(String cmdLine) {
+        return remoteOperationHelper.executeCommand(cmdLine);
     }
 
     /**
      * Executes a certain Sudo command on the VM.
      */
-    private void executeSudoCommand(String cmdLine) {
-        String ipAddress = getIpAddress();
-
-        try {
-            commandHelper.executeSudoCommand(ipAddress,
-                    universeParams.getVmUserName(),
-                    universeParams.getVmPassword(),
-                    "sudo " + cmdLine
-            );
-        } catch (JSchException | IOException e) {
-            throw new NodeException("Can't execute sudo command: " + cmdLine, e);
-        }
+    private String executeSudoCommand(String cmdLine) {
+        return remoteOperationHelper.executeSudoCommand(cmdLine);
     }
 
     /**
      * @return the IpAddress of this VM.
      */
     @Override
-    public String getIpAddress() {
-        GuestInfo guest = vm.getGuest();
-        return guest.getIpAddress();
+    public IpAddress getIpAddress() {
+        return vmManager.getResolvedIpAddress();
     }
 
     /**
@@ -222,7 +221,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         log.info("Stop corfu server on vm: {}, params: {}", params.getVmName(), params);
 
         try {
-            executeCommand("ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -15");
+            executeCommand(processManager.stopCommand());
         } catch (Exception e) {
             String err = String.format("Can't STOP corfu: %s. Process not found on vm: %s, ip: %s",
                     params.getName(), params.getVmName(), ipAddress
@@ -238,7 +237,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     public void kill() {
         log.info("Kill the corfu server. Params: {}", params);
         try {
-            executeCommand("ps -ef | grep -v grep | grep \"corfudb\" | awk '{print $2}' | xargs kill -9");
+            executeCommand(processManager.killCommand());
         } catch (Exception e) {
             String err = String.format("Can't KILL corfu: %s. Process not found on vm: %s, ip: %s",
                     params.getName(), params.getVmName(), ipAddress
@@ -258,15 +257,11 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         kill();
         try {
             executeSudoCommand(IpTablesUtil.cleanAll());
+            collectLogs();
             removeAppDir();
         } catch (Exception e) {
             throw new NodeException("Can't clean corfu directories", e);
         }
-    }
-
-    @Override
-    public Stress getStress() {
-        return stress;
     }
 
     /**
@@ -275,11 +270,40 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
      * so on, whatever used by the application.
      */
     private void removeAppDir() {
-        executeCommand(String.format("rm -rf ./%s", params.getName()));
+        executeCommand(processManager.removeServerDirCommand());
     }
 
     @Override
-    public String getNetworkInterface() {
+    public IpAddress getNetworkInterface() {
         return ipAddress;
+    }
+
+    @Override
+    public void collectLogs() {
+        if (!loggingParams.isEnabled()) {
+            log.debug("Logging is disabled");
+            return;
+        }
+
+        log.info("Download corfu server logs: {}", params.getName());
+
+        Path corfuLogDir = params
+                .getUniverseDirectory()
+                .resolve("logs")
+                .resolve(loggingParams.getRelativeServerLogDir());
+
+        File logDirFile = corfuLogDir.toFile();
+        if (!logDirFile.exists() && logDirFile.mkdirs()) {
+            log.info("Created new corfu log directory at {}.", corfuLogDir);
+        }
+
+        try {
+            remoteOperationHelper.downloadFile(
+                    corfuLogDir.resolve(params.getName() + ".log"),
+                    serverPath.getCorfuLogFile()
+            );
+        } catch (Exception e) {
+            log.error("Can't download logs for corfu server: {}", params.getName(), e);
+        }
     }
 }

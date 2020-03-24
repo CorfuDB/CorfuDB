@@ -2,8 +2,11 @@ package org.corfudb.infrastructure.log;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 
@@ -52,12 +55,37 @@ public interface StreamLog {
     /**
      * Get the global tail and stream tails.
      */
-    TailsResponse getTails();
+    TailsResponse getTails(List<UUID> streams);
+
+    /**
+     * Get the global log tail.
+     */
+    long getLogTail();
+
+    /**
+     * Get global and all stream tails.
+     */
+    TailsResponse getAllTails();
+
+    /**
+     * Get the address space for every stream.
+     */
+    StreamsAddressResponse getStreamsAddressSpace();
 
     /**
      * Get the first untrimmed address in the address space.
      */
     long getTrimMark();
+
+    /**
+     * Returns the known addresses in this Log Unit in the specified consecutive
+     * range of addresses.
+     *
+     * @param rangeStart Start address of range.
+     * @param rangeEnd   End address of range.
+     * @return Set of known addresses.
+     */
+    Set<Long> getKnownAddressesInRange(long rangeStart, long rangeEnd);
 
     /**
      * Sync the stream log file to secondary storage.
@@ -70,13 +98,6 @@ public interface StreamLog {
      * Close the stream log.
      */
     void close();
-
-    /**
-     * unmap/release the memory for entry.
-     *
-     * @param address  address to release
-     */
-    void release(long address, LogData entry);
 
     /**
      * Clears all data and resets all segment handlers.
@@ -111,5 +132,20 @@ public interface StreamLog {
             cause = OverwriteCause.NONE;
         }
         return cause;
+    }
+
+    /**
+     * Query if the StreamLog has enough quota to accept writes
+     */
+    default boolean quotaExceeded() {
+        return false;
+    }
+
+    /**
+     * Query the exact Quota value in bytes
+     * @return the quota set in bytes
+     */
+    default long quotaLimitInBytes() {
+        return Long.MAX_VALUE;
     }
 }

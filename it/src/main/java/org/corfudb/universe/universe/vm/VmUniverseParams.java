@@ -5,10 +5,13 @@ import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
+import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseParams;
+import org.corfudb.universe.util.IpAddress;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -18,22 +21,27 @@ import java.util.concurrent.ConcurrentMap;
 @Getter
 @ToString(callSuper = true)
 public class VmUniverseParams extends UniverseParams {
+
+    /**
+     * Default https://10.173.65.98/sdk
+     */
     @NonNull
     private final String vSphereUrl;
+
+    /**
+     * Default "10.172.208.208"
+     */
     @NonNull
-    private final String vSphereUsername;
+    private final List<String> vSphereHost;
+
     @NonNull
-    private final String vSpherePassword;
-    @NonNull
-    private final String vSphereHost;
+    private final VmCredentialsParams credentials;
+
     @NonNull
     private final String templateVMName;
+
     @NonNull
-    private final String vmUserName;
-    @NonNull
-    private final String vmPassword;
-    @NonNull
-    private final ConcurrentMap<String, String> vmIpAddresses;
+    private final ConcurrentMap<VmName, IpAddress> vmIpAddresses;
     @NonNull
     @Default
     private final String domainName = "eng.vmware.com";
@@ -56,26 +64,51 @@ public class VmUniverseParams extends UniverseParams {
     @Default
     private final Duration readinessTimeout = Duration.ofSeconds(3);
 
-
     @Builder
-    public VmUniverseParams(String vSphereUrl, String vSphereUsername, String vSpherePassword,
-                            String vSphereHost, String templateVMName, String vmUserName, String vmPassword,
-                            ConcurrentMap<String, String> vmIpAddresses, String networkName) {
-        super(networkName, new ConcurrentHashMap<>());
+    public VmUniverseParams(
+            VmCredentialsParams credentials, String vSphereUrl, List<String> vSphereHost,
+            String templateVMName, ConcurrentMap<VmName, IpAddress> vmIpAddresses, String networkName,
+            boolean cleanUpEnabled) {
+        super(networkName, new ConcurrentHashMap<>(), cleanUpEnabled);
         this.vSphereUrl = vSphereUrl;
-        this.vSphereUsername = vSphereUsername;
-        this.vSpherePassword = vSpherePassword;
         this.vSphereHost = vSphereHost;
-
         this.templateVMName = templateVMName;
-        this.vmUserName = vmUserName;
-        this.vmPassword = vmPassword;
         this.vmIpAddresses = vmIpAddresses;
+        this.credentials = credentials;
     }
 
 
-    public VmUniverseParams updateIpAddress(String vmName, String ipAddress) {
+    public VmUniverseParams updateIpAddress(VmName vmName, IpAddress ipAddress) {
         vmIpAddresses.put(vmName, ipAddress);
         return this;
+    }
+
+    /**
+     * VM credentials stored in a property file (vm.credentials.properties)
+     * The file format:
+     * <pre>
+     * vsphere.username=vSphereUser
+     * vsphere.password=vSpherePassword
+     *
+     * vm.username=vmPass
+     * vm.password=vmUser
+     * </pre>
+     */
+    @Builder
+    @Getter
+    public static class VmCredentialsParams {
+        @NonNull
+        private final Credentials vmCredentials;
+        @NonNull
+        private final Credentials vSphereCredentials;
+    }
+
+    @Builder
+    @Getter
+    public static class Credentials {
+        @NonNull
+        private final String username;
+        @NonNull
+        private final String password;
     }
 }

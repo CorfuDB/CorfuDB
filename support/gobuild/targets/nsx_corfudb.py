@@ -154,54 +154,12 @@ class CorfuDBBuild(helpers.target.Target, helpers.make.MakeHelper):
 
         cmds = [
             "cd /root/corfudb",
-            "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean deploy -DskipTests -DskipITs",
+            "/build/toolchain/noarch/apache-maven-3.3.3/bin/mvn clean package -DskipTests -DskipITs",
             "mkdir -p /tmp/mvn",
             "mkdir -p /tmp/%s" % (DIST),
-            "cp /root/corfudb/debian/target/*.deb /tmp/%s" % (DIST),
-            "cp /root/corfudb/migration/target/migration-*-shaded.jar /tmp"
+            "cp /root/corfudb/debian/target/*.deb /tmp/%s" % (DIST)
         ]
-        # For now, hard-code the sub-module names.
-        sub_modules = [
-            ".",
-            "annotationProcessor",
-            "annotations",
-            "cmdlets",
-            "debian",
-            "format",
-            "infrastructure",
-            "runtime",
-            "test"]
-        artifact_paths = [os.path.join("/root/corfudb",
-                                       module,
-                                       "target",
-                                       "mvn-repo",
-                                       "*")
-                          for module in sub_modules]
-        cp_cmds = ["cp -r {0} /tmp/mvn".format(path) for path in artifact_paths]
-        cmd = " && ".join(cmds + cp_cmds)
-        commands.append({
-            "desc": "Running mvn clean deploy",
-            "root": "%(buildroot)",
-            "log": "mvn_clean_deploy.log",
-            "command": ChrootHelper.chroot_cmd(cmd, chroot_dir),
-            "env": self._GetEnvironment(hosttype)
-        })
 
-        publish_dir = os.path.join(BUILDROOT, "publish")
-        publish_dist_dir = "%s/%s" % (publish_dir, DIST)
-        cmds = ["mkdir -p %s" % publish_dist_dir,
-                "mkdir -p %s/mvn" % publish_dir,
-                "cp -r %s/tmp/mvn %s" % (chroot_dir, publish_dir),
-                "cp %s/tmp/%s/* %s" % (chroot_dir, DIST, publish_dist_dir),
-                "cp %s/tmp/migration-*-shaded.jar %s/corfu-data-migration.jar" % (chroot_dir, publish_dir)]
-        cmd = " && ".join(cmds)
-        commands.append({
-            "desc": "Copy build collateral to publish directory",
-            "root": BUILDROOT,
-            "log": "gobuild_publish.log",
-            "command": cmd,
-            "env": self._GetEnvironment(hosttype)
-        })
         return commands
 
     # Hack: reading the version and build number from pom.xml

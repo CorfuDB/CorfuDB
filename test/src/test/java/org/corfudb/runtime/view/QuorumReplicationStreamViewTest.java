@@ -44,14 +44,6 @@ public class QuorumReplicationStreamViewTest extends StreamViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWriteFromStreamWithoutBackpointers()
-            throws Exception {
-        super.canReadWriteFromStreamWithoutBackpointers();
-    }
-
-
-    @Test
-    @SuppressWarnings("unchecked")
     public void canReadWriteFromCachedStream()
             throws Exception {
         super.canReadWriteFromCachedStream();
@@ -62,13 +54,6 @@ public class QuorumReplicationStreamViewTest extends StreamViewTest {
             throws Exception
     {
         super.canSeekOnStream();
-    }
-
-    @Test
-    public void canFindInStream()
-            throws Exception
-    {
-        super.canFindInStream();
     }
 
     @Test

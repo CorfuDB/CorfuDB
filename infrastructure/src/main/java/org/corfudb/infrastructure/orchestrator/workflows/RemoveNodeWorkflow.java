@@ -18,6 +18,7 @@ import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorReques
 /**
  * A workflow definition that removes a node from the cluster, if it exists. This workflow
  * will fail if the remove results in a cluster that is not redundant.
+ *
  * @author Maithem
  */
 
@@ -37,6 +38,7 @@ public class RemoveNodeWorkflow implements IWorkflow {
 
     /**
      * Create a remove node workflow from a request.
+     *
      * @param request the remove node request
      */
     public RemoveNodeWorkflow(@Nonnull RemoveNodeRequest request) {

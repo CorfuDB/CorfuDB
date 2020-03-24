@@ -16,6 +16,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ICorfuSMR;
 
 
 /**
@@ -157,7 +158,7 @@ public class PrimitiveSerializer implements ISerializer {
                 }),
         CORFU_SMR(15, Object.class, null, (o, b) -> {
             String className = o.getClass().toString();
-            className = "CorfuObject";
+            className = "SMRObject";
             byte[] classNameBytes = className.getBytes();
             b.writeShort(classNameBytes.length);
             b.writeBytes(classNameBytes);
@@ -169,7 +170,7 @@ public class PrimitiveSerializer implements ISerializer {
                 Field f = o.getClass().getDeclaredField("_corfuStreamID");
                 f.setAccessible(true);
                 UUID id = (UUID) f.get(o);
-                log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}",
+                log.trace("Serializing a SMRObject of type {} as a stream pointer to {}",
                         smrClass, id);
                 b.writeLong(id.getMostSignificantBits());
                 b.writeLong(id.getLeastSignificantBits());
@@ -186,7 +187,7 @@ public class PrimitiveSerializer implements ISerializer {
                     try {
                         return r.getObjectsView().build()
                                 .setStreamID(new UUID(b.readLong(), b.readLong()))
-                                .setType(Class.forName(smrClassName))
+                                .setType((Class<? extends ICorfuSMR>) Class.forName(smrClassName))
                                 .open();
                     } catch (ClassNotFoundException cnfe) {
                         log.error("Exception during deserialization!", cnfe);

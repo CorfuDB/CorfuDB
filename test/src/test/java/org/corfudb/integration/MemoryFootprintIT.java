@@ -1,5 +1,7 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.codahale.metrics.Gauge;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
@@ -10,8 +12,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * An integration test to utilize memory assessment utilities. It can be used as an example
@@ -63,19 +63,22 @@ public class MemoryFootprintIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        CorfuRuntime corfuRuntime = createRuntime(singleNodeEndpoint);
+        runtime = createRuntime(singleNodeEndpoint);
 
         // Create CorfuTable
-        CorfuTable testTable = corfuRuntime
+        CorfuTable testTable = runtime
                 .getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
                 .setStreamName("volbeat")
                 .open();
 
+        // Force GC first to prevent it from interfering with the size estimates after.
+        System.gc();
+
         // Register memory footprint tracking
         final Gauge<Long> corfuTableSizeGauge = MetricsUtils.addMemoryMeasurerFor(
-                corfuRuntime.getMetrics(),
+                CorfuRuntime.getDefaultMetrics(),
                 testTable);
         final Long initialSize = corfuTableSizeGauge.getValue();
 
@@ -113,10 +116,10 @@ public class MemoryFootprintIT extends AbstractIT {
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        CorfuRuntime corfuRuntime = createRuntime(singleNodeEndpoint);
+        runtime = createRuntime(singleNodeEndpoint);
 
         // Create CorfuTable
-        CorfuTable testTable = corfuRuntime
+        CorfuTable testTable = runtime
                 .getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
@@ -125,7 +128,7 @@ public class MemoryFootprintIT extends AbstractIT {
 
         // Register memory footprint tracking
         final Gauge<Long> corfuTableSizeGauge =
-                MetricsUtils.addMemoryMeasurerFor(corfuRuntime.getMetrics(), testTable);
+                MetricsUtils.addMemoryMeasurerFor(CorfuRuntime.getDefaultMetrics(), testTable);
 
         // Put key values in CorfuTable and capture the memory consumption after puts
         final int count = 100;

@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.SerializerException;
 
 
 /**
@@ -18,6 +19,13 @@ public class Serializers {
     public static final ISerializer JAVA = new JavaSerializer((byte) 1);
     public static final ISerializer JSON = new JsonSerializer((byte) 2);
     public static final ISerializer PRIMITIVE = new PrimitiveSerializer((byte) 3);
+
+    /**
+     * @return the recommended default serializer used for converting objects into write format.
+     */
+    public static final ISerializer getDefaultSerializer() {
+        return Serializers.JSON;
+    }
 
     private static final Map<Byte, ISerializer> serializersMap;
 
@@ -38,10 +46,16 @@ public class Serializers {
      */
     public static ISerializer getSerializer(Byte type) {
         if (type <= SYSTEM_SERIALIZERS_COUNT) {
-            return serializersMap.get(type);
-        } else {
+            if (serializersMap.containsKey(type)) {
+                return serializersMap.get(type);
+            }
+        } else if (customSerializers.containsKey(type)) {
             return customSerializers.get(type);
         }
+
+        log.error("Serializer with type code {} not found. Please check custom serializers " +
+                "for this client.", type.intValue());
+        throw new SerializerException(type);
     }
 
     /**

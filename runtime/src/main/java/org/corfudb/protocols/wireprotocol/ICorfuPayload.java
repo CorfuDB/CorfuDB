@@ -3,17 +3,25 @@ package org.corfudb.protocols.wireprotocol;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableRangeSet;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.reflect.TypeToken;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBufOutputStream;
+import io.netty.buffer.Unpooled;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
 import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
+import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.JsonUtils;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -62,6 +70,7 @@ public interface ICorfuPayload<T> {
                     })
                     .put(DataRank.class, x -> new DataRank(x.readLong(), new UUID(x.readLong(), x.readLong())))
                     .put(CheckpointEntryType.class, x -> CheckpointEntryType.typeMap.get(x.readByte()))
+                    .put(Codec.Type.class, x -> Codec.getCodecTypeById(x.readInt()))
                     .put(UUID.class, x -> new UUID(x.readLong(), x.readLong()))
                     .put(byte[].class, x -> {
                         int length = x.readInt();
@@ -75,6 +84,20 @@ public interface ICorfuPayload<T> {
                         x.readerIndex(x.readerIndex() + bytes);
                         return b;
                     })
+                    .put(StreamAddressRange.class, buffer ->
+                            new StreamAddressRange(new UUID(buffer.readLong(), buffer.readLong()),
+                                    buffer.readLong(), buffer.readLong()))
+                    .put(StreamAddressSpace.class, buffer -> {
+                        long trimMark = buffer.readLong();
+                        Roaring64NavigableMap map = new Roaring64NavigableMap();
+                        try (ByteBufInputStream inputStream = new ByteBufInputStream(buffer)) {
+                            map.deserialize(inputStream);
+                            return new StreamAddressSpace(trimMark, map);
+                        } catch (IOException ioe) {
+                            throw new SerializerException("Exception when attempting to " +
+                                    "deserialize stream address space.", ioe);
+                        }
+                    })
                     .build()
     );
 
@@ -83,6 +106,11 @@ public interface ICorfuPayload<T> {
      * A lookup representing the context we'll use to do lookups.
      */
     Lookup lookup = MethodHandles.lookup();
+
+    static <T> T fromBuffer(byte[] data, Class<T> cls) {
+        ByteBuf buffer = Unpooled.wrappedBuffer(data);
+        return fromBuffer(buffer, cls);
+    }
 
     /**
      * Build payload from Buffer
@@ -134,7 +162,8 @@ public interface ICorfuPayload<T> {
                 throw new RuntimeException(th);
             }
         } catch (NoSuchMethodException nsme) {
-            throw new RuntimeException("CorfuPayloads must include a ByteBuf constructor!");
+            throw new RuntimeException("CorfuPayloads must include a ByteBuf " +
+                    "constructor! for class: " + cls.toString());
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -223,57 +252,17 @@ public interface ICorfuPayload<T> {
     }
 
     /**
-     * A really simple flat set implementation. The first entry is the size of the set as an int,
-     * and the next entries are each value.
-     *
-     * @param buf        The buffer to deserialize.
-     * @param valueClass The class of the values.
-     * @param <V>        The type of the values.
-     * @return Set of values type
-     */
-    static <V extends Comparable<V>> RangeSet<V> rangeSetFromBuffer(ByteBuf buf, Class<V> valueClass) {
-        int numEntries = buf.readInt();
-        ImmutableRangeSet.Builder<V> rs = ImmutableRangeSet.builder();
-        for (int i = 0; i < numEntries; i++) {
-            BoundType upperType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
-            V upper = fromBuffer(buf, valueClass);
-            BoundType lowerType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
-            V lower = fromBuffer(buf, valueClass);
-            rs.add(Range.range(lower, lowerType, upper, upperType));
-        }
-        return rs.build();
-    }
-
-    /**
-     * A really simple flat set implementation. The first entry is the size of the set as an int,
-     * and the next entries are each value.
-     *
-     * @param buf        The buffer to deserialize.
-     * @param valueClass The class of the values.
-     * @param <V>        The type of the values.
-     * @return Set of values type
-     */
-    static <V extends Comparable<V>> Range<V> rangeFromBuffer(ByteBuf buf, Class<V> valueClass) {
-        BoundType upperType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
-        V upper = fromBuffer(buf, valueClass);
-        BoundType lowerType = buf.readBoolean() ? BoundType.CLOSED : BoundType.OPEN;
-        V lower = fromBuffer(buf, valueClass);
-        return Range.range(lower, lowerType, upper, upperType);
-    }
-
-    /**
      * A really simple flat map implementation. The first entry is the size of the map as an int,
      * and the next entries are each value.
      *
      * @param buf      The buffer to deserialize.
      * @param keyClass The class of the keys.
-     * @param objClass The class of the values.
      * @param <K>      The type of the keys
      * @param <V>      The type of the values.
      * @return Map for use with enum type keys
      */
     static <K extends Enum<K> & ITypedEnum<K>, V> EnumMap<K, V> enumMapFromBuffer(
-            ByteBuf buf, Class<K> keyClass, Class<V> objClass) {
+            ByteBuf buf, Class<K> keyClass) {
 
         EnumMap<K, V> metadataMap = new EnumMap<>(keyClass);
         byte numEntries = buf.readByte();
@@ -379,6 +368,30 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(rank.getUuid().getLeastSignificantBits());
         } else if (payload instanceof CheckpointEntryType) {
             buffer.writeByte(((CheckpointEntryType) payload).asByte());
+        } else if (payload instanceof Codec.Type) {
+            buffer.writeInt(((Codec.Type) payload).getId());
+        } else if (payload instanceof PriorityLevel) {
+            buffer.writeByte(((PriorityLevel) payload).asByte());
+        } else if (payload instanceof StreamAddressSpace) {
+            StreamAddressSpace streamAddressSpace = (StreamAddressSpace) payload;
+            buffer.writeLong(streamAddressSpace.getTrimMark());
+            serialize(buffer, streamAddressSpace.getAddressMap());
+        } else if (payload instanceof StreamAddressRange) {
+            StreamAddressRange streamRange = (StreamAddressRange) payload;
+            buffer.writeLong(streamRange.getStreamID().getMostSignificantBits());
+            buffer.writeLong(streamRange.getStreamID().getLeastSignificantBits());
+            buffer.writeLong(streamRange.getStart());
+            buffer.writeLong(streamRange.getEnd());
+        } else if (payload instanceof Roaring64NavigableMap) {
+            Roaring64NavigableMap mrb = (Roaring64NavigableMap) payload;
+            // Improve compression
+            mrb.runOptimize();
+            try (ByteBufOutputStream outputStream = new ByteBufOutputStream(buffer);
+                 DataOutputStream dataOutputStream =  new DataOutputStream(outputStream)){
+                mrb.serialize(dataOutputStream);
+            } catch (IOException ioe) {
+                throw new SerializerException("Unexpected error while serializing to a byte array");
+            }
         } else {
             throw new RuntimeException("Unknown class " + payload.getClass() + " for serialization");
         }

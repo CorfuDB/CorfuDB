@@ -5,12 +5,16 @@
     <parent>
         <artifactId>corfu</artifactId>
         <groupId>org.corfudb</groupId>
-        <version>0.2.2.20190222082048.796</version>
+        <version>${revision}</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>universe</artifactId>
     <packaging>jar</packaging>
+
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -43,6 +47,7 @@
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>3.8.0</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.maven</groupId>
@@ -63,6 +68,13 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
+
         <plugins>
             <!-- Disable integration tests by default -->
             <plugin>
@@ -71,11 +83,13 @@
                 <version>3.0.0-M1</version>
                 <configuration>
                     <skipITs>true</skipITs>
+                    <trimStackTrace>false</trimStackTrace>
+                    <!-- Option to generate a file test report or just output the test report to the console. -->
+                    <useFile>false</useFile>
                 </configuration>
             </plugin>
         </plugins>
     </build>
-
 
     <profiles>
         <profile>
@@ -89,6 +103,9 @@
                         <configuration>
                             <skipITs>false</skipITs>
                             <reuseForks>false</reuseForks>
+                            <trimStackTrace>false</trimStackTrace>
+                            <!-- Option to generate a file test report or just output the test report to the console. -->
+                            <useFile>false</useFile>
                             <systemProperties>
                                 <property>
                                     <name>project.version</name>
@@ -98,55 +115,41 @@
                             <workingDirectory>${project.build.directory}/fork_${surefire.forkNumber}</workingDirectory>
                         </configuration>
                     </plugin>
-                    <plugin>
-                        <artifactId>maven-resources-plugin</artifactId>
-                        <version>2.5</version>
-                        <executions>
-                            <execution>
-                                <phase>pre-integration-test</phase>
-                                <goals>
-                                    <goal>copy-resources</goal>
-                                </goals>
-                                <configuration>
-                                    <outputDirectory>${project.build.directory}/corfu/</outputDirectory>
-                                    <resources>
-                                        <resource>
-                                            <directory>../infrastructure/target/</directory>
-                                            <includes>
-                                                <include>infrastructure-${project.version}-shaded.jar</include>
-                                            </includes>
-                                        </resource>
-                                    </resources>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
+                </plugins>
+            </build>
+        </profile>
 
+        <!-- ./mvnw -pl it/ -Pinfrastructure dependency:copy -->
+        <profile>
+            <id>infrastructure</id>
+            <build>
+                <plugins>
                     <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>exec-maven-plugin</artifactId>
-                        <version>1.6.0</version>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
                         <executions>
                             <execution>
-                                <id>Docker build</id>
-                                <phase>pre-integration-test</phase>
+                                <id>copy</id>
+                                <phase>process-sources</phase>
                                 <goals>
-                                    <goal>exec</goal>
+                                    <goal>copy-dependencies</goal>
                                 </goals>
-                                <configuration>
-                                    <executable>docker</executable>
-                                    <arguments>
-                                        <argument>build</argument>
-                                        <argument>--network=host</argument>
-                                        <argument>--build-arg</argument>
-                                        <argument>CORFU_JAR=infrastructure-${project.version}-shaded.jar</argument>
-                                        <argument>-t</argument>
-                                        <argument>corfu-server:${project.version}</argument>
-                                        <argument>.</argument>
-                                    </arguments>
-                                </configuration>
                             </execution>
                         </executions>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.corfudb</groupId>
+                                    <artifactId>infrastructure</artifactId>
+                                    <version>${revision}</version>
+                                    <type>jar</type>
+                                    <classifier>shaded</classifier>
+                                    <overWrite>false</overWrite>
+                                    <outputDirectory>${project.build.directory}</outputDirectory>
+                                    <destFileName>infrastructure-${version}-shaded.jar</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
                     </plugin>
                 </plugins>
             </build>

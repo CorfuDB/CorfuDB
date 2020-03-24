@@ -3,8 +3,8 @@ package org.corfudb.universe.group;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
+import org.corfudb.universe.group.cluster.Cluster;
 import org.corfudb.universe.node.Node;
-import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.universe.Universe;
 
 import java.time.Duration;
@@ -21,7 +21,7 @@ import static org.corfudb.universe.node.Node.NodeParams;
  * STOP: stops a {@link Group} gracefully within the provided timeout
  * KILL: kills a {@link Group} immediately
  */
-public interface Group {
+public interface Group<T extends Node, G extends Group.GroupParams> {
 
     /**
      * Deploy the {@link Group} into the {@link Universe}.
@@ -58,22 +58,24 @@ public interface Group {
      *
      * @return a Group parameters
      */
-    <T extends GroupParams> T getParams();
+    G getParams();
 
     /**
      * Provide the nodes that the {@link Group} is composed of.
      *
      * @return an {@link ImmutableList} of {@link Node}s.
      */
-    <T extends Node> ImmutableSortedMap<String, T> nodes();
+    ImmutableSortedMap<String, T> nodes();
 
-    <T extends Node> T getNode(String nodeName);
-
-    interface GroupParams {
+    interface GroupParams<T extends NodeParams> {
         String getName();
 
-        <T extends NodeParams> ImmutableSortedSet<T> getNodesParams();
+        Cluster.ClusterType getType();
 
-        NodeType getNodeType();
+        ImmutableSortedSet<T> getNodesParams();
+
+        GroupParams<T> add(T nodeParams);
+
+        String getFullNodeName(String nodeName);
     }
 }

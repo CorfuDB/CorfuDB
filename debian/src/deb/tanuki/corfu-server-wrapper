@@ -34,27 +34,41 @@ if [ -f /vmware_studio_build_in_progress ]; then
     exit 0
 fi
 
-ADDITIONAL_MULTIROLE_CONF="../conf/corfu-server-wrapper_multirole.conf"
+CONVERGED_APP_SYMLINK="../conf/corfu-server-wrapper_converged_app_additional.conf"
 ADDITIONAL_CONVERGED_APP_CONF="../conf/corfu-server-wrapper_converged_app.conf"
+ADDITIONAL_CONVERGED_APP_CONF_24GB="../conf/corfu-server-wrapper_converged_app_24gb.conf"
+
+# Determine the absolute path to successfully
+# delete the converged appliance conf file
+SCRIPTPATH=$(readlink -f $0)
+SCRIPTBASE=`dirname $SCRIPTPATH`
+
 NODE_TYPE=`grep node-type /etc/nsx_issue | cut -d\  --fields=2-4`
 
-# When deployed with policy role, use multirole setting to allocate 18% memory
-# Else remove the multirole related configuration to use 20% memory
-if [ "$NODE_TYPE" != "nsx-manager" ] && [ "$NODE_TYPE" != "nsx-manager nsx-policy-manager" ] && [ "$NODE_TYPE" != "nsx-policy-manager nsx-manager" ]; then
-    # Determine the absolute path to delete the multirole conf file
-    SCRIPTPATH=$(readlink -f $0)
-    SCRIPTBASE=$(dirname $SCRIPTPATH)
-    rm -f "$SCRIPTBASE/$ADDITIONAL_MULTIROLE_CONF"
+# If it's not the converged appliance (manager, policy manager, and controller)
+# or the GM standalone (global-manager) appliance then remove the
+# converged appliance related configuration
+if ( [ "$NODE_TYPE" != "nsx-manager nsx-policy-manager nsx-controller" ] \
+  && [ "$NODE_TYPE" != "global-manager" ] ); then
+    rm -f "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF"
+    rm -f "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF_24GB"
+else
+    if [ -L "$SCRIPTBASE/$CONVERGED_APP_SYMLINK" ]; then
+        rm -f "$SCRIPTBASE/$CONVERGED_APP_SYMLINK"
+    fi
+
+    ln -s "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF" "$SCRIPTBASE/$CONVERGED_APP_SYMLINK"
 fi
 
-# If it's not a converged appliance (manager, policy manager, and controller) appliance then remove the
-# converged appliance related configuration
-if [ "$NODE_TYPE" != "nsx-manager nsx-policy-manager nsx-controller" ]; then
-    # Determine the absolute path to successfully
-    # delete the converged appliance conf file
-    SCRIPTPATH=$(readlink -f $0)
-    SCRIPTBASE=`dirname $SCRIPTPATH`
-    rm -f "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF"
+if ( [ "$NODE_TYPE" = "nsx-manager nsx-policy-manager nsx-controller" ] ); then
+    SYS_MEM_GB=$(free -g --si | awk '/Mem:/ { total=$2 }  END { print total }')
+
+    if [ $SYS_MEM_GB -le 24 ]; then
+        if [ -L "$SCRIPTBASE/$CONVERGED_APP_SYMLINK" ]; then
+            rm -f "$SCRIPTBASE/$CONVERGED_APP_SYMLINK"
+        fi
+        ln -s "$SCRIPTBASE/$ADDITIONAL_CONVERGED_APP_CONF_24GB" "$SCRIPTBASE/$CONVERGED_APP_SYMLINK"
+    fi
 fi
 
 # Changes to enable profile mode
@@ -1317,6 +1331,7 @@ start() {
             # The string passed to eval must handles spaces in paths correctly.
             COMMAND_LINE="$CMDNICE \"$WRAPPER_CMD\" \"$WRAPPER_CONF\" wrapper.java.additional_file=\"$JAVA_ADDITIONAL_FILE\" wrapper.syslog.ident=\"$APP_NAME\" wrapper.pidfile=\"$PIDFILE\" wrapper.name=\"$APP_NAME\" wrapper.displayname=\"$APP_LONG_NAME\" wrapper.daemonize=TRUE $ANCHORPROP $IGNOREPROP $STATUSPROP $COMMANDPROP $LOCKPROP wrapper.script.version=3.5.26 $ADDITIONAL_PARA"
         fi
+	eval echo `gettext '$COMMAND_LINE '`
         eval $COMMAND_LINE
     else
         if [ $have_tty -eq 1 ]; then
