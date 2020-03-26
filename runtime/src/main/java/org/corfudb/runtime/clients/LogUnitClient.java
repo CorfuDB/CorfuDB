@@ -43,8 +43,8 @@ import org.corfudb.util.serializer.Serializers;
  */
 public class LogUnitClient extends AbstractClient {
 
-    public LogUnitClient(IClientRouter router, long epoch) {
-        super(router, epoch);
+    public LogUnitClient(IClientRouter router, long epoch, UUID clusterID) {
+        super(router, epoch, clusterID);
     }
 
     public String getHost() {
