@@ -297,6 +297,29 @@ public class CorfuTableTest extends AbstractViewTest {
 
         assertThat(((CorfuCompileProxy) ((ICorfuSMR) corfuTable).
                 getCorfuSMRProxy()).getUnderlyingObject().getSmrStream().pos()).isEqualTo(3);
+    }
 
+    /**
+     * Ensure that if the values of the table contains any duplicates,
+     * APIs that tries to retrieve all values can correctly return all
+     * values including duplicates.
+     */
+    @Test
+    public void duplicateValues() {
+        CorfuTable<String, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        corfuTable.put("k1", "aa");
+        corfuTable.put("k2", "cc");
+        corfuTable.put("k3", "aa");
+        corfuTable.put("k4", "bb");
+
+        assertThat(corfuTable.values()).containsExactlyInAnyOrder("aa", "aa", "bb", "cc");
+        assertThat(corfuTable.entrySet()).containsExactlyInAnyOrder(
+                MapEntry.entry("k1", "aa"), MapEntry.entry("k3", "aa"),
+                MapEntry.entry("k4", "bb"), MapEntry.entry("k2", "cc"));
     }
 }
