@@ -35,8 +35,8 @@ import org.corfudb.util.CFUtils;
  */
 public class ManagementClient extends AbstractClient {
 
-    public ManagementClient(IClientRouter router, long epoch) {
-        super(router, epoch);
+    public ManagementClient(IClientRouter router, long epoch, UUID clusterID) {
+        super(router, epoch, clusterID);
     }
 
     /**

@@ -495,7 +495,8 @@ public class ManagementView extends AbstractView {
         // Get layout futures for layout requests from all layout servers.
         for (String server : layoutServers) {
             IClientRouter router = runtime.getRouter(server);
-            layoutFuturesMap.put(server, new LayoutClient(router, Layout.INVALID_EPOCH).getLayout());
+            layoutFuturesMap.put(server, new LayoutClient(router, Layout.INVALID_EPOCH, Layout.INVALID_CLUSTER_ID)
+                    .getLayout());
         }
 
         return layoutFuturesMap;

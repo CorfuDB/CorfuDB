@@ -220,14 +220,21 @@ public class ManagementServer extends AbstractServer {
                                                        ChannelHandlerContext ctx, IServerRouter r) {
         if (serverContext.getManagementLayout() != null) {
             // We are already bootstrapped, bootstrap again is not allowed.
-            log.warn("Got a request to bootstrap a server with {} which is already bootstrapped, "
-                    + "rejecting!", msg.getPayload());
+            log.warn("handleManagementBootstrap: Got a request to bootstrap a server " +
+                    "with {} which is already bootstrapped, rejecting!", msg.getPayload());
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.MANAGEMENT_ALREADY_BOOTSTRAP_ERROR));
         } else {
-            log.info("Received Bootstrap Layout : {}", msg.getPayload());
-            serverContext.saveManagementLayout(msg.getPayload());
-            r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
-
+            Layout layout = msg.getPayload();
+            log.info("handleManagementBootstrap: received bootstrap layout : {}", layout);
+            if(layout.getClusterId() == null){
+                log.warn("handleManagementBootstrap: clusterId for the layout {} is not present.",
+                        layout.getClusterId());
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
+            }
+            else{
+                serverContext.saveManagementLayout(layout);
+                r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
+            }
         }
     }
 
