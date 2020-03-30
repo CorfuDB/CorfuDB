@@ -10,6 +10,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.assertj.core.api.Assertions;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -22,6 +23,7 @@ import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.ObjectOpenOption;
+import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
@@ -38,10 +40,32 @@ public class CheckpointTrimTest extends AbstractViewTest {
                 .setStreamName("test")
                 .open();
 
-        // Place 3 entries into the map
-        testMap.put("a", "a");
-        testMap.put("b", "b");
-        testMap.put("c", "c");
+        Map<String, String> testMap1 = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
+                .setStreamName("test1")
+                .open();
+
+        CorfuRuntime runtime = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect().setCacheDisabled(true);
+
+        for(int i = 0; i < 5; i++) {
+            //getRuntime().getObjectsView().TXBegin();
+            testMap.put("a", "a");
+            //getRuntime().getObjectsView().TXEnd();
+        }
+
+        StreamOptions options = StreamOptions.builder()
+                .ignoreTrimmed(false)
+                .build();
+        IStreamView stream = runtime.getStreamsView().get(CorfuRuntime.getStreamID("test"), options);
+        List<ILogData> logEntries = stream.remaining();
+        System.out.println("\nbefore trim logentries :" + logEntries);
+
+        for(int i = 0; i < 5; i++) {
+            //getRuntime().getObjectsView().TXBegin();
+            testMap.put("b", "b");
+            //getRuntime().getObjectsView().TXEnd();
+        }
 
         // Insert a checkpoint
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
@@ -51,17 +75,53 @@ public class CheckpointTrimTest extends AbstractViewTest {
         // Trim the log
         trim(checkpointAddress);
 
-        // Ok, get a new view of the map
-        Map<String, String> newTestMap = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                })
-                .option(ObjectOpenOption.NO_CACHE)
-                .setStreamName("test")
-                .open();
+        for(int i = 0; i < 5; i++) {
+            //getRuntime().getObjectsView().TXBegin();
+            testMap.put("c", "c");
+            //getRuntime().getObjectsView().TXEnd();
+        }
 
-        // Reading an entry from scratch should be ok
-        assertThat(newTestMap)
-                .containsKeys("a", "b", "c");
+        long start, end;
+        boolean result = true;
+        long newAddress;
+
+        for (int i = 0; i < 3 && result; i++) {
+            result = false;
+            try {
+                start = System.currentTimeMillis();
+                logEntries = stream.remaining();
+                end = System.currentTimeMillis();
+                long current = stream.getCurrentGlobalPosition();
+                System.out.println("\nlogentries " + i +" :" + logEntries + "time:" + (end - start) + " pointer:" + current);
+            } catch (TrimmedException e) {
+                result = true;
+                newAddress = stream.getCurrentGlobalPosition() + 1;
+                stream.seek(newAddress);
+                System.out.println("caught an exception " + e + " seek to " + newAddress);
+            }
+        }
+
+        for (int i = 0; i < 2 && result; i++) {
+            result = false;
+            try {
+                start = System.currentTimeMillis();
+                logEntries = stream.remaining();
+                end = System.currentTimeMillis();
+                long current = stream.getCurrentGlobalPosition();
+                System.out.println("\nlogentries " + i +" :" + logEntries + "time:" + (end - start) + " pointer:" + current);
+            } catch (TrimmedException e) {
+                result = true;
+                newAddress = checkpointAddress.getSequence() + 1;
+                stream.seek(newAddress);
+                System.out.println("caught an exception " + e + " seek to " + newAddress);
+            }
+        }
+
+        //This will lose some entries
+        logEntries = stream.remaining();
+        System.out.println("\nseek to checkpoint logentries " +" :" + logEntries);
+
+        //while meet an trimmedexception, it should reopen the stream and read the most recent checkpoint.
     }
 
     /**
