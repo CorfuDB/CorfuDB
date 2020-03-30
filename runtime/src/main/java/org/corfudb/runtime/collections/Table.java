@@ -8,6 +8,7 @@ import java.util.Map.Entry;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -277,6 +278,21 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                         entry.getValue().getPayload(),
                         entry.getValue().getMetadata()))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Stream the whole table out in chunks, useful for very large tables
+     * that won't fit completely in memory.
+     *
+     * @return Collection of filtered entries.
+     */
+    public @Nonnull
+    Stream<CorfuStoreEntry<K, V, M>> entryStream() {
+         return corfuTable.entryStream().map(entry ->
+                 new CorfuStoreEntry<>(
+                         entry.getKey(),
+                         entry.getValue().getPayload(),
+                         entry.getValue().getMetadata()));
     }
 
     /**

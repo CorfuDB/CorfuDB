@@ -335,11 +335,19 @@ public class ServerContext implements AutoCloseable {
      *  @return True, if a new layout was installed, false otherwise.
      */
     public synchronized boolean installSingleNodeLayoutIfAbsent() {
-        if ((Boolean) getServerConfig().get("--single") && getCurrentLayout() == null) {
+        if (isSingleNodeSetup() && getCurrentLayout() == null) {
             setCurrentLayout(getNewSingleNodeLayout());
             return true;
         }
         return false;
+    }
+
+    /**
+     * Check if it's a single node setup.
+     * @return True if it is, false otherwise.
+     */
+    public boolean isSingleNodeSetup(){
+        return (Boolean) getServerConfig().get("--single");
     }
 
     /**
@@ -417,7 +425,7 @@ public class ServerContext implements AutoCloseable {
      */
     public synchronized long getServerEpoch() {
         Long epoch = dataStore.get(SERVER_EPOCH_RECORD);
-        return epoch == null ? 0 : epoch;
+        return epoch == null ? Layout.INVALID_EPOCH : epoch;
     }
 
     /**

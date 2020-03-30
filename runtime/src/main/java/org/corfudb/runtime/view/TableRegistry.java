@@ -17,6 +17,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -47,6 +48,7 @@ import javax.annotation.Nullable;
  * <p>
  * Created by zlokhandwala on 2019-08-10.
  */
+@Slf4j
 public class TableRegistry {
 
     /**
@@ -163,10 +165,28 @@ public class TableRegistry {
 
         TableMetadata.Builder metadataBuilder = TableMetadata.newBuilder();
         metadataBuilder.setDiskBased(tableOptions.getPersistentDataPath().isPresent());
+
+        // Schema validation to ensure that there is either proper modification of the schema across open calls.
+        // Or no modification to the protobuf files.
+        boolean hasSchemaChanged = false;
+        CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
+        if (oldRecord != null) {
+            if (!oldRecord.getPayload().getFileDescriptorsMap().equals(tableDescriptors.getFileDescriptorsMap())) {
+                hasSchemaChanged = true;
+                log.error("registerTable: Schema update detected for table "+namespace+" "+ tableName);
+                log.debug("registerTable: old schema:"+oldRecord.getPayload().getFileDescriptorsMap());
+                log.debug("registerTable: new schema:"+tableDescriptors.getFileDescriptorsMap());
+            }
+        }
         try {
             this.runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
-            this.registryTable.putIfAbsent(tableNameKey,
-                    new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+            if (hasSchemaChanged) {
+                this.registryTable.put(tableNameKey,
+                        new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+            } else {
+                this.registryTable.putIfAbsent(tableNameKey,
+                        new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+            }
         } finally {
             this.runtime.getObjectsView().TXEnd();
         }
@@ -347,13 +367,26 @@ public class TableRegistry {
     }
 
     /**
-     * Deletes a table.
+     * Only clears a table, DOES not delete its file descriptors from metadata.
+     * This is because if the purpose of the delete is to upgrade from an old schema to a new schema
+     * Then we must first purge all SMR entries of the current (old) format from corfu stream.
+     * It is the checkpointer which actually purges via a trim operation.
+     * But to even get to the trim, it must be able to read the table, which it can't do if the table's
+     * metadata (TableRegistry entry) is also removed here.
+     * So what would be nice if we can place a marker indicating that this table is marked
+     * for deletion, so that on the next Re-open we will actually force update the table registry entry.
+     * For now, just force the openTable to always purge the prior entry assuming that the
+     * caller has done the good work of
+     * 1. table.clear() using the old version
+     * 2. running checkpoint and trim
+     * 3. re-open the table with new proto files.
      *
      * @param namespace Namespace of the table.
      * @param tableName Name of the table.
      */
     public void deleteTable(String namespace, String tableName) {
-        throw new UnsupportedOperationException("deleteTable unsupported for now");
+        Table<Message, Message, Message> table = getTable(namespace, tableName);
+        table.clear();
     }
 
     /**

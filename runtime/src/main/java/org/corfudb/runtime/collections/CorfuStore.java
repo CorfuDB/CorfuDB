@@ -114,7 +114,7 @@ public class CorfuStore {
      * @param namespace Namespace of the table.
      * @param tableName Table name.
      */
-    private void deleteTable(String namespace, String tableName) {
+    public void deleteTable(String namespace, String tableName) {
         runtime.getTableRegistry().deleteTable(namespace, tableName);
     }
 

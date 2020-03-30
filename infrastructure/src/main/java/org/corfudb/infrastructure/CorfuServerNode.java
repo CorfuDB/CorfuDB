@@ -80,11 +80,17 @@ public class CorfuServerNode implements AutoCloseable {
      * @param serverMap     Server Map with all components.
      */
     public CorfuServerNode(@Nonnull ServerContext serverContext,
-                           @Nonnull Map<Class, AbstractServer> serverMap) {
+                           @Nonnull ImmutableMap<Class, AbstractServer> serverMap) {
         this.serverContext = serverContext;
         this.serverMap = serverMap;
-        router = new NettyServerRouter(new ArrayList<>(serverMap.values()));
+        router = new NettyServerRouter(serverMap.values().asList(), serverContext);
         this.serverContext.setServerRouter(router);
+        // If the node is started in the single node setup and was bootstrapped,
+        // set the server epoch as well.
+        if(serverContext.isSingleNodeSetup() && serverContext.getCurrentLayout() != null){
+            serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(),
+                    router);
+        }
         this.close = new AtomicBoolean(false);
     }
 
