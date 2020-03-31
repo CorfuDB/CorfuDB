@@ -85,4 +85,9 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
     public void addTransaction(AbstractTransactionalContext tc) {
         throw new UnsupportedOperationException("Can't merge into a readonly txn (yet)");
     }
+
+    @Override
+    public void addPreCommitListener(TransactionalContext.PreCommitListener preCommitListener) {
+        throw new UnsupportedOperationException("Can't register precommit hooks in readonly txn");
+    }
 }
