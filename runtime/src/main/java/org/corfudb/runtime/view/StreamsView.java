@@ -168,6 +168,19 @@ public class StreamsView extends AbstractView {
             }
 
             try {
+                if (TransactionalContext.isInTransaction()) {
+                    // If this transaction has entries that wish to capture the committed address
+                    // invoke its preCommitCallbacks with the tokenResponse from the sequencer.
+                    // Note that we might invoke the same method multiple times on retries,
+                    // which means the preCommitCallback must be idempotent.
+                    TokenResponse finalTokenResponse = tokenResponse;
+                    log.debug("append: Invoking {} preCommitListeners",
+                            TransactionalContext.getRootContext().getPreCommitListeners().size());
+                    TransactionalContext.getRootContext()
+                            .getPreCommitListeners()
+                            .forEach(e -> e.preCommitCallback(finalTokenResponse));
+                }
+
                 // Attempt to write to the log.
                 runtime.getAddressSpaceView().write(tokenResponse, ld, cacheOption);
                 // If we're here, we succeeded, return the acquired token.
