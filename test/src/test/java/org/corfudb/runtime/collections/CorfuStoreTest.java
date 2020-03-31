@@ -1,10 +1,12 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Message;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.integration.Event;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -22,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.google.protobuf.DescriptorProtos.DescriptorProto;
 import static com.google.protobuf.DescriptorProtos.FileDescriptorProto;
@@ -264,6 +267,19 @@ public class CorfuStoreTest extends AbstractViewTest {
         assertThatThrownBy(() ->
                 table.update(key1, EventInfo.getDefaultInstance(), wrongRevisionMetadata))
                 .isExactlyInstanceOf(RuntimeException.class);
+
+        // Verify the table is readable using entryStream()
+        final int batchSize = 50;
+        Stream<CorfuStoreEntry<Uuid, EventInfo, ManagedResources>> entryStream = table.entryStream();
+        final Iterable<List<CorfuStoreEntry<Uuid, EventInfo, ManagedResources>>> partitions =
+                Iterables.partition(entryStream::iterator, batchSize);
+        for (List<CorfuStoreEntry<Uuid, EventInfo, ManagedResources>> partition : partitions) {
+            for (CorfuStoreEntry<Uuid, EventInfo, ManagedResources> entry : partition) {
+                assertThat(entry.getKey()).isExactlyInstanceOf(Uuid.class);
+                assertThat(entry.getPayload()).isExactlyInstanceOf(EventInfo.class);
+                assertThat(entry.getMetadata()).isExactlyInstanceOf(ManagedResources.class);
+            }
+        }
     }
 
     /**

@@ -3,7 +3,7 @@
 
 (import org.docopt.Docopt)                                  ; parse some cmdline opts
 (import org.corfudb.runtime.view.Layout)
-
+(import java.util.UUID)
 (def usage "corfu_management_bootstrap, to bootstrap Corfu Management Server.
 Usage:
   corfu_management_bootstrap -c <config> -l <layout> [-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] [-g -o <username_file> -j <password_file>]]
@@ -24,7 +24,7 @@ Options:
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
 (defn build-layout [endpoint layout] (do
-                                       (let [q (.. (get-management-client (get-router server localcmd) 0) (bootstrapManagement (Layout/fromJSONString (str layout))))]
+                                       (let [q (.. (get-management-client (get-router server localcmd) 0 (.UUID (.fromString "00000000-0000-0000-0000-000000000000"))) (bootstrapManagement (Layout/fromJSONString (str layout))))]
                                             (.. q (get))
                                             )
                                        (println endpoint "bootstrapped successfully")

@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LayoutServer;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
@@ -11,6 +12,7 @@ import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -24,15 +26,17 @@ public class LayoutHandlerTest extends AbstractClientTest {
 
     @Override
     Set<AbstractServer> getServersForTest() {
+        ServerContext sc = defaultServerContext();
+        serverRouter.setServerContext(sc);
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new LayoutServer(defaultServerContext()))
+                .add(new LayoutServer(sc))
                 .build();
     }
 
     @Override
     Set<IClient> getClientsForTest() {
         LayoutHandler layoutHandler = new LayoutHandler();
-        client = new LayoutClient(router, 0L);
+        client = new LayoutClient(router, 0L, UUID.fromString("00000000-0000-0000-0000-000000000000"));
         return new ImmutableSet.Builder<IClient>()
                 .add(new BaseHandler())
                 .add(layoutHandler)
