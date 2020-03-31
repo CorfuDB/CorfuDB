@@ -128,11 +128,22 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
 
 
     //Assist the test that the log address values are not  in the same order of enqueue.
-    public void queueOutOfOrderedByTransaction(TransactionType txnType) throws Exception {
+    public void queueOutOfOrderedByTransaction(TransactionType txnType, boolean inOrder) throws Exception {
         Semaphore semId = new Semaphore(1);
         Semaphore semTx= new Semaphore(1);
         semId.acquire();
         semTx.acquire();
+
+        int semIdOwner;
+        int semTxOwner;
+
+        if (inOrder) {
+            semIdOwner = 0;
+            semTxOwner = 0;
+        } else {
+            semIdOwner = 0;
+            semTxOwner = 1;
+        }
 
         final int numThreads = PARAMETERS.CONCURRENCY_TWO;
         Map<Integer, Map<Long, Long>> tables = new HashMap<>();
@@ -179,23 +190,23 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                     testTable.put(coinToss, coinToss);
 
                     //enforce the second thread enqueue later
-                    if (tableID != 0) {
+                    if (tableID != semIdOwner) {
                         semId.acquire();
                     }
 
                     CorfuRecordId id = corfuQueue.enqueue(queueData);
 
-                    if (tableID == 0) {
+                    if (tableID == semIdOwner) {
                         semId.release();
                     }
 
                     //enforce the first thread get enQueue first, but
-                    if (tableID == 0) {
+                    if (tableID != semTxOwner) {
                         semTx.acquire();
                     }
 
                     final long streamOffset = TXEnd();
-                    if (tableID != 0) {
+                    if (tableID == semTxOwner) {
                         semTx.release();
                     }
 
@@ -229,17 +240,32 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
             i++;
         }
 
-        assertThat(cnt).isNotZero();
+        System.out.print("\ncnt of out of order " + cnt);
+        if (inOrder) {
+            assertThat(cnt).isZero();
+        } else {
+            assertThat(cnt).isNotZero();
+        }
+    }
+
+    @Test
+    public void queueInOrderedByWWTxn() throws Exception {
+        queueOutOfOrderedByTransaction(TransactionType.WRITE_AFTER_WRITE, true);
+    }
+
+    @Test
+    public void queueInOrderedByOptimTxn() throws Exception {
+        queueOutOfOrderedByTransaction(TransactionType.OPTIMISTIC, true);
     }
 
     @Test
     public void queueOutOfOrderedByWWTxn() throws Exception {
-        queueOutOfOrderedByTransaction(TransactionType.WRITE_AFTER_WRITE);
+        queueOutOfOrderedByTransaction(TransactionType.WRITE_AFTER_WRITE, false);
     }
 
     @Test
     public void queueOutOfOrderedByOptimTxn() throws Exception {
-        queueOutOfOrderedByTransaction(TransactionType.OPTIMISTIC);
+        queueOutOfOrderedByTransaction(TransactionType.OPTIMISTIC, false);
     }
 
 }
