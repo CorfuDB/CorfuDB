@@ -11,17 +11,15 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.junit.Test;
 
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Hashtable;
 import java.util.TreeMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
-import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -131,6 +129,10 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
 
     //Assist the test that the log address values are not  in the same order of enqueue.
     public void queueOutOfOrderedByTransaction(TransactionType txnType) throws Exception {
+        Semaphore semId = new Semaphore(1);
+        Semaphore semTx= new Semaphore(1);
+        semId.acquire();
+        semTx.acquire();
 
         final int numThreads = PARAMETERS.CONCURRENCY_TWO;
         Map<Integer, Map<Long, Long>> tables = new HashMap<>();
@@ -178,16 +180,24 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
 
                     //enforce the second thread enqueue later
                     if (tableID != 0) {
-                        sleep(100);
+                        semId.acquire();
                     }
+
                     CorfuRecordId id = corfuQueue.enqueue(queueData);
 
+                    if (tableID == 0) {
+                        semId.release();
+                    }
+
                     //enforce the first thread get enQueue first, but
-                    if (tableID != 0) {
-                        sleep(100);
+                    if (tableID == 0) {
+                        semTx.acquire();
                     }
 
                     final long streamOffset = TXEnd();
+                    if (tableID != 0) {
+                        semTx.release();
+                    }
 
                     //hashtable update is synchronized
                     validator.put(streamOffset, id);
