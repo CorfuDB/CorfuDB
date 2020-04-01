@@ -610,7 +610,7 @@ public class RemoteMonitoringService implements MonitoringService {
         }
 
         // Launch task to bootstrap the primary sequencer.
-        log.info("Attempting to bootstrap the primary sequencer. ClusterState {}", clusterState);
+        log.trace("Attempting to bootstrap the primary sequencer. ClusterState {}", clusterState);
         // We do not care about the result of the trigger.
         // If it fails, we detect this again and retry in the next polling cycle.
         return getCorfuRuntime()

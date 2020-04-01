@@ -3,7 +3,6 @@ package org.corfudb.runtime.collections;
 import com.google.common.primitives.UnsignedBytes;
 import lombok.Getter;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
-import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -31,37 +30,33 @@ public class CorfuQueueTest extends AbstractViewTest {
         CorfuQueue<String>
                 corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test");
 
-        CorfuRecordId idC = corfuQueue.enqueue("c");
-        CorfuRecordId idB = corfuQueue.enqueue("b");
-        CorfuRecordId idA = corfuQueue.enqueue("a");
+        corfuQueue.enqueue("c");
+        corfuQueue.enqueue("b");
+        corfuQueue.enqueue("a");
 
         List<CorfuQueueRecord<String>> records = corfuQueue.entryList();
-
-        /*
-         * Id returned during enqueue() are not the same as the Ids returned in entryList()
-         * Because they have additional data from the commit ordering.
-         */
-        assertThat(records.get(0).getRecordId().getEntryId()).isEqualTo(idC.getEntryId());
-        assertThat(records.get(1).getRecordId().getEntryId()).isEqualTo(idB.getEntryId());
-        assertThat(records.get(2).getRecordId().getEntryId()).isEqualTo(idA.getEntryId());
 
         assertThat(records.get(0).getEntry()).isEqualTo("c");
         assertThat(records.get(1).getEntry()).isEqualTo("b");
         assertThat(records.get(2).getEntry()).isEqualTo("a");
 
-        // Remove the middle entry
-        corfuQueue.removeEntry(idB);
-
-        assertThatThrownBy(() -> corfuQueue.entryList(Integer.MAX_VALUE)).
+        assertThatThrownBy(() -> corfuQueue.entryList(Integer.MIN_VALUE)).
                 isExactlyInstanceOf(IllegalArgumentException.class);
+
+        final int middleEntryIndex = 1;
+        // Remove the middle entry
+        corfuQueue.removeEntry(corfuQueue.entryList().get(middleEntryIndex).getRecordId());
+        assertThat(records.get(0).getRecordId().asUUID().getLeastSignificantBits())
+                .isEqualTo(records.get(0).getRecordId().getEntryId());
+
         List<CorfuQueueRecord<String>> records2 =
                     corfuQueue.entryList(Short.MAX_VALUE);
         assertThat(records2.get(0).getEntry()).isEqualTo("c");
         assertThat(records2.get(1).getEntry()).isEqualTo("a");
 
         // Also ensure that the records are comparable across snapshots
-        assertThat(records.get(0).getRecordId().getOrdering()).
-                isLessThan(records2.get(1).getRecordId().getOrdering());
+        assertThat(records.get(0).getRecordId()).
+                isLessThan(records2.get(1).getRecordId());
 
         assertThat(records.get(0).compareTo(records2.get(1))).isLessThan(0);
         assertThat(records.get(0).getRecordId().compareTo(records2.get(1).getRecordId())).isLessThan(0);
@@ -73,9 +68,9 @@ public class CorfuQueueTest extends AbstractViewTest {
                 corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test", Serializers.JAVA,
                 Index.Registry.empty());
 
-        CorfuRecordId idC = corfuQueue.enqueue("c");
-        CorfuRecordId idB = corfuQueue.enqueue("b");
-        CorfuRecordId idA = corfuQueue.enqueue("a");
+        corfuQueue.enqueue("c");
+        corfuQueue.enqueue("b");
+        corfuQueue.enqueue("a");
 
         final int expected = 3;
         List<CorfuQueueRecord<String>> records = corfuQueue.entryList();
@@ -83,7 +78,7 @@ public class CorfuQueueTest extends AbstractViewTest {
 
         // Only retrieve entries greater than the first entry.
         List<CorfuQueueRecord<String>> recAfter = corfuQueue.entryList(
-                records.get(0).getRecordId().getEntryId(),
+                records.get(0).getRecordId(),
                 records.size());
         assertThat(recAfter.size()).isEqualTo(records.size() - 1);
     }

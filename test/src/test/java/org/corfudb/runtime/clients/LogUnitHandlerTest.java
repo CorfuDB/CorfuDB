@@ -82,12 +82,16 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     Set<AbstractServer> getServersForTest() {
         String dirPath = PARAMETERS.TEST_TEMP_DIR;
         serverContext = new ServerContextBuilder()
-                .setSingle(false)
+                .setSingle(true)
                 .setNoVerify(false)
                 .setMemory(false)
                 .setLogPath(dirPath)
                 .setServerRouter(serverRouter)
                 .build();
+
+        serverContext.installSingleNodeLayoutIfAbsent();
+        serverRouter.setServerContext(serverContext);
+        serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(), serverRouter);
         LogUnitServer server = new LogUnitServer(serverContext);
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
@@ -97,7 +101,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     @Override
     Set<IClient> getClientsForTest() {
         LogUnitHandler logUnitHandler = new LogUnitHandler();
-        client = new LogUnitClient(router, 0L);
+        client = new LogUnitClient(router, 0L, UUID.fromString("00000000-0000-0000-0000-000000000000"));
         return new ImmutableSet.Builder<IClient>()
                 .add(new BaseHandler())
                 .add(logUnitHandler)
