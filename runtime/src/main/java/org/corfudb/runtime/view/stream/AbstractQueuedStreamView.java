@@ -352,6 +352,7 @@ public abstract class AbstractQueuedStreamView extends
                 // to be thrown. By updating the global pointer to include the hole,
                 // we prevent that from happening.
                 .filter(x -> x.isData() || x.isHole())
+                // Case of Checkpoint will never load these addresses, cause this is another stream
                 .filter(x -> x.containsStream(context.id))
                 .collect(Collectors.toList());
 
@@ -370,6 +371,7 @@ public abstract class AbstractQueuedStreamView extends
         } else {
             // Clear the entries which were read
             context.readQueue.headSet(maxGlobal, true).clear();
+            context.readCpQueue.headSet(maxGlobal, true).clear();
         }
 
         // Transfer the addresses of the read entries to the resolved queue
@@ -913,6 +915,7 @@ public abstract class AbstractQueuedStreamView extends
             // remove anything in the read queue LESS
             // than global address.
             readQueue.headSet(globalAddress).clear();
+            readCpQueue.headSet(globalAddress).clear();
             // transfer from the resolved queue into
             // the read queue anything equal to or
             // greater than the global address
