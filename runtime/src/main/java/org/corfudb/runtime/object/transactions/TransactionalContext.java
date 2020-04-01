@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 
 /** A class which allows access to transactional contexts, which manage
  * transactions. The static methods of this class provide access to the
@@ -103,5 +104,14 @@ public class TransactionalContext {
                 getTransactionStack().stream().collect(Collectors.toList());
         Collections.reverse(listReverse);
         return listReverse;
+    }
+
+    /**
+     * Callback context for objects that need special processing with TokenResponse
+     * That is returned after conflict resolution is successful but before write happens.
+     * This can be used to capture the commit address of the object into the object itself.
+     */
+    public interface PreCommitListener {
+        void preCommitCallback(TokenResponse tokenResponse);
     }
 }

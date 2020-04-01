@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.UUID;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -31,8 +32,8 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
     IClientRouter router;
 
     @Override
-    public LayoutClient getClient(long epoch) {
-        return new LayoutClient(router, epoch);
+    public LayoutClient getClient(long epoch, UUID clusterID) {
+        return new LayoutClient(router, epoch, clusterID);
     }
 
     /**

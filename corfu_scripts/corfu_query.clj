@@ -23,7 +23,7 @@ Options:
 
 (defn print-query [endpoint] (do
                                (println (format "Query %s:" endpoint))
-                               (let [q (.. (get-base-client (get-router server localcmd) 0) (getVersionInfo))]
+                               (let [q (.. (get-base-client (get-router server localcmd) 0 (.UUID (.fromString "00000000-0000-0000-0000-000000000000"))) (getVersionInfo))]
                                (println (bean (.. q (get)))))
                                ))
 

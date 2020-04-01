@@ -30,13 +30,30 @@ public class LogUnitCacheTest extends AbstractServerTest {
     private static final double MAX_HEAP_RATIO = 0.9;
 
     @Override
-    public AbstractServer getDefaultServer() {
+    public LogUnitServer getDefaultServer() {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        return new LogUnitServer(new ServerContextBuilder()
+        ServerContext sc = new ServerContextBuilder()
                 .setLogPath(serviceDir)
+                .setSingle(true)
                 .setMemory(false)
-                .build());
+                .build();
+
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
+        return s1;
+    }
+
+    @Override
+    public void setServer(AbstractServer server) {
+        router.reset();
+        router.addServer(server);
     }
 
     /**
@@ -48,7 +65,7 @@ public class LogUnitCacheTest extends AbstractServerTest {
         final long start = 0L;
         final long end = start + size;
 
-        LogUnitServer logUnitServer = (LogUnitServer) getDefaultServer();
+        LogUnitServer logUnitServer = getDefaultServer();
         setServer(logUnitServer);
 
         List<Long> addresses = LongStream.range(start, end).boxed().collect(Collectors.toList());
