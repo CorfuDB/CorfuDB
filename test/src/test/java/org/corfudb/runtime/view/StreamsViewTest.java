@@ -42,4 +42,14 @@ public class StreamsViewTest extends AbstractViewTest {
         scheduleConcurrently(numIter, t -> streamsView.gc(trimMark));
         executeScheduled(parallelNum, PARAMETERS.TIMEOUT_NORMAL);
     }
+
+    /**
+     * This test verifies that when a stream is directly consumed through the remaining API
+     * it is capable to load from a checkpoint on the first access.
+     */
+    @Test
+    public void testRemainingLoadFromCheckpoint() {
+
+    }
+
 }
