@@ -17,6 +17,7 @@ import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
@@ -27,9 +28,11 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.NodeLocator;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
@@ -584,6 +587,87 @@ public class CheckpointSmokeTest extends AbstractViewTest {
             assertThat(m2B.get(keyB)).isEqualTo(i);
         }
     }
+
+    /**
+     * This test evaluates the case of a stream consumed directly, where the initial checkpoint, i.e.,
+     * that one loaded on the first access is trimmed after several cycles.
+     */
+    @Test
+    public void consumeRawStreamCheckpointTrim() {
+        final String streamA = "streamA";
+        final int entries = 10;
+
+        Serializers.registerSerializer(serializer);
+        Map<String, String> mA =  r.getObjectsView()
+                .build()
+                .setStreamName(streamA)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setSerializer(serializer)
+                .open();
+
+        // Write 10 records to streamA
+        for (int i = 0 ; i < entries; i++) {
+            mA.put("key_" + i, "value_" + i);
+        }
+
+        // First Checkpoint
+        MultiCheckpointWriter mcw = new MultiCheckpointWriter();
+        mcw.addMap((CorfuTable) mA);
+        long cpAddress = mcw.appendCheckpoints(r, "author").getSequence();
+
+        // Load StreamView :: do not ignore trims
+        CorfuRuntime rt = getNewRuntime(NodeLocator.parseString(r.getLayoutServers().get(0))).connect();
+        StreamOptions options = StreamOptions.builder()
+                .ignoreTrimmed(false)
+                .build();
+        IStreamView sv = rt.getStreamsView().get(CorfuRuntime.getStreamID(streamA), options);
+
+        // Consume stream for the first time, it should load from the checkpoint (first time access)
+        // TODO: This does not return anything, cause it filters... is that ok for direct access?
+        List<ILogData> data = sv.remaining();
+
+        // Write some more data and do not consume yet
+        for (int i = 0 ; i < entries; i++) {
+            mA.put("key_" + i, "value_" + i);
+        }
+
+        // Write Second checkpoint
+        MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
+        mcw2.addMap((CorfuTable) mA);
+        long cpAddress2 = mcw2.appendCheckpoints(r, "author").getSequence();
+
+        // Consume the remaining (we should read the 10 entries)
+        data = sv.remaining();
+        assertThat(data.size()).isEqualTo(entries);
+
+        // Consume again, there should not be any entries
+        data = sv.remaining();
+        assertThat(data.size()).isEqualTo(0);
+
+        // Trim on second checkpoint and clear all caches
+        System.out.println("Trim at: " + cpAddress2);
+        r.getAddressSpaceView().prefixTrim(new Token(0, cpAddress2));
+        r.getAddressSpaceView().invalidateClientCache();
+        r.getAddressSpaceView().invalidateServerCaches();
+        rt.getAddressSpaceView().invalidateClientCache();
+
+        // Seek to the tail of the stream
+        sv.seek(r.getSequencerView().query(CorfuRuntime.getStreamID(streamA)) + 1);
+
+        // Request remaining, we should not obtain anything and not attempt to read anything that was trimmed.
+        data = sv.remaining();
+        assertThat(data.size()).isEqualTo(0);
+    }
+
+    @Test
+    public void getCheckpointId() {
+        String streamId = "e7f9d700-0e81-3839-8d70-cb5cbb79036e";
+
+        UUID cp = CorfuRuntime.getCheckpointStreamIdFromId(UUID.fromString(streamId));
+
+        System.out.println("CP : " + cp);
+    }
+
 
     @Test
     public void emptyCheckPoint() throws Exception {

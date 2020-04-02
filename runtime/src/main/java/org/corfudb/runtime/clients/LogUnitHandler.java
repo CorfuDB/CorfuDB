@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.UUID;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -35,8 +36,8 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     IClientRouter router;
 
     @Override
-    public LogUnitClient getClient(long epoch) {
-        return new LogUnitClient(router, epoch);
+    public LogUnitClient getClient(long epoch, UUID clusterID) {
+        return new LogUnitClient(router, epoch, clusterID);
     }
 
     /**
