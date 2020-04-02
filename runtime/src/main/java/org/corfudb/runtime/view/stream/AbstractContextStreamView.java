@@ -9,6 +9,9 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -197,7 +200,16 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             getCurrentContext().setGlobalPointerCheckGCTrimMark(maxGlobal);
         } else {
             // Update pointer from log data and then validate final position of the pointer against GC trim mark.
-            updatePointer(entries.get(entries.size() - 1));
+
+            // Entries can come from a checkpoint or a regular stream, in the case it comes from a checkpoint only
+            // (last entry is checkpoint entry type) we should accordingly set the pointer to point to the
+            // address this checkpoint represents for the regular stream and not for the checkpoint.
+            Object lastEntry = entries.get(entries.size() - 1).getPayload(runtime);
+            if (lastEntry instanceof CheckpointEntry) {
+                getCurrentContext().setGlobalPointer(Long.parseLong(((CheckpointEntry)lastEntry).getDict().get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)));
+            } else {
+                updatePointer(entries.get(entries.size() - 1));
+            }
             getCurrentContext().validateGlobalPointerPosition(getCurrentGlobalPosition());
         }
 

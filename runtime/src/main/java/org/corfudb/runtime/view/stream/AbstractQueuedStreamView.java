@@ -97,7 +97,7 @@ public abstract class AbstractQueuedStreamView extends
         // If we have no entries to read, fill the read queue.
         // Return if the queue is still empty.
         if (context.readQueue.isEmpty() && context.readCpQueue.isEmpty()
-                && !fillReadQueue(maxGlobal, context)) {
+                && !fillReadQueue(maxGlobal, context, false)) {
             return null;
         }
 
@@ -310,7 +310,7 @@ public abstract class AbstractQueuedStreamView extends
         // Scan backward in the stream to find interesting
         // log records less than or equal to maxGlobal.
         // Boolean includes both CHECKPOINT & DATA entries.
-        boolean readQueueIsEmpty = !fillReadQueue(maxGlobal, context);
+        boolean readQueueIsEmpty = !fillReadQueue(maxGlobal, context, true);
 
         // If maxGlobal is before the checkpoint position, throw a
         // trimmed exception
@@ -337,8 +337,7 @@ public abstract class AbstractQueuedStreamView extends
             readSet.addAll(context.readQueue.headSet(maxGlobal, true));
         }
 
-        List<Long> toRead = readSet.stream()
-                .collect(Collectors.toList());
+        List<Long> toRead = readSet.stream().collect(Collectors.toList());
 
         // The list to store read results in
         List<ILogData> readFrom = readAll(toRead).stream()
@@ -352,8 +351,9 @@ public abstract class AbstractQueuedStreamView extends
                 // to be thrown. By updating the global pointer to include the hole,
                 // we prevent that from happening.
                 .filter(x -> x.isData() || x.isHole())
-                // Case of Checkpoint will never load these addresses, cause this is another stream
-                .filter(x -> x.containsStream(context.id))
+                // The read data might come from the regular stream or the checkpoint
+                .filter(x ->
+                    x.containsStream(context.id) || x.containsStream(CorfuRuntime.getCheckpointStreamIdFromId(context.id)))
                 .collect(Collectors.toList());
 
         // If any entries change the context,
@@ -368,14 +368,27 @@ public abstract class AbstractQueuedStreamView extends
             readFrom = readFrom.subList(0, idx + 1);
             // NOTE: readSet's clear() changed underlying context.readQueue
             readSet.headSet(contextEntry.get().getGlobalAddress(), true).clear();
-        } else {
+        }
+
+        // Transfer the addresses of the read entries to the resolved queue
+        readFrom.forEach(entry -> {
+            // Entries might come from a checkpoint or the regular stream.
+            // For the case of entries coming from the checkpoint, we should not mix pointer information
+            // of the checkpoint stream itself with pointer information of the regular stream. It should always
+            // make reference to the point it has resolved in the regular stream.
+            if (context.readCpQueue.contains(entry.getGlobalAddress())) {
+                // The start log address represents the state resolved for the regular stream.
+                addToResolvedQueue(context, entry.getCheckpointedStreamStartLogAddress());
+            } else {
+                addToResolvedQueue(context, entry.getGlobalAddress());
+            }
+        });
+
+        if (!contextEntry.isPresent()) {
             // Clear the entries which were read
             context.readQueue.headSet(maxGlobal, true).clear();
             context.readCpQueue.headSet(maxGlobal, true).clear();
         }
-
-        // Transfer the addresses of the read entries to the resolved queue
-        readFrom.forEach(entry -> addToResolvedQueue(context, entry.getGlobalAddress()));
 
         // Update the global pointer
         if (readFrom.size() > 0) {
@@ -398,8 +411,10 @@ public abstract class AbstractQueuedStreamView extends
      * <p>This method returns true if entries were added to the read queue,
      * false otherwise.
      *
-     * @param maxGlobal     The maximum global address to read to.
-     * @param context       The current stream context.
+     * @param maxGlobal             The maximum global address to read to.
+     * @param context               The current stream context.
+     * @param directStreamAccess    True, if the stream is being accessed directly. False, if accessed through Object
+     *                              Layer.
      *
      * @return              True, if entries were added to the read queue,
      *                      False, otherwise.
@@ -407,7 +422,8 @@ public abstract class AbstractQueuedStreamView extends
      * {@inheritDoc}
      */
     protected boolean fillReadQueue(final long maxGlobal,
-                                    final QueuedStreamContext context) {
+                                    final QueuedStreamContext context,
+                                    boolean directStreamAccess) {
         log.trace("Fill_Read_Queue[{}] Max: {}, Current: {}, Resolved: {} - {}", this,
                 maxGlobal, context.getGlobalPointer(), context.maxResolution, context.minResolution);
         log.trace("Fill_Read_Queue[{}]: addresses in this stream Resolved queue {}" +
@@ -418,25 +434,40 @@ public abstract class AbstractQueuedStreamView extends
         // any checkpoint entries, we should consult
         // a checkpoint first.
         if (context.getCheckpoint() == StreamCheckpoint.UNINITIALIZED) {
-            context.checkpoint = StreamCheckpoint.INITIALIZED;
-            // The checkpoint stream ID is the UUID appended with CP
-            final UUID checkpointId = CorfuRuntime
-                    .getCheckpointStreamIdFromId(context.id);
-            // Find the checkpoint, if present
-            try {
-                if (discoverAddressSpace(checkpointId, context.readCpQueue,
-                        runtime.getSequencerView().query(checkpointId),
-                        Address.NEVER_READ,
-                        data -> scanCheckpointStream(context, data, maxGlobal),
-                        true, maxGlobal)) {
-                    log.trace("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
-                            this, context.readCpQueue.size());
+            // If the stream is being directly accessed by the consumer,
+            // the stream has to be reset in order to load from a checkpoint.
 
-                    return true;
+            // If the stream has already been accessed (through the remaining or remainingUpTo api)
+            // or seeked to a specific position (i.e., currentGlobalPosition != -1)
+            // there is no way to guarantee differentials by loading from a checkpoint (as it contains the coalesced state
+            // up to that point). Loading from a checkpoint, once the pointer has advanced could lead to duplicates.
+            if (directStreamAccess && getCurrentGlobalPosition() != Address.NON_ADDRESS) {
+                context.checkpoint = StreamCheckpoint.INITIALIZED;
+            } else {
+                context.checkpoint = StreamCheckpoint.INITIALIZED;
+                // The checkpoint stream ID is the UUID appended with CP
+                final UUID checkpointId = CorfuRuntime
+                        .getCheckpointStreamIdFromId(context.id);
+                // Find the checkpoint, if present
+                try {
+                    if (discoverAddressSpace(checkpointId, context.readCpQueue,
+                            runtime.getSequencerView().query(checkpointId),
+                            Address.NEVER_READ,
+                            data -> scanCheckpointStream(context, data, maxGlobal),
+                            true, maxGlobal)) {
+                        log.trace("Fill_Read_Queue[{}] Get Stream Address Map using checkpoint with {} entries",
+                                this, context.readCpQueue.size());
+                        // If the stream is being directly accessed, we should also check the regular stream
+                        // for updates, as the remaining/remainingUpTo APIs should return all entries up to
+                        // the specified point.
+                        if (!directStreamAccess) {
+                            return true;
+                        }
+                    }
+                } catch (TrimmedException te) {
+                    log.warn("Fill_Read_Queue[{}] Trim encountered.", this, te);
+                    throw te;
                 }
-            } catch (TrimmedException te) {
-                log.warn("Fill_Read_Queue[{}] Trim encountered.", this, te);
-                throw te;
             }
         }
 
