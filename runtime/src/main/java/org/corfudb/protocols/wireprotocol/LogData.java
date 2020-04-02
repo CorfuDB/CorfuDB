@@ -139,11 +139,12 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         byte[] tempData = data;
         if (tempData != null) {
             return tempData.length;
-        } else if (lastKnownSize != NOT_KNOWN) {
+        }
+
+        if (lastKnownSize != NOT_KNOWN) {
             return lastKnownSize;
         }
-        log.warn("getSizeEstimate: LogData size estimate is defaulting to 1,"
-                + " this might cause leaks in the cache!");
+
         return 1;
     }
 
