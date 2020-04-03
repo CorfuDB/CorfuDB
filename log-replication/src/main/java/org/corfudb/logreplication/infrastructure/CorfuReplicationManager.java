@@ -4,12 +4,21 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.logreplication.runtime.LogReplicationRuntime;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.util.retry.ExponentialBackoffRetry;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 public class CorfuReplicationManager {
+
+    final static int BACKOFF_MS = 1000;
 
     // Keep map of remote site endpoints and the associated log replication client
     Map<String, LogReplicationRuntime> logReplicationRuntimes = new HashMap<>();
@@ -26,13 +35,29 @@ public class CorfuReplicationManager {
         UNKNOWN
     }
 
-    public void setupReplicationLeaderRuntime(CrossSiteConfiguration.NodeInfo nodeInfo, CrossSiteConfiguration config) {
-        log.info("setupREplicationLeaderRuntime config {}", config);
-        for(Map.Entry<String, CrossSiteConfiguration.SiteInfo> entry: config.getStandbySites().entrySet()) {
-            entry.getValue().setupLogReplicationRemoteRuntime(nodeInfo);
-            log.info("setupReplicationLeaderRuntime {}", entry);
-            CrossSiteConfiguration.NodeInfo leader = entry.getValue().getRemoteLeader();
-            logReplicationRuntimes.put(entry.getKey(), leader.runtime);
+    public void setupReplicationLeaderRuntime(CrossSiteConfiguration.NodeInfo nodeInfo, CrossSiteConfiguration config)
+            throws InterruptedException {
+        log.info("setupReplicationLeaderRuntime config {}", config);
+
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    for (Map.Entry<String, CrossSiteConfiguration.SiteInfo> entry : config.getStandbySites().entrySet()) {
+                        entry.getValue().setupLogReplicationRemoteRuntime(nodeInfo);
+                        log.info("setupReplicationLeaderRuntime {}", entry);
+                        CrossSiteConfiguration.NodeInfo leader = entry.getValue().getRemoteLeader();
+                        logReplicationRuntimes.put(entry.getKey(), leader.runtime);
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to connect to a remote site. Retry after 1 second.");
+                    throw new RetryNeededException();
+                }
+
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to connect to remote site.", e);
+            throw e;
         }
     }
 
@@ -40,7 +65,7 @@ public class CorfuReplicationManager {
      * Once determined this is a Lead Sender (on primary site), start log replication.
      */
     public void startLogReplication(CrossSiteConfiguration config) {
-        log.info("Start Log Replication for Standby Sites {}", logReplicationRuntimes.keySet());
+        log.info("Start Log Replication to Standby Sites {}", logReplicationRuntimes.keySet());
         for(Map.Entry<String, LogReplicationRuntime> entry: logReplicationRuntimes.entrySet()) {
             String endpoint = entry.getKey();
             LogReplicationRuntime runtime = entry.getValue();
@@ -65,7 +90,7 @@ public class CorfuReplicationManager {
             case LEADERSHIP_LOST:
             case CONNECTION_LOST:
             case UNKNOWN:
-                log.info("Invalid Negotiation result. Re-trigger discvoery.");
+                log.info("Invalid Negotiation result. Re-trigger discovery.");
                 // Re-Trigger Discovery Leader Receiver
                 break;
         }
@@ -76,7 +101,7 @@ public class CorfuReplicationManager {
             log.info("Start Negotiation");
             LogReplicationNegotiationResponse negotiationResponse = logReplicationRuntime.startNegotiation();
             log.info("Negotiation Response received: " + negotiationResponse);
-            // Process Negotiation Response and determine if we should proceed with Snapshot Sync or Log Entry Sync
+            // Determine if we should proceed with Snapshot Sync or Log Entry Sync
             return processNegotiationResponse(negotiationResponse);
         } catch (Exception e) {
             log.error("Caught an exception during log replication negotiation", e);
