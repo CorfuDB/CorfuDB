@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -17,10 +18,7 @@ import java.util.concurrent.CompletableFuture;
 public class TestDataSender implements DataSender {
 
     @Getter
-    private Queue<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> snapshotQueue = new LinkedList<>();
-
-    @Getter
-    private Queue<LogReplicationEntry> logEntryQueue = new LinkedList<>();
+    private Queue<LogReplicationEntry> entryQueue = new LinkedList<>();
 
     public TestDataSender() {
     }
@@ -28,21 +26,43 @@ public class TestDataSender implements DataSender {
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         if (message != null && message.getPayload() != null) {
-            logEntryQueue.add(message);
+            if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_MESSAGE) ||
+                    message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
+                // Ignore, do not account Start and End Markers as messages
+                entryQueue.add(message);
+            }
         }
 
-        return new CompletableFuture<>();
+        CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
+        LogReplicationEntry ack = LogReplicationEntry.generateAck(message.getMetadata());
+        cf.complete(ack);
+
+        return cf;
     }
 
     @Override
-    public boolean send(List<LogReplicationEntry> messages) {
+    public CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages) {
+
+        CompletableFuture<LogReplicationEntry> lastSentMessage = new CompletableFuture<>();
+
         if (messages != null && !messages.isEmpty()) {
-            // Add all received messages to the queue
-            messages.forEach(msg -> logEntryQueue.add(msg));
-            return true;
+
+            CompletableFuture<LogReplicationEntry> tmp;
+
+            for (LogReplicationEntry message : messages) {
+                tmp = send(message);
+                if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END) ||
+                        message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
+                    lastSentMessage = tmp;
+                }
+            }
         }
 
-        return false;
+        return lastSentMessage;
+    }
+
+    public void reset() {
+        entryQueue.clear();
     }
 
     @Override

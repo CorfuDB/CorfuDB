@@ -377,8 +377,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyNoData(dstCorfuTables);
 
         // Start Snapshot Sync (through Source Manager)
-        System.out.println("****** Start Snapshot Sync");
-        SourceManager logReplicationSourceManager = startSnapshotSync(srcCorfuTables.keySet());
+        startSnapshotSync(srcCorfuTables.keySet());
 
         System.out.println(">>>>> END Snapshot Sync");
 
@@ -847,8 +846,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Wait until an error occurs and drop snapshot sync request or we'll get into an infinite loop
         // as the snapshot sync will always fail due to the log being trimmed with no checkpoint.
         expectedErrors = 1;
-        SourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_ERROR),
-                new DefaultDataControlConfig(true, NUM_KEYS_LARGE));
+        SourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_ERROR));
 
         // Verify its in require snapshot sync state and that data was not completely transferred to destination
         // checkStateChange(sourceManager.getLogReplicationFSM(), LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
@@ -881,8 +879,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedSinkReceivedMessages = RX_MESSAGES_LIMIT;
         expectedAckTimestamp = -1;
         testConfig.setWaitOn(WAIT.ON_ACK_TS);
-        SourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_ACK_TS, WAIT.ON_ERROR, WAIT.ON_SINK_RECEIVE),
-                new DefaultDataControlConfig(true, NUM_KEYS));
+        SourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(), Arrays.asList(WAIT.ON_ACK_TS, WAIT.ON_ERROR, WAIT.ON_SINK_RECEIVE));
 
         // KWrite a checkpoint and trim
         Token token = ckStreamsAndTrim(srcDataRuntime, srcCorfuTables);
@@ -1108,17 +1105,16 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private SourceManager startSnapshotSync(Set<String> tablesToReplicate, WAIT waitCondition) throws Exception {
-        return startSnapshotSync(tablesToReplicate, Arrays.asList(waitCondition), defaultDataControlConfig);
+        return startSnapshotSync(tablesToReplicate, Arrays.asList(waitCondition));
     }
 
-
-    private SourceManager startSnapshotSync(Set<String> tablesToReplicate, List<WAIT> waitConditions, DefaultDataControlConfig dataControlConfig) throws Exception {
+    private SourceManager startSnapshotSync(Set<String> tablesToReplicate, List<WAIT> waitConditions) throws Exception {
 
         // Observe ACKs on SourceManager, to assess when snapshot sync is completed
         // We only expect one message, related to the snapshot sync complete
         expectedAckMessages = 1;
         SourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
-                waitConditions, dataControlConfig);
+                waitConditions);
 
         // Start Snapshot Sync
         System.out.println("****** Start Snapshot Sync");
@@ -1154,7 +1150,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                                                 DefaultDataControlConfig dataControlConfig) throws Exception {
 
         SourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
-                waitConditions, dataControlConfig);
+                waitConditions);
 
         // Start Log Entry Sync
         System.out.println("****** Start Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
@@ -1175,21 +1171,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private SourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                               WAIT waitCondition) throws InterruptedException {
-        return setupSourceManagerAndObservedValues(tablesToReplicate, Arrays.asList(waitCondition), defaultDataControlConfig);
+        return setupSourceManagerAndObservedValues(tablesToReplicate, Arrays.asList(waitCondition));
     }
 
     private SourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                               List<WAIT> waitConditions) throws InterruptedException {
-        return setupSourceManagerAndObservedValues(tablesToReplicate, waitConditions, defaultDataControlConfig);
-    }
-
-    private SourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
-                                                              List<WAIT> waitConditions,
-                                                              DefaultDataControlConfig dataControlConfig) throws InterruptedException {
         // Config
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
 
-        // Data Control and Data Sender
+        // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel());
 
         // Source Manager
@@ -1204,7 +1194,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             switch(waitCondition) {
                 case ON_ACK:
                 case ON_ACK_TS:
-                    ackMessages = logReplicationSourceManager.getAckMessages();
+                    //ackMessages = logReplicationSourceManager.getAckMessages();
+                    ackMessages = sourceDataSender.getAckMessages();
                     ackMessages.addObserver(this);
                     break;
                 case ON_ERROR: // Wait on Error Notifications to Source
@@ -1277,15 +1268,17 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private void verifyExpectedAckMessage(ObservableAckMsg observableAckMsg) {
         // If expected a ackTs, release semaphore / unblock the wait
-        LogReplicationEntry logReplicationEntry = observableAckMsg.getDataMessage();
-        System.out.println("ackMsg " + logReplicationEntry.getMetadata());
-        switch (testConfig.waitOn) {
-            case ON_ACK:
-                verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
-                break;
-            case ON_ACK_TS:
-                verifyExpectedValue(expectedAckTimestamp, logReplicationEntry.getMetadata().timestamp);
-                break;
+        if (observableAckMsg.getDataMessage() != null) {
+            LogReplicationEntry logReplicationEntry = observableAckMsg.getDataMessage();
+            System.out.println("ackMsg " + logReplicationEntry.getMetadata());
+            switch (testConfig.waitOn) {
+                case ON_ACK:
+                    verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
+                    break;
+                case ON_ACK_TS:
+                    verifyExpectedValue(expectedAckTimestamp, logReplicationEntry.getMetadata().timestamp);
+                    break;
+            }
         }
     }
 
