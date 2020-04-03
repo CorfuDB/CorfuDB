@@ -208,10 +208,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
-        transitionAvailable.acquire();
+        for (int i = 0; i<(LARGE_NUM_ENTRIES/(StreamsSnapshotReader.MAX_NUM_SMR_ENTRY* SnapshotSender.SNAPSHOT_BATCH_SIZE)) + 1; i++) {
+            transitionAvailable.acquire();
+        }
+
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
@@ -260,20 +263,30 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // so we verify the state moves to INITIALIZED again.
         transitionAvailable.acquire();
 
+        boolean transitionOccurred = true;
+        while (transitionOccurred) {
+            if (fsm.getState().getType() == LogReplicationStateType.INITIALIZED) {
+                transitionOccurred = false;
+            }
+        }
+
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
 
-        ((TestDataSender) dataSender).getSnapshotQueue().clear();
+        ((TestDataSender) dataSender).reset();
 
         // Stop observing number of messages in snapshot sync, so this time it completes
         observeSnapshotSync = false;
 
         // Transition #2: This time the snapshot sync completes
-        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
+        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
-        transitionAvailable.acquire();
+        for (int i = 0; i<(LARGE_NUM_ENTRIES/(StreamsSnapshotReader.MAX_NUM_SMR_ENTRY* SnapshotSender.SNAPSHOT_BATCH_SIZE)) + 1; i++) {
+            transitionAvailable.acquire();
+        }
+
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
@@ -302,20 +315,24 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
 
         // Transition #1: Replication Start
-        transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+        // transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         // Transition #2: Snapshot Sync Request
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
-        for (int i = 0; i<LARGE_NUM_ENTRIES/(StreamsSnapshotReader.MAX_NUM_SMR_ENTRY* SnapshotSender.SNAPSHOT_BATCH_SIZE); i++) {
+        System.out.println("**** Wait for snapshot sync to complete");
+
+        // Block until the snapshot sync completes and next transition occurs.
+        // The transition should happen to IN_LOG_ENTRY_SYNC state.
+        for (int i = 0; i<(LARGE_NUM_ENTRIES/(StreamsSnapshotReader.MAX_NUM_SMR_ENTRY* SnapshotSender.SNAPSHOT_BATCH_SIZE)) + 1; i++) {
             transitionAvailable.acquire();
         }
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
-        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getSnapshotQueue();
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(LARGE_NUM_ENTRIES/StreamsSnapshotReader.MAX_NUM_SMR_ENTRY);
 
@@ -325,7 +342,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         int incrementalUpdates = 0;
 
         while(incrementalUpdates < NUM_ENTRIES) {
-           ((TestDataSender)dataSender).getLogEntryQueue().poll();
+           ((TestDataSender)dataSender).getEntryQueue().poll();
            incrementalUpdates++;
         }
 
@@ -514,6 +531,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
                 // System.out.println("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
 
+                System.out.println("REPLICATION STOP");
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
             }
         }

@@ -68,17 +68,17 @@ import java.util.concurrent.LinkedBlockingQueue;
  *             |     |  v      v-----------------------------+            |
  *             |    ++--+---------+                          |        +---+--------------------+
  *             +--->+ INITIALIZED +------------------------+ |        | SNAPSHOT_SYNC_REQUIRED +<---+
- *                  +---+----+----+ snapshot_sync_request  | |        +---+-------------+----+-+    |
- *                      ^    |                             | |            |             ^    ^      |
- *                      |    |                             | |    snapshot|             |    |      |
- *                      |    |                             | |      sync  |             |    |      |
- *     replication_stop |    | replication_start           | |     request|       sync  |    |      |
- *                      |    |                             | |            |      cancel |    |      |
- *                      |    v                             v |            v             |    |      |
- *               +------+----+-------+  snapshot_sync    +-+-+------------+-+           |    |      |
- *         +-----| IN_LOG_ENTRY_SYNC |     request       | IN_SNAPSHOT_SYNC +-----------+    |      |
- *         |     |                   +------------------>+                  |                |      |
- *         |     +----+----+---------+                   +---+---+----------+----------------+      |
+ *                  +---+----+----+ snapshot_sync_request  | |        +---+---------------+----+    |
+ *                      ^    |                             | |            |               ^         |
+ *                      |    |                             | |   snapshot |               |         |
+ *                      |    |                             | |    sync    |               |         |
+ *     replication_stop |    | replication_start           | |    request |               |         |
+ *                      |    |                             | |            |               |         |
+ *                      |    v                             v |            v               |         |
+ *               +------+----+-------+  snapshot_sync    +-+-+------------+-+             |         |
+ *         +-----| IN_LOG_ENTRY_SYNC |     request       | IN_SNAPSHOT_SYNC +             |         |
+ *         |     |                   +------------------>+                  |             |         |
+ *         |     +----+----+---------+                   +---+---+----------+-------------+         |
  *         |       ^  |   ^                                 |    |        ^        sync             |
  *         |       |  |   +---------------------------------+    |        |       cancel            |
  *         + ----- +  |                snapshot_sync             + -------+                         |
