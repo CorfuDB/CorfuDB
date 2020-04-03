@@ -26,7 +26,6 @@ public class LogReplicationTest {
         this.endpoint = endpoint;
     }
 
-
     /**
      * Setup Test Environment
      *
@@ -38,11 +37,11 @@ public class LogReplicationTest {
     private void setupEnv() throws IOException {
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters.builder()
-                //.trustStore("/config/cluster-manager/cluster-manager/public/truststore.jks")
-                //.tsPasswordFile("/config/cluster-manager/cluster-manager/public/truststore.password")
-                //.keyStore("/config/cluster-manager/cluster-manager/private/keystore.jks")
-                //.ksPasswordFile("/config/cluster-manager/cluster-manager/private/keystore.password")
-                //.tlsEnabled(true)
+//                .trustStore("/config/cluster-manager/cluster-manager/public/truststore.jks")
+//                .tsPasswordFile("/config/cluster-manager/cluster-manager/public/truststore.password")
+//                .keyStore("/config/cluster-manager/cluster-manager/private/keystore.jks")
+//                .ksPasswordFile("/config/cluster-manager/cluster-manager/private/keystore.password")
+//                .tlsEnabled(true)
                 .layoutServers(Arrays.asList(NodeLocator.parseString(endpoint)))
                 .build();
 
@@ -80,32 +79,32 @@ public class LogReplicationTest {
                 .open();
     }
 
+
     private void generateData() {
 
-        runtime.getObjectsView().TXBegin();
-        table1.put("SPECIAL1" , "V_PRIME");
-        runtime.getObjectsView().TXEnd();
+//        runtime.getObjectsView().TXBegin();
+//        table1.put("SPECIAL1" , "V_PRIME");
+//        runtime.getObjectsView().TXEnd();
+//
+//        runtime.getObjectsView().TXBegin();
+//        table1.put("SPECIAL2" , "V_PRIME");
+//        runtime.getObjectsView().TXEnd();
 
-        runtime.getObjectsView().TXBegin();
-        table1.put("SPECIAL2" , "V_PRIME");
-        runtime.getObjectsView().TXEnd();
 
-
-//        for(int i=0; i < ITERATIONS; i++) {
-//            try {
-//                runtime.getObjectsView().TXBegin();
-//                table1.put("T1_K" + i, "T4_V" + i);
-//                table2.put("T2_K" + i, "T5_V" + i);
-//                table3.put("T3_K" + i, "T6_V" +i);
-//            } finally {
-//                runtime.getObjectsView().TXEnd();
-//            }
-//        }
+        for(int i=0; i < ITERATIONS; i++) {
+            try {
+                runtime.getObjectsView().TXBegin();
+                table1.put("T1_K" + i, "T4_V" + i);
+                table2.put("T2_K" + i, "T5_V" + i);
+                table3.put("T3_K" + i, "T6_V" +i);
+            } finally {
+                runtime.getObjectsView().TXEnd();
+            }
+        }
 
     }
 
     private void verifyData() {
-
         if (table1.isEmpty() && table2.isEmpty() && table3.isEmpty()) {
             System.out.println("All tables are EMPTY");
         } else {

@@ -223,7 +223,7 @@ public class LogEntrySender {
         }
 
         while (taskActive && pendingEntries.list.size() < readerBatchSize) {
-            org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message;
+            LogReplicationEntry message;
             // Read and Send Log Entries
             try {
                 message = logEntryReader.read(logEntrySyncEventId);
@@ -235,12 +235,10 @@ public class LogEntrySender {
                     pendingLogEntriesAcked.put(message.getMetadata().getTimestamp(), cf);
                     log.trace("send message " + message.getMetadata().getTimestamp());
                 } else {
-                    if (message == null) {
-                        // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
-                        // take over the shared thread pool of the state machine
-                        taskActive = false;
-                        break;
-                    }
+                    // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
+                    // take over the shared thread pool of the state machine
+                    taskActive = false;
+                    break;
 
                     // Request full sync (something is wrong I cant deliver)
                     // (Optimization):

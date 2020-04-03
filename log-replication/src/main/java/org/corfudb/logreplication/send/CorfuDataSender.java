@@ -5,9 +5,15 @@ import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.runtime.LogReplicationClient;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
+import org.corfudb.util.CFUtils;
 
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 public class CorfuDataSender implements DataSender {
@@ -26,10 +32,20 @@ public class CorfuDataSender implements DataSender {
     }
 
     @Override
-    public boolean send(List<LogReplicationEntry> messages) {
+    public CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages) {
         log.info("Send multiple log entries");
-        messages.forEach(message -> send(message));
-        return true;
+        CompletableFuture<LogReplicationEntry> lastSentMessage = new CompletableFuture<>();
+        CompletableFuture<LogReplicationEntry> tmp;
+
+        for (LogReplicationEntry message :  messages) {
+            tmp = send(message);
+            if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END) ||
+                    message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
+                lastSentMessage = tmp;
+            }
+        }
+
+        return lastSentMessage;
     }
 
     @Override

@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 public class CrossSiteConfiguration {
@@ -158,7 +159,7 @@ public class CrossSiteConfiguration {
          **
          * @return remote leader endpoint.
          */
-        public NodeInfo getRemoteLeader() {
+        public NodeInfo getRemoteLeader() throws Exception {
             NodeInfo leaderNode = null;
             try {
                 long epoch = -1;
@@ -170,7 +171,8 @@ public class CrossSiteConfiguration {
                     }
                 }
             } catch (Exception e) {
-                log.error("Function getRemoteLeader caught an exception {}", e);
+                log.error("Function getRemoteLeader caught an exception", e);
+                throw e;
             }
 
             if (leaderNode != null) {

@@ -115,7 +115,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                  as 4, attempting to process a completion event for the incorrect snapshot sync.
                  */
                 if (snapshotSyncRequestId == transitionEventId) {
-                    cancelSnapshotSync("indication of completeness.");
+                    cancelSnapshotSync("it has completed.");
                     LogReplicationState logEntrySyncState = fsm.getStates()
                             .get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
                     // We need to set a new transition event Id, so anything happening on this new state
@@ -190,7 +190,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 log.warn("Exception while waiting on snapshot sync to complete.", e);
             }
         }
-        log.info("Snapshot sync has been canceled due to {}", cancelCause);
+        log.info("Snapshot sync is ending because {}", cancelCause);
     }
 
     @Override

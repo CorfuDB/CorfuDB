@@ -30,14 +30,17 @@ public class AckDataSender implements DataSender {
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         // Emulate it was sent over the wire and arrived on the source side
-        channel.execute(() -> sourceManager.receive(message));
-        return new CompletableFuture<>();
+//        channel.execute(() -> sourceManager.receive(message));
+        final CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
+        cf.complete(sourceManager.receive(message));
+        return cf;
     }
 
     @Override
-    public boolean send(List<LogReplicationEntry> messages) {
+    public CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages) {
+        CompletableFuture<LogReplicationEntry> ackCF = new CompletableFuture<>();
         messages.forEach(msg -> send(msg));
-        return true;
+        return ackCF;
     }
 
     @Override

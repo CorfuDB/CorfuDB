@@ -135,7 +135,7 @@ public class LogReplicationRuntime {
     }
 
     public LogReplicationQueryLeaderShipResponse queryLeadership() throws Exception {
-        log.info("*****Send QueryLeadership Request");
+        log.info("***** Send QueryLeadership Request");
         return client.sendQueryLeadership().get();
     }
 

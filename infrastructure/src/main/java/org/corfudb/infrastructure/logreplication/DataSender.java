@@ -29,7 +29,7 @@ public interface DataSender {
      * @param messages list of LogReplicationEntry representing the data to send across sites.
      * @return
      */
-    boolean send(List<LogReplicationEntry> messages);
+    CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages);
 
     /**
      * Application callback on error.

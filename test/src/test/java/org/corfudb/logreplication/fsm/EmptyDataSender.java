@@ -16,7 +16,7 @@ public class EmptyDataSender implements DataSender {
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) { return new CompletableFuture<>(); }
 
     @Override
-    public boolean send(List<LogReplicationEntry> messages) { return true; }
+    public CompletableFuture<LogReplicationEntry>  send(List<LogReplicationEntry> messages) { return new CompletableFuture<>(); }
 
     @Override
     public void onError(LogReplicationError error) {}

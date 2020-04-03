@@ -23,36 +23,47 @@ public class CorfuReplicationDiscoveryService implements Runnable {
 
     @Override
     public void run() {
-        log.info("Initiate Corfu Replication Discovery");
+        while (true) {
+            try {
+                log.info("Initiate Corfu Replication Discovery");
 
-        // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
-        CrossSiteConfiguration crossSiteConfig = fetchSiteConfiguration();
+                // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
+                CrossSiteConfiguration crossSiteConfig = fetchSiteConfiguration();
 
-        // Get the current node information.
-        CrossSiteConfiguration.NodeInfo nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
+                // Get the current node information.
+                CrossSiteConfiguration.NodeInfo nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
 
-        // Acquire lock and set it in the node information
-        nodeInfo.setLeader(acquireLock());
+                // Acquire lock and set it in the node information
+                nodeInfo.setLeader(acquireLock());
 
-        if (nodeInfo.isLeader()) {
-            if (nodeInfo.getRoleType() == PrimarySite) {
-                crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
-                log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
-                replicationManager.setupReplicationLeaderRuntime(nodeInfo, crossSiteConfig);
-                replicationManager.startLogReplication(crossSiteConfig);
-                return;
-            } else if (nodeInfo.getRoleType() == StandbySite) {
-                // Standby Site
-                // The LogReplicationServer (server handler) will initiate the SinkManager
-                log.info("Start as Sink (receiver) on node {} ", nodeInfo);
+                if (nodeInfo.isLeader()) {
+                    if (nodeInfo.getRoleType() == PrimarySite) {
+                        crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
+                        log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
+                        try {
+                            replicationManager.setupReplicationLeaderRuntime(nodeInfo, crossSiteConfig);
+                        } catch (InterruptedException ie) {
+                            log.error("Corfu Replication Discovery Service is interrupted", ie);
+                            return;
+                        }
+                        replicationManager.startLogReplication(crossSiteConfig);
+                        return;
+                    } else if (nodeInfo.getRoleType() == StandbySite) {
+                        // Standby Site
+                        // The LogReplicationServer (server handler) will initiate the SinkManager
+                        log.info("Start as Sink (receiver) on node {} ", nodeInfo);
+                    }
+                }
+
+                // Todo: Re-schedule periodically, attempt to acquire lock
+
+                // This class should keep state and re-schedule discovery,
+                // if nothing has changed nothing is done, if
+                // something changes it should stop previous replication.
+            } catch (Exception e) {
+                log.error("Caught Exception while discovering remote sites, retry. ", e);
             }
         }
-
-        // Todo: Re-schedule periodically, attempt to acquire lock
-
-        // This class should keep state and re-schedule discovery,
-        // if nothing has changed nothing is done, if
-        // something changes it should stop previous replication.
     }
 
     /**
