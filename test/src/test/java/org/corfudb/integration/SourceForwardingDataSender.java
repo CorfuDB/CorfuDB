@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -7,7 +8,9 @@ import org.corfudb.infrastructure.logreplication.SinkManager;
 import org.corfudb.logreplication.SourceManager;
 import org.corfudb.infrastructure.logreplication.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
+import org.corfudb.logreplication.fsm.ObservableAckMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 
@@ -34,6 +37,10 @@ public class SourceForwardingDataSender implements DataSender {
     private int receivedMessages = 0;
 
     private int errorCount = 0;
+
+    @VisibleForTesting
+    @Getter
+    private ObservableAckMsg ackMessages = new ObservableAckMsg();
 
     /*
      * 0: no message drop
@@ -64,6 +71,7 @@ public class SourceForwardingDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
+        System.out.println("Send message: " + message.getMetadata().getMessageMetadataType() + " for:: " + message.getMetadata().getTimestamp());
         if (ifDropMsg > 0 && message.getMetadata().timestamp == firstDrop) {
             System.out.println("****** Drop log entry " + message.getMetadata().timestamp);
             if (ifDropMsg == DROP_MSG_ONCE) {
@@ -71,15 +79,37 @@ public class SourceForwardingDataSender implements DataSender {
             }
         }
 
+        final CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
+
         // Emulate Channel by directly accepting from the destination, whatever is sent by the source manager
-        channelExecutorWorkers.execute(() -> destinationLogReplicationManager.receive(message));
-        return new CompletableFuture<>();
+        // channelExecutorWorkers.execute(() -> destinationLogReplicationManager.receive(message));
+        LogReplicationEntry ack = destinationLogReplicationManager.receive(message);
+        cf.complete(ack);
+        ackMessages.setValue(ack);
+        return cf;
     }
 
     @Override
-    public boolean send(List<LogReplicationEntry> messages) {
-        messages.forEach(msg -> send(msg));
-        return true;
+    public CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages) {
+        CompletableFuture<LogReplicationEntry> lastSentMessage = new CompletableFuture<>();
+        CompletableFuture<LogReplicationEntry> tmp;
+
+        for (LogReplicationEntry message :  messages) {
+            tmp = send(message);
+            if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END) ||
+                    message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
+                lastSentMessage = tmp;
+            }
+        }
+
+        try {
+            LogReplicationEntry entry = lastSentMessage.get();
+            ackMessages.setValue(entry);
+        } catch (Exception e) {
+            // Nothing
+        }
+
+        return lastSentMessage;
     }
 
     @Override

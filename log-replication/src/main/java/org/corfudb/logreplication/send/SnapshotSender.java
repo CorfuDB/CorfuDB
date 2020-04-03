@@ -19,6 +19,9 @@ import org.corfudb.runtime.view.Address;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  *  This class is responsible of transmitting a consistent view of the data at a given timestamp,
@@ -38,6 +41,7 @@ public class SnapshotSender {
 
     // TODO (probably move to a configuration file)
     public static final int SNAPSHOT_BATCH_SIZE = 5;
+    public static final int DEFAULT_TIMEOUT = 5000;
 
     private CorfuRuntime runtime;
     private SnapshotReader snapshotReader;
@@ -63,6 +67,8 @@ public class SnapshotSender {
         this.readProcessor = readProcessor;
         this.fsm = fsm;
     }
+
+    private CompletableFuture<LogReplicationEntry> snapshotSyncAck;
 
     /**
      * Initiate Snapshot Sync, this entails reading and sending data for a given snapshot.
@@ -93,7 +99,6 @@ public class SnapshotSender {
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
-                    System.out.println("Trim Exception");
                     log.warn("Cancel snapshot sync due to trimmed exception.", te);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC);
                     cancel = true;
@@ -105,25 +110,45 @@ public class SnapshotSender {
                     break;
                 }
 
-                List<LogReplicationEntry> dataToSend = processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, snapshotReadMessage.isEndRead());
+                List<LogReplicationEntry> dataToSend = processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, completed);
 
                 // Send message to the application through the dataSender
-                if (!dataSender.send(dataToSend)) {
-                    // TODO: Optimize (back-off) retry on the failed send.
-                    log.error("DataSender did not acknowledge next sent message(s). Notify error.");
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
-                    cancel = true;
-                    break;
+                CompletableFuture<LogReplicationEntry> pendingAck = dataSender.send(dataToSend);
+
+                if (completed) {
+                    // If all the data was sent, keep the last completable future (ack for full sync)
+                    snapshotSyncAck = pendingAck;
                 }
 
-                messagesSent++;
+                messagesSent += dataToSend.size();
                 observedCounter.setValue(messagesSent);
             }
 
             if (completed) {
-                // Snapshot Sync Completed
-                log.info("Snapshot sync completed for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
-                snapshotSyncComplete(snapshotSyncEventId);
+                // Block until ACK from last sent message is received
+                try {
+                    LogReplicationEntry ack = snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                    if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp) {
+                        // Snapshot Sync Completed
+                        log.info("Snapshot sync completed for {} on timestamp {}, ack[{}::{}]", snapshotSyncEventId,
+                                baseSnapshotTimestamp, ack.getMetadata().getMessageMetadataType(),
+                                ack.getMetadata().getSnapshotTimestamp());
+                        snapshotSyncComplete(snapshotSyncEventId);
+                    } else {
+                        log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
+                                ack.getMetadata().getSnapshotTimestamp());
+                        throw new Exception("Wrong base snapshot ack");
+                    }
+                } catch (Exception e) {
+                    log.error("Exception caught while blocking on snapshot sync {}, ack for {}",
+                            snapshotSyncEventId, baseSnapshotTimestamp, e);
+                    if (snapshotSyncAck.isCompletedExceptionally()) {
+                        log.error("...");
+                    }
+                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
+                } finally {
+                    snapshotSyncAck = null;
+                }
             } else if (!cancel) {
                 // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
@@ -224,7 +249,6 @@ public class SnapshotSender {
         // TODO: Do we need to persist the baseSnapshotTimestamp in the event of failover?
         // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data
         baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
-        System.out.println("Reset baseSnapshotTimestamp " + baseSnapshotTimestamp);
 
         // Starting a new snapshot sync, reset the reader's snapshot timestamp
         snapshotReader.reset(baseSnapshotTimestamp);
