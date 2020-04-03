@@ -6,11 +6,13 @@ import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.EnumMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.apache.commons.collections.iterators.EntrySetMapIterator;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -35,6 +37,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     private ByteBuf serializedCache = null;
 
     private int lastKnownSize = NOT_KNOWN;
+
+    final EnumMap<LogUnitMetadataType, Object> metadataMap;
 
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
 
@@ -64,6 +68,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     /**
      * Return the payload.
+     * This method is invoked by the clients to fetch the payload from the LogData
      */
     public Object getPayload(CorfuRuntime runtime) {
         Object value = payload.get();
@@ -95,7 +100,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                             }
                             value = actualValue == null ? this.payload : actualValue;
                             this.payload.set(value);
-                            lastKnownSize = data.length;
                         } catch (Throwable throwable) {
                             log.error("Exception caught at address {}, {}, {}",
                                     getGlobalAddress(), getStreams(), getType());
@@ -129,6 +133,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         if (serializedCache == null) {
             serializedCache = Unpooled.buffer();
             doSerializeInternal(serializedCache);
+            lastKnownSize = serializedCache.readableBytes();
         } else {
             serializedCache.retain();
         }
@@ -136,24 +141,22 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     @Override
     public int getSizeEstimate() {
-        byte[] tempData = data;
-        if (tempData != null) {
-            return tempData.length;
-        } else if (lastKnownSize != NOT_KNOWN) {
+        if (lastKnownSize != NOT_KNOWN) {
             return lastKnownSize;
         }
-        log.warn("getSizeEstimate: LogData size estimate is defaulting to 1,"
-                + " this might cause leaks in the cache!");
         return 1;
     }
 
-    @Getter
-    final EnumMap<LogUnitMetadataType, Object> metadataMap;
+    @Override
+    public EnumMap<IMetadata.LogUnitMetadataType, Object> getMetadataMap() {
+        return metadataMap;
+    }
 
     /**
      * Return the payload.
      */
     public LogData(ByteBuf buf) {
+        lastKnownSize = buf.readableBytes();
         type = ICorfuPayload.fromBuffer(buf, DataType.class);
         if (type == DataType.DATA) {
             data = ICorfuPayload.fromBuffer(buf, byte[].class);
@@ -281,10 +284,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 buf.writerIndex(lengthIndex);
                 buf.writeInt(size);
                 buf.writerIndex(lengthIndex + size + 4);
-                lastKnownSize = size;
             } else {
                 ICorfuPayload.serialize(buf, data);
-                lastKnownSize = data.length;
             }
         }
 

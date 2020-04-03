@@ -24,10 +24,13 @@ public class LogUnitServerCache {
     private final LoadingCache<Long, ILogData> dataCache;
     private final StreamLog streamLog;
 
+    // The Key is a long with size of 8 bytes
+    private static final int LONG_KEY_SIZE = 8;
+
     public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
         this.streamLog = streamLog;
         this.dataCache = Caffeine.newBuilder()
-                .<Long, ILogData>weigher((addr, logData) -> logData.getSizeEstimate())
+                .<Long, ILogData>weigher((addr, logData) -> logData.getSizeEstimate() + LONG_KEY_SIZE)
                 .maximumWeight(config.getMaxCacheSize())
                 .removalListener(this::handleEviction)
                 .build(this::handleRetrieval);

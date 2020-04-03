@@ -69,6 +69,9 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
 
     void releaseBuffer();
 
+    /**
+     * Serialize into a ByteBuffer
+     */
     void acquireBuffer();
 
     default SerializationHandle getSerializedForm() {
