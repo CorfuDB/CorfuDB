@@ -4,7 +4,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuQueue;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;
-import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
@@ -100,7 +99,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                     TimeUnit.MILLISECONDS.sleep(coinToss);
                     lock.lock();
                     final long streamOffset = TXEnd();
-                    validator.add(new Record(new CorfuRecordId(0,0,i), queueData));
+                    validator.add(new Record(new CorfuRecordId(0,i), queueData));
                     log.debug("ENQ: {} => {} at {}", i, queueData, streamOffset);
                     lock.unlock();
                 } catch (TransactionAbortedException txException) {
@@ -122,25 +121,23 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
         assertThat(validator.size()).isEqualTo(records.size());
 
         // Also validate that the order of the queue matches that of the commit order.
-        CorfuRecordId testOrder = new CorfuRecordId(0,0,0);
+        CorfuRecordId testOrder = new CorfuRecordId(0,0);
         for (int i = 0; i < validator.size(); i++) {
             log.debug("Entry:" + records.get(i).getRecordId());
             CorfuRecordId order = records.get(i).getRecordId();
             assertThat(testOrder.compareTo(order)).isLessThanOrEqualTo(0);
-            log.debug("queue entry"+i+":"+order+"UUID:"+order.asUUID());
+            log.debug("queue entry"+i+":"+order+"UUID:"+order.toByteArray());
             testOrder = order;
             assertThat(validator.get(i).getData()).isEqualTo(records.get(i).getEntry());
         }
         int idx = validator.size() - 1;
-        UUID fromRecId = records.get(idx).getRecordId().asUUID();
-        assertThat(fromRecId.getLeastSignificantBits()).isEqualTo(records.get(idx).getRecordId().getEntryId());
+        byte[] fromRecId = records.get(idx).getRecordId().toByteArray();
 
         CorfuRecordId backToRecId = new CorfuRecordId(fromRecId);
         assertThat(backToRecId.getEntryId()).isEqualTo(records.get(idx).getRecordId().getEntryId());
-        assertThat(backToRecId.getEpoch()).isEqualTo(records.get(idx).getRecordId().getEpoch());
-        log.debug("UUID from Record {} = {}", idx, fromRecId);
-        assertThat(backToRecId.getSequence()).isEqualTo(records.get(idx).getRecordId().getSequence());
-        log.debug("RecordId back from UUID = {}", backToRecId);
+        log.debug("byte array from Record {} = {}", idx, fromRecId);
+        assertThat(backToRecId.getTxSequence()).isEqualTo(records.get(idx).getRecordId().getTxSequence());
+        log.debug("RecordId back from byte array = {}", backToRecId);
     }
 
     //Assist the test that the log address values are not in the same order of enqueue.
@@ -250,7 +247,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
             String val0 = entry.getValue();
             String val1 = records.get(i).getEntry();
 
-            if (entry.getKey() != id.getSequence() || !val0.equals(val1)) {
+            if (entry.getKey() != id.getTxSequence() || !val0.equals(val1)) {
                 log.warn("\nentry: " + entry + " queue item: " + records.get(i));
                 cnt++;
             }
