@@ -106,11 +106,9 @@ public class PersistedWriterMetadata {
             } catch (TransactionAbortedException e) {
                 log.debug("Caught transaction aborted exception {}", e.getStackTrace());
                 log.warn("While trying to update lastSnapStart value to {}, aborted with retry {}", ts, retry);
-                System.out.println("While trying to update lastSnapStart value " + ts +" aborted with retry " + retry);
             } finally {
                 runtime.getObjectsView().TXEnd();
                 persistedTs = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
-                System.out.println("setSrcBaseSnapshotStart  " + ts + " persitedTs " + persistedTs);
             }
         }
 
