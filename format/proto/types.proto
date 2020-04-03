@@ -53,6 +53,11 @@ message LogHeader {
     optional bool verify_checksum = 2;
 }
 
+message CorfuQueueIdMsg {
+    optional int64 txSequence = 1;
+    optional int64 entryId = 2;
+}
+
 message Metadata {
     required sfixed32 payload_checksum = 1;
     required sfixed32 length_checksum = 2;
