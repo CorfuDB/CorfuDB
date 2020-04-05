@@ -5,6 +5,7 @@ import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
 
 import com.google.common.reflect.TypeToken;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -26,6 +27,7 @@ import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
@@ -50,6 +52,7 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -61,6 +64,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@Slf4j
 public class ClusterReconfigIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
@@ -1211,7 +1215,6 @@ public class ClusterReconfigIT extends AbstractIT {
         shutdownCorfuServer(server2);
     }
 
-
     @Test
     public void nodeResetPruneRaceTest() throws Exception {
         final int PORT_0 = 9000;
@@ -1233,58 +1236,42 @@ public class ClusterReconfigIT extends AbstractIT {
                 .setStreamName("test")
                 .open();
 
-        //final String data = createStringOfSize(1_000);
 
-        //Random r = getRandomNumberGenerator();
-        /*for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
-            String key = Long.toString(r.nextLong());
-            table.put(key, data);
-        }*/
-
-        System.out.print("\ninvalidate layout 0");
+        //fetch the layout without the client for localhost:9001
         runtime.invalidateLayout();
 
         final AtomicBoolean moreDataToBeWritten = new AtomicBoolean(true);
-        //Thread t = startDaemonWriter(runtime, r, table, data, moreDataToBeWritten);
 
         boolean result = true;
         int retry = 0;
+
+        //Without the fix, this will retry 3 times.
         while (result && retry < NUM_RETRY) {
             result = false;
             try {
-                System.out.print("\n*****retry : " + retry + " clientMap " + runtime.getLayoutView().getRuntimeLayout().getSenderClientMap());
+                log.debug("\n*****retry : " + retry + " clientMap " + runtime.getLayoutView().getRuntimeLayout().getSenderClientMap());
                 BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout()
                         .getBaseClient("localhost:9001");
                 IClientRouter router = baseClient.getRouter();
-                System.out.print("\nrouter " + router + " map " + runtime.getLayoutView().getRuntimeLayout().getSenderClientMap());
+                log.debug("\nrouter " + router + " map " + runtime.getLayoutView().getRuntimeLayout().getSenderClientMap());
                 if (retry == 0) {
                     runtime.invalidateLayout();
                 }
                 router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESET)
                         .setEpoch(baseClient.getEpoch()).setClusterID(baseClient.getClusterId())).get();
-
-                System.out.print("\nreset done");
             } catch (Exception e) {
-                System.out.print("\ncaught an exception " + e);
-                e.getStackTrace();
+                log.debug("\ncaught an exception " + e);
+                assertThat(e).isInstanceOf(ExecutionException.class);
                 result = true;
                 retry ++;
             }
         }
 
+        assertThat(retry).isEqualTo(1);
         runtime.getManagementView().addNode("localhost:9001", workflowNumRetry,
                 timeout, pollPeriod);
         runtime.getManagementView().addNode("localhost:9002", workflowNumRetry,
                 timeout, pollPeriod);
-
-        final int nodesCount = 3;
-        /* waitForLayoutChange(layout -> layout.getAllActiveServers().size() == nodesCount
-                && layout.getUnresponsiveServers().isEmpty()
-                && layout.getSegments().size() == 1, runtime);*/
-        //moreDataToBeWritten.set(false);
-        //t.join();
-
-        //verifyData(runtime);
 
         shutdownCorfuServer(corfuServer_1);
         shutdownCorfuServer(corfuServer_2);
