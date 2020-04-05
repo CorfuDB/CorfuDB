@@ -912,6 +912,7 @@ public class CorfuRuntime {
                         .contains(endpoint.toEndpointUrl()))
                 .forEach(endpoint -> {
                     try {
+                        getLayoutView().getRuntimeLayout().removeClient(BaseClient.class, endpoint.toEndpointUrl());
                         IClientRouter router = nodeRouterPool.getNodeRouters().remove(endpoint);
                         if (router != null) {
                             // Stop the channel from keeping connecting/reconnecting to server.

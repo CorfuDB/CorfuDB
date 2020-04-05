@@ -597,6 +597,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             log.info("keepAlive: channel not established or not open, skipping sending keep alive.");
             return;
         }
+
         // Send a keep alive message to server which ignores epoch
         sendMessageAndGetCompletable(null, CorfuMsgType.KEEP_ALIVE.msg());
         log.trace("keepAlive: sent keep alive to {}", this.channel.remoteAddress());

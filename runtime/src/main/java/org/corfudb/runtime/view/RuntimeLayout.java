@@ -86,6 +86,7 @@ public class RuntimeLayout {
      * This ensures that a client for a particular endpoint stamped with the required epoch is
      * created only once.
      */
+    @Getter
     private final Map<Class<? extends IClient>,
             Map<String, IClient>> senderClientMap = new ConcurrentHashMap<>();
 
@@ -122,6 +123,15 @@ public class RuntimeLayout {
             });
             return endpointClientMap;
         }).get(endpoint);
+    }
+
+    public void removeClient(final Class<? extends IClient> clientClass,
+                          final String endpoint) {
+        Map<String, IClient> clientMap = senderClientMap.get(clientClass);
+
+        if (clientMap != null) {
+            clientMap.remove(endpoint);
+        }
     }
 
     public BaseClient getBaseClient(String endpoint) {
