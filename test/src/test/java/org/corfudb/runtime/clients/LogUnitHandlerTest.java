@@ -425,6 +425,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             halfBatch.add(x);
         }
 
+        System.out.println("======= Starting =========");
         ReadResponse resp = client.readAll(halfBatch).get();
         assertThat(resp.getAddresses().size()).isEqualTo(half);
 

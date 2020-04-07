@@ -169,6 +169,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     @ClientHandler(type = CorfuMsgType.READ_RESPONSE)
     private static Object handleReadResponse(CorfuPayloadMsg<ReadResponse> msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
+        //System.out.println("Payload " + msg.getPayload());
         return msg.getPayload();
     }
 

@@ -429,7 +429,9 @@ public class LogUnitServerTest extends AbstractServerTest {
         setServer(s1);
 
         ILogData entry = s1.getDataCache().get(globalAddress);
-
+        if (entry instanceof LogData) {
+            ((LogData) entry).deserializeMetadata();
+        }
         // Verify that the meta data can be read correctly
         assertThat(entry.getBackpointerMap()).isEqualTo(uuidLongMap);
         assertThat(entry.getGlobalAddress()).isEqualTo(globalAddress);

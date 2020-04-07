@@ -45,6 +45,9 @@ public class LogUnitServerCache {
      */
     private ILogData handleRetrieval(long address) {
         LogData entry = streamLog.read(address);
+        if (entry != null) {
+            entry.serializeMetadata();
+        }
         log.trace("handleRetrieval: Retrieved[{} : {}]", address, entry);
         return entry;
     }
@@ -68,12 +71,11 @@ public class LogUnitServerCache {
             ILogData ld = dataCache.getIfPresent(address);
             return ld != null ? ld : handleRetrieval(address);
         }
-
         return dataCache.get(address);
     }
 
     /**
-     * Returns the log entry form the cache or retrieves it from the underlying storage.
+     * Returns the log entry from the cache or retrieves it from the underlying storage.
      *
      * @param address the address of the log entry to retrieve
      * @return the log entry read from cache or retrieved the underlying storage
@@ -91,6 +93,9 @@ public class LogUnitServerCache {
      */
     public void put(long address, ILogData entry) {
         log.trace("LogUnitServerCache.put: Cache write[{} : {}]", address, entry);
+        if (entry instanceof LogData) {
+            ((LogData)entry).serializeMetadata();
+        }
         dataCache.put(address, entry);
     }
 
