@@ -221,6 +221,7 @@ public class LogUnitServer extends AbstractServer {
 
         batchWriter.addTask(WRITE, msg)
                 .thenRunAsync(() -> {
+                    logData.serializeMetadata();
                     dataCache.put(msg.getPayload().getGlobalAddress(), logData);
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
                 }, executor).exceptionally(ex -> {

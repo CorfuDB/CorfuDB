@@ -95,7 +95,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                             }
                             value = actualValue == null ? this.payload : actualValue;
                             this.payload.set(value);
-                            lastKnownSize = data.length;
                         } catch (Throwable throwable) {
                             log.error("Exception caught at address {}, {}, {}",
                                     getGlobalAddress(), getStreams(), getType());
@@ -136,32 +135,33 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     @Override
     public int getSizeEstimate() {
-        byte[] tempData = data;
-        if (tempData != null) {
-            return tempData.length;
-        }
-
         if (lastKnownSize != NOT_KNOWN) {
             return lastKnownSize;
         }
-
         return 1;
     }
 
     @Getter
-    final EnumMap<LogUnitMetadataType, Object> metadataMap;
+    EnumMap<LogUnitMetadataType, Object> metadataMap;
+    private ByteBuf serializedMetadata = null;
+
+    public void serializeMetadata() {
+        serializedMetadata = Unpooled.buffer();
+        ICorfuPayload.serialize(serializedMetadata, metadataMap);
+        metadataMap = null;
+    }
 
     /**
      * Return the payload.
      */
     public LogData(ByteBuf buf) {
+        lastKnownSize = buf.readableBytes();
         type = ICorfuPayload.fromBuffer(buf, DataType.class);
         if (type == DataType.DATA) {
             data = ICorfuPayload.fromBuffer(buf, byte[].class);
         } else {
             data = null;
         }
-
         if (type.isMetadataAware()) {
             metadataMap = ICorfuPayload.enumMapFromBuffer(buf, IMetadata.LogUnitMetadataType.class);
         } else {
@@ -265,6 +265,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     }
 
     void doSerializeInternal(ByteBuf buf) {
+        int startAddress = buf.readerIndex();
         ICorfuPayload.serialize(buf, type);
         if (type == DataType.DATA) {
             if (data == null) {
@@ -282,16 +283,20 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 buf.writerIndex(lengthIndex);
                 buf.writeInt(size);
                 buf.writerIndex(lengthIndex + size + 4);
-                lastKnownSize = size;
             } else {
                 ICorfuPayload.serialize(buf, data);
-                lastKnownSize = data.length;
             }
         }
 
         if (type.isMetadataAware()) {
-            ICorfuPayload.serialize(buf, metadataMap);
+            if (serializedMetadata == null) {
+                ICorfuPayload.serialize(buf, metadataMap);
+            } else {
+                buf.writeBytes(serializedMetadata);
+            }
         }
+        int endAddress = buf.writerIndex();
+        lastKnownSize = endAddress - startAddress;
     }
 
     private void doCompressInternal(ByteBuf bufData, ByteBuf buf) {
