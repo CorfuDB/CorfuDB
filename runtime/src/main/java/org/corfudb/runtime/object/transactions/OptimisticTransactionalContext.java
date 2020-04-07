@@ -286,4 +286,9 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         log.trace("Commit[{}] Written to {}", this, address);
         return address;
     }
+
+    @Override
+    public void addPreCommitListener(TransactionalContext.PreCommitListener preCommitListener) {
+        this.getPreCommitListeners().add(preCommitListener);
+    }
 }
