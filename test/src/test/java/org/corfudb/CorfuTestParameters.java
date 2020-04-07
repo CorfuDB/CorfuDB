@@ -9,6 +9,7 @@ import java.lang.reflect.Modifier;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.concurrent.TimeoutException;
 
 
 /** This class contains automatically calculated parameters used for timeouts
@@ -139,5 +140,8 @@ public class CorfuTestParameters {
             .forEachOrdered(f -> { try {System.out.println(f.getName() + ":"
                                       + f.get(this).toString());}
             catch (Exception e) {}});
+        try {
+            Thread.sleep(10*1000);
+        } catch (InterruptedException e) { }
     }
 }

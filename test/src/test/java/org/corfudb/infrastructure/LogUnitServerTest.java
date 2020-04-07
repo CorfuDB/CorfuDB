@@ -6,6 +6,7 @@ import org.corfudb.format.Types;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.LogUnitException;
 
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -19,10 +20,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -429,7 +427,9 @@ public class LogUnitServerTest extends AbstractServerTest {
         setServer(s1);
 
         ILogData entry = s1.getDataCache().get(globalAddress);
-
+        if (entry instanceof LogData) {
+            ((LogData) entry).testOnlyDeserializeMetadata();
+        }
         // Verify that the meta data can be read correctly
         assertThat(entry.getBackpointerMap()).isEqualTo(uuidLongMap);
         assertThat(entry.getGlobalAddress()).isEqualTo(globalAddress);
@@ -496,6 +496,100 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogUnitServer logunit = new LogUnitServer(context);
     }
 
+    @Test (expected = NullPointerException.class)
+    public void testMetadataSerialized() throws Exception {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+
+        ServerContext sc = new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setSingle(true)
+                .setMemory(false)
+                .build();
+
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
+
+        final long ADDRESS_0 = 0L;
+        ByteBuf b = Unpooled.buffer();
+        Serializers.CORFU.serialize("0".getBytes(), b);
+        LogData ld = new LogData(DataType.DATA, b);
+        WriteRequest m = WriteRequest.builder()
+                .data(ld)
+                .build();
+        m.setGlobalAddress(ADDRESS_0);
+        m.setRank(new IMetadata.DataRank(0));
+        m.setBackpointerMap(Collections.emptyMap());
+        sendRequest(CorfuMsgType.WRITE.payloadMsg(m)).join();
+        assertThat(s1)
+                .containsDataAtAddress(ADDRESS_0);
+        LogData ld1 = (LogData) s1.getDataCache().get(ADDRESS_0);
+        ld1.getMetadataMap();
+    }
+
+    @Test
+    public void testLogDataRWLatency() {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+
+        ServerContext sc = new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setSingle(true)
+                .setMemory(false)
+                .build();
+
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
+
+        final int iterations = 1000;
+        long ADDRESS;
+
+        long start = System.currentTimeMillis();
+        for (int i=0; i<iterations; i++) {
+            ByteBuf buf = Unpooled.buffer();
+            Serializers.CORFU.serialize(Integer.toString(i).getBytes(), buf);
+            LogData ld = new LogData(DataType.DATA, buf);
+            WriteRequest m = WriteRequest.builder()
+                    .data(ld)
+                    .build();
+            ADDRESS = i;
+            m.setGlobalAddress(ADDRESS);
+            m.setRank(new IMetadata.DataRank(0));
+            m.setBackpointerMap(populateBackpointerMap());
+            m.setCheckpointedStreamId(UUID.randomUUID());
+            m.setCheckpointedStreamId(UUID.randomUUID());
+            m.setCheckpointId(UUID.randomUUID());
+            sendRequest(CorfuMsgType.WRITE.payloadMsg(m)).join();
+        }
+        long end = System.currentTimeMillis();
+        System.out.println("Total Write Time - " + (end - start));
+
+        start = System.currentTimeMillis();
+        for (int i=0; i<iterations; i++) {
+            ADDRESS = i;
+            sendRequest(CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(ADDRESS, true))).join();
+        }
+        end = System.currentTimeMillis();
+        System.out.println("Total Read Time -" + (end - start));
+    }
+
+    private Map<UUID, Long> populateBackpointerMap() {
+        Map<UUID, Long> backPointerMap = new HashMap<>();
+        for (int i=0; i<20; i++) {
+            backPointerMap.put(UUID.randomUUID(), new Random().nextLong());
+        }
+        return backPointerMap;
+    }
 
     @Test
     public void checkOverwriteExceptionIsNotThrownWhenTheRankIsHigher() throws Exception {

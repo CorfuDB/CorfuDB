@@ -6,9 +6,12 @@ import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
+import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+
+import static org.corfudb.util.MetricsUtils.sizeOf;
 
 /**
  * LogUnit server cache.
@@ -45,7 +48,11 @@ public class LogUnitServerCache {
      */
     private ILogData handleRetrieval(long address) {
         LogData entry = streamLog.read(address);
-        log.trace("handleRetrieval: Retrieved[{} : {}]", address, entry);
+        log.debug("handleRetrieval: Retrieved[{} : {}]", address, entry);
+        if (entry != null && !(streamLog instanceof InMemoryStreamLog)) {
+            //System.out.println("Here2");
+            entry.serializeMetadata();
+        }
         return entry;
     }
 
@@ -68,17 +75,17 @@ public class LogUnitServerCache {
             ILogData ld = dataCache.getIfPresent(address);
             return ld != null ? ld : handleRetrieval(address);
         }
-
         return dataCache.get(address);
     }
 
     /**
-     * Returns the log entry form the cache or retrieves it from the underlying storage.
+     * Returns the log entry from the cache or retrieves it from the underlying storage.
      *
      * @param address the address of the log entry to retrieve
      * @return the log entry read from cache or retrieved the underlying storage
      */
     public ILogData get(long address) {
+        //System.out.println("Here1");
         return get(address, true);
     }
 
@@ -90,7 +97,13 @@ public class LogUnitServerCache {
      * @param entry   the log entry to write
      */
     public void put(long address, ILogData entry) {
-        log.trace("LogUnitServerCache.put: Cache write[{} : {}]", address, entry);
+        log.info("LogUnitServerCache.put: Cache write[{} : {}]", address, entry);
+        if (entry instanceof LogData && !(streamLog instanceof InMemoryStreamLog)) {
+            //System.out.println("In mem metadata deepSizeOf {}" + ((LogData) entry).getDeepSizeOfMetadata());
+            ((LogData)entry).serializeMetadata();
+            //System.out.println("Serialized Metadata numbytes {}" + ((LogData) entry).getSerializedMetadataBytes());
+            //System.out.println("Total Size Estimate - " + entry.getSizeEstimate() + "Total Deep Size - " + sizeOf.deepSizeOf(entry));
+        }
         dataCache.put(address, entry);
     }
 
