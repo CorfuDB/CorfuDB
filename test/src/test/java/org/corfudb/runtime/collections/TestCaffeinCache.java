@@ -92,10 +92,8 @@ public class TestCaffeinCache {
         log.trace("LogUnitServerCache.put: Cache write[{} : {}]", address, entry);
         dataCache.put(address, entry);
         serializedSize += entry.length();
-        if (dataCache.estimatedSize() % 100000 == 0) {
             // System.out.print("\ncentry serialized size " + entry.length() + " deep size " + sizeOf.deepSizeOf(entry));
             //System.out.print("\ncache num_element " + dataCache.estimatedSize() + " deepSize " + sizeOf.deepSizeOf(dataCache));
-        }
     }
 
     /**

@@ -428,12 +428,12 @@ public class CorfuTableTest extends AbstractViewTest {
 
     @Test
     public void testCaffeinCache() {
-        long maxSize = 100000;
+        long maxSize = ITERATIONS;
 
-        for(int valSize = 1024; valSize <= 1024; valSize = valSize*2) {
+        for(int valSize = ITERATIONS; valSize <= ITERATIONS; valSize = valSize*2) {
             TestCaffeinCache testCache = new TestCaffeinCache(maxSize, null);
             String s = null;
-            for (long i = 0; i < 2*maxSize; i++) {
+            for (long i = 0; i < maxSize*2; i++) {
                 byte[] array = new byte[valSize]; // length is bounded by 7
                 new Random().nextBytes(array);
                 s = new String(array, Charset.forName("UTF-8"));

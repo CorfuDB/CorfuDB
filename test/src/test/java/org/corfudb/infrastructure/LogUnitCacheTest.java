@@ -65,7 +65,6 @@ public class LogUnitCacheTest extends AbstractServerTest {
         final long start = 0L;
         final long end = start + size;
 
-
         LogUnitServer logUnitServer = getDefaultServer();
         setServer(logUnitServer);
 

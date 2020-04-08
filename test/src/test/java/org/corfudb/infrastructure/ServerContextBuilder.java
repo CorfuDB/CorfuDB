@@ -109,8 +109,8 @@ public class ServerContextBuilder {
      * @return      A {@link ServerContext} with a {@link TestServerRouter} installed.
      */
     public static ServerContext defaultTestContext(int port) {
-        ServerContextBuilder scBuilder = new ServerContextBuilder()
-            .setPort(port).setCacheSizeHeapRatio("0.001");
+        ServerContextBuilder scBuilder = new ServerContextBuilder().setPort(port);
+        //.setCacheSizeHeapRatio("0.001");
         ServerContext sc = scBuilder.build();
         sc.setServerRouter(new TestServerRouter());
         return sc;
