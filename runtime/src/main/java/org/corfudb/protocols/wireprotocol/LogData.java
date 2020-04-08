@@ -18,6 +18,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.util.serializer.Serializers;
 
+import static org.corfudb.util.MetricsUtils.sizeOf;
+
 /**
  * Created by mwei on 8/15/16.
  */
@@ -138,7 +140,13 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         if (lastKnownSize != NOT_KNOWN) {
             return lastKnownSize;
         }
+
         return 1;
+    }
+
+    @Override
+    public int getSizeMemory() {
+        return (int) sizeOf.deepSizeOf(this);
     }
 
     @Getter
@@ -149,13 +157,16 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         serializedMetadata = Unpooled.buffer();
         ICorfuPayload.serialize(serializedMetadata, metadataMap);
         metadataMap = null;
+
+        //free not used space
+        serializedMetadata.capacity(serializedMetadata.writerIndex() + 1);
     }
 
     /**
      * Return the payload.
      */
     public LogData(ByteBuf buf) {
-        lastKnownSize = buf.readableBytes();
+        int start = buf.readerIndex();
         type = ICorfuPayload.fromBuffer(buf, DataType.class);
         if (type == DataType.DATA) {
             data = ICorfuPayload.fromBuffer(buf, byte[].class);
@@ -167,6 +178,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         } else {
             metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
         }
+        lastKnownSize = buf.readerIndex() - start;
     }
 
     /**
@@ -265,7 +277,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     }
 
     void doSerializeInternal(ByteBuf buf) {
-        int startAddress = buf.readerIndex();
+        int startAddress = buf.writerIndex();
         ICorfuPayload.serialize(buf, type);
         if (type == DataType.DATA) {
             if (data == null) {

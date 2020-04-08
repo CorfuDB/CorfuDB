@@ -1,15 +1,11 @@
-package org.corfudb.infrastructure;
+package org.corfudb.runtime.collections;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.LogData;
 
 import static org.corfudb.util.MetricsUtils.sizeOf;
 
@@ -22,20 +18,20 @@ import static org.corfudb.util.MetricsUtils.sizeOf;
  * Created by WenbinZhu on 5/30/19.
  */
 @Slf4j
-public class LogUnitServerCache {
+public class TestCaffeinCache {
 
-    @Getter
-    private final LoadingCache<Long, ILogData> dataCache;
+    private final LoadingCache<Long, String> dataCache;
     private final StreamLog streamLog;
+    private long serializedSize = 0;
 
-    public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
+    public TestCaffeinCache(Long maxSize , StreamLog streamLog) {
         this.streamLog = streamLog;
         this.dataCache = Caffeine.newBuilder()
-                .<Long, ILogData>weigher((addr, logData) -> logData.getSizeMemory())
-                .maximumWeight(config.getMaxCacheSize())
+                .<Long, String>weigher((addr, logData) -> logData.length())
+                .maximumWeight(maxSize)
                 .removalListener(this::handleEviction)
                 .build(this::handleRetrieval);
-        //System.out.println("\nconfig.maxsize " + config.getMaxCacheSize());
+        System.out.print("\ninit Deepsize cache " +sizeOf.deepSizeOf(this.dataCache) +" maxWeight " + maxSize);
     }
 
     /**
@@ -48,13 +44,13 @@ public class LogUnitServerCache {
      * in the streamLog. Any address that cannot be retrieved should be returned
      * as un-written (null).
      */
-    private ILogData handleRetrieval(long address) {
-        LogData entry = streamLog.read(address);
+    private String handleRetrieval(long address) {
+        String entry = streamLog.read(address).toString();
         log.trace("handleRetrieval: Retrieved[{} : {}]", address, entry);
         return entry;
     }
 
-    private void handleEviction(long address, ILogData entry, RemovalCause cause) {
+    private void handleEviction(long address, String entry, RemovalCause cause) {
         log.trace("handleEviction: Eviction[{}]: {}", address, cause);
     }
 
@@ -68,13 +64,11 @@ public class LogUnitServerCache {
      * @param cacheable if the log entry should be cached when retrieved from underlying storage
      * @return the log entry read from cache or retrieved the underlying storage
      */
-    public ILogData get(long address, boolean cacheable) {
-        if (!cacheable) {
-            ILogData ld = dataCache.getIfPresent(address);
-            return ld != null ? ld : handleRetrieval(address);
-        }
+    public String get(long address, boolean cacheable) {
 
-        return dataCache.get(address);
+            String ld = dataCache.getIfPresent(address);
+            return ld;
+
     }
 
     /**
@@ -83,7 +77,7 @@ public class LogUnitServerCache {
      * @param address the address of the log entry to retrieve
      * @return the log entry read from cache or retrieved the underlying storage
      */
-    public ILogData get(long address) {
+    public String get(long address) {
         return get(address, true);
     }
 
@@ -94,10 +88,14 @@ public class LogUnitServerCache {
      * @param address the address to write entry to
      * @param entry   the log entry to write
      */
-    public void put(long address, ILogData entry) {
-        ((LogData)entry).serializeMetadata();
+    public void put(long address, String entry) {
         log.trace("LogUnitServerCache.put: Cache write[{} : {}]", address, entry);
         dataCache.put(address, entry);
+        serializedSize += entry.length();
+        if (dataCache.estimatedSize() % 100000 == 0) {
+            // System.out.print("\ncentry serialized size " + entry.length() + " deep size " + sizeOf.deepSizeOf(entry));
+            //System.out.print("\ncache num_element " + dataCache.estimatedSize() + " deepSize " + sizeOf.deepSizeOf(dataCache));
+        }
     }
 
     /**

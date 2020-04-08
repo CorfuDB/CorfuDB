@@ -101,11 +101,19 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     }
 
     /**
-     * Get an estimate of how large this entry is in memory.
+     * Get an estimate of how large this entry is in disk space.
      *
      * @return An estimate on the size of this object, in bytes.
      */
     int getSizeEstimate();
+
+    /**
+     * Get an estimate of how large this entry is in memory.
+     *
+     * @return An estimate on the size of this object, in bytes.
+     */
+    int getSizeMemory();
+
 
     /**
      * Assign a given token to this log data.

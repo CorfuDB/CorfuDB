@@ -522,7 +522,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             if (test.testServerMap.putIfAbsent("test:" + port, this) != null) {
                 throw new RuntimeException("Server already registered at port " + port);
             }
-
         }
 
         public TestServerRouter getServerRouter() {

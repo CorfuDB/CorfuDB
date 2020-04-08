@@ -1,11 +1,18 @@
 package org.corfudb.runtime.collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.util.MetricsUtils.sizeOf;
+
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.reflect.TypeToken;
 
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.ConcurrentModificationException;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
@@ -15,19 +22,33 @@ import java.util.stream.Stream;
 
 import org.assertj.core.api.Assertions;
 import org.assertj.core.data.MapEntry;
+import org.corfudb.AbstractCorfuTest;
+import org.corfudb.CorfuTestParameters;
+import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.LogUnitServerCache;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.StreamOptions;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
 public class CorfuTableTest extends AbstractViewTest {
 
     private static final int ITERATIONS = 20;
+    private static final int NUM_TABLES = 32;
+
+
 
     Collection<String> project(Collection<Map.Entry<String, String>> entries) {
         return entries.stream().map(entry -> entry.getValue()).collect(Collectors.toCollection(ArrayList::new));
@@ -37,7 +58,8 @@ public class CorfuTableTest extends AbstractViewTest {
     public void openingCorfuTableTwice() {
         CorfuTable<String, String>
                 instance1 = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -46,7 +68,8 @@ public class CorfuTableTest extends AbstractViewTest {
 
         CorfuTable<String, String>
                 instance2 = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
                 .setStreamName("test")
                 .open();
 
@@ -61,10 +84,11 @@ public class CorfuTableTest extends AbstractViewTest {
     public void canReadFromEachIndex() {
         CorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                    .setArguments(new StringIndexer())
-                    .setStreamName("test")
-                    .open();
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
+                .setArguments(new StringIndexer())
+                .setStreamName("test")
+                .open();
 
         corfuTable.put("k1", "a");
         corfuTable.put("k2", "ab");
@@ -81,12 +105,13 @@ public class CorfuTableTest extends AbstractViewTest {
      * Verify that a  lookup by index throws an exception,
      * when the index has never been specified for this CorfuTable.
      */
-    @Test (expected = IllegalArgumentException.class)
+    @Test(expected = IllegalArgumentException.class)
     @SuppressWarnings("unchecked")
     public void cannotLookupByIndexWhenIndexNotSpecified() {
         CorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
                 .setStreamName("test")
                 .open();
 
@@ -101,12 +126,13 @@ public class CorfuTableTest extends AbstractViewTest {
      * Verify that a  lookup by index and filter throws an exception,
      * when the index has never been specified for this CorfuTable.
      */
-    @Test (expected = IllegalArgumentException.class)
+    @Test(expected = IllegalArgumentException.class)
     @SuppressWarnings("unchecked")
     public void cannotLookupByIndexAndFilterWhenIndexNotSpecified() {
         CorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
                 .setStreamName("test")
                 .open();
 
@@ -120,13 +146,14 @@ public class CorfuTableTest extends AbstractViewTest {
     @Test
     @SuppressWarnings("unchecked")
     public void canReadFromMultipleIndices() {
-                CorfuTable<String, String> corfuTable = getDefaultRuntime()
-                        .getObjectsView()
-                        .build()
-                        .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                        .setArguments(new StringMultiIndexer())
-                        .setStreamName("test-map")
-                        .open();
+        CorfuTable<String, String> corfuTable = getDefaultRuntime()
+                .getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
+                .setArguments(new StringMultiIndexer())
+                .setStreamName("test-map")
+                .open();
 
         corfuTable.put("k1", "dog fox cat");
         corfuTable.put("k2", "dog bat");
@@ -142,7 +169,8 @@ public class CorfuTableTest extends AbstractViewTest {
     public void emptyIndexesReturnEmptyValues() {
         CorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
                 .setArguments(new StringIndexer())
                 .setStreamName("test")
                 .open();
@@ -166,7 +194,8 @@ public class CorfuTableTest extends AbstractViewTest {
 
         CorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
                 .setArguments(new StringIndexer.FailingIndex())
                 .setStreamName("failing-index")
                 .open();
@@ -186,7 +215,8 @@ public class CorfuTableTest extends AbstractViewTest {
     public void problematicIndexFunctionTx() {
         CorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
                 .setArguments(new StringIndexer.FailingIndex())
                 .setStreamName("failing-index")
                 .open();
@@ -206,7 +236,8 @@ public class CorfuTableTest extends AbstractViewTest {
     public void canReadWithoutIndexes() {
         CorfuTable<String, String>
                 corfuTable = getDefaultRuntime().getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
                 .setStreamName("test")
                 .open();
 
@@ -216,8 +247,8 @@ public class CorfuTableTest extends AbstractViewTest {
 
         assertThat(corfuTable)
                 .containsExactly(MapEntry.entry("k1", "a"),
-                                 MapEntry.entry("k2", "ab"),
-                                 MapEntry.entry("k3", "b"));
+                        MapEntry.entry("k2", "ab"),
+                        MapEntry.entry("k3", "b"));
     }
 
     /**
@@ -263,7 +294,8 @@ public class CorfuTableTest extends AbstractViewTest {
         CorfuTable<String, String> corfuTable = getDefaultRuntime()
                 .getObjectsView()
                 .build()
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
                 .setStreamID(streamID)
                 .open();
 
@@ -272,7 +304,7 @@ public class CorfuTableTest extends AbstractViewTest {
         corfuTable.put("k3", "fox");
 
         // create a hole
-        TokenResponse tokenResponse =  getDefaultRuntime()
+        TokenResponse tokenResponse = getDefaultRuntime()
                 .getSequencerView()
                 .next(streamID);
 
@@ -299,4 +331,119 @@ public class CorfuTableTest extends AbstractViewTest {
                 getCorfuSMRProxy()).getUnderlyingObject().getSmrStream().pos()).isEqualTo(3);
 
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testLogUnitServerCache() {
+        CorfuTestParameters para = AbstractCorfuTest.PARAMETERS;
+        //Map<String, Object> serverConfig = ServerContextBuilder.defaultTestContext(0).getServerConfig();
+        //serverConfig.put("--cache-heap-ratio", 0.01);
+        //ServerContextBuilder
+
+        CorfuRuntime runtime = getDefaultRuntime().setTransactionLogging(true);
+        CorfuRuntime runtime1 = getNewRuntime(getDefaultNode()).connect().setTransactionLogging(true);
+        int numTables = NUM_TABLES;
+
+        HashMap<String, CorfuTable<String, String>> corfuTables = new HashMap<>();
+        HashMap<String, CorfuTable<String, String>> readCorfuTables = new HashMap<>();
+        HashMap<String, HashMap<String, String>> verificationTables = new HashMap<>();
+
+        StreamOptions options = StreamOptions.builder()
+                .cacheEntries(false)
+                .build();
+        IStreamView txnStream = runtime.getStreamsView()
+                .getUnsafe(ObjectsView.TRANSACTION_STREAM_ID, options);
+
+        for (int i = 0; i < numTables; i++) {
+            String tableName = "test" + i;
+            CorfuTable<String, String>
+                    corfuTable = runtime.getObjectsView().build()
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                    })
+                    .setArguments(new StringIndexer())
+                    .setStreamName(tableName)
+                    .open();
+
+            corfuTables.put(tableName, corfuTable);
+            verificationTables.put(tableName, new HashMap<>());
+
+            CorfuTable<String, String>
+                    readTable = runtime1.getObjectsView().build()
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                    })
+                    .setArguments(new StringIndexer())
+                    .setStreamName(tableName)
+                    .open();
+
+            readCorfuTables.put(tableName, readTable);
+        }
+
+        for (numTables = 1; numTables <= NUM_TABLES; numTables *= 2) {
+            System.out.println("\n\nTest for numTables " + numTables);
+
+            for (int i = 0; i < ITERATIONS ; i++) {
+                runtime.getObjectsView().TXBuild()
+                        .type(TransactionType.OPTIMISTIC)
+                        .build()
+                        .begin();
+                for (int num = 0; num < numTables; num++) {
+                    String tableName = "test" + num;
+                    String key = tableName + " " + i;
+                    corfuTables.get(tableName).put(key, key);
+                    verificationTables.get(tableName).put(key, key);
+                }
+                runtime.getObjectsView().TXEnd();
+            }
+
+            runtime.getObjectsView().TXEnd();
+            //verify
+            //System.out.println("verify tables" + corfuTables.keySet());
+            for (int num = 0; num < numTables; num++) {
+                String table = "test" + num;
+                CorfuTable<String, String> corfuTable = corfuTables.get(table);
+                HashMap<String, String> verifyTable = verificationTables.get(table);
+                assertThat(corfuTable.size()).isEqualTo(verifyTable.size());
+                assertThat(corfuTable.values()).containsAll(verifyTable.values());
+                //System.out.println("veryfied table " + table);
+            }
+
+            LogUnitServer logUnitServer = getLogUnit(SERVERS.PORT_0);
+            LoadingCache<Long, ILogData> dataCache = logUnitServer.getDataCache().getDataCache();
+            long tail = runtime.getAddressSpaceView().getLogTail();
+            System.out.print("dataCache numEntries " + dataCache.estimatedSize());
+
+            ILogData data = dataCache.get(tail);
+            System.out.print("\nLogUnitServerCache logdataSizeEstimate " + data.getSizeEstimate() +
+                    " deepSize " + data.getSizeMemory());
+
+            //At the runtime client side, the deepSize gives bigger value as the metadataMap is deserialized.
+            List<ILogData> dataList = txnStream.remaining();
+            data = dataList.get(dataList.size() - 1);
+            int esize = data.getSizeEstimate();
+            int msize = data.getSizeMemory();
+            System.out.print("\ntxData numStreams " + data.getStreams().size() + " runtime logdatasizeEstimate " + esize +
+                    " memorySize " + msize);
+        }
+    }
+
+    @Test
+    public void testCaffeinCache() {
+        long maxSize = 100000;
+
+        for(int valSize = 1024; valSize <= 1024; valSize = valSize*2) {
+            TestCaffeinCache testCache = new TestCaffeinCache(maxSize, null);
+            String s = null;
+            for (long i = 0; i < 2*maxSize; i++) {
+                byte[] array = new byte[valSize]; // length is bounded by 7
+                new Random().nextBytes(array);
+                s = new String(array, Charset.forName("UTF-8"));
+                testCache.put(i, s);
+            }
+
+            long cacheSize = sizeOf.deepSizeOf(testCache);
+            System.out.print("\n*******numElement " + testCache.getSize() + " cacheSize :" + cacheSize + " avg element size " + cacheSize/testCache.getSize() +
+                    " dataSize " + sizeOf.deepSizeOf(testCache.get(2*maxSize - 1)));
+        }
+    }
 }
+
