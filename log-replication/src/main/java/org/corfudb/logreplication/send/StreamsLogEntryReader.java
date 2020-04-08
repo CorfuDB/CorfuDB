@@ -98,7 +98,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     @Override
     public LogReplicationEntry read(UUID logEntryRequestId) throws TrimmedException, IllegalTransactionStreamsException {
-        //txStream.seek(preMsgTs + 1);  we may no need to call seek every time
         try {
             while (txStream.hasNext()) {
                 OpaqueEntry opaqueEntry = txStream.next();
@@ -106,7 +105,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     continue;
                 }
                 LogReplicationEntry txMessage = generateMessage(opaqueEntry, logEntryRequestId);
-                //System.out.println("StreamLogEntryReader generate a message " + txMessage.getMetadata().timestamp);
                 return txMessage;
             }
         } catch (TrimmedException e) {
