@@ -46,7 +46,6 @@ public class TestDataSender implements DataSender {
         CompletableFuture<LogReplicationEntry> lastSentMessage = new CompletableFuture<>();
 
         if (messages != null && !messages.isEmpty()) {
-
             CompletableFuture<LogReplicationEntry> tmp;
 
             for (LogReplicationEntry message : messages) {
@@ -60,7 +59,7 @@ public class TestDataSender implements DataSender {
 
         return lastSentMessage;
     }
-
+    
     public void reset() {
         entryQueue.clear();
     }
