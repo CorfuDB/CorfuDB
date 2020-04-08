@@ -19,6 +19,8 @@ public class StreamSeekAtomicityTest extends AbstractTransactionsTest {
     @Override
     public void TXBegin() { OptimisticTXBegin(); }
 
+
+
     protected int numIterations = PARAMETERS.NUM_ITERATIONS_LOW;
 
     /**

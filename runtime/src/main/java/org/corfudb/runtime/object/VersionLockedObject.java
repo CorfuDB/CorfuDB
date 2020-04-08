@@ -2,7 +2,6 @@ package org.corfudb.runtime.object;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -628,10 +627,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
 
         List<SMREntry> entries = stream.current();
 
-        while (stream.pos() > rollbackVersion) {
-            if (Address.nonAddress(stream.pos())) {
-                throw new NoRollbackException(stream.pos(), rollbackVersion);
-            }
+        while (!entries.isEmpty()) {
             if (entries.stream().allMatch(SMREntry::isUndoable)) {
                 // start from the end, process one at a time
                 ListIterator<SMREntry> it = entries.listIterator(entries.size());
@@ -650,7 +646,13 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             }
 
             entries = stream.previous();
+
+            if (stream.pos() <= rollbackVersion) {
+                return;
+            }
         }
+
+        throw new NoRollbackException(stream.pos(), rollbackVersion);
     }
 
     /**
@@ -717,11 +719,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     public void applyUpdateToStreamUnsafe(SMREntry entry, long globalAddress) {
         applyUpdateUnsafe(entry, globalAddress);
         seek(globalAddress + 1);
-    }
-
-    @VisibleForTesting
-    public ISMRStream getSmrStream() {
-        return smrStream;
     }
 
     /**

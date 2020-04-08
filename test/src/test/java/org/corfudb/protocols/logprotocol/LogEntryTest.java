@@ -6,7 +6,6 @@ import org.corfudb.CustomSerializer;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-import org.junit.After;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -18,11 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class LogEntryTest {
-
-    @After
-    public void tearDown() {
-        Serializers.clearCustomSerializers();
-    }
 
     @Test
     public void seekToEndSMREntry () {

@@ -71,11 +71,4 @@ public class Serializers {
             throw new RuntimeException(msg);
         }
     }
-
-    /**
-     * Clear custom serializers.
-     */
-    public static synchronized void clearCustomSerializers() {
-        customSerializers.clear();
-    }
 }

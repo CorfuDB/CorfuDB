@@ -16,6 +16,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -532,59 +533,5 @@ public class StreamViewTest extends AbstractViewTest {
         // Ensure that we can recover.
         txStream.seek(localRuntime.getSequencerView().query().getSequence());
         txStream.remaining();
-    }
-
-    @Test
-    public void testNextUpTo() {
-        final int numWrites = 10;
-
-        byte[] testPayload = "hello world".getBytes();
-
-        String stream = "stream1";
-        UUID id1 = CorfuRuntime.getStreamID(stream);
-
-        StreamingMap<String, String> map = r.getObjectsView()
-                .build()
-                .setStreamName(stream)
-                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .open();
-
-        CorfuRuntime producer = getNewRuntime(getDefaultNode())
-                .connect();
-
-        CorfuRuntime consumer = getNewRuntime(getDefaultNode())
-                .connect();
-
-        IStreamView svProducer = producer.getStreamsView().get(id1);
-        IStreamView svConsumer = consumer.getStreamsView().get(id1);
-
-
-        for (int x = 0; x < numWrites; x++) {
-            svProducer.append(testPayload);
-        }
-
-        // Emulate the extra Token the Checkpointer requests before appending a checkpoint
-        // producer.getSequencerView().next(id1);
-        // producer.getAddressSpaceView().write(new Token(0, numWrites), LogData.getHole(numWrites));
-
-        // Get two entries before checkpointing (so we don't load from checkpoint on next access)
-        assertThat(svConsumer.nextUpTo(numWrites).getPayload(consumer)).isEqualTo(testPayload);
-        assertThat(svConsumer.nextUpTo(numWrites).getPayload(consumer)).isEqualTo(testPayload);
-
-        MultiCheckpointWriter checkpointWriter = new MultiCheckpointWriter();
-        checkpointWriter.addMap(map);
-        checkpointWriter.appendCheckpoints(r, "Author");
-
-        // Consume Until Tail
-        long tail = consumer.getSequencerView().query(id1);
-
-        ILogData data;
-        while (svConsumer.hasNext()) {
-            data = svConsumer.nextUpTo(tail);
-            if (data != null) {
-                assertThat(data.getPayload(consumer)).isEqualTo(testPayload);
-            }
-        }
-
     }
 }
