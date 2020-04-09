@@ -117,7 +117,8 @@ public class StateTransferTest extends AbstractViewTest {
         addServer(SERVERS.PORT_2);
         final int addNodeRetries = 3;
         rt.getManagementView()
-                .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1));
+                .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L),
+                        Duration.ofSeconds(1), getRouterFunction(rt, SERVERS.ENDPOINT_2));
 
         rt.invalidateLayout();
         final long expectedEpoch = 3L;
@@ -293,7 +294,8 @@ public class StateTransferTest extends AbstractViewTest {
         addServer(SERVERS.PORT_2);
         final int addNodeRetries = 3;
         rt.getManagementView()
-                .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1));
+                .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1),
+                        getRouterFunction(rt, SERVERS.ENDPOINT_2));
 
         rt.invalidateLayout();
         final long finalEpochAfterAdd = 3L;
@@ -902,7 +904,8 @@ public class StateTransferTest extends AbstractViewTest {
         addServer(SERVERS.PORT_2);
         final int addNodeRetries = 3;
         corfuRuntime.getManagementView()
-                .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1));
+                .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L),
+                        Duration.ofSeconds(1), getRouterFunction(corfuRuntime, SERVERS.ENDPOINT_2));
         corfuRuntime.invalidateLayout();
         final long epochAfterAdd = 4L;
         Layout expectedLayout = new TestLayoutBuilder()

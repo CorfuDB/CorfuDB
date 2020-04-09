@@ -3,9 +3,12 @@ package org.corfudb.runtime.view;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.BaseHandler;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
-import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
+import org.corfudb.runtime.clients.LayoutHandler;
+import org.corfudb.runtime.clients.ManagementHandler;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.WorkflowException;
 import org.corfudb.runtime.exceptions.WorkflowResultUnknownException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -99,7 +102,29 @@ public class ManagementView extends AbstractView {
      */
     public void addNode(@Nonnull String endpointToAdd, int retry,
                         @Nonnull Duration timeout, @Nonnull Duration pollPeriod) {
-        new AddNode(endpointToAdd, runtime, retry, timeout, pollPeriod)
+        try (NettyClientRouter clientRouter = new NettyClientRouter(NodeLocator.parseString(endpointToAdd),
+                runtime.getParameters())) {
+            clientRouter.addClient(new LayoutHandler())
+                    .addClient(new ManagementHandler())
+                    .addClient(new BaseHandler());
+            addNode(endpointToAdd, retry, timeout, pollPeriod, clientRouter);
+        }
+    }
+
+    /**
+     * Add a new node to the existing cluster.
+     *
+     * @param endpointToAdd Endpoint of the new node to be added to the cluster.
+     * @param retry         the number of times to retry a workflow if it fails
+     * @param timeout       total time to wait before the workflow times out
+     * @param pollPeriod    the poll interval to check whether a workflow completed or not
+     * @param router        A client router to the endpoint
+     * @throws WorkflowResultUnknownException when the side affect of the operation
+     *                                        can't be determined
+     */
+    public void addNode(@Nonnull String endpointToAdd, int retry, @Nonnull Duration timeout,
+                        @Nonnull Duration pollPeriod, @NonNull IClientRouter router) {
+        new AddNode(endpointToAdd, runtime, retry, timeout, pollPeriod, router)
                 .invoke();
     }
 
@@ -572,31 +597,5 @@ public class ManagementView extends AbstractView {
         }
 
         return allLayoutServers.stream().distinct().collect(Collectors.toList());
-    }
-
-    /**
-     * Bootstraps the management server if not already bootstrapped.
-     * If already bootstrapped, it completes silently.
-     *
-     * @param endpoint Endpoint ot bootstrap.
-     * @param layout   Layout to bootstrap with.
-     * @return Completable Future which completes with True when the management server is bootstrapped.
-     */
-    public CompletableFuture<Boolean> bootstrapManagementServer(@Nonnull String endpoint, @Nonnull Layout layout) {
-        return runtime.getLayoutView().getRuntimeLayout(layout)
-                .getManagementClient(endpoint)
-                .bootstrapManagement(layout)
-                .exceptionally(throwable -> {
-                    try {
-                        CFUtils.unwrap(throwable, AlreadyBootstrappedException.class);
-                    } catch (AlreadyBootstrappedException e) {
-                        log.info("bootstrapManagementServer: Management Server {} already bootstrapped.", endpoint);
-                    }
-                    return true;
-                })
-                .thenApply(result -> {
-                    log.info("bootstrapManagementServer: Management Server {} bootstrap successful.", endpoint);
-                    return true;
-                });
     }
 }

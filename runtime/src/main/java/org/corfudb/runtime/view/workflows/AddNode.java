@@ -3,12 +3,13 @@ package org.corfudb.runtime.view.workflows;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
+import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.ManagementClient;
-import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
@@ -33,26 +34,43 @@ public class AddNode extends WorkflowRequest {
      * Duration between the pings.
      */
     private final Duration pingInterval = Duration.ofMillis(50);
+    /**
+     * Number of retries to bootstrap the management server.
+     */
+    private final int bootstrapRetries = 3;
+    /**
+     * Duration between bootstrap retries.
+     */
+    private final Duration bootstrapInterval = Duration.ofMillis(300);
+    /**
+     * A Client router to the node being added.
+     */
+    private final IClientRouter clientRouter;
 
     public AddNode(@NonNull String endpointToAdd, @NonNull CorfuRuntime runtime,
                    int retry, @NonNull Duration timeout,
-                   @NonNull Duration pollPeriod) {
+                   @NonNull Duration pollPeriod, @NonNull IClientRouter clientRouter) {
         this.nodeForWorkflow = endpointToAdd;
         this.runtime = runtime;
         this.retry = retry;
         this.timeout = timeout;
         this.pollPeriod = pollPeriod;
+        this.clientRouter = clientRouter;
     }
 
     @Override
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
         // Bootstrap a management server first.
-        // If there are network or timeout exceptions, throw them.
-        CFUtils.getUninterruptibly(runtime.getManagementView().bootstrapManagementServer(nodeForWorkflow, layout),
-                TimeoutException.class,
-                NetworkException.class);
-        // Send the add node request to the node's orchestrator.
+        // If there are network or timeout exceptions - retry.
+        // If the retries fail - throw an exception.
+        try {
+            BootstrapUtil.retryBootstrap(nodeForWorkflow, layout, bootstrapRetries,
+                    bootstrapInterval, clientRouter, BootstrapUtil::bootstrapManagementServer);
+        } catch (AlreadyBootstrappedException abe) {
+            log.warn("Skipping management server bootstrap for {}.", nodeForWorkflow);
+        }
+        // Now when the management server is bootstrapped, send the add node request to the node's orchestrator.
         CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);
         log.info("sendRequest: requested to add {} on orchestrator {}:{}",
                 nodeForWorkflow, managementClient.getRouter().getHost(),
@@ -78,14 +96,12 @@ public class AddNode extends WorkflowRequest {
     protected Optional<ManagementClient> getOrchestrator() {
         runtime.invalidateLayout();
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
-        BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout(layout).getBaseClient(nodeForWorkflow);
-        // Add node requires a few pings for orchestrator selection because the current
-        // server router might not be immediately ready after the recent shutdown.
+
+        BaseClient baseClient = new BaseClient(clientRouter, layout.getEpoch(), layout.getClusterId());
         for (int i = 0; i < pingRetries; i++) {
             if (baseClient.pingSync()) {
                 log.info("getOrchestrator: orchestrator selected {}", nodeForWorkflow);
-                return Optional.of(runtime.getLayoutView()
-                        .getRuntimeLayout(layout).getManagementClient(nodeForWorkflow));
+                return Optional.of(new ManagementClient(clientRouter, layout.getEpoch(), layout.getClusterId()));
             }
             Sleep.sleepUninterruptibly(pingInterval);
             log.info("Retrying to ping a current base server {} times.", i);

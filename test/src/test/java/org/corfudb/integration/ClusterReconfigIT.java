@@ -582,7 +582,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 new LayoutClient(router, layout.getEpoch(), layout.getClusterId()).bootstrapLayout(wrongLayout)));
 
         assertThatThrownBy(() -> BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT))
-                .hasCauseInstanceOf(AlreadyBootstrappedException.class);
+                .isInstanceOf(AlreadyBootstrappedException.class);
 
         shutdownCorfuServer(corfuServer_1);
         router.stop();
@@ -615,7 +615,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 managementClient.bootstrapManagement(wrongLayout)));
 
         assertThatThrownBy(() -> BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT))
-                .hasCauseInstanceOf(AlreadyBootstrappedException.class);
+                .isInstanceOf(AlreadyBootstrappedException.class);
 
         shutdownCorfuServer(corfuServer_1);
         router.stop();
