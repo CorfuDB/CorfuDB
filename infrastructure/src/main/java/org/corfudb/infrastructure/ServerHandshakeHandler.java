@@ -136,7 +136,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void channelActive(final ChannelHandlerContext ctx) throws Exception {
-        log.trace("channelActive: Incoming connection established from: {} Start Read Timeout.",
+        log.info("channelActive: Incoming connection established from: {} Start Read Timeout.",
                 ctx.channel().remoteAddress());
         ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER,
                 new ReadTimeoutHandler(this.timeoutInSeconds));
