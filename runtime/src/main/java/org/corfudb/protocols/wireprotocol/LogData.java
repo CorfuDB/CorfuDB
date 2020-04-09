@@ -7,6 +7,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -27,7 +29,6 @@ import static org.corfudb.util.MetricsUtils.sizeOf;
 public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     public static final int NOT_KNOWN = -1;
-
     @Getter
     final DataType type;
 
@@ -149,17 +150,32 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         return (int) sizeOf.deepSizeOf(this);
     }
 
-    @Getter
     EnumMap<LogUnitMetadataType, Object> metadataMap;
     private ByteBuf serializedMetadata = null;
 
     public void serializeMetadata() {
-        serializedMetadata = Unpooled.buffer();
-        ICorfuPayload.serialize(serializedMetadata, metadataMap);
-        metadataMap = null;
+        if (serializedMetadata != null)
+            return;
 
+        ByteBuf newBuf = Unpooled.buffer();
+        ICorfuPayload.serialize(newBuf, metadataMap);
         //free not used space
-        serializedMetadata.capacity(serializedMetadata.writerIndex() + 1);
+        newBuf.capacity(newBuf.writerIndex() + 1);
+        //System.out.println("\nserialize data " + serializedMetadata + " readerIndex " + serializedMetadata.readerIndex() + " writerIndex " + serializedMetadata.writerIndex());
+        newBuf.resetReaderIndex();
+        serializedMetadata = newBuf;
+        metadataMap = null;
+    }
+
+    public EnumMap<LogUnitMetadataType, Object> getMetadataMap() {
+        if (metadataMap == null) {
+            assert(serializedMetadata != null);
+            metadataMap = ICorfuPayload.enumMapFromBuffer(serializedMetadata, IMetadata.LogUnitMetadataType.class);
+            ByteBuf byteBuf = serializedMetadata;
+            serializedMetadata = null;
+            byteBuf.release();
+        }
+        return metadataMap;
     }
 
     /**
@@ -276,7 +292,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         }
     }
 
-    void doSerializeInternal(ByteBuf buf) {
+    synchronized void doSerializeInternal(ByteBuf buf) {
         int startAddress = buf.writerIndex();
         ICorfuPayload.serialize(buf, type);
         if (type == DataType.DATA) {
@@ -301,10 +317,13 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         }
 
         if (type.isMetadataAware()) {
-            if (serializedMetadata == null) {
+            EnumMap<LogUnitMetadataType, Object> localMap = metadataMap;
+            if (localMap != null) {
                 ICorfuPayload.serialize(buf, metadataMap);
             } else {
-                buf.writeBytes(serializedMetadata);
+                serializedMetadata.resetReaderIndex();
+                buf.writeBytes(serializedMetadata, serializedMetadata.writerIndex());
+                //System.out.print("\n internal " + serializedMetadata + " readerIndex " + serializedMetadata.readerIndex());
             }
         }
         int endAddress = buf.writerIndex();
