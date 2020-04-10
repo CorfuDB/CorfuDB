@@ -84,13 +84,13 @@ public class BootstrapUtil {
      *
      * @param router          Router connected to the node.
      * @param layout          Layout to bootstrap with.
-     * @param bootstrapFuture A supplier for the function to bootstrap a server.
-     * @param getLayoutFuture A supplier for the function to get a layout.
+     * @param bootstrapLayoutSupplier A supplier for the function to bootstrap a server.
+     * @param layoutFutureSupplier A supplier for the function to get a layout.
      */
     private static void bootstrap(IClientRouter router, Layout layout,
-                                 Supplier<CompletableFuture<Boolean>> bootstrapFuture,
-                                 Supplier<CompletableFuture<Layout>> getLayoutFuture) {
-        CompletableFuture<Void> bootstrapServer = bootstrapFuture
+                                 Supplier<CompletableFuture<Boolean>> bootstrapLayoutSupplier,
+                                 Supplier<CompletableFuture<Layout>> layoutFutureSupplier) {
+        CompletableFuture<Void> bootstrapServer = bootstrapLayoutSupplier
                 .get()
                 .exceptionally(ex -> {
                     try {
@@ -103,8 +103,10 @@ public class BootstrapUtil {
                     return true;
                 })
                 .thenCompose(bootstrapSucceeded -> {
-                    if (bootstrapSucceeded) return CompletableFuture.completedFuture(layout);
-                    return getLayoutFuture.get();
+                    if (bootstrapSucceeded) {
+                        return CompletableFuture.completedFuture(layout);
+                    }
+                    return layoutFutureSupplier.get();
                 })
                 .thenAccept(retrievedLayout -> {
                     if (retrievedLayout.equals(layout)) {

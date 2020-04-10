@@ -46,18 +46,12 @@ public class AddNodeDuringInvalidateLayoutIT extends GenericIntegrationTest {
     @Test(timeout = 300000)
     public void AddNodeDuringInvalidateLayoutTest() {
         workflow(wf -> {
-
-                    wf.setupDocker(fixture -> {
-                        fixture.getCluster().numNodes(3);
-                    });
-
                     wf.deploy();
                     try {
                         addNodeDuringInvalidateLayout(wf);
                     } catch (Exception e) {
                         Assertions.fail("Test failed: " + e);
                     }
-
                 }
         );
     }
@@ -66,92 +60,85 @@ public class AddNodeDuringInvalidateLayoutIT extends GenericIntegrationTest {
         UniverseParams params = wf.getFixture().data();
         DockerCorfuCluster corfuCluster = wf.getUniverse()
                 .getGroup(params.getGroupParamByIndex(0).getName());
-        Optional<CorfuServer> first = corfuCluster.nodes().values().asList().stream().findFirst();
+        CorfuServer first = corfuCluster.getFirstServer();
+        String endpoint = first.getEndpoint();
+        LocalCorfuClient client = corfuCluster.getLocalCorfuClient();
+        final Duration timeOutDuration = Duration.ofSeconds(5);
+        final Duration pollDuration = Duration.ofSeconds(1);
+        final int numRetries = 3;
+        final int waitForResetDurationSeconds = 8;
+        final int resetWaitPeriod = 2000;
+        // Remove a node so we can add it back later.
+        client.getRuntime().getManagementView()
+                .removeNode(endpoint, numRetries, timeOutDuration, pollDuration);
+        Layout layout = client.getLayout();
+        assertThat(layout.getAllServers().contains(endpoint)).isFalse();
+        // Create a base client to the node we want to reset and the spy to cause a race condition.
+        BaseClient baseClient = client.getRuntime().getLayoutView()
+                .getRuntimeLayout().getBaseClient(endpoint);
+        BaseClient baseClientSpy = Mockito.spy(baseClient);
 
-        if (first.isPresent()) {
-            String endpoint = first.get().getEndpoint();
-            LocalCorfuClient client = corfuCluster.getLocalCorfuClient();
-            final Duration timeOutDuration = Duration.ofSeconds(5);
-            final Duration pollDuration = Duration.ofSeconds(1);
-            final int numRetries = 3;
-            final int waitForResetDurationSeconds = 8;
-            final int resetWaitPeriod = 2000;
-            // Remove a node so we can add it back later.
-            client.getRuntime().getManagementView()
-                    .removeNode(endpoint, numRetries, timeOutDuration, pollDuration);
-            Layout layout = client.getLayout();
-            assertThat(layout.getAllServers().contains(endpoint)).isFalse();
-            // Create a base client to the node we want to reset and the spy to cause a race condition.
-            BaseClient baseClient = client.getRuntime().getLayoutView()
-                    .getRuntimeLayout().getBaseClient(endpoint);
-            BaseClient baseClientSpy = Mockito.spy(baseClient);
+        // When a base client tries to perform a reset, invalidate a layout.
+        // This will prune the router of the base client.
+        Mockito.doAnswer(invoke -> {
+            client.getRuntime().invalidateLayout();
+            return invoke.callRealMethod();
+        }).when(baseClientSpy).reset();
 
-            // When a base client tries to perform a reset, invalidate a layout.
-            // This will prune the router of the base client.
+        // When we try to issue a reset, depending on when the router was pruned,
+        // either a TimeoutException will be thrown
+        // (because the connection future times out),
+        // or a NetworkException will be thrown
+        // (because the connection future completed exceptionally).
+        assertThatThrownBy(() -> CFUtils.getUninterruptibly(baseClientSpy.reset(),
+                TimeoutException.class, NetworkException.class))
+                .isInstanceOfAny(NetworkException.class, TimeoutException.class);
+
+        // Now lets create a client router that is not part of a router pool,
+        // issue a reset to the node we would want to add.
+        // When a reset is called, the layout will be invalidated.
+        try (NettyClientRouter clientRouter = new NettyClientRouter(NodeLocator.parseString(endpoint),
+                client.getRuntime().getParameters())) {
+
+            baseClient = new BaseClient(clientRouter, layout.getEpoch(), layout.getClusterId());
+            BaseClient spyBaseClient = Mockito.spy(baseClient);
+
             Mockito.doAnswer(invoke -> {
                 client.getRuntime().invalidateLayout();
                 return invoke.callRealMethod();
-            }).when(baseClientSpy).reset();
+            }).when(spyBaseClient).reset();
 
-            // When we try to issue a reset, depending on when the router was pruned,
-            // either a TimeoutException will be thrown
-            // (because the connection future times out),
-            // or a NetworkException will be thrown
-            // (because the connection future completed exceptionally).
-            assertThatThrownBy(() -> CFUtils.getUninterruptibly(baseClientSpy.reset(),
-                    TimeoutException.class, NetworkException.class))
-                    .isInstanceOfAny(NetworkException.class, TimeoutException.class);
-
-            // Now lets create a client router that is not part of a router pool,
-            // issue a reset to the node we would want to add.
-            // When a reset is called, the layout will be invalidated.
-            try (NettyClientRouter clientRouter = new NettyClientRouter(NodeLocator.parseString(endpoint),
-                    client.getRuntime().getParameters())) {
-
-                baseClient = new BaseClient(clientRouter, layout.getEpoch(), layout.getClusterId());
-                BaseClient spyBaseClient = Mockito.spy(baseClient);
-
-                Mockito.doAnswer(invoke -> {
-                    client.getRuntime().invalidateLayout();
-                    return invoke.callRealMethod();
-                }).when(spyBaseClient).reset();
-
-                // The reset should go through.
-                boolean resetHappened = spyBaseClient.reset()
-                        .get(waitForResetDurationSeconds, TimeUnit.SECONDS);
-                assertThat(resetHappened).isTrue();
-            }
-
-            // Wait until a node fully restarts.
-            Sleep.sleepUninterruptibly(Duration.ofMillis(resetWaitPeriod));
-
-            // Now lets create a client router that is not part of a router pool,
-            // and run the add node workflow.
-            // Every time a clientRouter sends a request, the layout will be invalidated.
-            try (NettyClientRouter clientRouter = new NettyClientRouter(NodeLocator.parseString(endpoint),
-                    client.getRuntime().getParameters())) {
-
-                NettyClientRouter spyRouter = Mockito.spy(clientRouter);
-
-                spyRouter.addClient(new LayoutHandler())
-                        .addClient(new ManagementHandler())
-                        .addClient(new BaseHandler());
-
-                Mockito.doAnswer(invoke -> {
-                    client.getRuntime().invalidateLayout();
-                    return invoke.callRealMethod();
-                }).when(spyRouter).sendMessageAndGetCompletable(Mockito.any(), Mockito.any());
-
-                // Run add node.
-                client.getManagementView()
-                        .addNode(endpoint, numRetries, timeOutDuration, pollDuration);
-                // Verify that the node was added.
-                assertThat(client.getLayout().getAllServers()).contains(endpoint);
-            }
-
-            return;
+            // The reset should go through.
+            boolean resetHappened = spyBaseClient.reset()
+                    .get(waitForResetDurationSeconds, TimeUnit.SECONDS);
+            assertThat(resetHappened).isTrue();
         }
 
-        throw new IllegalStateException("Node is not present.");
+        // Wait until a node fully restarts.
+        Sleep.sleepUninterruptibly(Duration.ofMillis(resetWaitPeriod));
+
+        // Now lets create a client router that is not part of a router pool,
+        // and run the add node workflow.
+        // Every time a clientRouter sends a request, the layout will be invalidated.
+        try (NettyClientRouter clientRouter = new NettyClientRouter(NodeLocator.parseString(endpoint),
+                client.getRuntime().getParameters())) {
+
+            NettyClientRouter spyRouter = Mockito.spy(clientRouter);
+
+            spyRouter.addClient(new LayoutHandler())
+                    .addClient(new ManagementHandler())
+                    .addClient(new BaseHandler());
+
+            Mockito.doAnswer(invoke -> {
+                client.getRuntime().invalidateLayout();
+                return invoke.callRealMethod();
+            }).when(spyRouter).sendMessageAndGetCompletable(Mockito.any(), Mockito.any());
+
+            // Run add node.
+            client.getManagementView()
+                    .addNode(endpoint, numRetries, timeOutDuration, pollDuration, spyRouter);
+            // Verify that the node was added.
+            assertThat(client.getLayout().getAllServers()).contains(endpoint);
+        }
     }
 }
