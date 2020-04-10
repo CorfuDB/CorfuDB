@@ -30,8 +30,10 @@ public class BaseClient implements IClient {
     @Setter
     private IClientRouter router;
 
+    @Getter
     private final long epoch;
 
+    @Getter
     private final UUID clusterId;
 
     public BaseClient(IClientRouter router, long epoch, UUID clusterId) {

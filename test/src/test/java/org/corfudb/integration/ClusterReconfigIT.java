@@ -6,6 +6,8 @@ import com.google.common.collect.Range;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -14,6 +16,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.RebootUtil;
+import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.BaseHandler;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.LayoutClient;
@@ -47,6 +50,7 @@ import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -63,6 +67,7 @@ public class ClusterReconfigIT extends AbstractIT {
     private static String corfuSingleNodeHost;
     private final int basePort = 9000;
     private final int retries = 10;
+    private final int nodeResetRetry = 3;
 
     @Before
     public void loadProperties() {
@@ -1205,5 +1210,69 @@ public class ClusterReconfigIT extends AbstractIT {
 
         shutdownCorfuServer(server1);
         shutdownCorfuServer(server2);
+    }
+
+
+    @Test
+    public void nodeResetPruneRaceTest() throws Exception {
+        final int PORT_0 = 9000;
+        final int PORT_1 = 9001;
+        final int PORT_2 = 9002;
+        final Duration timeout = Duration.ofMinutes(5);
+        final Duration pollPeriod = Duration.ofSeconds(5);
+        final int workflowNumRetry = 3;
+
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, true);
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+
+        runtime = createDefaultRuntime();
+
+        CorfuTable<String, String> table = runtime.getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamName("test")
+                .open();
+
+
+        //fetch the layout without the client for localhost:9001
+        runtime.invalidateLayout();
+
+        final AtomicBoolean moreDataToBeWritten = new AtomicBoolean(true);
+
+        boolean result = true;
+        int retry = 0;
+
+        //Without the fix, this will retry 3 times.
+        while (result && retry < nodeResetRetry) {
+            result = false;
+            try {
+                System.out.print("\n*****retry : " + retry + " clientMap " + runtime.getLayoutView().getRuntimeLayout().getSenderClientMap());
+                BaseClient baseClient = runtime.getLayoutView().getRuntimeLayout()
+                        .getBaseClient("localhost:9001");
+                IClientRouter router = baseClient.getRouter();
+                System.out.print("\nrouter " + router + " map " + runtime.getLayoutView().getRuntimeLayout().getSenderClientMap());
+                if (retry == 0) {
+                    runtime.invalidateLayout();
+                }
+                router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESET)
+                        .setEpoch(baseClient.getEpoch()).setClusterID(baseClient.getClusterId())).get();
+            } catch (Exception e) {
+                System.out.print("\ncaught an exception " + e);
+                assertThat(e).isInstanceOf(ExecutionException.class);
+                result = true;
+                retry ++;
+            }
+        }
+
+        assertThat(retry).isEqualTo(1);
+        runtime.getManagementView().addNode("localhost:9001", workflowNumRetry,
+                timeout, pollPeriod);
+        runtime.getManagementView().addNode("localhost:9002", workflowNumRetry,
+                timeout, pollPeriod);
+
+        shutdownCorfuServer(corfuServer_1);
+        shutdownCorfuServer(corfuServer_2);
+        shutdownCorfuServer(corfuServer_3);
     }
 }
