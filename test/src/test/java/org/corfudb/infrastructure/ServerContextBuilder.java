@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.experimental.Accessors;
 import org.corfudb.test.concurrent.TestThreadGroups;
 
+import static org.corfudb.AbstractCorfuTest.PARAMETERS;
+
 /**
  * Created by mwei on 6/29/16.
  */
@@ -111,6 +113,7 @@ public class ServerContextBuilder {
     public static ServerContext defaultTestContext(int port) {
         ServerContextBuilder scBuilder = new ServerContextBuilder().setPort(port);
         //.setCacheSizeHeapRatio("0.001");
+        //scBuilder.setMemory(false).setLogPath(PARAMETERS.TEST_TEMP_DIR);
         ServerContext sc = scBuilder.build();
         sc.setServerRouter(new TestServerRouter());
         return sc;
