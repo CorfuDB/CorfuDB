@@ -36,11 +36,11 @@ public class AddNodeDuringInvalidateLayoutIT extends GenericIntegrationTest {
      * <p>
      * 1) Deploy and bootstrap a three nodes cluster.
      * 2) Remove a node.
-     * 2) Try resetting a node and invalidating layout at the same time. This should throw an exception.
-     * 3) Create a separate router for resets. Try resetting a node and invalidating layout at the same.
+     * 2) Try resetting a node and pruning the routers at the same time. This should throw an exception.
+     * 3) Create a separate router for resets. Try resetting a node and pruning the routers at the same.
      *    The reset should go through.
      * 4) Create a separate router for adding a node, and invoke the add node procedure.
-     *    Keep invalidating a layout every time RPC is called. The add node should succeed.
+     *    Keep pruning a router every time RPC is called. The add node should succeed.
      * 5) Verify that the node is present in the new layout.
      */
     @Test(timeout = 300000)
@@ -78,10 +78,10 @@ public class AddNodeDuringInvalidateLayoutIT extends GenericIntegrationTest {
                 .getRuntimeLayout().getBaseClient(endpoint);
         BaseClient baseClientSpy = Mockito.spy(baseClient);
 
-        // When a base client tries to perform a reset, invalidate a layout.
+        // When a base client tries to perform a reset, prune the routers.
         // This will prune the router of the base client.
         Mockito.doAnswer(invoke -> {
-            client.getRuntime().invalidateLayout();
+            client.getRuntime().pruneRouters(layout);
             return invoke.callRealMethod();
         }).when(baseClientSpy).reset();
 
@@ -104,7 +104,7 @@ public class AddNodeDuringInvalidateLayoutIT extends GenericIntegrationTest {
             BaseClient spyBaseClient = Mockito.spy(baseClient);
 
             Mockito.doAnswer(invoke -> {
-                client.getRuntime().invalidateLayout();
+                client.getRuntime().pruneRouters(layout);
                 return invoke.callRealMethod();
             }).when(spyBaseClient).reset();
 
@@ -130,7 +130,7 @@ public class AddNodeDuringInvalidateLayoutIT extends GenericIntegrationTest {
                     .addClient(new BaseHandler());
 
             Mockito.doAnswer(invoke -> {
-                client.getRuntime().invalidateLayout();
+                client.getRuntime().pruneRouters(layout);
                 return invoke.callRealMethod();
             }).when(spyRouter).sendMessageAndGetCompletable(Mockito.any(), Mockito.any());
 

@@ -1,6 +1,7 @@
 package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
@@ -9,6 +10,7 @@ import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Singular;
 import lombok.ToString;
 import lombok.experimental.Accessors;
@@ -923,6 +925,11 @@ public class CorfuRuntime {
                                 + "router connection to node {} :", endpoint, e);
                     }
                 });
+    }
+
+    @VisibleForTesting
+    public void pruneRouters(@NonNull Layout layout) {
+        pruneRemovedRouters(layout);
     }
 
     /**
