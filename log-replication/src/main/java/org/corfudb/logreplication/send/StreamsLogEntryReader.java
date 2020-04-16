@@ -109,7 +109,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
             }
         } catch (TrimmedException e) {
             log.warn("Caught a trimmed exception {}", e);
-            //System.out.println("StreamsLogEntryReader caught a trimmed exception");
             throw e;
         }
 
