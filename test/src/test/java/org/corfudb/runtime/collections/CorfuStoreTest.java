@@ -11,6 +11,7 @@ import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
@@ -280,6 +281,30 @@ public class CorfuStoreTest extends AbstractViewTest {
                 assertThat(entry.getMetadata()).isExactlyInstanceOf(ManagedResources.class);
             }
         }
+    }
+
+    /**
+     * Demonstrates that opening same table from multiple threads will retry internal transactions
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkOpenRetriesTXN() throws Exception {
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+        final String nsxManager = "nsx-manager"; // namespace for the table
+        final String tableName = "EventInfo"; // table name
+        final int numThreads = 10;
+        scheduleConcurrently(numThreads, t -> {
+            for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
+                // Create & Register the table.
+                // This is required to initialize the table for the current corfu client.
+                corfuStore.openTable(nsxManager, tableName, Uuid.class, EventInfo.class, null,
+                        TableOptions.builder().build());
+            }
+
+        });
+        executeScheduled(numThreads, PARAMETERS.TIMEOUT_LONG);
     }
 
     /**
