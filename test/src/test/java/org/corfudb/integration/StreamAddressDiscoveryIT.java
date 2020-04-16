@@ -1225,7 +1225,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         testCheckpointEmptyMapWithSequencerFailover(true);
     }
 
-    private void testCheckpointEmptyMapWithSequencerFailover(boolean readerHole) throws Exception{
+    private void testCheckpointEmptyMapWithSequencerFailover(boolean readerHole) throws Exception {
         final int n0Port = 9000;
         final int n1Port = 9001;
         final int n2Port = 9002;
