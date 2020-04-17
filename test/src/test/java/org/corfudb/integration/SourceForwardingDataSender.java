@@ -77,6 +77,8 @@ public class SourceForwardingDataSender implements DataSender {
             if (ifDropMsg == DROP_MSG_ONCE) {
                 firstDrop += DROP_INCREMENT;
             }
+
+            return new CompletableFuture<>();
         }
 
         final CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
