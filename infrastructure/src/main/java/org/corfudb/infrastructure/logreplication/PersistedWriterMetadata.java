@@ -9,7 +9,6 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 
-import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -118,9 +117,10 @@ public class PersistedWriterMetadata {
     }
 
 
+
     /**
      * If the persistent data show it is my epic and my snapshot value, will update the
-     * snapshot timestamp and the lastlogprocessed timestamp
+     * snapshot timestamp and the lastlog processed timestamp
      */
     public void setSrcBaseSnapshotDone() {
         try {
@@ -144,10 +144,13 @@ public class PersistedWriterMetadata {
         }
     }
 
+    public long getLastSnapStartTimestamp() {
+        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
+    }
+
     public long getLastSrcBaseSnapshotTimestamp() {
         return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapApplyDone.getVal());
     }
-
 
     /**
      * This call should be done in a transaction while applying a log entry message.
@@ -160,6 +163,18 @@ public class PersistedWriterMetadata {
 
     public long getLastProcessedLogTimestamp() {
         return writerMetaDataTable.get(PersistedWriterMetadataType.LastLogProcessed.getVal());
+    }
+
+    /**
+     * This call should be done in a transaction after a transfer done and before apply the snapshot.
+     * @param ts
+     */
+    public void setLastSnapTransferDoneTimestamp(long ts) {
+        writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapTransferDone.getVal(), ts);
+    }
+
+    public long getLastSnapTransferDoneTimestamp() {
+        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapTransferDone.getVal());
     }
 
     /**
