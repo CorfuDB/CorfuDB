@@ -685,9 +685,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
 
         testConfig.clear().setDropMessageLevel(2);
-        LogReplicationFSM fsm = startLogEntrySync(crossTables, WAIT.ON_ERROR);
-
-        // checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
+        startLogEntrySync(crossTables, WAIT.ON_ERROR);
     }
 
     /**

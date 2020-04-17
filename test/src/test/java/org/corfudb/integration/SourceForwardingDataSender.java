@@ -77,6 +77,8 @@ public class SourceForwardingDataSender implements DataSender {
             if (ifDropMsg == DROP_MSG_ONCE) {
                 firstDrop += DROP_INCREMENT;
             }
+
+            return new CompletableFuture<>();
         }
 
         final CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
@@ -91,7 +93,7 @@ public class SourceForwardingDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages) {
-        CompletableFuture<LogReplicationEntry> lastSentMessage = new CompletableFuture<>();
+        CompletableFuture<LogReplicationEntry> lastSentMessage = null;
         CompletableFuture<LogReplicationEntry> tmp;
 
         for (LogReplicationEntry message :  messages) {
@@ -103,10 +105,12 @@ public class SourceForwardingDataSender implements DataSender {
         }
 
         try {
-            LogReplicationEntry entry = lastSentMessage.get();
-            ackMessages.setValue(entry);
+            if (lastSentMessage != null) {
+                LogReplicationEntry entry = lastSentMessage.get();
+                ackMessages.setValue(entry);
+            }
         } catch (Exception e) {
-            // Nothing
+            System.out.print("Caught an exception " + e);
         }
 
         return lastSentMessage;
