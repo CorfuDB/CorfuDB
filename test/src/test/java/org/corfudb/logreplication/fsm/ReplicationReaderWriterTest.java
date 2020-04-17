@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.corfudb.integration.ReplicationReaderWriterIT.NUM_TRANSACTIONS;
 import static org.corfudb.integration.ReplicationReaderWriterIT.generateTransactions;
 import static org.corfudb.integration.ReplicationReaderWriterIT.openStreams;
 import static org.corfudb.integration.ReplicationReaderWriterIT.printTails;
@@ -39,6 +40,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
     HashMap<String, CorfuTable<Long, Long>> srcTables = new HashMap<>();
     HashMap<String, CorfuTable<Long, Long>> dstTables = new HashMap<>();
+    HashMap<String, CorfuTable<Long, Long>> shadowTables = new HashMap<>();
     LogEntryReader logEntryReader;
     LogEntryWriter logEntryWriter;
 
@@ -108,6 +110,13 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
         }
+        Long seq = writer.getPersistedWriterMetadata().getLastSnapSeqNum() + 1;
+
+        //for (CorfuTable<Long, Long> corfuTable : shadowTables.values()) {
+        //    System.out.print("\nCorfuTable " + corfuTable.size() + " values " + corfuTable.values());
+        //}
+
+        writer.applyShadowStreams(seq);
     }
 
     @Test
@@ -115,7 +124,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         setup();
         openStreams(srcTables, srcDataRuntime);
 
-        generateTransactions(srcTables, hashMap, ReplicationReaderWriterIT.NUM_TRANSACTIONS, srcDataRuntime, START_VAL);
+        generateTransactions(srcTables, hashMap, NUM_TRANSACTIONS, srcDataRuntime, START_VAL);
         printTails("after writing data to src tables", srcDataRuntime, dstDataRuntime);
 
         readMsgs(msgQ, hashMap.keySet(), readerRuntime);
@@ -128,10 +137,13 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
         verifyNoData(srcTables);
 
+        //openStreams(shadowTables, srcDataRuntime, true);
         //clear all tables, play messages
         writeMsgs(msgQ, hashMap.keySet(), writerRuntime);
 
+
         openStreams(dstTables, dstDataRuntime);
+
         //verify data with hashtable
         verifyData("after writing log entry at dst", dstTables, hashMap);
     }
