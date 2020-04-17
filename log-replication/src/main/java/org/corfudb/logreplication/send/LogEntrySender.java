@@ -170,7 +170,8 @@ public class LogEntrySender {
                 }
 
                 entry.retry(getCurrentTime());
-                dataSender.send(entry.getData());
+                CompletableFuture<LogReplicationEntry> cf = dataSender.send(entry.getData());
+                pendingLogEntriesAcked.put(entry.getData().getMetadata().getTimestamp(), cf);
                 log.info("resend message " + entry.getData().getMetadata().getTimestamp());
             }
         }
