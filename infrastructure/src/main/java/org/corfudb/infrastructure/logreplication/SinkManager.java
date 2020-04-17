@@ -38,6 +38,7 @@ public class SinkManager implements DataReceiver {
 
     private CorfuRuntime runtime;
     private SinkBufferManager sinkBufferManager;
+    private StreamsSnapshotWriter shadowSnapshotWriter;
     private StreamsSnapshotWriter snapshotWriter;
     private LogEntryWriter logEntryWriter;
     private PersistedWriterMetadata persistedWriterMetadata;
@@ -102,6 +103,7 @@ public class SinkManager implements DataReceiver {
     @Override
     public LogReplicationEntry receive(LogReplicationEntry message) {
         log.info("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
+        System.out.print("Sink manager received " + message.getMetadata().getMessageMetadataType() + " while in " + rxState);
 
         if (!receivedValidMessage(message)) {
             // If we received a start marker for snapshot sync while in LOG_ENTRY_SYNC, switch rxState
@@ -202,7 +204,6 @@ public class SinkManager implements DataReceiver {
     }
 
     private LogReplicationEntry applySnapshotSync(LogReplicationEntry message) {
-
         switch (message.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_START:
                 initializeSnapshotSync(message);
@@ -211,6 +212,7 @@ public class SinkManager implements DataReceiver {
                 snapshotWriter.apply(message);
                 break;
             case SNAPSHOT_END:
+                snapshotWriter.snapshotTransferDone(message);
                 return completeSnapshotApply();
             default:
                 log.warn("Message type {} should not be applied as snapshot sync.", message.getMetadata().getMessageMetadataType());
