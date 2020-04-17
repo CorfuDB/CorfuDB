@@ -29,16 +29,20 @@ import static org.corfudb.util.MetricsUtils.sizeOf;
 public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     public static final int NOT_KNOWN = -1;
+
     @Getter
     final DataType type;
 
     @Getter
     byte[] data;
 
+    @Getter
     private ByteBuf serializedCache = null;
 
+    @Getter
     private int lastKnownSize = NOT_KNOWN;
 
+    @Getter
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
 
     public static LogData getTrimmed(long address) {
@@ -150,7 +154,10 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         return (int) sizeOf.deepSizeOf(this);
     }
 
+
     EnumMap<LogUnitMetadataType, Object> metadataMap;
+
+    @Getter
     private byte[] serializedMetadata = null;
 
     public void serializeMetadata() {
@@ -324,6 +331,12 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         }
         int endAddress = buf.writerIndex();
         lastKnownSize = endAddress - startAddress;
+    }
+
+    public int getSerializedMetadataSize() {
+        if (serializedMetadata == null)
+            return 0;
+        return (int)sizeOf.deepSizeOf(serializedMetadata);
     }
 
     private void doCompressInternal(ByteBuf bufData, ByteBuf buf) {
