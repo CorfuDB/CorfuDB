@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import com.esotericsoftware.kryo.Serializer;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogEntryWriter;
@@ -69,6 +70,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     HashMap<String, CorfuTable<Long, Long>> srcTables = new HashMap<>();
     HashMap<String, CorfuTable<Long, Long>> dstTables = new HashMap<>();
+    HashMap<String, CorfuTable<Long, Long>> shadowTables = new HashMap<>();
 
     CorfuRuntime srcTestRuntime;
     HashMap<String, CorfuTable<Long, Long>> srcTestTables = new HashMap<>();
@@ -131,7 +133,11 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt) {
-        openStreams(tables, rt, NUM_STREAMS);
+        openStreams(tables, rt, NUM_STREAMS, Serializers.PRIMITIVE, false);
+    }
+
+    public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, boolean shadow) {
+        openStreams(tables, rt, NUM_STREAMS, Serializers.PRIMITIVE, shadow);
     }
 
     public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams) {
@@ -139,10 +145,12 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams,
-                                                 ISerializer serializer) {
+                                   ISerializer serializer, boolean shadow) {
         for (int i = 0; i < num_streams; i++) {
             String name = "test" + i;
-
+            if (shadow) {
+                name = name + "_shadow";
+            }
             CorfuTable<Long, Long> table = rt.getObjectsView()
                     .build()
                     .setStreamName(name)
@@ -153,6 +161,12 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             tables.put(name, table);
         }
     }
+
+    public static void openStreams(HashMap<String, CorfuTable<Long, Long>> tables, CorfuRuntime rt, int num_streams,
+                                                 ISerializer serializer) {
+        openStreams(tables, rt, num_streams, serializer, false);
+    }
+
 
     public static void generateData(HashMap<String, CorfuTable<Long, Long>> tables,
                       HashMap<String, HashMap<Long, Long>> hashMap,
@@ -172,14 +186,16 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public static void generateTransactions(HashMap<String, CorfuTable<Long, Long>> tables,
                       HashMap<String, HashMap<Long, Long>> hashMap,
                       int numT, CorfuRuntime rt, long startval) {
+        int j = 0;
         for (int i = 0; i < numT; i++) {
             rt.getObjectsView().TXBegin();
             for (String name : tables.keySet()) {
                 hashMap.putIfAbsent(name, new HashMap<>());
-                long key = i + startval;
+                long key = j + startval;
                 tables.get(name).put(key, key);
                 log.trace("tail " + rt.getAddressSpaceView().getLogTail() + " seq " + rt.getSequencerView().query().getSequence());
                 hashMap.get(name).put(key, key);
+                j++;
             }
             rt.getObjectsView().TXEnd();
         }
@@ -328,10 +344,11 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             System.out.println("msgQ is empty");
         }
         writer.reset(msgQ.get(0).getMetadata().getSnapshotTimestamp());
-
         for (org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
         }
+        Long seq = writer.getPersistedWriterMetadata().getLastSnapSeqNum() + 1;
+        writer.applyShadowStreams(seq);
     }
 
     void accessTxStream(Iterator iterator, int num) {
@@ -673,6 +690,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         ISerializer serializer = new TestSerializer(Byte.MAX_VALUE);
 
         openStreams(srcTables, srcDataRuntime, NUM_STREAMS, serializer);
+        openStreams(shadowTables, dstDataRuntime, NUM_STREAMS, serializer, true);
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_TRANSACTIONS);
 
         //read snapshot from srcServer and put msgs into Queue
