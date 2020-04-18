@@ -21,6 +21,7 @@
         <module>debian</module>
         <module>test</module>
         <module>it</module>
+        <module>utils</module>
   </modules>
 
 
