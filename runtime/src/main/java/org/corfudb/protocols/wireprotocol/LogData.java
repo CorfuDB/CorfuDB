@@ -38,6 +38,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
 
+    private final EnumMap<LogUnitMetadataType, Object> metadataMap;
+
     public static LogData getTrimmed(long address) {
         LogData logData = new LogData(DataType.TRIMMED);
         logData.setGlobalAddress(address);
@@ -148,8 +150,10 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         return 1;
     }
 
-    @Getter
-    final EnumMap<LogUnitMetadataType, Object> metadataMap;
+    @Override
+    public EnumMap<IMetadata.LogUnitMetadataType, Object> getMetadataMap() {
+        return metadataMap;
+    }
 
     /**
      * Return the payload.
