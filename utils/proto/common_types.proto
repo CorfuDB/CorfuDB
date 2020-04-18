@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package org.corfudb.utils;
+option java_package = "org.corfudb.utils";
+
+message Uuid {
+    fixed64 msb = 1;
+    fixed64 lsb = 2;
+}
