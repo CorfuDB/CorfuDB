@@ -13,19 +13,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.utils.lock.LockDataTypes.LockId;
 import org.corfudb.utils.lock.persistence.LockStore;
+import org.corfudb.utils.lock.states.LockEvent;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.*;
+import java.util.concurrent.*;
 
 /**
  * Applications can register interest for a lock using the LockClient. When a lock is acquired on behalf of an instance
  * of an application it is notified through registered callbacks. Similarly if a lock is lost/revoked the corresponding
  * application instance is notified through callbacks.
+ * <p>
+ * The client also monitors the registered locks. If a lock has an expired lease, it generates a LEASE_REVOKED
+ * event on that lock.
  *
  * @author mdhawan
  * @since 04/17/2020
@@ -35,30 +35,20 @@ import java.util.concurrent.ScheduledExecutorService;
 public class LockClient {
 
     // all the locks that the applications are interested in.
-    private static final Map<LockId, Lock> locks = new ConcurrentHashMap<>();
+    private final Map<LockId, Lock> locks = new ConcurrentHashMap<>();
 
-    /**
-     * Context is used to provide access to common values and resources needed by objects implementing
-     * the Lock functionality.
-     */
-    @Data
-    public class ClientContext {
+    // lock data store
+    private final LockStore lockStore;
 
-        private final UUID clientUuid;
-        private final LockStore lockStore;
-        private final ScheduledExecutorService taskScheduler;
-        private final ExecutorService lockListenerExecutor;
+    // single threaded scheduler to monitor locks
+    private final ScheduledExecutorService lockMonitorScheduler;
 
-
-        public ClientContext(UUID clientUuid, LockStore lockStore, ScheduledExecutorService taskScheduler, ExecutorService lockListenerExecutor) {
-            this.clientUuid = clientUuid;
-            this.lockStore = lockStore;
-            this.taskScheduler = taskScheduler;
-            this.lockListenerExecutor = lockListenerExecutor;
-        }
-    }
+    // duration between monitoring runs
+    private final int DURATION_BETWEEN_LOCK_MONITOR_RUNS = 60;
     // The context contains objects that are shared across the locks in this client.
     private final ClientContext clientContext;
+    // Handle for the periodic lock monitoring task
+    private Optional<ScheduledFuture<?>> lockMonitorFuture = Optional.empty();
 
     /**
      * Constructor
@@ -88,7 +78,16 @@ public class LockClient {
             return t;
         });
 
-        clientContext = new ClientContext(clientId, new LockStore(corfuRuntime), taskScheduler, lockListenerExecutor);
+        this.lockMonitorScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        {
+            Thread t = Executors.defaultThreadFactory().newThread(r);
+            t.setName("LockMonitorThread");
+            t.setDaemon(true);
+            return t;
+        });
+
+        this.lockStore = new LockStore(corfuRuntime, clientId);
+        this.clientContext = new ClientContext(clientId, lockStore, taskScheduler, lockListenerExecutor);
     }
 
     /**
@@ -112,4 +111,52 @@ public class LockClient {
                 lockId,
                 (key) -> new Lock(lockId, lockListener, clientContext));
     }
+
+    /**
+     * Monitor all the locks this client is interested in.
+     * If a lock has an expired lease, the lock will be revoked.
+     *
+     * @param initialDelay
+     */
+    private void monitorLocks(int initialDelay) {
+        // find the expired leases.
+        lockMonitorFuture = Optional.of(lockMonitorScheduler.scheduleWithFixedDelay(
+                () -> {
+                    try {
+                        Collection<LockId> locksWithExpiredLeases = lockStore.filterLocksWithExpiredLeases(locks.keySet());
+                        for(LockId lockId:locksWithExpiredLeases) {
+                            locks.get(lockId).input(LockEvent.LEASE_REVOKED);
+                        }
+                    } catch (Exception ex) {
+
+                    }
+                },
+                0,
+                DURATION_BETWEEN_LOCK_MONITOR_RUNS,
+                TimeUnit.SECONDS
+
+        ));
+    }
+
+    /**
+     * Context is used to provide access to common values and resources needed by objects implementing
+     * the Lock functionality.
+     */
+    @Data
+    public class ClientContext {
+
+        private final UUID clientUuid;
+        private final LockStore lockStore;
+        private final ScheduledExecutorService taskScheduler;
+        private final ExecutorService lockListenerExecutor;
+
+        public ClientContext(UUID clientUuid, LockStore lockStore, ScheduledExecutorService taskScheduler, ExecutorService lockListenerExecutor) {
+            this.clientUuid = clientUuid;
+            this.lockStore = lockStore;
+            this.taskScheduler = taskScheduler;
+            this.lockListenerExecutor = lockListenerExecutor;
+        }
+    }
+
+
 }
