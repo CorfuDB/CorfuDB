@@ -72,13 +72,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 @Slf4j
 public class Lock {
 
+    // lease duration in 300 seconds
+    public static int LEASE_DURATION = 300;
     // id of the lock
     @Getter
     private final LockDataTypes.LockId lockId;
-
-    // id of the client interested in the lock
-    @Getter
-    private final UUID clientUuid;
 
     //Common context object
     @Getter
@@ -113,17 +111,13 @@ public class Lock {
     public Lock(LockDataTypes.LockId lockId, LockListener lockListener, LockClient.ClientContext clientContext) {
         this.lockId = lockId;
         this.clientContext = clientContext;
-        this.clientUuid = clientContext.getClientUuid();
         this.lockListener = lockListener;
         this.eventConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("lock-event-consumer").build());
 
-
         initializeStates();
         // set initial state as NO_LEASE
         this.state = states.get(LockStateType.NO_LEASE);
-        // start the state machine
-        this.input(LockEvent.START_LOCK_FSM);
 
         eventConsumer.submit(this::consume);
     }

@@ -22,21 +22,19 @@ import java.util.concurrent.TimeUnit;
 public class HasLeaseState extends LockState {
     //TODO move these to configs.
 
-    private static int DURATION_BETWEEN_LEASE_MONITOR_CHECKS = 60;
-
-
-
-
+    // duration after which a local task checks if a lease has expired.
+    private static int DURATION_BETWEEN_LEASE_CHECKS = 60;
 
 
     // task to renew lease
     private Optional<ScheduledFuture<?>> leaseRenewalFuture = Optional.empty();
 
-    // task to monitor lease expiration
+    // task to check if the lease has expired
     private Optional<ScheduledFuture<?>> leaseMonitorFuture = Optional.empty();
 
     // records the last time lease was acquired or renewed.
-    private Optional<Instant> leaseTime = Optional.empty();
+    // this variable is used to check whether the lease has expired.
+    private volatile Optional<Instant> leaseTime = Optional.empty();
 
     /**
      * Constructor
@@ -56,12 +54,12 @@ public class HasLeaseState extends LockState {
      */
     @Override
     public Optional<LockState> processEvent(LockEvent event) throws IllegalTransitionException {
-        log.debug("Lock: {} Client:{} lock event:{} in state:{}", lock.getLockId(), lock.getClientUuid(), event, getType());
+        log.debug("Lock: {} lock event:{} in state:{}", lock.getLockId(), event, getType());
         switch (event) {
             case LEASE_ACQUIRED: {
                 // This should not happen !
                 // TODO maybe this is illegalStateTransition
-                log.warn("Lock: {} Client:{} unexpected lock event:{} in state:{}", lock.getLockId(), lock.getClientUuid(), event, getType());
+                log.warn("Lock: {} unexpected lock event:{} in state:{}", lock.getLockId(), event, getType());
                 leaseTime = Optional.of(Instant.now());
                 return Optional.empty();
             }
@@ -79,7 +77,7 @@ public class HasLeaseState extends LockState {
                 return Optional.of(lock.getStates().get(LockStateType.NO_LEASE));
             }
             case UNRECOVERABLE_ERROR: {
-                log.error("Lock: {} Client:{} unexpected lock event:{} in state:{}", lock.getLockId(), lock.getClientUuid(), event, getType());
+                log.error("Lock: {} unexpected lock event:{} in state:{}", lock.getLockId(), event, getType());
                 leaseTime = Optional.empty();
                 return Optional.of(lock.getStates().get(LockStateType.STOPPED));
             }
@@ -151,13 +149,15 @@ public class HasLeaseState extends LockState {
         taskScheduler.schedule(() -> {
             if (!taskFuture.isDone()) {
                 taskFuture.cancel(true);
-                log.error("Lock: {} Client:{} {} callback cancelled due to timeout!", lock.getLockId(), lock.getClientUuid(), callback);
+                log.error("Lock: {} {} callback cancelled due to timeout!", lock.getLockId(), callback);
             }
         }, MAX_TIME_FOR_NOTIFICATION_LISTENER_PROCESSING, TimeUnit.SECONDS);
     }
 
     /**
-     * Starts lease renewal task.
+     * Starts lease renewal task. Tries to renew the lease periodically so that it
+     * does not expire. If lease expires, another client can acquire the lock.
+     *
      */
     private void startLeaseRenewal() {
         synchronized (leaseRenewalFuture) {
@@ -165,13 +165,13 @@ public class HasLeaseState extends LockState {
                 leaseRenewalFuture = Optional.of(taskScheduler.scheduleWithFixedDelay(
                         () -> {
                             try {
-                                if (lockStore.renew(lock.getLockId(), lock.getClientUuid())) {
+                                if (lockStore.renew(lock.getLockId())) {
                                     lock.input(LockEvent.LEASE_RENEWED);
                                 } else {
                                     lock.input(LockEvent.LEASE_REVOKED);
                                 }
                             } catch (Exception e) {
-                                log.error("Lock: {} Client:{} could not renew lease for lock {}", lock.getLockId(), lock.getClientUuid(), e);
+                                log.error("Lock: {} could not renew lease for lock {}", lock.getLockId(), e);
                             }
                         },
                         0,
@@ -183,20 +183,21 @@ public class HasLeaseState extends LockState {
     }
 
     /**
-     * Starts lease Monitor task
+     * An independent task is run to make sure the lease is renewed on time. This task generates
+     * a LEASE_EXPIRED event if the lease was not be renewed on time.
      */
     private void startLeaseMonitor() {
         synchronized (leaseMonitorFuture) {
             if (!leaseMonitorFuture.isPresent() || leaseMonitorFuture.get().isDone())
                 leaseMonitorFuture = Optional.of(taskScheduler.scheduleWithFixedDelay(
                         () -> {
-                            if (leaseTime.isPresent() && leaseTime.get().isBefore(Instant.now().minusSeconds(LEASE_DURATION))) {
+                            if (leaseTime.isPresent() && leaseTime.get().isBefore(Instant.now().minusSeconds(Lock.LEASE_DURATION))) {
                                 lock.input(LockEvent.LEASE_EXPIRED);
                             }
 
                         },
                         0,
-                        DURATION_BETWEEN_LEASE_MONITOR_CHECKS,
+                        DURATION_BETWEEN_LEASE_CHECKS,
                         TimeUnit.SECONDS
                 ));
         }
@@ -211,7 +212,7 @@ public class HasLeaseState extends LockState {
             if (leaseRenewalFuture.isPresent() && !leaseRenewalFuture.get().isDone()) {
                 boolean cancelled = leaseRenewalFuture.get().cancel(false);
                 if (!cancelled) {
-                    log.error("Lock: {} Client:{} Could not cancel the future for lease renewal!!!", lock.getLockId(), lock.getClientUuid());
+                    log.error("Lock: Could not cancel the future for lease renewal!!!", lock.getLockId());
                 }
             }
         }
@@ -225,7 +226,7 @@ public class HasLeaseState extends LockState {
             if (leaseMonitorFuture.isPresent() && !leaseMonitorFuture.get().isDone()) {
                 boolean cancelled = leaseMonitorFuture.get().cancel(false);
                 if (!cancelled) {
-                    log.error("Lock: {} Client:{} Could not cancel the future for lease monitor!!!", lock.getLockId(), lock.getClientUuid());
+                    log.error("Lock: {} Could not cancel the future for lease monitor!!!", lock.getLockId());
                 }
             }
         }
