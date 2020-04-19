@@ -15,9 +15,6 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public abstract class LockState {
 
-    // lease duration in 300 seconds
-    public static int LEASE_DURATION = 300;
-
     // renew lease every 60 seconds
     public static int DURATION_BETWEEN_LEASE_RENEWALS = 60;
 
