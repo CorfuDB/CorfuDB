@@ -29,7 +29,6 @@ public class StoppedState extends LockState {
     @Override
     public Optional<LockState> processEvent(LockEvent event) throws IllegalTransitionException {
         switch (event) {
-            case START_LOCK_FSM:
             case LEASE_ACQUIRED:
             case LEASE_RENEWED:
             case LEASE_REVOKED:
