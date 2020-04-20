@@ -142,9 +142,13 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
     public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("handleTailRequest: received a tail request {}", msg);
+        log.trace("handleTailRequest: received a tail request {}, type: {}", msg.getPayload().getReqType());
         batchWriter.<TailsResponse>addTask(TAILS_QUERY, msg)
-                .thenAccept(tailsResp -> r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp)))
+                .thenAccept(tailsResp -> {
+                    log.debug("handleTailRequest: global tail: {}, number of streams: {}",
+                            tailsResp.getLogTail(), tailsResp.getStreamTails().size());
+                    r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp));
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
@@ -157,12 +161,16 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST)
     public void handleLogAddressSpaceRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("handleLogAddressSpaceRequest: received a log address space request {}", msg);
         CorfuPayloadMsg<Void> payloadMsg = new CorfuPayloadMsg<>();
         payloadMsg.copyBaseFields(msg);
-        log.trace("handleLogAddressSpaceRequest: received a log address space request {}", msg);
         batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
-                .thenAccept(tailsResp -> r.sendResponse(ctx, msg,
-                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
+                .thenAccept(tailsResp -> {
+                    log.debug("handleLogAddressSpaceRequest: global tail: {}, number of streams: {}",
+                            tailsResp.getLogTail(), tailsResp.getAddressMap().size());
+                    r.sendResponse(ctx, msg,
+                            CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp));
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, payloadMsg, r);
                     return null;
@@ -175,7 +183,9 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST)
     public void handleTrimMarkRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleTrimMarkRequest: received a trim mark request {}", msg);
-        r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
+        long trimMark = streamLog.getTrimMark();
+        log.debug("handleTrimMarkRequest: trim mark response: {}", trimMark);
+        r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(trimMark));
     }
 
     /**
