@@ -38,7 +38,6 @@ public class SinkManager implements DataReceiver {
 
     private CorfuRuntime runtime;
     private SinkBufferManager sinkBufferManager;
-    private StreamsSnapshotWriter shadowSnapshotWriter;
     private StreamsSnapshotWriter snapshotWriter;
     private LogEntryWriter logEntryWriter;
     private PersistedWriterMetadata persistedWriterMetadata;
