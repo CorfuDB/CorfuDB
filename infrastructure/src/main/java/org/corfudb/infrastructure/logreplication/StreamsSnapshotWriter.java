@@ -40,10 +40,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     CorfuRuntime rt;
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private long recvSeq;
+    private long shadowStreamStartAddress;
     @Getter
     private PersistedWriterMetadata persistedWriterMetadata;
     HashMap<UUID, UUID> uuidMap;
     Phase phase;
+
     // The sequence number of the message, it has received.
     // It is expecting the message in order of the sequence.
 
@@ -66,33 +68,35 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
     }
 
+
+    void clearTable(UUID streamID) {
+        boolean doRetry = true;
+        int numRetry = 0;
+        while (doRetry && numRetry++ < MAX_NUM_TX_RETRY) {
+            try {
+                rt.getObjectsView().TXBegin();
+                SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+                TransactionalContext.getCurrentContext().logUpdate(streamID, entry);
+                rt.getObjectsView().TXEnd();
+                log.info("Clear stream {} ", streamID);
+                doRetry = false;
+            } catch (TransactionAbortedException e) {
+                log.warn("Caught an exception {} will retry {}", e, numRetry);
+            }
+        }
+    }
+
     /**
      * clear all tables registered
      * TODO: replace with stream API
      */
     void clearTables() {
-        boolean doRetry = true;
-        int numRetry = 0;
-
-        while (doRetry && numRetry++ < MAX_NUM_TX_RETRY) {
-            try {
-                rt.getObjectsView().TXBegin();
-                for (UUID streamID : streamViewMap.keySet()) {
-                    UUID usedStreamID = streamID;
-                    if (phase == Phase.TransferPhase) {
-                        usedStreamID = uuidMap.get(streamID);
-                    }
-                    SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-                    TransactionalContext.getCurrentContext().logUpdate(usedStreamID, entry);
-                    log.info("Clear tables for streams {} ", usedStreamID);
-                }
-
-                doRetry = false;
-            } catch (TransactionAbortedException e) {
-                log.warn("Caught an exception {} will retry {}", e, numRetry);
-            } finally {
-                rt.getObjectsView().TXEnd();
+        for (UUID streamID : streamViewMap.keySet()) {
+            UUID usedStreamID = streamID;
+            if (phase == Phase.TransferPhase) {
+                usedStreamID = uuidMap.get(streamID);
             }
+            clearTable(usedStreamID);
         }
     }
 
@@ -117,12 +121,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     public void reset(long snapshot) {
        srcGlobalSnapshot = snapshot;
        recvSeq = 0;
-       clearTables();
-    }
 
-    /**
-     * Convert an OpaqueEntry to an MultiObjectSMREntry and write to log.
-     */
+       //clear shadow streams and remember the start address
+       clearTables();
+       shadowStreamStartAddress = rt.getAddressSpaceView().getLogTail();
+    }
 
 
     /**
@@ -212,19 +215,41 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                 .cacheEntries(false)
                 .build();
 
+        //Can we do a seek after open to ignore all entries that are earlier
         Stream shadowStream = (new OpaqueStream(rt, rt.getStreamsView().get(shadowUUID, options))).streamUpTo(snapshot);
+
         Iterator<OpaqueEntry> iterator = shadowStream.iterator();
         System.out.print("\napply to stream " + uuid + " name " + streamViewMap.get(uuid) + " shadow stream " + shadowMap.get(shadowUUID)) ;
         while (iterator.hasNext()) {
             OpaqueEntry opaqueEntry = iterator.next();
-            processOpaqueEntry(opaqueEntry.getEntries().get(shadowUUID), seqNum, uuid);
-            seqNum = seqNum + 1;
+            if (opaqueEntry.getVersion() > shadowStreamStartAddress) {
+                processOpaqueEntry(opaqueEntry.getEntries().get(shadowUUID), seqNum, uuid);
+                seqNum = seqNum + 1;
+            }
         }
 
         System.out.print("\nshadowStream seqNum " + seqNum);
         return seqNum;
     }
 
+
+    /**
+     * read from shadowStream and append to the
+     */
+    public void applyShadowStreams(Long seqNum) {
+        System.out.print("***start applyShadowStreams with seqNum " + seqNum);
+        phase = Phase.ApplyPhase;
+        long snapshot = rt.getAddressSpaceView().getLogTail();
+        clearTables();
+        for (UUID uuid : streamViewMap.keySet()) {
+            seqNum = applyShadowStream(uuid, seqNum, snapshot);
+        }
+    }
+
+    /**
+     * Snapshot data has been transferred from primary node to the standby node
+     * @param entry
+     */
     public  void snapshotTransferDone(LogReplicationEntry entry) {
         phase = Phase.ApplyPhase;
         //verify that the snapshot Apply hasn't started yet and set it as started and set the seqNumber
@@ -235,7 +260,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             if (persistedWriterMetadata.getLastSnapStartTimestamp() == ts && persistedWriterMetadata.getLastSnapTransferDoneTimestamp() <= ts) {
                 persistedWriterMetadata.setLastSnapTransferDoneTimestamp(ts);
                 seqNum = persistedWriterMetadata.getLastSnapSeqNum() + 1;
-                clearTables();
             }
         } catch (Exception e) {
             log.warn("caught an exception ", e);
@@ -247,18 +271,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             return;
 
         applyShadowStreams(seqNum);
-    }
-
-    /**
-     * read from shadowStream and append to the
-     */
-    public void applyShadowStreams(Long seqNum) {
-        System.out.print("***start applyShadowStreams with seqNum " + seqNum);
-        phase = Phase.ApplyPhase;
-        long snapshot = rt.getAddressSpaceView().getLogTail();
-        for (UUID uuid : streamViewMap.keySet()) {
-            seqNum = applyShadowStream(uuid, seqNum, snapshot);
-        }
     }
 
     enum Phase {
