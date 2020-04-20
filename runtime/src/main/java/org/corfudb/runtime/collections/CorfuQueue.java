@@ -46,15 +46,15 @@ public class CorfuQueue<E> {
     /**
      * The main CorfuTable which contains the primary key-value mappings.
      */
-    private final CorfuTable<Long, CorfuQueueRecord<E>> corfuTable;
+    private final CorfuTable<CorfuRecordId, E> corfuTable;
     private final CorfuGuidGenerator guidGenerator;
 
     public CorfuQueue(CorfuRuntime runtime, String streamName, ISerializer serializer,
-                      Index.Registry<Long, E> indices) {
-        final Supplier<StreamingMap<Long, E>> mapSupplier =
-                () -> new StreamingMapDecorator<>(new LinkedHashMap<Long, E>());
+                      Index.Registry<CorfuRecordId, E> indices) {
+        final Supplier<StreamingMap<CorfuRecordId, E>> mapSupplier =
+                () -> new StreamingMapDecorator<>(new LinkedHashMap<CorfuRecordId, E>());
         corfuTable = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<Long, CorfuQueueRecord<E>>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<CorfuRecordId, E>>() {})
                 .setStreamName(streamName)
                 .setArguments(indices, mapSupplier)
                 .setSerializer(serializer)
@@ -81,7 +81,6 @@ public class CorfuQueue<E> {
      * were in wrapped a corfu transaction.
      * This class encapsulates these two longs into one Id and add rules on comparability.
      */
-    @EqualsAndHashCode
     public static class CorfuRecordId implements Comparable<CorfuRecordId> {
         @Setter
         @Getter
@@ -130,6 +129,19 @@ public class CorfuQueue<E> {
         public String toString() {
             return String.format("%s|%s", txSequence, entryId);
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CorfuRecordId that = (CorfuRecordId) o;
+            return getEntryId() == that.getEntryId();
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(getEntryId());
+        }
     }
 
     /**
@@ -148,22 +160,20 @@ public class CorfuQueue<E> {
      *         element prevents it from being added to this queue
      */
     public CorfuRecordId enqueue(E e) {
-        final Long id = guidGenerator.nextLong();
-        CorfuQueueRecord<E> queueEntry;
+        final CorfuRecordId id = new CorfuRecordId(0, guidGenerator.nextLong());
 
         // If we are in a transaction, then we need the commit address of this transaction
         // to fix up as the txSequence
         if (TransactionalContext.isInTransaction()) {
-            queueEntry = new CorfuQueueRecord<>(Address.NON_ADDRESS, id, e);
             /**
              * This is a callback that is placed into the root transaction's context on
              * the thread local stack which will be invoked right after this transaction
              * is deemed successful and has obtained a final sequence number to write.
              */
             class QueueEntryAddressGetter implements PreCommitListener {
-                private CorfuQueueRecord<E> queueRecord;
-                private QueueEntryAddressGetter(CorfuQueueRecord<E> queueRecord) {
-                    this.queueRecord = queueRecord;
+                private CorfuRecordId recordId;
+                private QueueEntryAddressGetter(CorfuRecordId recordId) {
+                    this.recordId = recordId;
                 }
 
                 /**
@@ -173,19 +183,17 @@ public class CorfuQueue<E> {
                  */
                 @Override
                 public void preCommitCallback(TokenResponse tokenResponse) {
-                    queueRecord.getRecordId().setTxSequence(tokenResponse.getSequence());
-                    log.trace("preCommitCallback for Queue: " + queueRecord.getRecordId().toString());
+                    recordId.setTxSequence(tokenResponse.getSequence());
+                    log.trace("preCommitCallback for Queue: " + recordId.toString());
                 }
             }
-            QueueEntryAddressGetter addressGetter = new QueueEntryAddressGetter(queueEntry);
-            log.trace("enqueue: Adding preCommitListener for Queue: " + queueEntry.getRecordId().toString());
+            QueueEntryAddressGetter addressGetter = new QueueEntryAddressGetter(id);
+            log.trace("enqueue: Adding preCommitListener for Queue: " + id.toString());
             TransactionalContext.getRootContext().addPreCommitListener(addressGetter);
-        } else {
-            queueEntry = new CorfuQueueRecord<>(0, id, e);
         }
 
-        corfuTable.put(queueEntry.getRecordId().getEntryId(), queueEntry);
-        return queueEntry.getRecordId();
+        corfuTable.put(id, e);
+        return id;
     }
 
     /**
@@ -214,8 +222,8 @@ public class CorfuQueue<E> {
             return String.format("%s=>%s", recordId, entry);
         }
 
-        CorfuQueueRecord(long txSequence, long entryId, E entry) {
-            this.recordId = new CorfuRecordId(txSequence, entryId);
+        CorfuQueueRecord(CorfuRecordId recordId, E entry) {
+            this.recordId = recordId;
             this.entry = entry;
         }
 
@@ -260,13 +268,12 @@ public class CorfuQueue<E> {
                 Math.min(corfuTable.size(), maxEntries)
         );
 
-        Comparator<Map.Entry<Long, CorfuQueueRecord<E>>> recordIdComparator = (r1, r2) ->
-                r1.getValue().getRecordId().compareTo(r2.getValue().recordId);
-        for (Map.Entry<Long, CorfuQueueRecord<E>> entry : corfuTable.entryStream()
-                .filter(e -> e.getValue().getRecordId().compareTo(entriesAfter) > 0)
+        Comparator<Map.Entry<CorfuRecordId, E>> recordIdComparator = Comparator.comparing(Map.Entry::getKey);
+        for (Map.Entry<CorfuRecordId, E> entry : corfuTable.entryStream()
+                .filter(e -> e.getKey().compareTo(entriesAfter) > 0)
                 .limit(maxEntries)
                 .sorted(recordIdComparator).collect(Collectors.toList())) {
-            copy.add(entry.getValue());
+            copy.add(new CorfuQueueRecord<>(entry.getKey(), entry.getValue()));
         }
         return copy;
     }
@@ -291,7 +298,7 @@ public class CorfuQueue<E> {
     }
 
     public boolean containsKey(CorfuRecordId key) {
-        return corfuTable.containsKey(key.getEntryId());
+        return corfuTable.containsKey(key);
     }
 
     /**
@@ -300,7 +307,7 @@ public class CorfuQueue<E> {
      * @return
      */
     public E get(CorfuRecordId key) {
-        return corfuTable.get(key.getEntryId()).getEntry();
+        return corfuTable.get(key);
     }
 
     /**
@@ -309,7 +316,7 @@ public class CorfuQueue<E> {
      * @return The entry that was successfully removed or null if there was no mapping.
      */
     public E removeEntry(CorfuRecordId entryId) {
-        return corfuTable.remove(entryId.getEntryId()).getEntry();
+        return corfuTable.remove(entryId);
     }
 
     /**
@@ -330,7 +337,7 @@ public class CorfuQueue<E> {
     public String toString(){
         StringBuilder stringBuilder = new StringBuilder(corfuTable.size());
         stringBuilder.append("{");
-        for (Map.Entry<Long, CorfuQueueRecord<E>> entry : corfuTable.entrySet()) {
+        for (Map.Entry<CorfuRecordId, E> entry : corfuTable.entrySet()) {
             stringBuilder.append(entry.toString()).append(", ");
         }
         stringBuilder.append("}");
