@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.reflect.TypeToken;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -46,7 +47,7 @@ public class CorfuQueue<E> {
     /**
      * The main CorfuTable which contains the primary key-value mappings.
      */
-    private final CorfuTable<Long, CorfuQueueRecord<E>> corfuTable;
+    private final CorfuTable<Long, CorfuQueueRecord<ByteString>> corfuTable;
     private final CorfuGuidGenerator guidGenerator;
 
     public CorfuQueue(CorfuRuntime runtime, String streamName, ISerializer serializer,
@@ -54,7 +55,7 @@ public class CorfuQueue<E> {
         final Supplier<StreamingMap<Long, E>> mapSupplier =
                 () -> new StreamingMapDecorator<>(new LinkedHashMap<Long, E>());
         corfuTable = runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<Long, CorfuQueueRecord<E>>>() {})
+                .setTypeToken(new TypeToken<CorfuTable<Long, CorfuQueueRecord<ByteString>>>() {})
                 .setStreamName(streamName)
                 .setArguments(indices, mapSupplier)
                 .setSerializer(serializer)
@@ -147,9 +148,9 @@ public class CorfuQueue<E> {
      * @throws IllegalArgumentException if some property of the specified
      *         element prevents it from being added to this queue
      */
-    public CorfuRecordId enqueue(E e) {
+    public CorfuRecordId enqueue(ByteString e) {
         final Long id = guidGenerator.nextLong();
-        CorfuQueueRecord<E> queueEntry;
+        CorfuQueueRecord<ByteString> queueEntry;
 
         // If we are in a transaction, then we need the commit address of this transaction
         // to fix up as the txSequence
@@ -161,8 +162,8 @@ public class CorfuQueue<E> {
              * is deemed successful and has obtained a final sequence number to write.
              */
             class QueueEntryAddressGetter implements PreCommitListener {
-                private CorfuQueueRecord<E> queueRecord;
-                private QueueEntryAddressGetter(CorfuQueueRecord<E> queueRecord) {
+                private CorfuQueueRecord<ByteString> queueRecord;
+                private QueueEntryAddressGetter(CorfuQueueRecord<ByteString> queueRecord) {
                     this.queueRecord = queueRecord;
                 }
 
@@ -208,13 +209,13 @@ public class CorfuQueue<E> {
         private final CorfuRecordId recordId;
 
         @Getter
-        private final E entry;
+        private final ByteString entry;
 
         public String toString() {
             return String.format("%s=>%s", recordId, entry);
         }
 
-        CorfuQueueRecord(long txSequence, long entryId, E entry) {
+        CorfuQueueRecord(long txSequence, long entryId, ByteString entry) {
             this.recordId = new CorfuRecordId(txSequence, entryId);
             this.entry = entry;
         }
@@ -250,19 +251,19 @@ public class CorfuQueue<E> {
      * @throws IllegalArgumentException if maxEntries is negative.
      * @return List of Entries sorted by their enqueue order
      */
-    public List<CorfuQueueRecord<E>> entryList(CorfuRecordId entriesAfter, int maxEntries) {
+    public List<CorfuQueueRecord<ByteString>> entryList(CorfuRecordId entriesAfter, int maxEntries) {
         if (maxEntries <= 0) {
             throw new IllegalArgumentException("entryList can't take zero or negative maxEntries");
         }
         log.trace("entryList: "+maxEntries+" entries after:"+entriesAfter);
 
-        List<CorfuQueueRecord<E>> copy = new ArrayList<>(
+        List<CorfuQueueRecord<ByteString>> copy = new ArrayList<>(
                 Math.min(corfuTable.size(), maxEntries)
         );
 
-        Comparator<Map.Entry<Long, CorfuQueueRecord<E>>> recordIdComparator = (r1, r2) ->
+        Comparator<Map.Entry<Long, CorfuQueueRecord<ByteString>>> recordIdComparator = (r1, r2) ->
                 r1.getValue().getRecordId().compareTo(r2.getValue().recordId);
-        for (Map.Entry<Long, CorfuQueueRecord<E>> entry : corfuTable.entryStream()
+        for (Map.Entry<Long, CorfuQueueRecord<ByteString>> entry : corfuTable.entryStream()
                 .filter(e -> e.getValue().getRecordId().compareTo(entriesAfter) > 0)
                 .limit(maxEntries)
                 .sorted(recordIdComparator).collect(Collectors.toList())) {
@@ -274,7 +275,7 @@ public class CorfuQueue<E> {
     /**
      * @return all the entries in the Queue
      */
-    public List<CorfuQueueRecord<E>> entryList() {
+    public List<CorfuQueueRecord<ByteString>> entryList() {
         return this.entryList(new CorfuRecordId(0,0), Integer.MAX_VALUE);
     }
 
@@ -282,7 +283,7 @@ public class CorfuQueue<E> {
      * @param maxEntries limit number of entries returned to this.
      * @return all the entries in the Queue
      */
-    public List<CorfuQueueRecord<E>> entryList(int maxEntries) {
+    public List<CorfuQueueRecord<ByteString>> entryList(int maxEntries) {
         return this.entryList(new CorfuRecordId(0, 0), maxEntries);
     }
 
@@ -299,7 +300,7 @@ public class CorfuQueue<E> {
      * @param key
      * @return
      */
-    public E get(CorfuRecordId key) {
+    public ByteString get(CorfuRecordId key) {
         return corfuTable.get(key.getEntryId()).getEntry();
     }
 
@@ -308,7 +309,7 @@ public class CorfuQueue<E> {
      *
      * @return The entry that was successfully removed or null if there was no mapping.
      */
-    public E removeEntry(CorfuRecordId entryId) {
+    public ByteString removeEntry(CorfuRecordId entryId) {
         return corfuTable.remove(entryId.getEntryId()).getEntry();
     }
 
@@ -330,7 +331,7 @@ public class CorfuQueue<E> {
     public String toString(){
         StringBuilder stringBuilder = new StringBuilder(corfuTable.size());
         stringBuilder.append("{");
-        for (Map.Entry<Long, CorfuQueueRecord<E>> entry : corfuTable.entrySet()) {
+        for (Map.Entry<Long, CorfuQueueRecord<ByteString>> entry : corfuTable.entrySet()) {
             stringBuilder.append(entry.toString()).append(", ");
         }
         stringBuilder.append("}");

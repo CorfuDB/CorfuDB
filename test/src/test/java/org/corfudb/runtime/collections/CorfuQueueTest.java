@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.primitives.UnsignedBytes;
+import com.google.protobuf.ByteString;
 import lombok.Getter;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -30,15 +31,15 @@ public class CorfuQueueTest extends AbstractViewTest {
         CorfuQueue<String>
                 corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test");
 
-        corfuQueue.enqueue("c");
-        corfuQueue.enqueue("b");
-        corfuQueue.enqueue("a");
+        corfuQueue.enqueue(ByteString.copyFromUtf8("c"));
+        corfuQueue.enqueue(ByteString.copyFromUtf8("b"));
+        corfuQueue.enqueue(ByteString.copyFromUtf8("a"));
 
-        List<CorfuQueueRecord<String>> records = corfuQueue.entryList();
+        List<CorfuQueueRecord<ByteString>> records = corfuQueue.entryList();
 
-        assertThat(records.get(0).getEntry()).isEqualTo("c");
-        assertThat(records.get(1).getEntry()).isEqualTo("b");
-        assertThat(records.get(2).getEntry()).isEqualTo("a");
+        assertThat(records.get(0).getEntry()).isEqualTo(ByteString.copyFromUtf8("c"));
+        assertThat(records.get(1).getEntry()).isEqualTo(ByteString.copyFromUtf8("b"));
+        assertThat(records.get(2).getEntry()).isEqualTo(ByteString.copyFromUtf8("a"));
 
         assertThatThrownBy(() -> corfuQueue.entryList(Integer.MIN_VALUE)).
                 isExactlyInstanceOf(IllegalArgumentException.class);
@@ -47,7 +48,7 @@ public class CorfuQueueTest extends AbstractViewTest {
         // Remove the middle entry
         corfuQueue.removeEntry(corfuQueue.entryList().get(middleEntryIndex).getRecordId());
 
-        List<CorfuQueueRecord<String>> records2 =
+        List<CorfuQueueRecord<ByteString>> records2 =
                     corfuQueue.entryList(Short.MAX_VALUE);
         assertThat(records2.get(0).getEntry()).isEqualTo("c");
         assertThat(records2.get(1).getEntry()).isEqualTo("a");
@@ -62,20 +63,40 @@ public class CorfuQueueTest extends AbstractViewTest {
 
     @Test
     public void queueWithSecondaryIndexCheck() {
-        CorfuQueue<String>
+        CorfuQueue<ByteString>
                 corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test", Serializers.JAVA,
                 Index.Registry.empty());
 
-        corfuQueue.enqueue("c");
-        corfuQueue.enqueue("b");
-        corfuQueue.enqueue("a");
+        corfuQueue.enqueue(ByteString.copyFromUtf8("c"));
+        corfuQueue.enqueue(ByteString.copyFromUtf8("b"));
+        corfuQueue.enqueue(ByteString.copyFromUtf8("a"));
 
         final int expected = 3;
-        List<CorfuQueueRecord<String>> records = corfuQueue.entryList();
+        List<CorfuQueueRecord<ByteString>> records = corfuQueue.entryList();
         assertThat(records.size()).isEqualTo(expected);
 
         // Only retrieve entries greater than the first entry.
-        List<CorfuQueueRecord<String>> recAfter = corfuQueue.entryList(
+        List<CorfuQueueRecord<ByteString>> recAfter = corfuQueue.entryList(
+                records.get(0).getRecordId(),
+                records.size());
+        assertThat(recAfter.size()).isEqualTo(records.size() - 1);
+    }
+
+    @Test
+    public void queueWithByteString() {
+        CorfuQueue<ByteString>
+                corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test");
+
+        corfuQueue.enqueue(ByteString.copyFromUtf8("A"));
+        corfuQueue.enqueue(ByteString.copyFromUtf8("B"));
+        corfuQueue.enqueue(ByteString.copyFromUtf8("C"));
+
+        final int expected = 3;
+        List<CorfuQueueRecord<ByteString>> records = corfuQueue.entryList();
+        assertThat(records.size()).isEqualTo(expected);
+
+        // Only retrieve entries greater than the first entry.
+        List<CorfuQueueRecord<ByteString>> recAfter = corfuQueue.entryList(
                 records.get(0).getRecordId(),
                 records.size());
         assertThat(recAfter.size()).isEqualTo(records.size() - 1);
