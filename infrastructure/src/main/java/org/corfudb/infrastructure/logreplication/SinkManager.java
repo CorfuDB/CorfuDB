@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.common.util.ObservableValue;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -102,7 +103,6 @@ public class SinkManager implements DataReceiver {
     @Override
     public LogReplicationEntry receive(LogReplicationEntry message) {
         log.info("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
-        System.out.print("Sink manager received " + message.getMetadata().getMessageMetadataType() + " while in " + rxState);
 
         if (!receivedValidMessage(message)) {
             // If we received a start marker for snapshot sync while in LOG_ENTRY_SYNC, switch rxState
