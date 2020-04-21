@@ -1,15 +1,17 @@
 package org.corfudb.utils.lock;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.utils.lock.LockClient.ClientContext;
 import org.corfudb.utils.lock.states.*;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -17,8 +19,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 /**
  * A Lock, identified by a <class>LockDataTypes.LockId</class>, attempts to acquire and renew lease on behalf of
  * the application interested in the lock. Once a Lock instance is able to acquire a lock it will try to renew it's lease
- * periodically. If for some reason (e.g. jvm pause, stuck thread , jvm slowness, instance fail stopped etc) the
- * instance is not able to renew the lease before it's expiration another instance can acquire the lock assuming
+ * periodically. If for some reason (e.g. jvm pause, stuck thread, jvm slowness, instance fail stopped, etc.) the
+ * instance is not able to renew the lease before it's expiration, another instance can acquire the lock assuming
  * this instance has fail stopped.
  * Lock Acquisition and renewal are done in the <code>LockStore</code> which is accessed by all instances contending
  * for the lock.
@@ -73,7 +75,10 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class Lock {
 
     // lease duration in 300 seconds
-    public static int LEASE_DURATION = 300;
+    @Setter
+    @VisibleForTesting
+    public static int leaseDuration = 300;
+
     // id of the lock
     @Getter
     private final LockDataTypes.LockId lockId;
@@ -82,7 +87,7 @@ public class Lock {
     @Getter
     private final ClientContext clientContext;
 
-    // Application regiesters this interface to receive lockAcquired and lockLost notifications
+    // Application registers this interface to receive lockAcquired and lockLost notifications
     @Getter
     private final LockListener lockListener;
 
@@ -96,10 +101,9 @@ public class Lock {
     @Getter
     private volatile LockState state;
 
-    //Map of precreated FSM state objects
+    //Map of pre-created FSM state objects
     @Getter
     private Map<LockStateType, LockState> states = new HashMap<>();
-
 
     /**
      * Constructor
@@ -138,7 +142,7 @@ public class Lock {
      *
      * @param event LogReplicationEvent to process.
      */
-    public synchronized void input(LockEvent event) {
+    public void input(LockEvent event) {
         try {
             if (state.getType().equals(LockStateType.STOPPED)) {
                 // Log: not accepting events, in stopped state
@@ -163,7 +167,7 @@ public class Lock {
                 return;
             }
 
-            //   Block until an event shows up in the queue.
+            // Block until an event shows up in the queue.
             LockEvent event = eventQueue.take();
             try {
                 Optional<LockState> newState = state.processEvent(event);

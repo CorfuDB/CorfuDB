@@ -7,8 +7,11 @@
 package org.corfudb.utils.lock;
 
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.utils.lock.LockDataTypes.LockId;
@@ -35,6 +38,8 @@ import java.util.concurrent.*;
 public class LockClient {
 
     // all the locks that the applications are interested in.
+    @VisibleForTesting
+    @Getter
     private final Map<LockId, Lock> locks = new ConcurrentHashMap<>();
 
     // lock data store
@@ -44,11 +49,17 @@ public class LockClient {
     private final ScheduledExecutorService lockMonitorScheduler;
 
     // duration between monitoring runs
-    private final int DURATION_BETWEEN_LOCK_MONITOR_RUNS = 60;
+    @Setter
+    private static int DurationBetweenLockMonitorRuns = 60;
+
     // The context contains objects that are shared across the locks in this client.
     private final ClientContext clientContext;
+
     // Handle for the periodic lock monitoring task
     private Optional<ScheduledFuture<?>> lockMonitorFuture = Optional.empty();
+
+    @Getter
+    private UUID clientId;
 
     /**
      * Constructor
@@ -86,6 +97,7 @@ public class LockClient {
             return t;
         });
 
+        this.clientId = clientId;
         this.lockStore = new LockStore(corfuRuntime, clientId);
         this.clientContext = new ClientContext(clientId, lockStore, taskScheduler, lockListenerExecutor);
     }
@@ -107,32 +119,36 @@ public class LockClient {
                 .setLockName(lockName)
                 .build();
 
-        locks.computeIfAbsent(
+        Lock lock = locks.computeIfAbsent(
                 lockId,
                 (key) -> new Lock(lockId, lockListener, clientContext));
+
+        // Initialize the lease
+        lock.input(LockEvent.LEASE_REVOKED);
+
+        monitorLocks();
     }
 
     /**
      * Monitor all the locks this client is interested in.
      * If a lock has an expired lease, the lock will be revoked.
-     *
-     * @param initialDelay
-     */
-    private void monitorLocks(int initialDelay) {
+     **/
+    private void monitorLocks() {
         // find the expired leases.
         lockMonitorFuture = Optional.of(lockMonitorScheduler.scheduleWithFixedDelay(
                 () -> {
                     try {
                         Collection<LockId> locksWithExpiredLeases = lockStore.filterLocksWithExpiredLeases(locks.keySet());
-                        for(LockId lockId:locksWithExpiredLeases) {
+                        for(LockId lockId : locksWithExpiredLeases) {
+                            log.trace("LockClient: lease revoked for lock {}", lockId.getLockName());
                             locks.get(lockId).input(LockEvent.LEASE_REVOKED);
                         }
                     } catch (Exception ex) {
 
                     }
                 },
-                0,
-                DURATION_BETWEEN_LOCK_MONITOR_RUNS,
+                DurationBetweenLockMonitorRuns,
+                DurationBetweenLockMonitorRuns,
                 TimeUnit.SECONDS
 
         ));

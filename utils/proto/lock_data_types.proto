@@ -16,7 +16,7 @@ message LockData {
     Uuid lease_owner_id = 2;
     // how many times the lease has been acquired by a different client
     int32 lease_acquisition_number = 3;
-    // how many times the lease has been renewed since the last acquistion
+    // how many times the lease has been renewed since the last acquisition
     int32 lease_renewal_number = 4;
 }
 
