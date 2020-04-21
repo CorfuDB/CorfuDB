@@ -9,7 +9,6 @@ import org.corfudb.utils.lock.states.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -17,8 +16,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 /**
  * A Lock, identified by a <class>LockDataTypes.LockId</class>, attempts to acquire and renew lease on behalf of
  * the application interested in the lock. Once a Lock instance is able to acquire a lock it will try to renew it's lease
- * periodically. If for some reason (e.g. jvm pause, stuck thread , jvm slowness, instance fail stopped etc) the
- * instance is not able to renew the lease before it's expiration another instance can acquire the lock assuming
+ * periodically. If for some reason (e.g. jvm pause, stuck thread, jvm slowness, instance fail stopped, etc.) the
+ * instance is not able to renew the lease before it's expiration, another instance can acquire the lock assuming
  * this instance has fail stopped.
  * Lock Acquisition and renewal are done in the <code>LockStore</code> which is accessed by all instances contending
  * for the lock.
