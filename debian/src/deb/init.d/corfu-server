@@ -50,11 +50,17 @@ change_ownership () {
 
 ensure_eth0_has_routable_ip_addr () {
     while true; do
-        grep_ip_addr=$(ip addr | grep inet | grep eth0 | grep -E "[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}/[0-9]{1,2}" > /dev/null 2>&1; echo $?)
-        if [ ${grep_ip_addr} ]; then
-            break
+        ip addr > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            grep_ip_addr=$(ip addr | grep inet | grep eth0 | grep -E "[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}/[0-9]{1,2}" > /dev/null 2>&1; echo $?)
+            if [ ${grep_ip_addr} -eq 0 ]; then
+                break
+            else
+                echo "Interface eth0 does not have a routable network interface. Trying again."
+                sleep 1
+            fi
         else
-            echo "Interface eth0 does not have a routable network interface. Trying again."
+            echo "Command ip addr does not have a exit code 0. Trying again"
             sleep 1
         fi
     done

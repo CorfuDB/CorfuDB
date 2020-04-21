@@ -69,7 +69,7 @@ public class CompleteGraphAdvisor implements ClusterAdvisor {
         NodeRank decisionMaker = maybeDecisionMaker.get();
         if (!decisionMaker.is(localEndpoint)) {
             String message = "The node can't be a decision maker, skip operation. Decision maker node is: {}";
-            log.debug(message, decisionMaker);
+            log.trace(message, decisionMaker);
             return Optional.empty();
         }
 

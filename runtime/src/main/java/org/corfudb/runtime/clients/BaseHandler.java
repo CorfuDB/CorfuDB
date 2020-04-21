@@ -14,7 +14,9 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.protocols.wireprotocol.WrongClusterMsg;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
 /**
@@ -138,5 +140,20 @@ public class BaseHandler implements IClient {
         log.warn("Server threw exception for request {}", msg.getRequestID(),
                 msg.getPayload().getThrowable());
         throw msg.getPayload().getThrowable();
+    }
+
+    /**
+     * Handle a wrong cluster id exception.
+     * @param msg Wrong cluster id exception message.
+     * @param ctx A context the message was sent under.
+     * @param r A reference to the router.
+     * @return None, throw a wrong cluster id exception.
+     */
+    @ClientHandler(type = CorfuMsgType.WRONG_CLUSTER_ID)
+    private static Object handleWrongClusterId(CorfuPayloadMsg<WrongClusterMsg> msg,
+                                               ChannelHandlerContext ctx, IClientRouter r) {
+        WrongClusterMsg wrongClusterMessage = msg.getPayload();
+        throw new WrongClusterException(wrongClusterMessage.getServerClusterId(),
+                wrongClusterMessage.getClientClusterId());
     }
 }
