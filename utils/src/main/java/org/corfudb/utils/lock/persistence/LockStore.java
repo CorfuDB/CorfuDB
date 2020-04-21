@@ -1,5 +1,6 @@
 package org.corfudb.utils.lock.persistence;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +16,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.corfudb.utils.lock.Lock.LEASE_DURATION;
+import static org.corfudb.utils.lock.Lock.leaseDuration;
 
 /**
  * Enables instances of <class>Lock</class> to acquire locks and renew leases.
@@ -151,7 +152,7 @@ public class LockStore {
     }
 
     /**
-     * It checks the <class>LockId</class> s passed as input and returns
+     * It checks the <class>LockId</class> passed as input and returns
      * a collection of the ones that have expired leases.
      *
      * @param lockIds
@@ -186,6 +187,7 @@ public class LockStore {
      */
     private void create(LockId lockId, LockData lockMetaData, CorfuStoreMetadata.Timestamp timestamp) throws LockStoreException {
         try {
+            log.info("LockStore: create lock record for : {}", lockId.getLockName());
             corfuStore.tx(namespace)
                     .create(tableName,
                             lockId,
@@ -249,7 +251,8 @@ public class LockStore {
      * @return
      * @throws LockStoreException
      */
-    private Optional<LockData> get(LockId lockId) throws LockStoreException {
+    @VisibleForTesting
+    public Optional<LockData> get(LockId lockId) throws LockStoreException {
         try {
             CorfuRecord record = corfuStore.query(namespace).getRecord(tableName, lockId);
             if (record != null) {
@@ -278,13 +281,17 @@ public class LockStore {
                 // If the lock has not been observed before or the lock in data store
                 // is not the same as the previously observed lock for that key, update the observation
                 // lease is not expired yet.
+                log.info("LockStore: new observed lock");
                 observedLocks.put(lockId, new ObservedLock(lockInDatastore.get(), Instant.now()));
                 return false;
             } else {
                 // check if the lease has expired
-                return observedLock.timestamp.isBefore(Instant.now().minusSeconds(LEASE_DURATION));
+                boolean leaseExpired = observedLock.timestamp.isBefore(Instant.now().minusSeconds(leaseDuration));
+                log.info("LockStore: check if lease is expired : {}", leaseExpired);
+                return leaseExpired;
             }
         } else {
+            log.info("LockStore: lockId {} not present in store", lockId.getLockName());
             return true;
         }
     }

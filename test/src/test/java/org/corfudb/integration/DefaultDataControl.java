@@ -2,9 +2,9 @@ package org.corfudb.integration;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.common.util.ObservableValue;
 import org.corfudb.logreplication.DataControl;
 import org.corfudb.logreplication.SourceManager;
-import org.corfudb.infrastructure.logreplication.ObservableValue;
 
 import static org.assertj.core.api.Assertions.fail;
 

@@ -1,5 +1,6 @@
 package org.corfudb.utils.lock.states;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.utils.lock.Lock;
 

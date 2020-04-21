@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication;
+package org.corfudb.common.util;
 
 import java.util.Observable;
 

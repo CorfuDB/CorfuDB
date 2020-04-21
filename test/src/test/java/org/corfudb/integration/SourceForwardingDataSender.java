@@ -2,11 +2,11 @@ package org.corfudb.integration;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
+import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.SinkManager;
 import org.corfudb.logreplication.SourceManager;
-import org.corfudb.infrastructure.logreplication.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.fsm.ObservableAckMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;

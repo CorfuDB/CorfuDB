@@ -142,7 +142,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         while (doRetry && numRetry++ < MAX_NUM_TX_RETRY){
             try {
                 rt.getObjectsView().TXBegin();
-                System.out.print("\nTxBeing seq " + currentSeqNum);
                 // read persistentMetadata's snapshot seq number
                 persistentSeqNum = persistedWriterMetadata.getLastSnapSeqNum();
 
@@ -150,22 +149,16 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                     for (SMREntry smrEntry : smrEntries) {
                         TransactionalContext.getCurrentContext().logUpdate(dstUUID, smrEntry);
                     }
-                    System.out.print("\nphase " + phase + " dst_uuid " + dstUUID + " name " +
-                            (shadowMap.containsKey(dstUUID)? shadowMap.get(dstUUID) : streamViewMap.get(dstUUID)));
                     persistedWriterMetadata.setLastSnapSeqNum(currentSeqNum);
                     log.debug("Process the entries {}  and set sequence number {} ", smrEntries, currentSeqNum);
                 } else {
-                    System.out.print("\nSkip the entry as the sequence number " + currentSeqNum + " is not equal to " + persistentSeqNum +  " + 1 ");
                     log.warn("\nSkip the entry as the sequence number is not equal to {} + 1", persistentSeqNum);
                 }
-                System.out.print("\nThe sequence number " + currentSeqNum + " persistent " + persistentSeqNum +  " + 1 ");
                 // We have succeed update successful, don't need retry any more.
                 doRetry = false;
             } catch (TransactionAbortedException e) {
-                System.out.print("Caughte an exception " + e);
                 log.warn("Caught an exception {}, will retry {}.", e, numRetry);
              } finally {
-                System.out.print("\nTxEnd seq " + currentSeqNum);
                 rt.getObjectsView().TXEnd();
             }
         }
@@ -209,7 +202,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      */
     public long applyShadowStream(UUID uuid, Long seqNum, long snapshot) {
         UUID shadowUUID = uuidMap.get(uuid);
-        System.out.print("\napplyshadowStream seqNum " + seqNum + " uuid " + uuid + " name " + streamViewMap.get(uuid));
         StreamOptions options = StreamOptions.builder()
                 .ignoreTrimmed(false)
                 .cacheEntries(false)
@@ -219,7 +211,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         Stream shadowStream = (new OpaqueStream(rt, rt.getStreamsView().get(shadowUUID, options))).streamUpTo(snapshot);
 
         Iterator<OpaqueEntry> iterator = shadowStream.iterator();
-        System.out.print("\napply to stream " + uuid + " name " + streamViewMap.get(uuid) + " shadow stream " + shadowMap.get(shadowUUID)) ;
         while (iterator.hasNext()) {
             OpaqueEntry opaqueEntry = iterator.next();
             if (opaqueEntry.getVersion() > shadowStreamStartAddress) {
@@ -228,7 +219,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             }
         }
 
-        System.out.print("\nshadowStream seqNum " + seqNum);
         return seqNum;
     }
 
@@ -237,7 +227,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * read from shadowStream and append to the
      */
     public void applyShadowStreams(Long seqNum) {
-        System.out.print("***start applyShadowStreams with seqNum " + seqNum);
         phase = Phase.ApplyPhase;
         long snapshot = rt.getAddressSpaceView().getLogTail();
         clearTables();
@@ -272,7 +261,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
         applyShadowStreams(seqNum);
     }
-
+    
     enum Phase {
         TransferPhase,
         ApplyPhase
