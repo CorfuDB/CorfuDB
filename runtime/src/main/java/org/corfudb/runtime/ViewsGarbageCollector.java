@@ -5,7 +5,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.Utils;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.concurrent.Executors;
@@ -87,7 +86,7 @@ public class ViewsGarbageCollector {
                     endTs - startTs, runtime.getObjectsView().getObjectCache().size(), trimMark);
         } catch (Exception e) {
             if (e.getCause() instanceof InterruptedException) {
-                throw new UnrecoverableCorfuInterruptedError((InterruptedException) Utils.extractCauseWithCompleteStacktrace(e));
+                throw new UnrecoverableCorfuInterruptedError((InterruptedException) e.getCause());
             } else {
                 log.error("Encountered an error while running runtime GC", e);
             }
