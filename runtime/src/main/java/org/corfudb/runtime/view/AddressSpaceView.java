@@ -473,6 +473,14 @@ public class AddressSpaceView extends AbstractView {
      * Get the first address in the address space.
      */
     public Token getTrimMark() {
+        return getTrimMark(false);
+    }
+
+    /**
+     * Get the first address in the address space.
+     * Pass a rethrowExceptions flag to propagate all the exceptions to the caller.
+     */
+    public Token getTrimMark(boolean rethrowExceptions) {
         return layoutHelper(
                 e -> {
                     long trimMark = e.getLayout().segments.stream()
@@ -497,7 +505,7 @@ public class AddressSpaceView extends AbstractView {
                             })
                             .max(Comparator.naturalOrder()).get();
                     return new Token(e.getLayout().getEpoch(), trimMark);
-                });
+                }, rethrowExceptions);
     }
 
     /**
