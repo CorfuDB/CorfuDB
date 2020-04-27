@@ -22,6 +22,7 @@ import java.nio.channels.FileChannel;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -574,6 +575,66 @@ public class LogUnitServerTest extends AbstractServerTest {
         assertThat(s2)
                 .matchesDataAtAddress(ADDRESS_0, "1".getBytes());
 
+    }
+
+    @Test
+    public void testLogDataRWLatency() {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+
+        ServerContext sc = new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setSingle(true)
+                .setMemory(false)
+                .build();
+
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
+
+        final int iterations = 1000;
+        long ADDRESS;
+
+        long start = System.currentTimeMillis();
+        for (int i=0; i<iterations; i++) {
+            ByteBuf buf = Unpooled.buffer();
+            Serializers.CORFU.serialize(Integer.toString(i).getBytes(), buf);
+            LogData ld = new LogData(DataType.DATA, buf);
+            WriteRequest m = WriteRequest.builder()
+                    .data(ld)
+                    .build();
+            ADDRESS = i;
+            m.setGlobalAddress(ADDRESS);
+            m.setRank(new IMetadata.DataRank(0));
+            m.setBackpointerMap(populateBackpointerMap());
+            m.setCheckpointedStreamId(UUID.randomUUID());
+            m.setCheckpointedStreamId(UUID.randomUUID());
+            m.setCheckpointId(UUID.randomUUID());
+            sendRequest(CorfuMsgType.WRITE.payloadMsg(m)).join();
+        }
+        long end = System.currentTimeMillis();
+        System.out.println("Total Write Time - " + (end - start));
+
+        start = System.currentTimeMillis();
+        for (int i=0; i<iterations; i++) {
+            ADDRESS = i;
+            sendRequest(CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(ADDRESS, true))).join();
+        }
+        end = System.currentTimeMillis();
+        System.out.println("Total Read Time -" + (end - start));
+    }
+
+    private Map<UUID, Long> populateBackpointerMap() {
+        final int numBackpointers = 20;
+        Map<UUID, Long> backPointerMap = new HashMap<>();
+        for (int i=0; i<numBackpointers; i++) {
+            backPointerMap.put(UUID.randomUUID(), new Random().nextLong());
+        }
+        return backPointerMap;
     }
 }
 
