@@ -12,10 +12,10 @@ public interface LockListener {
     /**
      * Application gets this callback when a lock is acquired.
      */
-    public void lockAcquired();
+    void lockAcquired(LockDataTypes.LockId lockId);
 
     /**
      * Application gets this callback when a lock is lost.
      */
-    public void lockRevoked();
+    void lockRevoked(LockDataTypes.LockId lockId);
 }
