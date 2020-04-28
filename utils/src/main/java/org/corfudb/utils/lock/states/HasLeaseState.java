@@ -102,7 +102,7 @@ public class HasLeaseState extends LockState {
      */
     @Override
     public void onEntry(LockState from) {
-        notify(() -> lock.getLockListener().lockAcquired(), "Lock Acquired");
+        notify(() -> lock.getLockListener().lockAcquired(lock.getLockId()), "Lock Acquired");
         //Record the lease time
         leaseTime = Optional.of(Instant.now());
         startLeaseRenewal();
@@ -123,7 +123,7 @@ public class HasLeaseState extends LockState {
      */
     @Override
     public void onExit(LockState to) {
-        notify(() -> lock.getLockListener().lockRevoked(), "Lock Revoked");
+        notify(() -> lock.getLockListener().lockRevoked(lock.getLockId()), "Lock Revoked");
         //Clear leaseTime.
         leaseTime = Optional.empty();
         stopLeaseRenewal();
@@ -151,7 +151,7 @@ public class HasLeaseState extends LockState {
                 taskFuture.cancel(true);
                 log.error("Lock: {} {} callback cancelled due to timeout!", lock.getLockId(), callback);
             }
-        }, MAX_TIME_FOR_NOTIFICATION_LISTENER_PROCESSING, TimeUnit.SECONDS);
+        }, MaxTimeForNotificationListenerProcessing, TimeUnit.SECONDS);
     }
 
     /**
@@ -160,6 +160,7 @@ public class HasLeaseState extends LockState {
      *
      */
     private void startLeaseRenewal() {
+        // TODO: add hook / predicate to be run before lease renewal
         synchronized (leaseRenewalFuture) {
             if (!leaseRenewalFuture.isPresent() || leaseRenewalFuture.get().isDone())
                 leaseRenewalFuture = Optional.of(taskScheduler.scheduleWithFixedDelay(
@@ -167,7 +168,9 @@ public class HasLeaseState extends LockState {
                             try {
                                 if (lockStore.renew(lock.getLockId())) {
                                     lock.input(LockEvent.LEASE_RENEWED);
+                                    leaseTime = Optional.of(Instant.now());
                                 } else {
+                                    log.info("Lock: {} lease revoked for lock {}", lock.getLockId());
                                     lock.input(LockEvent.LEASE_REVOKED);
                                 }
                             } catch (Exception e) {
@@ -175,7 +178,7 @@ public class HasLeaseState extends LockState {
                             }
                         },
                         0,
-                        DURATION_BETWEEN_LEASE_RENEWALS,
+                        DurationBetweenLeaseRenewals,
                         TimeUnit.SECONDS
                 ));
         }
@@ -191,7 +194,8 @@ public class HasLeaseState extends LockState {
             if (!leaseMonitorFuture.isPresent() || leaseMonitorFuture.get().isDone())
                 leaseMonitorFuture = Optional.of(taskScheduler.scheduleWithFixedDelay(
                         () -> {
-                            if (leaseTime.isPresent() && leaseTime.get().isBefore(Instant.now().minusSeconds(Lock.LEASE_DURATION))) {
+                            if (leaseTime.isPresent() && leaseTime.get().isBefore(Instant.now().minusSeconds(Lock.leaseDuration))) {
+                                log.info("Lock: {} lease expired for lock {}", lock.getLockId());
                                 lock.input(LockEvent.LEASE_EXPIRED);
                             }
 
