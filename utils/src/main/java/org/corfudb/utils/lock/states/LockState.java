@@ -1,5 +1,6 @@
 package org.corfudb.utils.lock.states;
 
+import lombok.Setter;
 import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.persistence.LockStore;
 
@@ -16,11 +17,12 @@ import java.util.concurrent.ScheduledExecutorService;
 public abstract class LockState {
 
     // renew lease every 60 seconds
-    public static int DURATION_BETWEEN_LEASE_RENEWALS = 60;
+    @Setter
+    public static int DurationBetweenLeaseRenewals = 60;
 
     // max time allowed for listener to process a notification
-    public static int MAX_TIME_FOR_NOTIFICATION_LISTENER_PROCESSING = 60;
-
+    @Setter
+    public static int MaxTimeForNotificationListenerProcessing = 60;
 
     // Lock being acquired
     protected final Lock lock;
@@ -28,14 +30,14 @@ public abstract class LockState {
     protected final LockStore lockStore;
     // Task scheduler to be used by lock states
     protected final ScheduledExecutorService taskScheduler;
-    // Listener executor (for locklost, lockAcquired) notifications.
+    // Listener executor (for lock lost, lockAcquired) notifications.
     protected final ExecutorService lockListenerExecutor;
 
     public LockState(Lock lock) {
         this.lock = lock;
         this.lockStore = lock.getClientContext().getLockStore();
-        this.taskScheduler = lock.getClientContext().getTaskScheduler();
-        this.lockListenerExecutor = lock.getClientContext().getLockListenerExecutor();
+        this.taskScheduler =  lock.getClientContext().getTaskScheduler();
+        this.lockListenerExecutor =  lock.getClientContext().getLockListenerExecutor();
     }
 
     /**
