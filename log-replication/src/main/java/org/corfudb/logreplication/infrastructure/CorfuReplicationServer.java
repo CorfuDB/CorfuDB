@@ -3,6 +3,7 @@ package org.corfudb.logreplication.infrastructure;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.core.joran.spi.JoranException;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.util.GitRepositoryState;
@@ -159,31 +160,45 @@ public class CorfuReplicationServer {
                     + " --version                                                                "
                     + "              Show version\n";
 
-        // Active Corfu Server Node.
-        private static volatile CorfuReplicationServerNode activeServer;
+    // Active Corfu Server Node.
+    private volatile CorfuReplicationServerNode activeServer;
 
-        // Flag if set to true - causes the Corfu Server to shutdown.
-        private static volatile boolean shutdownServer = false;
-        // If set to true - triggers a reset of the server by wiping off all the data.
-        private static volatile boolean cleanupServer = false;
-        // Error code required to detect an ungraceful shutdown.
-        private static final int EXIT_ERROR_CODE = 100;
+    // Flag if set to true - causes the Corfu Server to shutdown.
+    private volatile boolean shutdownServer = false;
 
-        /**
-         * Main program entry point.
-         *
-         * @param args command line argument strings
-         */
-        public static void main(String[] args) {
-            try {
-                startServer(args);
-            } catch (Throwable err) {
-                log.error("Exit. Unrecoverable error", err);
+    // If set to true - triggers a reset of the server by wiping off all the data.
+    private volatile boolean cleanupServer = false;
+    // Error code required to detect an ungraceful shutdown.
+    private static final int EXIT_ERROR_CODE = 100;
+
+    private CorfuReplicationSiteManagerAdapter siteManagerAdapter = null;
+
+    final ServerContext serverContext = null;
+
+    /**
+     * Main program entry point.
+     *
+     * @param args command line argument strings
+     */
+    public static void main(String[] args) {
+        CorfuReplicationServer corfuReplicationServer = new CorfuReplicationServer();
+        try {
+            corfuReplicationServer.startServer(args);
+        } catch (Throwable err) {
+            log.error("Exit. Unrecoverable error", err);
                 throw err;
-            }
         }
+    }
 
-    private static void startServer(String[] args) {
+    CorfuReplicationServer() {
+        siteManagerAdapter = new DefaultSiteManager();
+    }
+
+    CorfuReplicationServer(CorfuReplicationSiteManagerAdapter adapter) {
+        siteManagerAdapter = adapter;
+    }
+
+    private void startServer(String[] args) {
             // Parse the options given, using docopt.
             Map<String, Object> opts = new Docopt(USAGE)
                     .withVersion(GitRepositoryState.getRepositoryState().describe)
@@ -210,7 +225,7 @@ public class CorfuReplicationServer {
             }
 
             // Register shutdown handler
-            Thread shutdownThread = new Thread(CorfuReplicationServer::cleanShutdown);
+            Thread shutdownThread = new Thread(new CleanupRunnable(this));
             shutdownThread.setName("ShutdownThread");
             Runtime.getRuntime().addShutdownHook(shutdownThread);
 
@@ -224,8 +239,7 @@ public class CorfuReplicationServer {
                     // acquiring lock, retrieving Site Manager Info and processing this info
                     // so this node is initialized as Source (sender) or Sink (receiver)
                     String endpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).toEndpointUrl();
-                    Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(endpoint,
-                            new DefaultSiteManager(endpoint));
+                    Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(endpoint, siteManagerAdapter);
                     Thread replicationDiscoveryThread = new Thread(replicationDiscoveryRunnable);
                     replicationDiscoveryThread.start();
 
@@ -256,7 +270,7 @@ public class CorfuReplicationServer {
          * @param opts command line parameters
          * @throws JoranException logback exception
          */
-        private static void configureLogger(Map<String, Object> opts) {
+        private void configureLogger(Map<String, Object> opts) {
             final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
             final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
             root.setLevel(level);
@@ -267,7 +281,7 @@ public class CorfuReplicationServer {
          *
          * @param resetData Resets and clears all data if True.
          */
-        static void restartServer(boolean resetData) {
+        void restartServer(boolean resetData) {
 
             if (resetData) {
                 cleanupServer = true;
@@ -281,7 +295,7 @@ public class CorfuReplicationServer {
         /**
          * Attempt to cleanly shutdown all the servers.
          */
-        private static void cleanShutdown() {
+        private void cleanShutdown() {
             log.info("CleanShutdown: Starting Cleanup.");
             shutdownServer = true;
             activeServer.close();
@@ -325,6 +339,17 @@ public class CorfuReplicationServer {
             println("Serving on port " + port);
             println("------------------------------------");
             println("");
+        }
+
+        static class CleanupRunnable implements Runnable {
+            CorfuReplicationServer server;
+            CleanupRunnable(CorfuReplicationServer server) {
+                this.server = server;
+            }
+            @Override
+            public void run() {
+                server.cleanShutdown();
+            }
         }
 
 }
