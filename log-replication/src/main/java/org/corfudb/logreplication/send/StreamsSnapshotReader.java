@@ -2,8 +2,10 @@ package org.corfudb.logreplication.send;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -45,6 +47,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
 
+
+    @Setter
+    private long siteEpoch;
+
     /**
      * Init runtime and streams to read
      */
@@ -83,7 +89,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, opaqueEntry);
 
-        org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry txMsg = new org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry(MessageType.SNAPSHOT_MESSAGE, snapshotRequestId, currentMsgTs,
+        org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry txMsg = new org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry
+                (MessageType.SNAPSHOT_MESSAGE, siteEpoch, snapshotRequestId, currentMsgTs,
                 preMsgTs, snapshotTimestamp, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
@@ -204,4 +211,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
             maxVersion = 0;
          }
     }
+
+    @Override
+    public void setSiteEpoch(long siteEpoch) {
+        this.siteEpoch = siteEpoch;
+    }
+
 }

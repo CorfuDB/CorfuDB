@@ -31,6 +31,7 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 
+import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -41,10 +42,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     // Parameters for writes
     private static final int NUM_ENTRIES = 10;
     private static final int LARGE_NUM_ENTRIES = 100;
-    private static final String PAYLOAD_FORMAT = "hello world %s";
+    private static final String PAYLOAD_FORMAT = "%s hello world";
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
     private static final int WAIT_TIME = 100;
+    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
+    static final UUID REMOTE_SITE_ID = UUID.randomUUID();
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -147,7 +150,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     }
 
     private void insertDelay(int timeMilliseconds) throws InterruptedException {
-        Thread.sleep(timeMilliseconds);
+        sleep(timeMilliseconds);
     }
 
     /**
@@ -208,19 +211,21 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
-        for (int i = 0; i<(LARGE_NUM_ENTRIES/(StreamsSnapshotReader.MAX_NUM_SMR_ENTRY* SnapshotSender.SNAPSHOT_BATCH_SIZE)) + 1; i++) {
+        int numTransition = (NUM_ENTRIES/(batchSize* SnapshotSender.SNAPSHOT_BATCH_SIZE)) + 1;
+        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
+
+
+        for (int i = 0; i < numTransition; i++) {
+            System.out.print("\nnumTransitions " + numTransition + " i " + i);
             transitionAvailable.acquire();
         }
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
-
-        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
-
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
-        for (int i=0; i<NUM_ENTRIES; i++) {
+        for (int i = 0; i < NUM_ENTRIES; i++) {
             assertThat(listenerQueue.poll().getPayload())
-                    .isEqualTo( String.format("hello world %s", i).getBytes());
+                    .isEqualTo( String.format(PAYLOAD_FORMAT, i).getBytes());
         }
     }
 
@@ -262,6 +267,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // We observe the number of transmitted messages and force a REPLICATION_STOP, when 2 messages have been sent
         // so we verify the state moves to INITIALIZED again.
         transitionAvailable.acquire();
+        fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
 
         boolean transitionOccurred = true;
         while (transitionOccurred) {
@@ -280,7 +286,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #2: This time the snapshot sync completes
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
-        for (int i = 0; i<(LARGE_NUM_ENTRIES/(StreamsSnapshotReader.MAX_NUM_SMR_ENTRY* SnapshotSender.SNAPSHOT_BATCH_SIZE)) + 1; i++) {
+        for (int i = 0; i<(NUM_ENTRIES/(BATCH_SIZE * SnapshotSender.SNAPSHOT_BATCH_SIZE)) + 1; i++) {
             transitionAvailable.acquire();
         }
 
@@ -292,7 +298,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         for (int i=0; i<NUM_ENTRIES; i++) {
             assertThat(listenerQueue.poll().getPayload())
-                    .isEqualTo( String.format("hello world %s", i).getBytes());
+                    .isEqualTo( String.format(PAYLOAD_FORMAT, i).getBytes());
         }
     }
 
@@ -368,7 +374,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         List<TokenResponse> writeTokens = new ArrayList<>();
 
         // Write
-        for (int i=0; i<NUM_ENTRIES; i++) {
+        for (int i=0; i < NUM_ENTRIES; i++) {
             TokenResponse response = runtime.getSequencerView().next(streamA);
             writeTokens.add(response);
             runtime.getAddressSpaceView().write(response, String.format(PAYLOAD_FORMAT, i).getBytes());
@@ -430,7 +436,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
             case STREAMS:
                 // Default implementation used for Log Replication (stream-based)
                 LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME),
-                        UUID.randomUUID());
+                        PRIMARY_SITE_ID, REMOTE_SITE_ID);
                 snapshotReader = new StreamsSnapshotReader(getNewRuntime(getDefaultNode()).connect(),
                         logReplicationConfig);
                 dataSender = new TestDataSender();
@@ -440,7 +446,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET, UUID.randomUUID()),
+                new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET, PRIMARY_SITE_ID, REMOTE_SITE_ID),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);

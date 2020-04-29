@@ -28,4 +28,6 @@ public interface SnapshotReader {
      * @param snapshotTimestamp new snapshot timestamp.
      */
     void reset(long snapshotTimestamp);
+
+    void setSiteEpoch(long siteEpoch);
 }

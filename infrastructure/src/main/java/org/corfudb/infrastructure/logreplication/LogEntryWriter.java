@@ -93,6 +93,8 @@ public class LogEntryWriter {
             throw new ReplicationWriterException("Wrong streams set");
         }
 
+
+        long epoch = txMessage.getMetadata().getSiteEpoch();
         long msgTs = txMessage.getMetadata().timestamp;
         long persistTs = Address.NON_ADDRESS;
 
@@ -100,13 +102,14 @@ public class LogEntryWriter {
             try {
                 rt.getObjectsView().TXBegin();
                 persistTs = persistedWriterMetadata.getLastProcessedLogTimestamp();
-                if (msgTs > persistTs ) {
+                if (epoch == persistedWriterMetadata.getSiteEpoch() && msgTs > persistTs ) {
                     for (UUID uuid : opaqueEntry.getEntries().keySet()) {
                         for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
                             TransactionalContext.getCurrentContext().logUpdate(uuid, smrEntry);
                         }
                     }
 
+                    persistedWriterMetadata.setSiteEpoch(epoch);
                     persistedWriterMetadata.setLastProcessedLogTimestamp(msgTs);
                     log.trace("Will append msg {} as its timestamp is not later than the persisted one {}",
                             txMessage.getMetadata(), persistTs);
