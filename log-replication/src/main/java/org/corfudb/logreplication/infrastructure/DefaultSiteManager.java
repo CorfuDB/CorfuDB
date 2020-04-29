@@ -12,7 +12,6 @@ import java.util.Set;
 
 @Slf4j
 public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
-    //String localEndpoint;
     CrossSiteConfiguration crossSiteConfiguration;
 
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
@@ -34,7 +33,6 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     private static final String STANDBY_SITE_NODE = "standby_site_node";
 
     DefaultSiteManager() {
-        //localEndpoint = endpoint;
     }
 
     public CrossSiteConfiguration readConfig() throws IOException {
