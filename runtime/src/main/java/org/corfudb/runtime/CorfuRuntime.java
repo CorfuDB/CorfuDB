@@ -57,6 +57,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -623,8 +624,10 @@ public class CorfuRuntime {
     @Getter(lazy = true)
     private final ManagementView managementView = new ManagementView(this);
 
-    @Getter(lazy = true)
-    private final TableRegistry tableRegistry = new TableRegistry(this);
+    /**
+     * CorfuStore's table registry cache for Table lifecycle management.
+     */
+    private final AtomicReference<TableRegistry> tableRegistry = new AtomicReference<>(null);
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
@@ -710,6 +713,22 @@ public class CorfuRuntime {
         return this;
     }
 
+    /**
+     * lazy instantiation of the tableRegistry
+     */
+    public TableRegistry getTableRegistry() {
+        TableRegistry tableRegistryObj = this.tableRegistry.get();
+        if (tableRegistryObj == null) {
+            synchronized (this) {
+                tableRegistryObj = this.tableRegistry.get();
+                if (tableRegistryObj == null) {
+                    tableRegistryObj = new TableRegistry(this);
+                    this.tableRegistry.set(tableRegistryObj);
+                }
+            }
+        }
+        return tableRegistryObj;
+    }
 
     /**
      * When set, overrides the default getRouterFunction. Used by the testing
@@ -837,6 +856,10 @@ public class CorfuRuntime {
     public void shutdown() {
         // Stopping async task from fetching layout.
         isShutdown = true;
+        TableRegistry tableRegistryObj = tableRegistry.get();
+        if (tableRegistryObj != null) {
+            tableRegistryObj.shutdown();
+        }
         garbageCollector.stop();
         runtimeExecutor.shutdownNow();
         if (layout != null) {

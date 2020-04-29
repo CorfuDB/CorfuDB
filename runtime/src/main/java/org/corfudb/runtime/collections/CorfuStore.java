@@ -22,19 +22,11 @@ import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
  *   o-> getTimestamp() for database snapshots
  *   o-> table lifecycle management
  *
- * By itself it is a lightweight layer and only carries the CorfuRuntime and therefore can be
- * instantiated many times with the same runtime.
- *
  * Created by zlokhandwala on 2019-08-02.
  */
 public class CorfuStore {
 
     private final CorfuRuntime runtime;
-
-    /**
-     * Transaction Streamer.
-     */
-    private final TxnStreamingManager txnStreamingManager;
 
     /**
      * Creates a new CorfuStore.
@@ -45,7 +37,6 @@ public class CorfuStore {
     public CorfuStore(@Nonnull final CorfuRuntime runtime) {
         runtime.setTransactionLogging(true);
         this.runtime = runtime;
-        this.txnStreamingManager = new TxnStreamingManager(runtime);
     }
 
     /**
@@ -171,9 +162,10 @@ public class CorfuStore {
      */
     public <K extends Message, V extends Message, M extends Message>
     void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                   @Nonnull List<TableSchema> tablesOfInterest,
+                   @Nonnull List<TableSchema<K, V, M>> tablesOfInterest,
                    @Nullable Timestamp timestamp) {
-        txnStreamingManager.subscribe(streamListener, namespace, tablesOfInterest,
+        runtime.getTableRegistry().getStreamManager()
+                .subscribe(streamListener, namespace, tablesOfInterest,
                 (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
     }
 
@@ -183,6 +175,7 @@ public class CorfuStore {
      * @param streamListener - callback context.
      */
     public void unsubscribe(@Nonnull StreamListener streamListener) {
-        txnStreamingManager.unsubscribe(streamListener);
+        runtime.getTableRegistry().getStreamManager()
+                .unsubscribe(streamListener);
     }
 }

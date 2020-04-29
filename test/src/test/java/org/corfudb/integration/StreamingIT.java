@@ -373,7 +373,7 @@ public class StreamingIT extends AbstractIT {
         txBuilder.commit();
 
         // Subscribe to both tables
-        List<TableSchema> tablesSubscribed = new ArrayList<>();
+        List<TableSchema<Uuid, Uuid, Uuid>> tablesSubscribed = new ArrayList<>();
         TableSchema schema1 = new TableSchema("t1", Uuid.class, Uuid.class, Uuid.class);
         TableSchema schema2 = new TableSchema("t2", Uuid.class, Uuid.class, Uuid.class);
         tablesSubscribed.add(schema1);
