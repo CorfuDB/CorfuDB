@@ -14,11 +14,13 @@ import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.R
 @Slf4j
 public class CorfuReplicationDiscoveryService implements Runnable {
     private final CorfuReplicationManager replicationManager;
+    private CorfuReplicationSiteManagerAdapter siteManager;
     private String localEndpoint;
 
-    public CorfuReplicationDiscoveryService(NodeLocator localEndpoint) {
+    public CorfuReplicationDiscoveryService(String endpoint, CorfuReplicationSiteManagerAdapter siteManager) {
         this.replicationManager = new CorfuReplicationManager();
-        this.localEndpoint = localEndpoint.toEndpointUrl();
+        this.siteManager = siteManager;
+        this.localEndpoint = endpoint;
     }
 
     @Override
@@ -28,7 +30,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
                 log.info("Initiate Corfu Replication Discovery");
 
                 // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
-                CrossSiteConfiguration crossSiteConfig = fetchSiteConfiguration();
+                CrossSiteConfiguration crossSiteConfig = siteManager.fetchSiteConfiguration();
 
                 // Get the current node information.
                 CrossSiteConfiguration.NodeInfo nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
@@ -64,15 +66,6 @@ public class CorfuReplicationDiscoveryService implements Runnable {
                 log.error("Caught Exception while discovering remote sites, retry. ", e);
             }
         }
-    }
-
-    /**
-     * Fetch Sites Configuration.
-     *
-     * @return cross-site configuration.
-     */
-    private CrossSiteConfiguration fetchSiteConfiguration() {
-        return new CrossSiteConfiguration();
     }
 
     /**

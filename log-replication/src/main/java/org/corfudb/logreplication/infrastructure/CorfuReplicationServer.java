@@ -223,7 +223,9 @@ public class CorfuReplicationServer {
                     // Start LogReplicationDiscovery Service, responsible for
                     // acquiring lock, retrieving Site Manager Info and processing this info
                     // so this node is initialized as Source (sender) or Sink (receiver)
-                    Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(NodeLocator.parseString(serverContext.getLocalEndpoint()));
+                    String endpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).toEndpointUrl();
+                    Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(endpoint,
+                            new DefaultSiteManager(endpoint));
                     Thread replicationDiscoveryThread = new Thread(replicationDiscoveryRunnable);
                     replicationDiscoveryThread.start();
 
