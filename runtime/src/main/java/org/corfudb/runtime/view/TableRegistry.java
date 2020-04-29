@@ -25,6 +25,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.StreamManager;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
@@ -64,6 +65,11 @@ public class TableRegistry {
      * Connected runtime instance.
      */
     private final CorfuRuntime runtime;
+
+    /**
+     * A TableRegistry should just have one stream manager for lifecycle management.
+     */
+    private StreamManager streamManager;
 
     /**
      * Stores the schemas of the Key, Value and Metadata.
@@ -428,5 +434,21 @@ public class TableRegistry {
         return Optional.ofNullable(this.registryTable.get(tableName))
                 .map(CorfuRecord::getPayload)
                 .orElse(null);
+    }
+
+    /**
+     * Register a stream subscription manager. We want only one of these per runtime.
+     */
+    public synchronized StreamManager getStreamManager() {
+        if (this.streamManager == null) {
+            this.streamManager = new StreamManager(runtime);
+        }
+        return this.streamManager;
+    }
+
+    public synchronized void shutdown() {
+        if (this.streamManager != null) {
+            this.streamManager.shutdown();
+        }
     }
 }
