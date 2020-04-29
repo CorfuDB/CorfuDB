@@ -6,12 +6,10 @@ import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Message;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.integration.Event;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
