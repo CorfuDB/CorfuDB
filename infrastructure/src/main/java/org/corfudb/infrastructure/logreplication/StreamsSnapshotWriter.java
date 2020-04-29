@@ -3,13 +3,11 @@ package org.corfudb.infrastructure.logreplication;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
+import org.corfudb.protocols.logprotocol.OpaqueEntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
-
-import org.corfudb.protocols.logprotocol.OpaqueEntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -38,6 +36,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     HashMap<UUID, String> streamViewMap; // It contains all the streams registered for write to.
     HashMap<UUID, String> shadowMap;
     CorfuRuntime rt;
+
+    long siteEpoch;
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private long recvSeq;
     private long shadowStreamStartAddress;
@@ -45,6 +45,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private PersistedWriterMetadata persistedWriterMetadata;
     HashMap<UUID, UUID> uuidMap;
     Phase phase;
+
 
     // The sequence number of the message, it has received.
     // It is expecting the message in order of the sequence.
@@ -69,14 +70,22 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
 
-    void clearTable(UUID streamID) {
+    void clearTable(long siteEpoch, UUID streamID) {
         boolean doRetry = true;
         int numRetry = 0;
         while (doRetry && numRetry++ < MAX_NUM_TX_RETRY) {
             try {
                 rt.getObjectsView().TXBegin();
-                SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-                TransactionalContext.getCurrentContext().logUpdate(streamID, entry);
+
+                if (siteEpoch == persistedWriterMetadata.getSiteEpoch() &&
+                        srcGlobalSnapshot == persistedWriterMetadata.getLastSnapStartTimestamp()) {
+                    SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+                    TransactionalContext.getCurrentContext().logUpdate(streamID, entry);
+                    persistedWriterMetadata.setSiteEpoch(siteEpoch);
+                    persistedWriterMetadata.setSrcBaseSnapshotStart(srcGlobalSnapshot);
+                    //System.out.print("\nClear table " + streamID );
+                }
+
                 rt.getObjectsView().TXEnd();
                 log.info("Clear stream {} ", streamID);
                 doRetry = false;
@@ -96,7 +105,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             if (phase == Phase.TransferPhase) {
                 usedStreamID = uuidMap.get(streamID);
             }
-            clearTable(usedStreamID);
+            clearTable(siteEpoch, usedStreamID);
         }
     }
 
@@ -118,13 +127,14 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * Reset snapshot writer state.
      * @param snapshot
      */
-    public void reset(long snapshot) {
-       srcGlobalSnapshot = snapshot;
-       recvSeq = 0;
+    public void reset(long siteEpoch, long snapshot) {
+        this.siteEpoch = siteEpoch;
+        srcGlobalSnapshot = snapshot;
+        recvSeq = 0;
 
-       //clear shadow streams and remember the start address
-       clearTables();
-       shadowStreamStartAddress = rt.getAddressSpaceView().getLogTail();
+        //clear shadow streams and remember the start address
+        clearTables();
+        shadowStreamStartAddress = rt.getAddressSpaceView().getLogTail();
     }
 
 
@@ -145,14 +155,25 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                 // read persistentMetadata's snapshot seq number
                 persistentSeqNum = persistedWriterMetadata.getLastSnapSeqNum();
 
-                if (currentSeqNum == (persistentSeqNum + 1)) {
+                if (siteEpoch == persistedWriterMetadata.getSiteEpoch() &&
+                        srcGlobalSnapshot == persistedWriterMetadata.getLastSnapStartTimestamp() &&
+                        currentSeqNum == (persistentSeqNum + 1)) {
                     for (SMREntry smrEntry : smrEntries) {
                         TransactionalContext.getCurrentContext().logUpdate(dstUUID, smrEntry);
                     }
+
+                    persistedWriterMetadata.setSiteEpoch(siteEpoch);
+                    persistedWriterMetadata.setSrcBaseSnapshotStart(srcGlobalSnapshot);
                     persistedWriterMetadata.setLastSnapSeqNum(currentSeqNum);
                     log.debug("Process the entries {}  and set sequence number {} ", smrEntries, currentSeqNum);
                 } else {
-                    log.warn("\nSkip the entry as the sequence number is not equal to {} + 1", persistentSeqNum);
+                    log.warn("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
+                            " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
+                            " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
+
+                    //System.out.print("\nSkip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
+                    //        " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
+                    //        " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
                 }
                 // We have succeed update successful, don't need retry any more.
                 doRetry = false;
@@ -246,7 +267,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long seqNum = 0;
         try {
             rt.getObjectsView().TXBegin();
-            if (persistedWriterMetadata.getLastSnapStartTimestamp() == ts && persistedWriterMetadata.getLastSnapTransferDoneTimestamp() <= ts) {
+            if (persistedWriterMetadata.getSiteEpoch() == entry.getMetadata().getSiteEpoch() &&
+                    persistedWriterMetadata.getLastSnapStartTimestamp() == ts &&
+                    persistedWriterMetadata.getLastSnapTransferDoneTimestamp() <= ts) {
+                persistedWriterMetadata.setSiteEpoch(entry.getMetadata().getSiteEpoch());
+                persistedWriterMetadata.setSrcBaseSnapshotStart(ts);
                 persistedWriterMetadata.setLastSnapTransferDoneTimestamp(ts);
                 seqNum = persistedWriterMetadata.getLastSnapSeqNum() + 1;
             }

@@ -18,9 +18,9 @@ public class LogReplicationEntry implements ICorfuPayload<LogReplicationEntry> {
         this.metadata = metadata;
     }
 
-    public LogReplicationEntry(MessageType type, UUID syncRequestId, long entryTS, long preTS, long snapshot, long sequence,
+    public LogReplicationEntry(MessageType type, long epoch, UUID syncRequestId, long entryTS, long preTS, long snapshot, long sequence,
                                byte[] payload) {
-        this.metadata = new LogReplicationEntryMetadata(type, syncRequestId, entryTS, preTS, snapshot, sequence);
+        this.metadata = new LogReplicationEntryMetadata(type, epoch, syncRequestId, entryTS, preTS, snapshot, sequence);
         this.payload = payload;
     }
 

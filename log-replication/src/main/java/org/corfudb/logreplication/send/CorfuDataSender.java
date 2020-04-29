@@ -6,14 +6,11 @@ import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.runtime.LogReplicationClient;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
-import org.corfudb.util.CFUtils;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
+
+import static java.lang.Thread.sleep;
 
 @Slf4j
 public class CorfuDataSender implements DataSender {
@@ -38,7 +35,13 @@ public class CorfuDataSender implements DataSender {
         CompletableFuture<LogReplicationEntry> tmp;
 
         for (LogReplicationEntry message :  messages) {
+            //System.out.print("\nsend message " + message.getMetadata());
             tmp = send(message);
+            try {
+                sleep(1000);
+            } catch (Exception e) {
+
+            }
             if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END) ||
                     message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
                 lastSentMessage = tmp;

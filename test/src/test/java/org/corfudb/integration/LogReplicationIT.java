@@ -5,23 +5,17 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.PersistedWriterMetadata;
+import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 import org.corfudb.logreplication.SourceManager;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.LogReplicationStateType;
 import org.corfudb.logreplication.fsm.ObservableAckMsg;
-
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.infrastructure.logreplication.PersistedWriterMetadata;
-
-import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
-
-import org.corfudb.logreplication.send.PersistedReaderMetadata;
-
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
-
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -41,15 +35,12 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 
 import static java.lang.Thread.sleep;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed;
 import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapApplyDone;
 import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart;
-import static org.corfudb.logreplication.send.PersistedReaderMetadata.PersistedMetaDataType.LastLogSync;
-import static org.corfudb.logreplication.send.PersistedReaderMetadata.PersistedMetaDataType.LastSnapSync;
+import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 
 /**
  * Start two servers, one as the src, the other as the dst.
@@ -62,6 +53,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
 
+    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
     static final UUID REMOTE_SITE_ID = UUID.randomUUID();
     static final String TABLE_PREFIX = "test";
 
@@ -222,17 +214,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
 
-        readerMetaDataTable = srcTestRuntime.getObjectsView()
-                .build()
-                .setStreamName(PersistedReaderMetadata.getPersistedReaderMetadataTableName(REMOTE_SITE_ID))
-                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
-                })
-                .setSerializer(Serializers.JSON)
-                .open();
-
         writerMetaDataTable = dstTestRuntime.getObjectsView()
                 .build()
-                .setStreamName(PersistedWriterMetadata.getPersistedWriterMetadataTableName(REMOTE_SITE_ID))
+                .setStreamName(PersistedWriterMetadata.getPersistedWriterMetadataTableName(PRIMARY_SITE_ID, REMOTE_SITE_ID))
                 .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                 })
                 .setSerializer(Serializers.JSON)
@@ -386,13 +370,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         System.out.println("****** Verify Data on Destination");
         verifyData(dstCorfuTables, srcDataForVerification);
 
+        // Reset expected messages for number of ACKs expected (log entry sync batches + 1 from snapshot sync)
+        expectedAckMessages = (NUM_KEYS) + 1;
+
         // Write Extra Data (for incremental / log entry sync)
         generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS*2);
         System.out.println("****** Verify Source Data for log entry (incremental updates)");
         verifyData(srcCorfuTables, srcDataForVerification);
 
-        // Reset expected messages for number of ACKs expected (log entry sync batches + 1 from snapshot sync)
-        expectedAckMessages = (NUM_KEYS) + 1;
 
         System.out.println("***** Start Log Entry Replication");
 
@@ -1176,7 +1161,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private SourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                               List<WAIT> waitConditions) throws InterruptedException {
         // Config
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, PRIMARY_SITE_ID, REMOTE_SITE_ID);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel());
@@ -1244,7 +1229,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Override
     public void update(Observable o, Object arg) {
         if (o == ackMessages) {
-            System.out.println("Ack " + ackMessages.getValue());
+            //System.out.println("Ack " + ackMessages.getValue());
             verifyExpectedAckMessage((ObservableAckMsg)o);
         } else if (o == errorsLogEntrySync) {
             verifyExpectedValue(expectedErrors, errorsLogEntrySync.getValue());
@@ -1269,7 +1254,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // If expected a ackTs, release semaphore / unblock the wait
         if (observableAckMsg.getDataMessage() != null) {
             LogReplicationEntry logReplicationEntry = observableAckMsg.getDataMessage();
-            System.out.println("ackMsg " + logReplicationEntry.getMetadata());
+            //System.out.print("\nackMsg " + logReplicationEntry.getMetadata());
             switch (testConfig.waitOn) {
                 case ON_ACK:
                     verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
@@ -1282,22 +1267,17 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        long lastSnapSync = readerMetaDataTable.get(LastSnapSync.getVal());
-
         long lastSnapStart = writerMetaDataTable.get(LastSnapStart.getVal());
         long lastSnapDone = writerMetaDataTable.get(LastSnapApplyDone.getVal());
 
-        System.out.println("\nlastSnapSync " + lastSnapSync + " lastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
-        assertThat(lastSnapStart == lastSnapSync).isTrue();
+        System.out.println("\nlastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
         assertThat(lastSnapStart == lastSnapDone).isTrue();
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogSync = readerMetaDataTable.get(LastLogSync.getVal());
         long lastLogProcessed = writerMetaDataTable.get(LastLogProcessed.getVal());
 
-        System.out.println("\nlastLogSync " + lastLogSync + " lastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp);
-        assertThat(lastLogProcessed == lastLogSync).isTrue();
+        System.out.println("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp);
         assertThat(expectedAckTimestamp == lastLogProcessed).isTrue();
     }
 
@@ -1308,6 +1288,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         ON_DATA_CONTROL_CALL,
         ON_RESCHEDULE_SNAPSHOT_SYNC,
         ON_SINK_RECEIVE,
+        //ON_SNAPSHOT_END,
         NONE
     }
 

@@ -4,9 +4,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
-import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.ObjectsView;
@@ -43,6 +43,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     // the sequence number of the message based on the globalBaseSnapshot
     private long sequence;
 
+    private long siteEpoch;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
@@ -61,7 +62,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         OpaqueEntry.serialize(buf, entry);
 
         currentMsgTs = entry.getVersion();
-        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, logEntryRequestId,
+        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, siteEpoch,logEntryRequestId,
                 currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
@@ -105,14 +106,17 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     continue;
                 }
                 LogReplicationEntry txMessage = generateMessage(opaqueEntry, logEntryRequestId);
+                //System.out.print("\nread a message " + txMessage.getMetadata());
                 return txMessage;
             }
-        } catch (TrimmedException e) {
-            log.warn("Caught a trimmed exception {}", e);
+        } catch (Exception e) {
+            log.warn("Caught an exception {}", e);
+            //System.out.print("\ncaught an exception " + e);
             throw e;
         }
 
         //TODO: this I added so it compiles (fix)
+        //System.out.print("\nread a message " + "no new data");
         return null;
     }
 
@@ -184,5 +188,10 @@ public class StreamsLogEntryReader implements LogEntryReader {
             txStream.seek(firstAddress);
             streamUpTo();
         }
+    }
+
+    @Override
+    public void setSiteEpoch(long siteEpoch) {
+        this.siteEpoch = siteEpoch;
     }
 }

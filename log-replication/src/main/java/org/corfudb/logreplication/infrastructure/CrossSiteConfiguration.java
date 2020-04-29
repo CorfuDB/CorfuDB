@@ -4,100 +4,66 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.AphInfoMsg;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteMsg;
 import org.corfudb.logreplication.runtime.LogReplicationRuntime;
 import org.corfudb.logreplication.runtime.LogReplicationRuntimeParameters;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 
-import java.io.File;
-import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
 
 @Slf4j
 public class CrossSiteConfiguration {
-    public static final String config_file = "/config/corfu/corfu_replication_config.properties";
+    final static String DEFAULT_CORFU_PORT_NUM = "9000";
 
-    private static final String DEFAULT_CORFU_PORT_NUM = "9000";
-    private static final String DEFAULT_PRIMARY_SITE_NAME = "primary_site";
-    private static final String DEFAULT_STANDBY_SITE_NAME = "standby_site";
-    private static final int NUM_NODES_PER_CLUSTER = 3;
-
-    private static final String PRIMARY_SITE_NAME = "primary_site";
-    private static final String STANDBY_SITE_NAME = "standby_site";
-    private static final String PRIMARY_SITE_CORFU_PORTNUM = "primary_site_corfu_portnumber";
-    private static final String STANDBY_SITE_CORFU_PORTNUM = "standby_site_corfu_portnumber";
-    private static final String LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM = "primary_site_portnumber";
-    private static final String LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM = "standby_site_portnumber";
-
-
-    private static final String PRIMARY_SITE_NODE = "primary_site_node";
-    private static final String STANDBY_SITE_NODE = "standby_site_node";
+    @Setter
+    @Getter
+    static String CorfuPortnum = DEFAULT_CORFU_PORT_NUM;
 
     @Getter
-    SiteInfo primarySite;
+    private long epoch;
+
+    @Getter
+    private SiteInfo primarySite;
 
     @Getter
     Map<String, SiteInfo> standbySites;
 
-    public CrossSiteConfiguration() {
-        readConfig();
+    public CrossSiteConfiguration(SiteConfigurationMsg siteConfigMsg) {
+        this.epoch = siteConfigMsg.getEpoch();
+        standbySites = new HashMap<>();
+        for (SiteMsg siteMsg : siteConfigMsg.getSiteList()) {
+            SiteInfo siteInfo = new SiteInfo(siteMsg);
+            if (siteMsg.getGmStatus() == GlobalManagerStatus.ACTIVE) {
+                primarySite = siteInfo;
+            } else if (siteMsg.getGmStatus() == GlobalManagerStatus.STANDBY) {
+                standbySites.put(siteMsg.getId(), siteInfo);
+            }
+        }
     }
 
-    private void readConfig() {
-        try {
-            File configFile = new File(config_file);
-            FileReader reader = new FileReader(configFile);
+    public CrossSiteConfiguration(long epoch, SiteInfo primarySite, Map<String, SiteInfo> standbySites) {
+        this.epoch = epoch;
+        this.primarySite = primarySite;
+        this.standbySites = standbySites;
+    }
 
-            Properties props = new Properties();
-            props.load(reader);
+    public SiteConfigurationMsg convert2msg() {
+        ArrayList<SiteMsg> siteMsgs = new ArrayList<>();
+        siteMsgs.add((primarySite.convert2msg()));
 
-            Set<String> names = props.stringPropertyNames();
-
-            // Setup primary site information
-            primarySite = new SiteInfo(props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME));
-            String corfuPortNum = props.getProperty(PRIMARY_SITE_CORFU_PORTNUM);
-            String portNum = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
-
-
-            for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
-                String nodeName = PRIMARY_SITE_NODE + i;
-                log.info("primary site ipaddress for node {}", nodeName);
-                if (!names.contains(nodeName)) {
-                    continue;
-                }
-                String ipAddress = props.getProperty(nodeName);
-                log.info("primary site ipaddress {} for node {}", ipAddress, nodeName);
-                NodeInfo nodeInfo = new NodeInfo(ipAddress, portNum, RoleType.PrimarySite, corfuPortNum);
-                primarySite.nodesInfo.add(nodeInfo);
-            }
-
-            // Setup backup site information
-            standbySites = new HashMap<>();
-            standbySites.put(STANDBY_SITE_NAME, new SiteInfo(props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME)));
-            corfuPortNum = props.getProperty(STANDBY_SITE_CORFU_PORTNUM);
-            portNum = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
-            for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
-                String nodeName = STANDBY_SITE_NODE + i;
-                log.info("standby site ipaddress for node {}", nodeName);
-                if (!names.contains(nodeName)) {
-                    continue;
-                }
-                String ipAddress = props.getProperty(STANDBY_SITE_NODE + i);
-                log.info("standby site ipaddress {} for node {}", ipAddress, i);
-                NodeInfo nodeInfo = new NodeInfo(ipAddress, portNum, RoleType.StandbySite, corfuPortNum);
-                standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);
-            }
-
-            reader.close();
-            log.info("Primary Site Info {}; Backup Site Info {}", primarySite, standbySites);
-        } catch (Exception e) {
-            log.warn("Caught an exception while reading the config file: {}", e);
+        for (SiteInfo siteInfo : standbySites.values()) {
+            siteMsgs.add(siteInfo.convert2msg());
         }
+
+        SiteConfigurationMsg configMsg = SiteConfigurationMsg.newBuilder().setEpoch(epoch).addAllSite(siteMsgs).build();
+
+        return configMsg;
     }
 
     public NodeInfo getNodeInfo(String endpoint) {
@@ -126,10 +92,12 @@ public class CrossSiteConfiguration {
         return null;
     }
 
-    static class SiteInfo {
-
+    public static class SiteInfo {
         @Getter
         String siteId;
+
+        @Getter
+        GlobalManagerStatus roleType; //standby or active
 
         @Getter
         @Setter
@@ -138,12 +106,45 @@ public class CrossSiteConfiguration {
         @Getter
         List<NodeInfo> nodesInfo;
 
-        public SiteInfo(String siteId) {
+        public SiteInfo(SiteMsg siteMsg) {
+            this.siteId = siteMsg.getId();
+            this.roleType = siteMsg.getGmStatus();
+            this.leader = null;
+            this.nodesInfo = new ArrayList<>();
+            for (AphInfoMsg aphInfoMsg : siteMsg.getAphList()) {
+                NodeInfo newNode = new NodeInfo(aphInfoMsg.getAddress(), Integer.toString(aphInfoMsg.getPort()), siteMsg.getGmStatus(), Integer.toString(aphInfoMsg.getCorfuPort()));
+                this.nodesInfo.add(newNode);
+            }
+        }
+
+        public SiteInfo(SiteInfo info, GlobalManagerStatus roleType) {
+            this.siteId = info.siteId;
+            this.roleType = roleType;
+            this.leader = info.leader;
+            this.nodesInfo = new ArrayList<>();
+            for ( NodeInfo nodeInfo : info.nodesInfo) {
+                NodeInfo newNode = new NodeInfo(nodeInfo.getIpAddress(), nodeInfo.getPortNum(), roleType, nodeInfo.corfuPortNum);
+                this.nodesInfo.add(newNode);
+            }
+        }
+
+        public SiteInfo(String siteId, GlobalManagerStatus roleType) {
             this.siteId = siteId;
+            this.roleType = roleType;
             nodesInfo = new ArrayList<>();
         }
 
-        public void setupLogReplicationRemoteRuntime(NodeInfo localNode) {
+        SiteMsg convert2msg() {
+            ArrayList<AphInfoMsg> aphInfoMsgs = new ArrayList<>();
+            for (NodeInfo nodeInfo : nodesInfo) {
+                aphInfoMsgs.add(nodeInfo.convert2msg());
+            }
+
+            SiteMsg siteMsg = SiteMsg.newBuilder().setId(siteId).setGmStatus(roleType).addAllAph(aphInfoMsgs).build();
+            return siteMsg;
+        }
+
+        public void setupLogReplicationRemoteRuntime(NodeInfo localNode, long siteEpoch) {
             for (NodeInfo nodeInfo : nodesInfo) {
                 LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
                         .localCorfuEndpoint(localNode.getCorfuEndpoint())
@@ -168,6 +169,7 @@ public class CrossSiteConfiguration {
                     resp = nodeInfo.runtime.queryLeadership();
                     if (resp.getEpoch() > epoch && resp.isLeader()) {
                         leaderNode = nodeInfo;
+                        epoch = resp.getEpoch();
                     }
                 }
             } catch (Exception e) {
@@ -184,26 +186,38 @@ public class CrossSiteConfiguration {
 
         @Override
         public String toString() {
-            return String.format("Cluster[%s] --- Nodes[%s]:  %s", siteId, nodesInfo.size(), nodesInfo);
+            return String.format("Cluster[%s] --- Nodes[%s]:  %s", getSiteId(), nodesInfo.size(), nodesInfo);
         }
     }
 
-
     @Data
-    public class NodeInfo {
-        RoleType roleType;
+    public static class NodeInfo {
+        //AphInfoMsg aphInfo;
+
+        GlobalManagerStatus roleType;
+
+        @Getter
         String ipAddress;
+
         String corfuPortNum;
+
         String portNum;
+
         boolean leader;
+
         LogReplicationRuntime runtime;
 
-        NodeInfo(String ipAddress, String portNum, RoleType type, String corfuPortNum) {
-            this.ipAddress = ipAddress;
-            this.portNum = portNum;
-            this.roleType = type;
+        NodeInfo(String ipAddress, String portNum, GlobalManagerStatus roleType, String corfuPortNum) {
             this.leader = false;
+            this.ipAddress = ipAddress;
+            this.roleType = roleType;
+            this.portNum = portNum;
             this.corfuPortNum = corfuPortNum;
+        }
+
+        public AphInfoMsg convert2msg() {
+            AphInfoMsg aphInfoMsg = AphInfoMsg.newBuilder().setAddress(ipAddress).setPort(Integer.parseInt(portNum)).setCorfuPort(Integer.parseInt(corfuPortNum)).build();
+            return aphInfoMsg;
         }
 
         public String getEndpoint() {
@@ -213,14 +227,10 @@ public class CrossSiteConfiguration {
         public String getCorfuEndpoint() {
             return ipAddress + ":" + corfuPortNum;
         }
+
         @Override
         public String toString() {
             return String.format("Role Type: %s, %s, %s", roleType, getEndpoint(), leader);
         }
-    }
-
-    enum RoleType {
-        PrimarySite,
-        StandbySite
     }
 }

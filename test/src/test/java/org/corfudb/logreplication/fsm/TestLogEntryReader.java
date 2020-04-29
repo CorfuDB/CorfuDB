@@ -21,4 +21,9 @@ public class TestLogEntryReader implements LogEntryReader {
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         // Read everything from start
     }
+
+    @Override
+    public void setSiteEpoch(long siteEpoch) {
+
+    }
 }

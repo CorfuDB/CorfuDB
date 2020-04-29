@@ -21,4 +21,6 @@ public interface LogEntryReader {
     LogReplicationEntry read(UUID logEntryRequestId);
 
     void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp);
+
+    void setSiteEpoch(long siteEpoch);
 }

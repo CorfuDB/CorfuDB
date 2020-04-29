@@ -1,19 +1,20 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * TxBuilder() is a layer that aggregates mutations made to CorfuStore protobuf tables
@@ -95,6 +96,34 @@ public class TxBuilder {
         Table<K, V, M> table = getTable(tableName);
         operations.add(() -> {
             table.update(key, value, metadata);
+        });
+        return this;
+    }
+
+    /**
+     *
+     * @param tableName      The talbeName to perform the update.
+     * @param updateEntry   The entry to be applied to the stream.
+     * @return TxBuilder Instance
+     */
+    public TxBuilder logUpdate(String tableName, SMREntry updateEntry) {
+
+        try {
+            if (tableRegistry.getTable(namespace, tableName) != null) {
+                throw new UnsupportedOperationException("The provided table is already opened. "
+                        + "The logUpdate operaton could not be applied to an opened table. table "
+                        + tableName + " in namespace " + namespace);
+            }
+        } catch (Exception e) {
+            //This is the correct exception.
+            if (!(e instanceof IllegalArgumentException)) {
+                throw e;
+            }
+        }
+
+        UUID streamId = UUID.nameUUIDFromBytes((TableRegistry.getFullyQualifiedTableName(namespace, tableName).getBytes()));
+        operations.add(() -> {
+        TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntry);
         });
         return this;
     }

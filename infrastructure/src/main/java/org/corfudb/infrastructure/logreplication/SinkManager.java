@@ -41,6 +41,8 @@ public class SinkManager implements DataReceiver {
     private SinkBufferManager sinkBufferManager;
     private StreamsSnapshotWriter snapshotWriter;
     private LogEntryWriter logEntryWriter;
+
+    @Getter
     private PersistedWriterMetadata persistedWriterMetadata;
     private RxState rxState;
 
@@ -48,6 +50,7 @@ public class SinkManager implements DataReceiver {
     private UUID snapshotRequestId = new UUID(0L, 0L);
 
     private int rxMessageCounter = 0;
+    private long siteEpoch = 0;
 
     // Count number of received messages, used for testing purposes
     @VisibleForTesting
@@ -69,7 +72,7 @@ public class SinkManager implements DataReceiver {
     }
 
     private void init() {
-        persistedWriterMetadata = new PersistedWriterMetadata(runtime, config.getRemoteSiteID());
+        persistedWriterMetadata = new PersistedWriterMetadata(runtime, 0, config.getSiteID(), config.getRemoteSiteID());
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, persistedWriterMetadata);
         logEntryWriter = new LogEntryWriter(runtime, config, persistedWriterMetadata);
         logEntryWriter.setTimestamp(persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
@@ -103,7 +106,8 @@ public class SinkManager implements DataReceiver {
     @Override
     public LogReplicationEntry receive(LogReplicationEntry message) {
         log.info("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
-
+        siteEpoch = Math.max(siteEpoch, message.getMetadata().getSiteEpoch());
+        //System.out.print("\nSink manager received " + message.getMetadata() + " while in " + rxState);
         if (!receivedValidMessage(message)) {
             // If we received a start marker for snapshot sync while in LOG_ENTRY_SYNC, switch rxState
             if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_START)) {
@@ -112,6 +116,8 @@ public class SinkManager implements DataReceiver {
                 // Invalid message // Drop the message
                 log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
                         message.getMetadata().getMessageMetadataType());
+                System.out.print("****Sink Manager in state " + rxState + " and received message {}. Dropping Message." +
+                        message.getMetadata());
                 return null;
             }
         }
@@ -141,14 +147,15 @@ public class SinkManager implements DataReceiver {
     /**
      * Signal the manager a snapshot sync is about to complete. This is required to transition to log sync.
      */
-    private LogReplicationEntry completeSnapshotApply() {
+    private LogReplicationEntry completeSnapshotApply(LogReplicationEntry inputEntry) {
         log.debug("Complete of a snapshot apply");
         //check if the all the expected message has received
         rxState = RxState.LOG_ENTRY_SYNC;
-        persistedWriterMetadata.setSrcBaseSnapshotDone();
+        persistedWriterMetadata.setSrcBaseSnapshotDone(inputEntry);
 
         // Prepare and Send Snapshot Sync ACK
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_REPLICATED,
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END,
+                siteEpoch,
                 snapshotRequestId,
                 persistedWriterMetadata.getLastProcessedLogTimestamp(),
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
@@ -212,7 +219,7 @@ public class SinkManager implements DataReceiver {
                 break;
             case SNAPSHOT_END:
                 snapshotWriter.snapshotTransferDone(message);
-                return completeSnapshotApply();
+                return completeSnapshotApply(message);
             default:
                 log.warn("Message type {} should not be applied as snapshot sync.", message.getMetadata().getMessageMetadataType());
                 break;
@@ -222,16 +229,17 @@ public class SinkManager implements DataReceiver {
     }
 
     private void initializeSnapshotSync(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry) {
+        long siteEpoch = entry.getMetadata().getSiteEpoch();
         long timestamp = entry.getMetadata().getSnapshotTimestamp();
 
         log.debug("Received snapshot sync start marker for {} on base snapshot timestamp {}",
                 entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
 
         // If we are just starting snapshot sync, initialize base snapshot start
-        timestamp = persistedWriterMetadata.setSrcBaseSnapshotStart(timestamp);
+        timestamp = persistedWriterMetadata.setSrcBaseSnapshotStart(siteEpoch, timestamp);
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
-        snapshotWriter.reset(timestamp);
+        snapshotWriter.reset(siteEpoch, timestamp);
 
         // Retrieve snapshot request ID to be used for ACK of snapshot sync complete
         snapshotRequestId = entry.getMetadata().getSyncRequestId();
