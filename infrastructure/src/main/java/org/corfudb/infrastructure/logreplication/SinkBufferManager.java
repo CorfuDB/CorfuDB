@@ -114,6 +114,7 @@ public class SinkBufferManager {
         }
 
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED,
+                entry.getMetadata().getSiteEpoch(),
                 entry.getMetadata().getSyncRequestId(), nextKey,
                 entry.getMetadata().getSnapshotTimestamp());
         return metadata;

@@ -24,7 +24,7 @@ public class LogReplicationConfig {
     /*
      * Unique identifier of the current site ID.
      */
-    private UUID siteID;
+    private UUID siteID = UUID.randomUUID();
 
     /*
      * Unique identifier of the remote/destination site ID.
@@ -40,8 +40,9 @@ public class LogReplicationConfig {
      * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
      * @param remoteSiteID Unique identifier of the remote/destination site.
      */
-    public LogReplicationConfig(Set<String> streamsToReplicate, @NonNull UUID remoteSiteID) {
+    public LogReplicationConfig(Set<String> streamsToReplicate, @NonNull UUID siteID, @NonNull UUID remoteSiteID) {
         this.streamsToReplicate = streamsToReplicate;
+        this.siteID = siteID;
         this.remoteSiteID = remoteSiteID;
     }
 
@@ -65,7 +66,7 @@ public class LogReplicationConfig {
             UUID remoteSiteId = UUID.fromString(prop.getProperty(REMOTE_SITE_UUID_KEY));
 
             log.info("Loaded log replication config: streams to replicate [{}], remote site id {}", streamsToReplicate, remoteSiteId);
-            return new LogReplicationConfig(streamsToReplicate, remoteSiteId);
+            return new LogReplicationConfig(streamsToReplicate, UUID.randomUUID(), remoteSiteId);
 
         } catch (Exception e) {
             log.error("Caught exception while reading log replication config file {}", filePath, e);
@@ -76,6 +77,6 @@ public class LogReplicationConfig {
 
     private static LogReplicationConfig getDefaultConfig() {
         Set<String> streamsToReplicate = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
-        return new LogReplicationConfig(streamsToReplicate, UUID.randomUUID());
+        return new LogReplicationConfig(streamsToReplicate, UUID.randomUUID(), UUID.randomUUID());
     }
 }

@@ -26,7 +26,6 @@ import java.util.function.Function;
 
 @Slf4j
 public class LogReplicationRuntime {
-
     /**
      * The parameters used to configure this {@link LogReplicationRuntime}.
      */
@@ -46,6 +45,7 @@ public class LogReplicationRuntime {
     /**
      * Log Replication Source Manager - to local Corfu Log Unit
      */
+    @Getter
     private SourceManager sourceManager;
 
     /**
@@ -55,7 +55,6 @@ public class LogReplicationRuntime {
     private final EventLoopGroup nettyEventLoop;
 
     public LogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters) {
-
         this.parameters = parameters;
 
         // Generate or set the NettyEventLoop
@@ -128,7 +127,7 @@ public class LogReplicationRuntime {
 
         // TODO (Anny) TEMP fix the tables to replicate
         Set<String> tablesToReplicate = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, UUID.randomUUID());
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, UUID.randomUUID(), UUID.randomUUID());
         log.info("Set Source Manager to connect to local Corfu on {}", parameters.getLocalCorfuEndpoint());
         sourceManager = new SourceManager(parameters.getLocalCorfuEndpoint(),
                 client, config);
@@ -162,5 +161,13 @@ public class LogReplicationRuntime {
 
     public void startLogEntrySync() {
         sourceManager.startReplication();
+    }
+
+    /***
+     * clean up router, stop source manager.
+     */
+    //TODO: stop the router etc.
+    public void stop() {
+        sourceManager.shutdown();
     }
 }

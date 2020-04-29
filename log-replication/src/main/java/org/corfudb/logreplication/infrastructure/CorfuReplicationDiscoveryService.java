@@ -1,10 +1,13 @@
 package org.corfudb.logreplication.infrastructure;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.util.NodeLocator;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
-import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.StandbySite;
-import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.PrimarySite;
+import java.util.concurrent.LinkedBlockingQueue;
+
+//import org.corfudb.utils.LogReplicationSiteInfo;
 
 /**
  * This class represents the Replication Discovery Service.
@@ -13,66 +16,120 @@ import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.R
  */
 @Slf4j
 public class CorfuReplicationDiscoveryService implements Runnable {
-    private final CorfuReplicationManager replicationManager;
-    private String localEndpoint;
 
-    public CorfuReplicationDiscoveryService(NodeLocator localEndpoint) {
+    /**
+     * Used by both primary site and standby site.
+     */
+    private final CorfuReplicationServerNode replicationServerNode;
+
+    /**
+     * Used by the primary site
+     */
+    @Getter
+    private final CorfuReplicationManager replicationManager;
+    private CorfuReplicationSiteManagerAdapter siteManager;
+    private String localEndpoint;
+    boolean shouldRun = true;
+    CrossSiteConfiguration crossSiteConfig;
+    CrossSiteConfiguration.NodeInfo nodeInfo = null;
+
+    /**
+     * A queue of events.
+     */
+    private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
+
+    public CorfuReplicationDiscoveryService(String endpoint, CorfuReplicationServerNode serverNode, CorfuReplicationSiteManagerAdapter siteManager) {
+        this.replicationServerNode = serverNode;
         this.replicationManager = new CorfuReplicationManager();
-        this.localEndpoint = localEndpoint.toEndpointUrl();
+        this.localEndpoint = endpoint;
+        this.siteManager = siteManager;
+        this.siteManager.setCorfuReplicationDiscoveryService(this);
     }
 
-    @Override
     public void run() {
-        while (true) {
+        siteManager.start();
+
+        while (shouldRun) {
             try {
-                log.info("Initiate Corfu Replication Discovery");
+                //discover the current site configuration.
+                runService();
 
-                // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
-                CrossSiteConfiguration crossSiteConfig = fetchSiteConfiguration();
-
-                // Get the current node information.
-                CrossSiteConfiguration.NodeInfo nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
-
-                // Acquire lock and set it in the node information
-                nodeInfo.setLeader(acquireLock());
-
-                if (nodeInfo.isLeader()) {
-                    if (nodeInfo.getRoleType() == PrimarySite) {
-                        crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
-                        log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
-                        try {
-                            replicationManager.setupReplicationLeaderRuntime(nodeInfo, crossSiteConfig);
-                        } catch (InterruptedException ie) {
-                            log.error("Corfu Replication Discovery Service is interrupted", ie);
-                            return;
+                // blocking on the event queue.
+                // will unblock untill there is a new epoch for site information.
+                synchronized (eventQueue) {
+                    while (true) {
+                        DiscoveryServiceEvent event = eventQueue.take();
+                        if (event.siteConfigMsg.getEpoch() > crossSiteConfig.getEpoch()) {
+                            break;
                         }
-                        replicationManager.startLogReplication(crossSiteConfig);
-                        return;
-                    } else if (nodeInfo.getRoleType() == StandbySite) {
-                        // Standby Site
-                        // The LogReplicationServer (server handler) will initiate the SinkManager
-                        log.info("Start as Sink (receiver) on node {} ", nodeInfo);
                     }
                 }
-
-                // Todo: Re-schedule periodically, attempt to acquire lock
-
-                // This class should keep state and re-schedule discovery,
-                // if nothing has changed nothing is done, if
-                // something changes it should stop previous replication.
+                replicationManager.stopLogReplication(crossSiteConfig);
             } catch (Exception e) {
-                log.error("Caught Exception while discovering remote sites, retry. ", e);
+                log.error("caught an exception ", e);
+                shouldRun = false;
+                if (e instanceof InterruptedException) {
+                    Thread.interrupted();
+                }
             }
         }
     }
 
-    /**
-     * Fetch Sites Configuration.
-     *
-     * @return cross-site configuration.
-     */
-    private CrossSiteConfiguration fetchSiteConfiguration() {
-        return new CrossSiteConfiguration();
+    public void runService() {
+        try {
+            log.info("Run Corfu Replication Discovery");
+            //System.out.print("\nRun Corfu Replication Discovery Service");
+
+            // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
+            crossSiteConfig = siteManager.fetchSiteConfig();
+            //System.out.print("\n Primary Site " + crossSiteConfig.getPrimarySite());
+
+            // Get the current node information.
+            nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
+
+            // Acquire lock and set it in the node information
+            nodeInfo.setLeader(acquireLock());
+
+            if (nodeInfo.isLeader()) {
+                if (nodeInfo.getRoleType() == GlobalManagerStatus.ACTIVE) {
+                    crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
+                    log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
+                    //System.out.print("\nStart as Source (sender/replicator) on node " + nodeInfo + " siteConig " + crossSiteConfig);
+
+                    try {
+                        replicationManager.setupReplicationLeaderRuntime(nodeInfo, crossSiteConfig);
+                    } catch (InterruptedException ie) {
+                        log.error("Corfu Replication Discovery Service is interrupted", ie);
+                        throw ie;
+                    }
+
+                    replicationManager.startLogReplication(crossSiteConfig);
+
+                    return;
+                } else if (nodeInfo.getRoleType() == GlobalManagerStatus.STANDBY) {
+                    // Standby Site
+                    // The LogReplicationServer (server handler) will initiate the SinkManager
+                    // Update the siteEpoch metadata.
+                    replicationServerNode.getLogReplicationServer().getSinkManager().getPersistedWriterMetadata().
+                            setupEpoch(crossSiteConfig.getEpoch());
+                    log.info("Start as Sink (receiver) on node {} ", nodeInfo);
+                    //System.out.print("\nStart as Sink (receiver) on node " + nodeInfo + " siteConig " + crossSiteConfig);
+                }
+            }
+            // Todo: Re-schedule periodically, attempt to acquire lock
+
+        } catch (Exception e) {
+                log.error("Caught Exception while discovering remote sites, retry. ", e);
+        } finally {
+            if (nodeInfo != null && nodeInfo.isLeader()) {
+                    releaseLock();
+            }
+        }
+    }
+
+    public synchronized void putEvent(DiscoveryServiceEvent event) {
+        eventQueue.add(event);
+        notifyAll();
     }
 
     /**
@@ -82,5 +139,30 @@ public class CorfuReplicationDiscoveryService implements Runnable {
      */
     private boolean acquireLock() {
         return true;
+    }
+
+    private void releaseLock() {
+
+    }
+
+    public enum DiscoveryServiceEventType {
+        DiscoverySite("SiteChange");
+
+        @Getter
+        String val;
+        DiscoveryServiceEventType(String newVal) {
+            val = newVal;
+        }
+    }
+
+    static class DiscoveryServiceEvent {
+        DiscoveryServiceEventType type;
+        @Getter
+        SiteConfigurationMsg siteConfigMsg;
+
+        DiscoveryServiceEvent(DiscoveryServiceEventType type, SiteConfigurationMsg siteConfigMsg) {
+            this.type = type;
+            this.siteConfigMsg = siteConfigMsg;
+        }
     }
 }

@@ -7,16 +7,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.logreplication.infrastructure.CrossSiteConfiguration;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.LogEntrySender;
-import org.corfudb.logreplication.send.PersistedReaderMetadata;
 import org.corfudb.logreplication.send.ReadProcessor;
 import org.corfudb.logreplication.send.SnapshotReader;
 import org.corfudb.logreplication.send.SnapshotSender;
 import org.corfudb.logreplication.send.StreamsLogEntryReader;
 import org.corfudb.logreplication.send.StreamsSnapshotReader;
-import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -96,6 +97,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 @Slf4j
 public class LogReplicationFSM {
 
+    private CrossSiteConfiguration siteConfig;
+
+    @Getter
+    private long siteEpoch;
+
     /**
      * Current state of the FSM.
      */
@@ -132,9 +138,26 @@ public class LogReplicationFSM {
     private ObservableValue numTransitions = new ObservableValue(0);
 
     /**
-     * Metadata to persist in the Sender
+     *
      */
-    PersistedReaderMetadata persistedReaderMetadata;
+    LogEntryReader logEntryReader;
+
+    /**
+     *
+     */
+    SnapshotReader snapshotReader;
+
+    /**
+     *
+     */
+    @Getter
+    long baseSnapshot = Address.NON_ADDRESS;
+
+    /**
+     *
+     */
+    @Getter
+    long ackedTimestamp = Address.NON_ADDRESS;
 
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
@@ -151,6 +174,7 @@ public class LogReplicationFSM {
         // Use stream-based readers for snapshot and log entry sync reads
         this(runtime, new StreamsSnapshotReader(runtime, config), dataSender,
                 new StreamsLogEntryReader(runtime, config), readProcessor, config, workers);
+
     }
 
     /**
@@ -169,6 +193,9 @@ public class LogReplicationFSM {
                              LogEntryReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
                              ExecutorService workers) {
 
+        this.snapshotReader = snapshotReader;
+        this.logEntryReader = logEntryReader;
+
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
         SnapshotSender snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, this);
@@ -181,7 +208,6 @@ public class LogReplicationFSM {
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build());
-        this.persistedReaderMetadata = new PersistedReaderMetadata(runtime, config.getRemoteSiteID());
 
         logReplicationFSMConsumer.submit(this::consume);
 
@@ -235,6 +261,7 @@ public class LogReplicationFSM {
      */
     private void consume() {
         try {
+            //System.out.print ("\nsrc state " + state.getType());
             if (state.getType() == LogReplicationStateType.STOPPED) {
                 log.info("Log Replication State Machine has been stopped. No more events will be processed.");
                 return;
@@ -243,7 +270,6 @@ public class LogReplicationFSM {
             // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
             //   Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
-
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
                 log.info("Log Replication FSM consume event {}", event);
             }
@@ -252,7 +278,7 @@ public class LogReplicationFSM {
                 if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC &&
                         state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
                     log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
-                    persistedReaderMetadata.setLastAckedTimestamp(event.getMetadata().getSyncTimestamp());
+                    ackedTimestamp = event.getMetadata().getSyncTimestamp();
                 }
             } else {
                 if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE) {
@@ -260,8 +286,7 @@ public class LogReplicationFSM {
                     if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC &&
                             state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
                         log.debug("Snapshot Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
-                        // Retrieve the base snapshot timestamp associated to this snapshot sync request from the send
-                        persistedReaderMetadata.setLastSentBaseSnapshotTimestamp(event.getMetadata().getSyncTimestamp());
+                        baseSnapshot = event.getMetadata().getSyncTimestamp();
                     }
                 }
 
@@ -273,6 +298,13 @@ public class LogReplicationFSM {
                     numTransitions.setValue(numTransitions.getValue() + 1);
                 } catch (IllegalTransitionException illegalState) {
                     log.debug("Illegal log replication event {} when in state {}", event.getType(), state.getType());
+                }
+            }
+
+            if (event.getType() == LogReplicationEventType.REPLICATION_STOP) {
+                System.out.print("\n****notify the stop replication is done");
+                synchronized (event) {
+                    event.notifyAll();
                 }
             }
 
@@ -295,5 +327,25 @@ public class LogReplicationFSM {
         from.onExit(to);
         to.clear();
         to.onEntry(from);
+    }
+
+    /**
+     * Start consumer again due to site switch.
+     * It will clean the queue first and prepare the new transfer
+     * @param siteConfig
+     */
+    public void startConsumer(CrossSiteConfiguration siteConfig) {
+        this.siteConfig = siteConfig;
+        if (state.getType() == LogReplicationStateType.STOPPED) {
+            eventQueue.clear();
+            this.state = states.get(LogReplicationStateType.INITIALIZED);
+            logReplicationFSMConsumer.submit(this::consume);
+        }
+    }
+
+    public void setSiteEpoch(long siteEpoch) {
+        this.siteEpoch = siteEpoch;
+        snapshotReader.setSiteEpoch(siteEpoch);
+        logEntryReader.setSiteEpoch(siteEpoch);
     }
 }
