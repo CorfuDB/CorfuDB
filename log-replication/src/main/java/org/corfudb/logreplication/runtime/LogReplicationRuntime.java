@@ -163,4 +163,12 @@ public class LogReplicationRuntime {
     public void startLogEntrySync() {
         sourceManager.startReplication();
     }
+
+    /***
+     * clean up router, stop source manager.
+     */
+    //TODO: stop the router etc.
+    public void stop() {
+        sourceManager.shutdown();
+    }
 }

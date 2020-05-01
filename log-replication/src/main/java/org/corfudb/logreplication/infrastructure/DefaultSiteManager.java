@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.infrastructure;
 
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
@@ -10,13 +11,11 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import static java.lang.Thread.sleep;
+
 @Slf4j
 public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
-    CrossSiteConfiguration crossSiteConfiguration;
-
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
-
-    private static final String DEFAULT_CORFU_PORT_NUM = "9000";
     private static final String DEFAULT_PRIMARY_SITE_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_SITE_NAME = "standby_site";
     private static final int NUM_NODES_PER_CLUSTER = 3;
@@ -32,7 +31,16 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     private static final String PRIMARY_SITE_NODE = "primary_site_node";
     private static final String STANDBY_SITE_NODE = "standby_site_node";
 
+    SiteManagerCallback siteManagerCallback;
+    Thread thread = new Thread(siteManagerCallback);
+
     DefaultSiteManager() {
+    }
+
+    public void start() {
+        siteManagerCallback = new SiteManagerCallback(this);
+        thread = new Thread(siteManagerCallback);
+        System.out.print("\nstart the listener");
     }
 
     public CrossSiteConfiguration readConfig() throws IOException {
@@ -83,22 +91,32 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             }
 
             reader.close();
-            crossSiteConfiguration = new CrossSiteConfiguration(primarySite, standbySites);
             log.info("Primary Site Info {}; Backup Site Info {}", primarySite, standbySites);
+            return new CrossSiteConfiguration(primarySite, standbySites);
         } catch (Exception e) {
             log.warn("Caught an exception while reading the config file: {}", e);
             throw e;
         }
-
-        return crossSiteConfiguration;
     }
 
     public CrossSiteConfiguration query() throws IOException {
-        crossSiteConfiguration = readConfig();
-        return crossSiteConfiguration;
+        return readConfig();
     }
 
-    public void siteChangeNotification() throws IOException {
-        update(query());
+    static class SiteManagerCallback implements Runnable {
+        CorfuReplicationSiteManagerAdapter siteManager;
+
+        SiteManagerCallback(CorfuReplicationSiteManagerAdapter siteManagerAdapter) {
+            this.siteManager = siteManagerAdapter;
+        }
+
+        @SneakyThrows
+        @Override
+        public void run() {
+            while (true) {
+                sleep(100000);
+                siteManager.update(siteManager.query());
+            }
+        }
     }
 }
