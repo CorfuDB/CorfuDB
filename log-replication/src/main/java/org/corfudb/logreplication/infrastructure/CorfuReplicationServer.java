@@ -181,17 +181,15 @@ public class CorfuReplicationServer {
      * @param args command line argument strings
      */
     public static void main(String[] args) {
-        CorfuReplicationServer corfuReplicationServer = new CorfuReplicationServer();
+        DefaultSiteManager siteManager = new DefaultSiteManager();
+
+        CorfuReplicationServer corfuReplicationServer = new CorfuReplicationServer(siteManager);
         try {
             corfuReplicationServer.startServer(args);
         } catch (Throwable err) {
             log.error("Exit. Unrecoverable error", err);
                 throw err;
         }
-    }
-
-    CorfuReplicationServer() {
-        siteManagerAdapter = new DefaultSiteManager();
     }
 
     CorfuReplicationServer(CorfuReplicationSiteManagerAdapter adapter) {
