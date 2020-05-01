@@ -23,9 +23,6 @@ public class CorfuReplicationManager {
     // Keep map of remote site endpoints and the associated log replication client
     Map<String, LogReplicationRuntime> logReplicationRuntimes = new HashMap<>();
 
-    public CorfuReplicationManager() {
-    }
-
     enum LogReplicationNegotiationResult {
         SNAPSHOT_SYNC,
         LOG_ENTRY_SYNC,
@@ -76,6 +73,17 @@ public class CorfuReplicationManager {
         }
     }
 
+    public void stopLogReplication(CrossSiteConfiguration config) {
+        for(Map.Entry<String, LogReplicationRuntime> entry: logReplicationRuntimes.entrySet()) {
+            String endpoint = entry.getKey();
+            LogReplicationRuntime runtime = entry.getValue();
+
+            LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
+            log.info("Log Replication Negotiation with {} result {}", endpoint, negotiationResult);
+            runtime.stop();
+        }
+    }
+
     private void startReplication(LogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult) {
 
         switch (negotiationResult) {
@@ -113,6 +121,4 @@ public class CorfuReplicationManager {
         // TODO (TEMP): for now default always to snapshot sync
         return LogReplicationNegotiationResult.SNAPSHOT_SYNC;
     }
-
-
 }
