@@ -268,7 +268,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public static void writeLogEntryMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         UUID uuid = UUID.randomUUID();
         org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams, uuid);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid, uuid);
         LogEntryWriter writer = new LogEntryWriter(rt, config, persistedWriterMetadata);
 
         if (msgQ.isEmpty()) {
@@ -337,7 +337,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public static void writeSnapLogMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         UUID uuid = UUID.randomUUID();
         LogReplicationConfig config = new LogReplicationConfig(streams, uuid);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid, uuid);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
 
         if (msgQ.isEmpty()) {
@@ -590,7 +590,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public void testPersistentTable() throws IOException {
         setupEnv();
         try {
-            PersistedWriterMetadata meta = new PersistedWriterMetadata(writerRuntime, UUID.randomUUID());
+            PersistedWriterMetadata meta = new PersistedWriterMetadata(writerRuntime, UUID.randomUUID(), UUID.randomUUID());
             meta.getLastProcessedLogTimestamp();
         } catch (Exception e) {
             e.getStackTrace();
