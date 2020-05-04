@@ -163,7 +163,6 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             if (!mapA1.keySet().containsAll(mapAStandby.keySet())) {
                 System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
                 System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
-                sleep(2000);
             }
 
             for (int i = 0; i < 2*numWrites ; i++) {
