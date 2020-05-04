@@ -9,6 +9,7 @@ import org.junit.Test;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class CorfuReplicationE2EIT extends AbstractIT {
@@ -28,7 +29,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             final String activeEndpoint = DEFAULT_HOST + ":" + activeSiteCorfuPort;
             final String standbyEndpoint = DEFAULT_HOST + ":" + standbySiteCorfuPort;
 
-            final int numWrites = 1000;
+            final int numWrites = 10;
 
             // Start Single Corfu Node Cluster on Active Site
             activeCorfu = runServer(activeSiteCorfuPort, true);
@@ -44,7 +45,14 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             activeRuntime.parseConfigurationString(activeEndpoint);
             activeRuntime.connect();
 
-            CorfuRuntime standbyRuntime = new CorfuRuntime(standbyEndpoint).connect();
+            CorfuRuntime activeRuntime1 = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+            activeRuntime1.parseConfigurationString(activeEndpoint);
+            activeRuntime1.connect();
+
+            //CorfuRuntime standbyRuntime = new CorfuRuntime(standbyEndpoint).setTransactionLogging(true).connect();
+            CorfuRuntime standbyRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+            standbyRuntime.parseConfigurationString(standbyEndpoint);
+            standbyRuntime.connect();
 
             // Write to StreamA on Active Site
             CorfuTable<String, Integer> mapA = activeRuntime.getObjectsView()
@@ -75,16 +83,16 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             assertThat(mapAStandby.size()).isEqualTo(0);
 
             // Start Log Replication Server on Standby Site
-            executorService.submit(() -> {
-                System.out.println("Start Corfu Log Replication Server on 9010");
-                CorfuReplicationServer.main(new String[]{"9010"});
-            });
+            CorfuReplicationServer serverA = new CorfuReplicationServer(new String[]{"9010"});
+            Thread siteAThread = new Thread(serverA);
+            System.out.println("Start Corfu Log Replication Server on 9010");
+            siteAThread.start();
 
-            // Start Log Replication Server on Active Site
-            executorService.submit(() -> {
-                System.out.println("Start Corfu Log Replication Server on 9020");
-                CorfuReplicationServer.main(new String[]{"9020"});
-            });
+            CorfuReplicationServer serverB = new CorfuReplicationServer(new String[]{"9020"});
+            Thread siteBThread = new Thread(serverB);
+            System.out.println("Start Corfu Log Replication Server on 9020");
+            siteBThread.start();
+
 
             // Wait until data is fully replicated
             System.out.println("Wait ... Data is being replicated ...");
@@ -113,6 +121,53 @@ public class CorfuReplicationE2EIT extends AbstractIT {
 
             for (int i = 0; i < (numWrites + numWrites/2) ; i++) {
                 assertThat(mapAStandby.containsKey(String.valueOf(i)));
+            }
+            assertThat(mapAStandby.keySet().containsAll(mapA.keySet()));
+
+            System.out.print("\nwait for site switch " + activeRuntime.getAddressSpaceView().getLogTail());
+            String primary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
+            String currentPimary;
+
+            // Wait till site role change and new transfer done.
+            currentPimary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
+            assertThat(currentPimary).isEqualTo(primary);
+            System.out.print("\nWait for site switch " + activeRuntime.getAddressSpaceView().getLogTail());
+            System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
+            System.out.print("\nmapA1 keySet " + mapA.keySet() + " mapAstandby " + mapAStandby.keySet());
+
+            serverA.getSiteManagerAdapter().getNotification().acquire();
+            currentPimary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
+            assertThat(currentPimary).isNotEqualTo(primary);
+            primary = currentPimary;
+            System.out.print("\nVerified Site Role Change" + activeRuntime.getAddressSpaceView().getLogTail());
+
+            // Add new updates (deltas)
+            for (int i=numWrites/2; i < numWrites; i++) {
+                standbyRuntime.getObjectsView().TXBegin();
+                mapAStandby.put(String.valueOf(numWrites + i), numWrites + i);
+                standbyRuntime.getObjectsView().TXEnd();
+            }
+
+            // Verify data is present in Standby Site
+            System.out.println("\nWait ... Data is being replicated ...");
+
+            // Write to StreamA on Active Site
+            CorfuTable<String, Integer> mapA1 = activeRuntime1.getObjectsView()
+                    .build()
+                    .setStreamName(streamA)
+                    .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
+                    })
+                    .open();
+
+            // Will fix this part later
+            if (!mapA1.keySet().containsAll(mapAStandby.keySet())) {
+                System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
+                System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
+                sleep(2000);
+            }
+
+            for (int i = 0; i < 2*numWrites ; i++) {
+                //assertThat(mapA.containsKey(String.valueOf(i)));
             }
 
         } finally {
