@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.infrastructure;
 
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.collections.StreamingSubscriptionContext;
 
 import java.io.File;
 import java.io.FileReader;
@@ -10,11 +10,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.Semaphore;
 
 import static java.lang.Thread.sleep;
 
 @Slf4j
 public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
+    public static final int changeInveral = 10000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
     private static final String DEFAULT_PRIMARY_SITE_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_SITE_NAME = "standby_site";
@@ -35,15 +37,17 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     Thread thread = new Thread(siteManagerCallback);
 
     DefaultSiteManager() {
+        notification = new Semaphore(0);
     }
 
     public void start() {
         siteManagerCallback = new SiteManagerCallback(this);
         thread = new Thread(siteManagerCallback);
-        System.out.print("\nstart the listener");
+        thread.start();
+        //System.out.print("\nstart the listener");
     }
 
-    public CrossSiteConfiguration readConfig() throws IOException {
+    public static CrossSiteConfiguration readConfig() throws IOException {
         CrossSiteConfiguration.SiteInfo primarySite;
         Map<String, CrossSiteConfiguration.SiteInfo> standbySites = new HashMap<>();
         try {
@@ -103,19 +107,56 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         return readConfig();
     }
 
+    /**
+     * Change one of the standby as the primary and primary become the standby
+     * @return
+     */
+    public static CrossSiteConfiguration changePrimary(CrossSiteConfiguration siteConfig) {
+        CrossSiteConfiguration.SiteInfo oldPrimary = new CrossSiteConfiguration.SiteInfo(siteConfig.getPrimarySite(), CrossSiteConfiguration.RoleType.StandbySite);
+        Map<String, CrossSiteConfiguration.SiteInfo> standbys = new HashMap<>();
+        CrossSiteConfiguration.SiteInfo newPrimary = null;
+        CrossSiteConfiguration.SiteInfo standby;
+
+        standbys.put(oldPrimary.getSiteId(), oldPrimary);
+        for (String endpoint : siteConfig.getStandbySites().keySet()) {
+            CrossSiteConfiguration.SiteInfo info = siteConfig.getStandbySites().get(endpoint);
+            if (newPrimary == null) {
+                newPrimary = new CrossSiteConfiguration.SiteInfo(info, CrossSiteConfiguration.RoleType.PrimarySite);
+            } else {
+                standby = new CrossSiteConfiguration.SiteInfo(info, CrossSiteConfiguration.RoleType.StandbySite);
+                standbys.put(standby.getSiteId(), standby);
+            }
+        }
+
+        CrossSiteConfiguration newSiteConf = new CrossSiteConfiguration(newPrimary, standbys);
+        return newSiteConf;
+    }
+
+    /**
+     * Testing purpose to generate site role change.
+     */
     static class SiteManagerCallback implements Runnable {
         CorfuReplicationSiteManagerAdapter siteManager;
+        private StreamingSubscriptionContext notification;
 
         SiteManagerCallback(CorfuReplicationSiteManagerAdapter siteManagerAdapter) {
             this.siteManager = siteManagerAdapter;
         }
 
-        @SneakyThrows
         @Override
         public void run() {
+            boolean shouldChange = true;
             while (true) {
-                sleep(100000);
-                siteManager.update(siteManager.query());
+                try {
+                    System.out.print("\nwill sleep then change the site role");
+                    sleep(changeInveral);
+                    if (shouldChange) {
+                        siteManager.update(changePrimary(readConfig()));
+                        shouldChange = false;
+                    }
+                } catch (Exception e) {
+                    log.error("caught an exception " + e);
+                }
             }
         }
     }

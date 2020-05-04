@@ -62,6 +62,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
 
+    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
     static final UUID REMOTE_SITE_ID = UUID.randomUUID();
     static final String TABLE_PREFIX = "test";
 
@@ -232,7 +233,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         writerMetaDataTable = dstTestRuntime.getObjectsView()
                 .build()
-                .setStreamName(PersistedWriterMetadata.getPersistedWriterMetadataTableName(REMOTE_SITE_ID))
+                .setStreamName(PersistedWriterMetadata.getPersistedWriterMetadataTableName(PRIMARY_SITE_ID, REMOTE_SITE_ID))
                 .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                 })
                 .setSerializer(Serializers.JSON)
