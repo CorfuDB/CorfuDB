@@ -8,14 +8,9 @@ import org.corfudb.logreplication.runtime.LogReplicationRuntime;
 import org.corfudb.logreplication.runtime.LogReplicationRuntimeParameters;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 
-import java.io.File;
-import java.io.FileReader;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
 
 @Slf4j
 public class CrossSiteConfiguration {
@@ -69,6 +64,16 @@ public class CrossSiteConfiguration {
 
         @Getter
         List<NodeInfo> nodesInfo;
+
+        public SiteInfo(SiteInfo info, RoleType roleType) {
+            this.siteId = info.siteId;
+            this.roleType = roleType;
+            this.nodesInfo = new ArrayList<>(info.nodesInfo);
+            for ( NodeInfo nodeInfo : info.nodesInfo) {
+                NodeInfo newNode = new NodeInfo(nodeInfo.getIpAddress(), nodeInfo.getPortNum(), roleType, nodeInfo.getCorfuPortNum());
+                this.nodesInfo.add(newNode);
+            }
+        }
 
         public SiteInfo(String siteId, RoleType roleType) {
             this.siteId = siteId;

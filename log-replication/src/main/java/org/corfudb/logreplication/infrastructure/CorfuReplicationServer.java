@@ -3,6 +3,7 @@ package org.corfudb.logreplication.infrastructure;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.core.joran.spi.JoranException;
+import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
@@ -22,7 +23,7 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
  * A discovery mechanism will enable a site as Source (Sender) and another as Sink (Receiver).
  */
 @Slf4j
-public class CorfuReplicationServer {
+public class CorfuReplicationServer implements Runnable {
 
     /**
      * This string defines the command line arguments,
@@ -171,32 +172,40 @@ public class CorfuReplicationServer {
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
+    @Getter
     private CorfuReplicationSiteManagerAdapter siteManagerAdapter = null;
 
     final ServerContext serverContext = null;
+    String[] args;
 
-    /**
-     * Main program entry point.
-     *
-     * @param args command line argument strings
-     */
+
     public static void main(String[] args) {
-        DefaultSiteManager siteManager = new DefaultSiteManager();
+        CorfuReplicationSiteManagerAdapter siteManagerAdapter = new DefaultSiteManager();
+        CorfuReplicationServer corfuReplicationServer = new CorfuReplicationServer(args, siteManagerAdapter);
+        corfuReplicationServer.run();
+    }
 
-        CorfuReplicationServer corfuReplicationServer = new CorfuReplicationServer(siteManager);
+    public CorfuReplicationServer(String[] inputs) {
+        this.args = inputs;
+        this.siteManagerAdapter = new DefaultSiteManager();
+    }
+
+    CorfuReplicationServer(String[] inputs, CorfuReplicationSiteManagerAdapter adapter) {
+        this.args = inputs;
+        this.siteManagerAdapter = adapter;
+    }
+
+    @Override
+    public void run() {
         try {
-            corfuReplicationServer.startServer(args);
+            this.startServer();
         } catch (Throwable err) {
             log.error("Exit. Unrecoverable error", err);
-                throw err;
+            throw err;
         }
     }
 
-    CorfuReplicationServer(CorfuReplicationSiteManagerAdapter adapter) {
-        siteManagerAdapter = adapter;
-    }
-
-    private void startServer(String[] args) {
+    private void startServer() {
             // Parse the options given, using docopt.
             Map<String, Object> opts = new Docopt(USAGE)
                     .withVersion(GitRepositoryState.getRepositoryState().describe)
@@ -231,8 +240,6 @@ public class CorfuReplicationServer {
             while (!shutdownServer) {
                 final ServerContext serverContext = new ServerContext(opts);
                 try {
-                    activeServer = new CorfuReplicationServerNode(serverContext);
-
                     // Start LogReplicationDiscovery Service, responsible for
                     // acquiring lock, retrieving Site Manager Info and processing this info
                     // so this node is initialized as Source (sender) or Sink (receiver)
@@ -240,6 +247,8 @@ public class CorfuReplicationServer {
                     Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(endpoint, siteManagerAdapter);
                     Thread replicationDiscoveryThread = new Thread(replicationDiscoveryRunnable);
                     replicationDiscoveryThread.start();
+
+                    activeServer = new CorfuReplicationServerNode(serverContext);
 
                     // Start Corfu Replication Server Node
                     activeServer.startAndListen();
@@ -339,7 +348,8 @@ public class CorfuReplicationServer {
             println("");
         }
 
-        static class CleanupRunnable implements Runnable {
+
+    static class CleanupRunnable implements Runnable {
             CorfuReplicationServer server;
             CleanupRunnable(CorfuReplicationServer server) {
                 this.server = server;
