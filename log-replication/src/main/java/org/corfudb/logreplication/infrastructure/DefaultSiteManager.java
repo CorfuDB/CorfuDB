@@ -148,7 +148,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             boolean shouldChange = true;
             while (true) {
                 try {
-                    System.out.print("\nwill sleep then change the site role");
+                    //System.out.print("\nwill sleep then change the site role");
                     sleep(changeInveral);
                     if (shouldChange) {
                         siteManager.update(changePrimary(readConfig()));
