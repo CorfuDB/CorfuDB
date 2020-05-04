@@ -4,14 +4,20 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.io.IOException;
+import java.util.concurrent.Semaphore;
 
 public abstract class CorfuReplicationSiteManagerAdapter {
     @Getter
     @Setter
     CorfuReplicationDiscoveryService corfuReplicationDiscoveryService;
 
+    @Getter
     CrossSiteConfiguration crossSiteConfiguration;
     String localEndpoint;
+
+    //For testing purpose to notify the change of siteConfig.
+    @Getter
+    Semaphore notification;
 
     public CrossSiteConfiguration fetchSiteConfiguration() throws IOException {
         if (crossSiteConfiguration != null) {
@@ -38,6 +44,7 @@ public abstract class CorfuReplicationSiteManagerAdapter {
             crossSiteConfiguration = newConfiguration;
             //notify the site change
             getCorfuReplicationDiscoveryService().notification.release();
+            notification.release();
         }
 
         return crossSiteConfiguration;

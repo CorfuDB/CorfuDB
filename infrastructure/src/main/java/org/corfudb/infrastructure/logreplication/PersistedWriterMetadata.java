@@ -32,11 +32,11 @@ public class PersistedWriterMetadata {
 
     CorfuRuntime runtime;
 
-    public PersistedWriterMetadata(CorfuRuntime rt, UUID dst) {
+    public PersistedWriterMetadata(CorfuRuntime rt, UUID primary, UUID dst) {
         this.runtime = rt;
         writerMetaDataTable = rt.getObjectsView()
                 .build()
-                .setStreamName(getPersistedWriterMetadataTableName(dst))
+                .setStreamName(getPersistedWriterMetadataTableName(primary, dst))
                 .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                 })
                 .setSerializer(Serializers.PRIMITIVE)
@@ -65,8 +65,8 @@ public class PersistedWriterMetadata {
         }
     }
 
-    public static String getPersistedWriterMetadataTableName(UUID dst) {
-        return TABLE_PREFIX_NAME + dst.toString();
+    public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {
+        return TABLE_PREFIX_NAME + primarySite.toString() + "-to-" + dst.toString();
     }
 
 
