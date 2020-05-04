@@ -18,8 +18,6 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class CorfuReplicationManager {
 
-    final static int BACKOFF_MS = 1000;
-
     // Keep map of remote site endpoints and the associated log replication client
     Map<String, LogReplicationRuntime> logReplicationRuntimes = new HashMap<>();
 
@@ -89,16 +87,19 @@ public class CorfuReplicationManager {
         switch (negotiationResult) {
             case SNAPSHOT_SYNC:
                 log.info("Start Snapshot Sync Replication");
+                System.out.print("\nStart Snapshot Sync Replication ");
                 runtime.startSnapshotSync();
                 break;
             case LOG_ENTRY_SYNC:
                 log.info("Start Log Entry Sync Replication");
+                System.out.print("\nStart Log Entry Sync Replication");
                 runtime.startLogEntrySync();
                 break;
             case LEADERSHIP_LOST:
             case CONNECTION_LOST:
             case UNKNOWN:
                 log.info("Invalid Negotiation result. Re-trigger discovery.");
+                System.out.print("\nInvalid Negotiation result. Re-trigger discovery.");
                 // Re-Trigger Discovery Leader Receiver
                 break;
         }

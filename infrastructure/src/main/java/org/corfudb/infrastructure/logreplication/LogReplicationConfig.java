@@ -24,7 +24,7 @@ public class LogReplicationConfig {
     /*
      * Unique identifier of the current site ID.
      */
-    private UUID siteID;
+    private UUID siteID = UUID.randomUUID();
 
     /*
      * Unique identifier of the remote/destination site ID.

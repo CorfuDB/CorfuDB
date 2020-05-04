@@ -1,10 +1,7 @@
 package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.util.NodeLocator;
-
 import java.util.concurrent.Semaphore;
 
 import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.StandbySite;
@@ -51,10 +48,12 @@ public class CorfuReplicationDiscoveryService implements Runnable {
 
     public void runService() {
         try {
-            log.info("Initiate Corfu Replication Discovery");
+            log.info("Run Corfu Replication Discovery");
+            //System.out.print("\nRun Corfu Replication Discovery Service");
 
             // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
             crossSiteConfig = siteManager.fetchSiteConfiguration();
+            //System.out.print("\n Primary Site " + crossSiteConfig.getPrimarySite());
 
             // Get the current node information.
             nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
