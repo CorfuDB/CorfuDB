@@ -32,6 +32,8 @@ import static org.corfudb.integration.ReplicationReaderWriterIT.writeLogEntryMsg
 
 public class ReplicationReaderWriterTest extends AbstractViewTest {
     static private final int START_VAL = 1;
+    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
+    static final UUID REMOTE_SITE_ID = UUID.randomUUID();
 
     CorfuRuntime srcDataRuntime = null;
     CorfuRuntime dstDataRuntime = null;
@@ -62,7 +64,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         writerRuntime = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect();
 
         UUID uuid = UUID.randomUUID();
-        LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(), uuid);
+        LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(), PRIMARY_SITE_ID, REMOTE_SITE_ID);
         PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(readerRuntime, uuid, uuid);
         logEntryReader = new StreamsLogEntryReader(readerRuntime, config);
         logEntryWriter = new LogEntryWriter(writerRuntime, config, persistedWriterMetadata);
@@ -86,7 +88,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
     }
 
     void readMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
+        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
@@ -101,7 +103,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
     void writeMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         UUID uuid = UUID.randomUUID();
-        LogReplicationConfig config = new LogReplicationConfig(streams, uuid);
+        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid, uuid);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
 

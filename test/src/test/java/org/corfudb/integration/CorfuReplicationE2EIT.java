@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationServer;
+import org.corfudb.logreplication.infrastructure.CorfuReplicationSiteManagerAdapter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
@@ -13,7 +14,7 @@ import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class CorfuReplicationE2EIT extends AbstractIT {
-
+    static final int MAX_RETRY = 4;
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
@@ -124,22 +125,22 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             }
             assertThat(mapAStandby.keySet().containsAll(mapA.keySet()));
 
-            System.out.print("\nwait for site switch " + activeRuntime.getAddressSpaceView().getLogTail());
             String primary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
-            String currentPimary;
+            String currentPimary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
 
             // Wait till site role change and new transfer done.
-            currentPimary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
             assertThat(currentPimary).isEqualTo(primary);
-            System.out.print("\nWait for site switch " + activeRuntime.getAddressSpaceView().getLogTail());
-            System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
+            System.out.print("\ncurrent standbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
             System.out.print("\nmapA1 keySet " + mapA.keySet() + " mapAstandby " + mapAStandby.keySet());
+            System.out.print("\nwait for site switch " + activeRuntime.getAddressSpaceView().getLogTail());
 
-            serverA.getSiteManagerAdapter().getNotification().acquire();
+            CorfuReplicationSiteManagerAdapter siteManagerAdapter = serverA.getSiteManagerAdapter();
+            synchronized (siteManagerAdapter) {
+                serverA.getSiteManagerAdapter().wait();
+            }
             currentPimary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
             assertThat(currentPimary).isNotEqualTo(primary);
-            primary = currentPimary;
-            System.out.print("\nVerified Site Role Change" + activeRuntime.getAddressSpaceView().getLogTail());
+            System.out.print("\nVerified Site Role Change " + activeRuntime.getAddressSpaceView().getLogTail());
 
             // Add new updates (deltas)
             for (int i=numWrites/2; i < numWrites; i++) {
@@ -160,7 +161,8 @@ public class CorfuReplicationE2EIT extends AbstractIT {
                     .open();
 
             // Will fix this part later
-            if (!mapA1.keySet().containsAll(mapAStandby.keySet())) {
+            int retry = 0;
+            while (!mapA1.keySet().containsAll(mapAStandby.keySet()) && retry++ < MAX_RETRY) {
                 System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
                 System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
             }
