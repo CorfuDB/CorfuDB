@@ -52,6 +52,9 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     static private final int NUM_KEYS = 10;
     static private final int NUM_STREAMS = 2;
     static public final int NUM_TRANSACTIONS = 100;
+    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
+    static final UUID REMOTE_SITE_ID = UUID.randomUUID();
+
 
     Process server1;
     Process server2;
@@ -242,12 +245,12 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void readLogEntryMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) throws
             TrimmedException {
-        LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
+        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         for (int i = 0; i < NUM_TRANSACTIONS; i++) {
-            org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message = reader.read(UUID.randomUUID());
+            org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message = reader.read(PRIMARY_SITE_ID);
 
             if (message == null) {
                 System.out.println("**********data message is null");
@@ -266,9 +269,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeLogEntryMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        UUID uuid = UUID.randomUUID();
-        org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams, uuid);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid, uuid);
+        org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         LogEntryWriter writer = new LogEntryWriter(rt, config, persistedWriterMetadata);
 
         if (msgQ.isEmpty()) {
@@ -315,14 +317,14 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void readSnapLogMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, UUID.randomUUID());
+        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
         int cnt = 0;
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
             cnt++;
-            SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
+            SnapshotReadMessage snapshotReadMessage = reader.read(PRIMARY_SITE_ID);
             for (org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data : snapshotReadMessage.getMessages()) {
                 msgQ.add(data);
                 //System.out.println("generate msg " + cnt);
@@ -335,9 +337,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeSnapLogMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        UUID uuid = UUID.randomUUID();
-        LogReplicationConfig config = new LogReplicationConfig(streams, uuid);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid, uuid);
+        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
 
         if (msgQ.isEmpty()) {
@@ -590,7 +591,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public void testPersistentTable() throws IOException {
         setupEnv();
         try {
-            PersistedWriterMetadata meta = new PersistedWriterMetadata(writerRuntime, UUID.randomUUID(), UUID.randomUUID());
+            PersistedWriterMetadata meta = new PersistedWriterMetadata(writerRuntime, PRIMARY_SITE_ID, REMOTE_SITE_ID);
             meta.getLastProcessedLogTimestamp();
         } catch (Exception e) {
             e.getStackTrace();

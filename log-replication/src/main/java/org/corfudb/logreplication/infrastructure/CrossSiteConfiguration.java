@@ -14,13 +14,15 @@ import java.util.Map;
 
 @Slf4j
 public class CrossSiteConfiguration {
+    long epoch;
     @Getter
     SiteInfo primarySite;
 
     @Getter
     Map<String, SiteInfo> standbySites;
 
-    public CrossSiteConfiguration(SiteInfo primarySite, Map<String, SiteInfo> standbySites) {
+    public CrossSiteConfiguration(long epoch, SiteInfo primarySite, Map<String, SiteInfo> standbySites) {
+        this.epoch = epoch;
         this.primarySite = primarySite;
         this.standbySites = standbySites;
     }

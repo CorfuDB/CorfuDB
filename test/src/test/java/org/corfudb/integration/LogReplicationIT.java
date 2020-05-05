@@ -1177,7 +1177,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private SourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                               List<WAIT> waitConditions) throws InterruptedException {
         // Config
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, REMOTE_SITE_ID);
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, PRIMARY_SITE_ID, REMOTE_SITE_ID);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel());
