@@ -19,4 +19,9 @@ public class EmptySnapshotReader implements SnapshotReader {
     public void reset(long snapshotTimestamp) {
 
     }
+
+    @Override
+    public void setSiteEpoch(long siteEpoch) {
+
+    }
 }
