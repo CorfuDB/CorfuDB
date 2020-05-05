@@ -13,43 +13,39 @@ public abstract class CorfuReplicationSiteManagerAdapter {
 
     @Getter
     CrossSiteConfiguration crossSiteConfiguration;
-    String localEndpoint;
 
-    //For testing purpose to notify the change of siteConfig.
-    @Getter
-    Semaphore notification;
-
-    public CrossSiteConfiguration fetchSiteConfiguration() throws IOException {
-        if (crossSiteConfiguration != null) {
-            return crossSiteConfiguration;
-        } else {
-            return update(query());
-        }
-    }
-
-    synchronized CrossSiteConfiguration update(CrossSiteConfiguration newConfiguration) {
+    public synchronized CrossSiteConfiguration fetchSiteConfiguration() throws IOException {
         if (crossSiteConfiguration == null) {
-            crossSiteConfiguration = newConfiguration;
-
-        } else if (newConfiguration.getPrimarySite().getSiteId() == crossSiteConfiguration.getPrimarySite().getSiteId() &&
-                    newConfiguration.getNodeInfo(localEndpoint).getRoleType() == crossSiteConfiguration.getNodeInfo(localEndpoint).getRoleType()) {
-            //If the primary doesn't change, and the current node's role type doesn't change do nothing
-            return crossSiteConfiguration;
-        } else {
-            //TODO: enforce stop replication work and get into idle state
-            //need to call disconnect to stop the current router?
-            // for each runtime
-            // logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
-            getCorfuReplicationDiscoveryService().getReplicationManager().stopLogReplication(crossSiteConfiguration);
-            crossSiteConfiguration = newConfiguration;
-            //notify the site change
-            getCorfuReplicationDiscoveryService().notification.release();
-            notification.release();
+            crossSiteConfiguration = query();
         }
-
         return crossSiteConfiguration;
     }
 
-    public abstract CrossSiteConfiguration query() throws IOException;
+    /**
+     * Will be called when the site change and a new configuration is sent over
+     * @param newConfiguration
+     * @return
+     */
+    synchronized void update(CrossSiteConfiguration newConfiguration) {
+        if (crossSiteConfiguration == null) {
+            //If the the config hasn't been initialized, set the config
+            crossSiteConfiguration = newConfiguration;
+        } else if (newConfiguration.epoch > crossSiteConfiguration.epoch) {
+            //If the newCongig has higher epoch, update it
+
+            //TODO: enforce stop replication work and get into idle state
+            //need to call disconnect to stop the current router?
+            getCorfuReplicationDiscoveryService().getReplicationManager().stopLogReplication(crossSiteConfiguration);
+            crossSiteConfiguration = newConfiguration;
+
+            //System.out.print("\nnotify the site change");
+            notifyAll();
+        }
+    }
+
+    public synchronized CrossSiteConfiguration query() throws IOException {
+        return null;
+    };
+
     public abstract void start();
 }

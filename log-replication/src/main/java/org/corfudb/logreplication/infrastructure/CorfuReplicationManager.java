@@ -67,7 +67,7 @@ public class CorfuReplicationManager {
 
             LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
             log.info("Log Replication Negotiation with {} result {}", endpoint, negotiationResult);
-            startReplication(runtime, negotiationResult);
+            startReplication(config.epoch, runtime, negotiationResult);
         }
     }
 
@@ -82,8 +82,8 @@ public class CorfuReplicationManager {
         }
     }
 
-    private void startReplication(LogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult) {
-
+    private void startReplication(long siteEpoch, LogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult) {
+        runtime.getSourceManager().getLogReplicationFSM().setSiteEpoch(siteEpoch);
         switch (negotiationResult) {
             case SNAPSHOT_SYNC:
                 log.info("Start Snapshot Sync Replication");

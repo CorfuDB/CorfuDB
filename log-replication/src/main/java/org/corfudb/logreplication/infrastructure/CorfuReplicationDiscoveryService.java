@@ -2,7 +2,6 @@ package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import java.util.concurrent.Semaphore;
 
 import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.StandbySite;
 import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.PrimarySite;
@@ -19,7 +18,6 @@ public class CorfuReplicationDiscoveryService implements Runnable {
     private CorfuReplicationSiteManagerAdapter siteManager;
     private String localEndpoint;
     boolean shouldRun = true;
-    Semaphore notification;
     CrossSiteConfiguration crossSiteConfig;
     CrossSiteConfiguration.NodeInfo nodeInfo = null;
 
@@ -28,20 +26,26 @@ public class CorfuReplicationDiscoveryService implements Runnable {
         this.localEndpoint = endpoint;
         this.siteManager = siteManager;
         this.siteManager.setCorfuReplicationDiscoveryService(this);
-        this.notification = new Semaphore(1);
     }
 
     public void run() {
         siteManager.start();
+
         while (shouldRun) {
             try {
-                notification.drainPermits();
-                runService();
-                notification.acquire();
+                //notification.drainPermits();
+                synchronized (siteManager) {
+                    runService();
+                    siteManager.wait();
+                    //System.out.print("\n *****site switch");
+                }
                 replicationManager.stopLogReplication(crossSiteConfig);
             } catch (Exception e) {
                 log.error("caught an exception ", e);
                 shouldRun = false;
+                if (e instanceof InterruptedException) {
+                    Thread.interrupted();
+                }
             }
         }
     }
