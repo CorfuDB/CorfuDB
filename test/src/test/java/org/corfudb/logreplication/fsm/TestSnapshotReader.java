@@ -18,6 +18,7 @@ import java.util.UUID;
  * wraps the payload in the LogReplicationEntry.
  */
 public class TestSnapshotReader implements SnapshotReader {
+    long siteEpoch = 0;
 
     final int FIRST_ADDRESS = 2;
 
@@ -45,7 +46,7 @@ public class TestSnapshotReader implements SnapshotReader {
             Object data = runtime.getAddressSpaceView().read((long)i).getPayload(runtime);
             // For testing we don't have access to the snapshotSyncId so we fill in with a random UUID
             // and overwrite it in the TestDataSender with the correct one, before sending the message out
-            LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_MESSAGE,
+            LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_MESSAGE, siteEpoch,
                     snapshotRequestId, i, config.getNumEntries(), UUID.randomUUID());
             messages.add(new LogReplicationEntry(metadata, (byte[])data));
             globalIndex++;
@@ -57,6 +58,11 @@ public class TestSnapshotReader implements SnapshotReader {
     @Override
     public void reset(long snapshotTimestamp) {
         globalIndex = FIRST_ADDRESS;
+    }
+
+    @Override
+    public void setSiteEpoch(long siteEpoch) {
+        this.siteEpoch = siteEpoch;
     }
 
     public void setBatchSize(int batchSize) {

@@ -16,6 +16,7 @@ import static java.lang.Thread.sleep;
 
 @Slf4j
 public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
+    public static long epoch = 0;
     public static final int changeInveral = 10000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
     private static final String DEFAULT_PRIMARY_SITE_NAME = "primary_site";
@@ -96,7 +97,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
 
             reader.close();
             log.info("Primary Site Info {}; Backup Site Info {}", primarySite, standbySites);
-            return new CrossSiteConfiguration(primarySite, standbySites);
+            return new CrossSiteConfiguration(epoch++, primarySite, standbySites);
         } catch (Exception e) {
             log.warn("Caught an exception while reading the config file: {}", e);
             throw e;
@@ -128,7 +129,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             }
         }
 
-        CrossSiteConfiguration newSiteConf = new CrossSiteConfiguration(newPrimary, standbys);
+        CrossSiteConfiguration newSiteConf = new CrossSiteConfiguration(epoch++, newPrimary, standbys);
         return newSiteConf;
     }
 

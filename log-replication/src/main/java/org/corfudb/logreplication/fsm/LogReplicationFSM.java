@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.logreplication.SourceManager;
+import org.corfudb.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.logreplication.send.PersistedReaderMetadata;
@@ -96,6 +98,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 @Slf4j
 public class LogReplicationFSM {
 
+    @Getter
+    private long siteEpoch;
+
     /**
      * Current state of the FSM.
      */
@@ -137,6 +142,16 @@ public class LogReplicationFSM {
     PersistedReaderMetadata persistedReaderMetadata;
 
     /**
+     *
+     */
+    LogEntryReader logEntryReader;
+
+    /**
+     *
+     */
+    SnapshotReader snapshotReader;
+
+    /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
      * @param runtime Corfu Runtime
@@ -151,6 +166,7 @@ public class LogReplicationFSM {
         // Use stream-based readers for snapshot and log entry sync reads
         this(runtime, new StreamsSnapshotReader(runtime, config), dataSender,
                 new StreamsLogEntryReader(runtime, config), readProcessor, config, workers);
+
     }
 
     /**
@@ -168,6 +184,9 @@ public class LogReplicationFSM {
     public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                              LogEntryReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
                              ExecutorService workers) {
+
+        this.snapshotReader = snapshotReader;
+        this.logEntryReader = logEntryReader;
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
@@ -295,5 +314,11 @@ public class LogReplicationFSM {
         from.onExit(to);
         to.clear();
         to.onEntry(from);
+    }
+
+    public void setSiteEpoch(long siteEpoch) {
+        this.siteEpoch = siteEpoch;
+        snapshotReader.setSiteEpoch(siteEpoch);
+        logEntryReader.setSiteEpoch(siteEpoch);
     }
 }
