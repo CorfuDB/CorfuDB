@@ -48,6 +48,7 @@ public class SinkManager implements DataReceiver {
     private UUID snapshotRequestId = new UUID(0L, 0L);
 
     private int rxMessageCounter = 0;
+    private long siteEpoch = 0;
 
     // Count number of received messages, used for testing purposes
     @VisibleForTesting
@@ -103,7 +104,7 @@ public class SinkManager implements DataReceiver {
     @Override
     public LogReplicationEntry receive(LogReplicationEntry message) {
         log.info("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
-
+        siteEpoch = Math.max(siteEpoch, message.getMetadata().getEpoch());
         if (!receivedValidMessage(message)) {
             // If we received a start marker for snapshot sync while in LOG_ENTRY_SYNC, switch rxState
             if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_START)) {
@@ -149,6 +150,7 @@ public class SinkManager implements DataReceiver {
 
         // Prepare and Send Snapshot Sync ACK
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_REPLICATED,
+                siteEpoch,
                 snapshotRequestId,
                 persistedWriterMetadata.getLastProcessedLogTimestamp(),
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),

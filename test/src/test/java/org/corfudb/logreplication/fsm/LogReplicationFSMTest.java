@@ -45,6 +45,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
     private static final int WAIT_TIME = 100;
+    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
+    static final UUID REMOTE_SITE_ID = UUID.randomUUID();
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -430,7 +432,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
             case STREAMS:
                 // Default implementation used for Log Replication (stream-based)
                 LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME),
-                        UUID.randomUUID());
+                        PRIMARY_SITE_ID, REMOTE_SITE_ID);
                 snapshotReader = new StreamsSnapshotReader(getNewRuntime(getDefaultNode()).connect(),
                         logReplicationConfig);
                 dataSender = new TestDataSender();
@@ -440,7 +442,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET, UUID.randomUUID()),
+                new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET, PRIMARY_SITE_ID, REMOTE_SITE_ID),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
