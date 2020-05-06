@@ -1,7 +1,12 @@
 package org.corfudb.logreplication.fsm;
 
+import org.corfudb.format.Types;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.integration.ReplicationReaderWriterIT;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.OpaqueEntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.infrastructure.logreplication.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.PersistedWriterMetadata;
@@ -11,16 +16,33 @@ import org.corfudb.logreplication.send.SnapshotReadMessage;
 import org.corfudb.logreplication.send.StreamsLogEntryReader;
 import org.corfudb.logreplication.send.StreamsSnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.StreamOptions;
+import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.runtime.view.stream.OpaqueStream;
+import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Test;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.integration.ReplicationReaderWriterIT.NUM_TRANSACTIONS;
 import static org.corfudb.integration.ReplicationReaderWriterIT.generateTransactions;
 import static org.corfudb.integration.ReplicationReaderWriterIT.openStreams;
@@ -148,5 +170,102 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
         //verify data with hashtable
         verifyData("after writing log entry at dst", dstTables, hashMap);
+    }
+
+    @Test
+    public void testUFOWithLogUpdate() throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+        //setup();
+        //start runtime 1, populate some data for table A, table C
+        String namespace = "default_namespace";
+        String tableAName = "tableA";
+        String tableBName = "tableB";
+        String tableCName = "tableC";
+
+        //start runtime 1, populate some data for table A, table C
+        CorfuRuntime runtime1 = getDefaultRuntime().setTransactionLogging(true).connect();
+        CorfuStore corfuStore1 = new CorfuStore(runtime1);
+
+        Table<Uuid, Uuid, Uuid> tableA = corfuStore1.openTable(namespace, tableAName,
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+
+        Table<Uuid, Uuid, Uuid> tableB = corfuStore1.openTable(namespace, tableBName,
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+
+        Table<Uuid, Uuid, Uuid> tableC = corfuStore1.openTable(namespace, tableCName,
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+
+        UUID uuidA = CorfuRuntime.getStreamID(tableA.getFullyQualifiedTableName());
+        UUID uuidB = CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName());
+        UUID uuidC = CorfuRuntime.getStreamID(tableC.getFullyQualifiedTableName());
+        System.out.print("\n uuidA " + uuidA + " uuidB " + uuidB + " uuidC " + uuidC);
+
+        for (int i = 0; i < 4; i ++) {
+            UUID uuid = UUID.randomUUID();
+            Uuid key = Uuid.newBuilder()
+                    .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
+                    .build();
+            corfuStore1.tx(namespace).update(tableAName, key, key, key).commit();
+        }
+
+        //start runtime 2, open A, B as a stream and C as an UFO
+        CorfuRuntime runtime2 = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect();
+        CorfuStore corfuStore2 = new CorfuStore(runtime2);
+        Table<Uuid, Uuid, Uuid> tableC2 = corfuStore2.openTable(namespace, tableCName,
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+
+        StreamOptions options = StreamOptions.builder()
+                .ignoreTrimmed(false)
+                .cacheEntries(false)
+                .build();
+
+        //Can we do a seek after open to ignore all entries that are earlier
+        Stream streamA = (new OpaqueStream(runtime2, runtime2.getStreamsView().
+                get(uuidA, options))).streamUpTo(runtime2.getAddressSpaceView().getLogTail());
+
+        //OpaqueStream txStream = new OpaqueStream(runtime2, runtime2.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID));
+        IStreamView txStream = runtime2.getStreamsView()
+                .getUnsafe(ObjectsView.TRANSACTION_STREAM_ID, StreamOptions.builder()
+                        .cacheEntries(false)
+                        .build());
+        long tail = runtime2.getAddressSpaceView().getLogTail();
+
+        Iterator<OpaqueEntry> iterator = streamA.iterator();
+        while (iterator.hasNext()) {
+            CorfuStoreMetadata.Timestamp timestamp = corfuStore2.getTimestamp();
+            TxBuilder txBuilder = corfuStore2.tx(namespace);
+            txBuilder.begin();
+
+            //runtime2.getObjectsView().TXBegin();
+
+            UUID uuid = UUID.randomUUID();
+            Uuid key = Uuid.newBuilder()
+                    .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
+                    .build();
+            txBuilder.update(tableCName, key, key, key);
+            OpaqueEntry opaqueEntry = iterator.next();
+            for( SMREntry smrEntry : opaqueEntry.getEntries().get(uuidA)) {
+                AbstractTransactionalContext contxt = TransactionalContext.getCurrentContext();
+                if (contxt == null) {
+                    System.out.print("\n the contxt is null");
+                } else {
+                    contxt.logUpdate(uuidB, smrEntry);
+                }
+            }
+            txBuilder.commitOnly(timestamp);
+            System.out.print("\n tail " + runtime2.getAddressSpaceView().getLogTail());
+        }
+
+        //verify data at B and C with runtime 1
+        System.out.print("\nseek to tail " + tail);
+        txStream.seek(tail);
+         Iterator<ILogData> iterator1 = txStream.streamUpTo(runtime2.getAddressSpaceView().getLogTail()).iterator();
+        while(iterator1.hasNext()) {
+            ILogData data = iterator1.next();
+            data.getStreams().contains(uuidB);
+            System.out.print("\n Data " + data.getStreams());
+            //assertThat(smrEntry).isNotEqualTo(null);
+        }
+
+        assertThat(tableA.getCorfuTable().size()).isEqualTo(tableB.getCorfuTable().size());
     }
 }

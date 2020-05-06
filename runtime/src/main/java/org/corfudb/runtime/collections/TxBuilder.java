@@ -183,4 +183,23 @@ public class TxBuilder {
             operations.clear();
         }
     }
+
+    public void begin() {
+        txBegin();
+    }
+
+    public void commitOnly() {
+        commitOnly(null);
+    }
+
+    public void commitOnly(final Timestamp timestamp) {
+        this.timestamp = timestamp;
+        try {
+            operations.forEach(Runnable::run);
+        } finally {
+            txEnd();
+            operations.clear();
+        }
+
+    }
 }
