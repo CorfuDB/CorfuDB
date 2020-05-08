@@ -1,5 +1,5 @@
 syntax = "proto3";
-package org.corfudb.utils.replication;
+package org.corfudb.utils;
 
 message LogReplicationMetadataKey {
   string key = 1;
