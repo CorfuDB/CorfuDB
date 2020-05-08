@@ -53,6 +53,7 @@ import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.SUFFIX_TRIM;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 
@@ -409,6 +410,23 @@ public class LogUnitServer extends AbstractServer {
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
         return getState() == ServerState.READY;
+    }
+
+    /**
+     * Suffix trim the log unit server via the BatchProcessor.
+     * Warning: Clears all data after local commit tail. Only used for healed node.
+     *
+     */
+    @ServerHandler(type = CorfuMsgType.SUFFIX_TRIM)
+    private synchronized void suffixTrim(CorfuPayloadMsg<Long> msg,
+                                         ChannelHandlerContext ctx, IServerRouter r) {
+        log.info("LogUnit Server Suffix Trim request received.");
+        batchWriter.addTask(SUFFIX_TRIM, msg)
+                .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()))
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
     }
 
     /**

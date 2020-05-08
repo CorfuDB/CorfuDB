@@ -72,6 +72,7 @@ public enum CorfuMsgType {
     RESET_LOGUNIT(47, new TypeToken<CorfuPayloadMsg<Long>>(){}, true, false),
     LOG_ADDRESS_SPACE_REQUEST(48, TypeToken.of(CorfuMsg.class)),
     LOG_ADDRESS_SPACE_RESPONSE(49, new TypeToken<CorfuPayloadMsg<StreamsAddressResponse>>(){}),
+    SUFFIX_TRIM(69, new TypeToken<CorfuPayloadMsg<Long>>() {}),
 
     WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
     ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),

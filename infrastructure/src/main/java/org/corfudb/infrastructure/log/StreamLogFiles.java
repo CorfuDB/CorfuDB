@@ -11,13 +11,13 @@ import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -30,6 +30,7 @@ import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.Address;
 
 import javax.annotation.Nullable;
 import java.io.File;
@@ -156,6 +157,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     /**
      * Create stream log directory if not exists
+     *
      * @return total capacity of the file system that owns the log files.
      */
     private long initStreamLogDirectory() {
@@ -192,7 +194,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * This method will scan the log (i.e. read all log segment files)
      * on this LU and create a map of stream offsets and the global
      * addresses seen.
-     *
+     * <p>
      * consecutive segments from [startSegment, endSegment]
      */
     private void initializeLogMetadata() {
@@ -205,18 +207,16 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         // Note: if a checkpoint END record is not found (i.e., incomplete) this data is not considered
         // for stream trim mark computation.
         for (long currentSegment = tailSegment; currentSegment >= startingSegment; currentSegment--) {
-            SegmentHandle segment = getSegmentHandleForAddress(currentSegment * RECORDS_PER_LOG_FILE + 1);
-            try {
+            long segmentAddress = currentSegment * RECORDS_PER_LOG_FILE + 1;
+            try (SegmentHandle segment = getSegmentHandleForAddress(segmentAddress)) {
                 for (Long address : segment.getKnownAddresses().keySet()) {
                     // skip trimmed entries
                     if (address < dataStore.getStartingAddress()) {
                         continue;
                     }
-                    LogData logEntry = read(address);
-                    logMetadata.update(logEntry, true);
+                    LogData logData = read(address);
+                    logMetadata.update(logData, true);
                 }
-            } finally {
-                segment.close();
             }
         }
 
@@ -225,6 +225,39 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         long end = System.currentTimeMillis();
         log.info("initializeStreamTails: took {} ms to load {}, log start {}", end - start, logMetadata, getTrimMark());
     }
+
+    /**
+     * This method will scan the log (i.e. read all log segment files)
+     * on this LU and create a map of stream offsets and the global
+     * addresses seen. It also validate checksum for each log entry by force.
+     * <p>
+     * consecutive segments from [startSegment, endSegment]
+     */
+    private void rebuildLogMetadataWithValidation() {
+        long startingSegment = getStartingSegment();
+        long tailSegment = dataStore.getTailSegment();
+
+        for (long currentSegment = tailSegment; currentSegment >= startingSegment; currentSegment--) {
+            long segmentAddress = currentSegment * RECORDS_PER_LOG_FILE + 1;
+            try (SegmentHandle segment = getSegmentHandleForSuffixTrim(segmentAddress)) {
+                readAddressSpace(segment, true);
+                for (Long address : segment.getKnownAddresses().keySet()) {
+                    // skip trimmed entries
+                    if (isTrimmed(address)) {
+                        continue;
+                    }
+                    LogData logData = read(address);
+                    logMetadata.update(logData, true);
+                }
+            } catch (IOException e) {
+                log.debug("Error when rebuild log metadata from segment {}", currentSegment);
+                throw new IllegalStateException(e);
+            }
+        }
+    }
+
+
+
 
     /**
      * Write the header for a Corfu log file.
@@ -341,6 +374,82 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         // Trim address space maps.
         logMetadata.prefixTrim(address);
+    }
+
+    @Override
+    public void suffixTrim() {
+
+        // Have a global tail copy is necessary, since degrade to reset is dependent on it
+        long globalTailCopy = logMetadata.getGlobalTail();
+
+        try {
+            long committedTail = dataStore.getCommittedTail();
+
+            // Check if committed tail is initialized
+            if (committedTail == Address.NON_ADDRESS) {
+                throw new IllegalStateException(String.format("Local committed tail is not " +
+                                "initialized, committedTail: %s, globalTail: %s",
+                        committedTail, globalTailCopy));
+            }
+
+            // Check if committed tail is not less than starting address
+            if (isTrimmed(committedTail)) {
+                throw new IllegalStateException(String.format("Local committed tail is trimmed, " +
+                                "committedTail: %s, globalTail: %s",
+                        committedTail, globalTailCopy));
+            }
+
+            // Check if committed tail is greater than global tail
+            if (committedTail > globalTailCopy) {
+                throw new IllegalStateException(String.format("Local committed tail is greater " +
+                                "than global tail, committedTail: %s, globalTail: %s",
+                        committedTail, globalTailCopy));
+            }
+
+            // Close all segment handlers
+            long tailSegment = getSegmentIndexForAddress(Math.max(globalTailCopy, 0L));
+            closeSegmentHandlers(tailSegment);
+
+            // Delete suffix log files
+            // If committed tail splits a segment into two sections
+            // [start, committedTail, end] -> left part is committed
+            // It is easier and safer to swipe this whole segment.
+            // Otherwise whole segment is committed.
+            long committedSegment = getSegmentIndexForAddress(committedTail);
+            long firstSegmentTBD = isTheLastAddressInASegment(committedTail) ?
+                    committedSegment + 1 : committedSegment;
+            deleteFilesMatchingFilter(file -> {
+                try {
+                    String segmentStr = file.getName().split("\\.")[0];
+                    long segment = Long.parseLong(segmentStr);
+                    return segment >= firstSegmentTBD && segment <= tailSegment;
+                } catch (Exception e) {
+                    log.warn("suffixTrim: ignoring file {}", file.getName());
+                    return false;
+                }
+            });
+
+            // Update tail segment
+            long newTailSegment = Math.max(firstSegmentTBD - 1, 0);
+            dataStore.resetTailSegment();
+            dataStore.updateTailSegment(newTailSegment);
+
+            // Rebuild logMetadata and validate checksum by force
+            logMetadata = new LogMetadata();
+            rebuildLogMetadataWithValidation();
+
+            // Update committed tail
+            dataStore.resetTailSegment();
+            updateCommittedTail(logMetadata.getGlobalTail());
+        } catch (RuntimeException e) {
+            log.debug("suffixTrim: degrade to reset", e);
+            logMetadata.updateGlobalTail(globalTailCopy);
+            reset();
+            return;
+        }
+
+        log.info("suffixTrim: Completed, new end segment {}, new global tail {}",
+                dataStore.getTailSegment(), logMetadata.getGlobalTail());
     }
 
     private boolean isTrimmed(long address) {
@@ -493,10 +602,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @throws IOException IO exception
      */
     private Metadata parseMetadata(FileChannel fileChannel, String segmentFile) throws IOException {
-        long actualMetaDataSize = fileChannel.size() - fileChannel.position();
-        if (actualMetaDataSize < METADATA_SIZE) {
+        long remainingSize = fileChannel.size() - fileChannel.position();
+        if (remainingSize < METADATA_SIZE) {
             log.error("Meta data has wrong size. Actual size: {}, expected: {}",
-                    actualMetaDataSize, METADATA_SIZE
+                    remainingSize, METADATA_SIZE
             );
             return null;
         }
@@ -607,10 +716,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      *
      * @param channel  file channel
      * @param metadata meta data
+     * @param fileName filename
+     * @param force    validate checksum by force
      * @return an log entry
      * @throws IOException IO exception
      */
-    private LogEntry parseEntry(FileChannel channel, Metadata metadata, String fileName)
+    private LogEntry parseEntry(FileChannel channel, Metadata metadata, String fileName, boolean force)
             throws IOException {
 
         if (metadata == null) {
@@ -627,7 +738,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             return null;
         }
 
-        if (verify && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
+        if ((force || verify) && metadata.getPayloadChecksum() != Checksum.getChecksum(buffer.array())) {
             String errorMessage = getDataCorruptionErrorMessage(
                     "Checksum mismatch detected while trying to read file",
                     channel, fileName
@@ -654,6 +765,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param segment Object containing state for the segment to be read
      */
     private void readAddressSpace(SegmentHandle segment) throws IOException {
+        readAddressSpace(segment, false);
+    }
+
+    private void readAddressSpace(SegmentHandle segment, boolean force) throws IOException {
         FileChannel fileChannel = segment.getWriteChannel();
         fileChannel.position(0);
 
@@ -667,7 +782,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         while (fileChannel.size() - fileChannel.position() > 0) {
             long channelOffset = fileChannel.position();
             Metadata metadata = parseMetadata(fileChannel, segment.getFileName());
-            LogEntry entry = parseEntry(fileChannel, metadata, segment.getFileName());
+            LogEntry entry = parseEntry(fileChannel, metadata, segment.getFileName(), force);
 
             if (entry == null) {
                 // Metadata or Entry were partially written
@@ -794,6 +909,34 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         return handle;
     }
 
+    /**
+     * Gets the file channel for a particular address, throw exception
+     * if is not present in the file system.
+     * <p>
+     * This method should only be called by suffixTrim
+     *
+     * @param address The address to open.
+     * @return The FileChannel for that address.
+     * @throws IOException
+     */
+    SegmentHandle getSegmentHandleForSuffixTrim(long address) throws IOException {
+        long segment = address / RECORDS_PER_LOG_FILE;
+
+        String filePath = logDir + File.separator;
+        filePath += segment;
+        filePath += ".log";
+        if (!new File(filePath).exists()) {
+            throw new FileNotFoundException(filePath);
+        }
+
+        FileChannel writeCh = getChannel(filePath, false);
+        FileChannel readCh = getChannel(filePath, true);
+        SegmentHandle segmentHandle = new SegmentHandle(segment, writeCh, readCh, filePath);
+
+        segmentHandle.retain();
+        return segmentHandle;
+    }
+
     private Map<String, Long> getStrLongMap(Map<UUID, Long> uuidLongMap) {
         Map<String, Long> stringLongMap = new HashMap<>();
 
@@ -825,7 +968,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         return strUUIds;
     }
-
 
 
     private LogEntry getLogEntry(long address, LogData entry) {
@@ -1220,6 +1362,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         writeChannels = new ConcurrentHashMap<>();
+    }
+
+    private long getSegmentIndexForAddress(long address) {
+        return address / RECORDS_PER_LOG_FILE;
+    }
+
+    private boolean isTheLastAddressInASegment(long address) {
+        return (address + 1) % RECORDS_PER_LOG_FILE == 0;
     }
 
     /**

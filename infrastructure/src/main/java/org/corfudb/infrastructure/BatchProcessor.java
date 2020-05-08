@@ -164,6 +164,9 @@ public class BatchProcessor implements AutoCloseable {
                                 RangeWriteMsg writeRange = (RangeWriteMsg) currOp.getMsg().getPayload();
                                 streamLog.append(writeRange.getEntries());
                                 break;
+                            case SUFFIX_TRIM:
+                                streamLog.suffixTrim();
+                                break;
                             case RESET:
                                 streamLog.reset();
                                 break;

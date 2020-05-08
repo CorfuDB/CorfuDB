@@ -58,6 +58,13 @@ public interface StreamLog {
     void prefixTrim(long address);
 
     /**
+     * Suffix trim the global log according to local committed tail.
+     */
+    default void suffixTrim() {
+        reset();
+    }
+
+    /**
      * Remove all trimmed addresses from the StreamLog.
      */
     void compact();

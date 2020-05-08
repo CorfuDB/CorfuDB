@@ -31,6 +31,7 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -43,7 +44,9 @@ import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus.STABLE;
+import static org.corfudb.test.TestUtils.clearAggressiveTimeouts;
 import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
 import static org.corfudb.test.TestUtils.waitForLayoutChange;
 
@@ -948,5 +951,153 @@ public class StateTransferTest extends AbstractViewTest {
                     .getPayload(rt)).isEqualTo(DEFAULT_PAYLOAD);
         }
 
+    }
+
+    /**
+     * The test first creates a layout with 1 segments.
+     * Initial layout:
+     * Segment 1: 0 -> infinity (exclusive) Node 0, Node 1, Node 2
+     * <p>
+     * Write 22000 entries to all 3 nodes, so each node has 3 log files.
+     * Then fail Node 2 to make it unresponsive for a while
+     * <p>
+     * First, segment will be
+     * Segment 1: 0 -> infinity (exclusive) Node 0, Node 1
+     * Node 2 is unresponsive
+     * <p>
+     * Then, write another 4000 entries to Node 0 and Node 1, and heal Node 2
+     * Segment 1: 0 -> 22000 (exclusive) Node 0, Node 1
+     * Segment 2: 22001 -> infinity (exclusive) Node 0, Node 1, Node 2
+     * <p>
+     * At the end, the stable layout will be the following:
+     * Segment 1: 0 -> infinity (exclusive) Node 0, Node 1, Node 2
+     * Finally the stable layout is verified as well as the state transfer is verified by asserting
+     * all 3 nodes' data.
+     */
+    @Test
+    public void verifyDeltaTransfer() throws Exception {
+        // Add three servers
+        final long batchSize = 100;
+        ServerContext sc2 = new ServerContextBuilder()
+                .setMemory(false)
+                .setSingle(false)
+                .setBatchSize(String.valueOf(batchSize))
+                .setLogPath(PARAMETERS.TEST_TEMP_DIR)
+                .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
+                .setPort(SERVERS.PORT_2).build();
+
+
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2, sc2);
+
+        Layout l1 = new TestLayoutBuilder()
+                .setEpoch(1L)
+                .addLayoutServer(SERVERS.PORT_0)
+                .addLayoutServer(SERVERS.PORT_1)
+                .addLayoutServer(SERVERS.PORT_2)
+                .addSequencer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_1)
+                .addSequencer(SERVERS.PORT_2)
+                .buildSegment()
+                .setStart(0L)
+                .setEnd(-1L)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .build();
+        bootstrapAllServers(l1);
+
+        final int writtenAddressesBatch1 = 22000;
+        final int writtenAddressesBatch2 = 26000;
+
+        CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
+        setAggressiveTimeouts(l1, rt,
+                getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
+        setAggressiveDetectorTimeouts(SERVERS.PORT_0);
+        IStreamView testStream = rt.getStreamsView().get(CorfuRuntime.getStreamID("test"));
+
+        // Write to address spaces 0 to 21999 (inclusive) to all 3 SERVERS.
+        for (int i = 0; i < writtenAddressesBatch1; i++) {
+            testStream.append("testPayload".getBytes());
+        }
+
+        // Update committed tail on SERVER 2
+        rt.getLayoutView()
+                .getRuntimeLayout()
+                .getLogUnitClient(SERVERS.ENDPOINT_2)
+                .updateCommittedTail(writtenAddressesBatch1 - 1)
+                .get();
+
+        // Fail Node 2 for a while
+        addServerRule(SERVERS.PORT_2, new TestRule().drop().always());
+
+        // Wait until a layout is observed
+        rt.invalidateLayout();
+        List<String> expected = Collections.singletonList(SERVERS.ENDPOINT_2);
+        waitForLayoutChange(layout -> layout.getUnresponsiveServers().equals(expected) &&
+                layout.segments.size() == 1, rt);
+
+        // Write to address spaces 22000 to 25999 (inclusive) to SERVER 0 and SERVER 1.
+        for (int i = writtenAddressesBatch1; i < writtenAddressesBatch2; i++) {
+            testStream.append("testPayload".getBytes());
+        }
+
+        // Allow node 2 to be healed.
+        clearServerRules(SERVERS.PORT_2);
+
+        AtomicLong deltaBatches = new AtomicLong(0L);
+        // Now count how many batches are transferred.
+        addServerRule(SERVERS.PORT_2, new TestRule().matches(
+                msg -> msg.getMsgType().equals(CorfuMsgType.WRITE_OK) &&
+                        deltaBatches.incrementAndGet() > 0));
+
+        // Wait until a stable and merged layout is observed
+        rt.invalidateLayout();
+
+        waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty() &&
+                layout.segments.size() == 1, rt);
+
+        final String[] expectedNodes = new String[]{SERVERS.ENDPOINT_0,
+                SERVERS.ENDPOINT_1,
+                SERVERS.ENDPOINT_2};
+        final Layout actualLayout = rt.getLayoutView().getLayout();
+
+        // Verify Node 1, Node 2, and Node 3 are active without considering order
+        assertThat(actualLayout.getAllActiveServers()).containsExactlyInAnyOrder(expectedNodes);
+
+        // Verify segments are merged into one segment
+        assertThat(actualLayout.getSegments().size()).isEqualTo(1);
+
+        // Verify start and end of the segment
+        assertThat(actualLayout.getSegments().get(0).start).isEqualTo(0);
+        assertThat(actualLayout.getSegments().get(0).end).isEqualTo(-1);
+
+        // Verify no unresponsive server are in the layout
+        assertThat(actualLayout.getUnresponsiveServers()).isEmpty();
+
+        // Verify layout servers in the layout and their order
+        assertThat(actualLayout.getLayoutServers()).containsExactly(expectedNodes);
+
+        // Verify sequencers in the layout and their order
+        assertThat(actualLayout.getSequencers()).containsExactly(expectedNodes);
+
+        // Clear aggressive timeouts to make sure getAllNonEmptyData from Node 2 work
+        clearAggressiveTimeouts(actualLayout, rt,
+                getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
+
+        // Only the delta is transferred
+        final long tailAfterSuffixTrim = writtenAddressesBatch1 / RECORDS_PER_LOG_FILE * RECORDS_PER_LOG_FILE;
+        final long expectedTransferred = writtenAddressesBatch2 - tailAfterSuffixTrim;
+        assertThat(deltaBatches.get() * batchSize).isEqualTo(expectedTransferred);
+
+        // Verify Nodes' data
+        final long lastAddress = rt.getSequencerView().query(CorfuRuntime.getStreamID("test"));
+        Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
+        Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
     }
 }

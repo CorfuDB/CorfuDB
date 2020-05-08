@@ -190,10 +190,9 @@ public class LayoutManagementView extends AbstractView {
             // Seal the node to be healed.
             CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
                     .getBaseClient(endpoint).sealRemoteServer(currentLayout.getEpoch()));
-
-            // Reset the node to be healed.
+            // Suffix trim the node to be healed.
             CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
-                    .getLogUnitClient(endpoint).resetLogUnit(currentLayout.getEpoch()));
+                    .getLogUnitClient(endpoint).suffixTrim(currentLayout.getEpoch()));
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             layoutBuilder.addLogunitServer(0,

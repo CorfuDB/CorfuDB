@@ -580,6 +580,37 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     }
 
     /**
+     * Ensure log unit client can suffix trim.
+     * @throws Exception
+     */
+    @Test
+    public void canSuffixTrim() throws Exception {
+        final long numEntries = 15000L;
+
+        // Write 15000 Entries
+        byte[] testString = "hello".getBytes();
+
+        for (int i = 0; i < numEntries; i++) {
+            client.write(i, null, testString, Collections.emptyMap()).get();
+        }
+
+        CompletableFuture<TailsResponse> cf = client.getLogTail();
+        long tail = cf.get().getLogTail();
+        assertThat(tail).isEqualTo(numEntries-1);
+
+        // set committed tail to the last address
+        client.updateCommittedTail(numEntries - 1).get();
+        client.suffixTrim(serverContext.getServerEpoch()).get();
+
+        cf = client.getLogTail();
+        tail = cf.get().getLogTail();
+        long segment = numEntries / StreamLogFiles.RECORDS_PER_LOG_FILE;
+        long expectedTail = segment * StreamLogFiles.RECORDS_PER_LOG_FILE - 1;
+        assertThat(tail).isEqualTo(expectedTail);
+    }
+
+
+    /**
      * Ensure log unit client can query stream's address space and log address space.
      * @throws Exception
      */

@@ -283,6 +283,13 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
+     * Send a suffix trim request that will trim the log up to local commit tail.
+     */
+    public CompletableFuture<Void> suffixTrim(long epoch) {
+        return sendMessageWithFuture(CorfuMsgType.SUFFIX_TRIM.payloadMsg(epoch));
+    }
+
+    /**
      * Send a compact request that will delete the trimmed parts of the log.
      */
     public CompletableFuture<Void> compact() {
@@ -295,7 +302,6 @@ public class LogUnitClient extends AbstractClient {
     public CompletableFuture<Void> flushCache() {
         return sendMessageWithFuture(CorfuMsgType.FLUSH_CACHE.msg());
     }
-
 
     /**
      * Send a reset request.

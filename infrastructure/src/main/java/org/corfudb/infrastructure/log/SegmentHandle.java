@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Data
-class SegmentHandle {
+class SegmentHandle implements AutoCloseable {
     final long segment;
 
     @NonNull
@@ -51,6 +51,7 @@ class SegmentHandle {
         refCount--;
     }
 
+    @Override
     public void close() {
         Set<FileChannel> channels = new HashSet<>(
                 Arrays.asList(writeChannel, readChannel)
@@ -60,7 +61,7 @@ class SegmentHandle {
             try {
                 channel.force(true);
             } catch (IOException e) {
-                log.debug("Can't force updates in the channel", e.getMessage());
+                log.debug("Can't force updates in the channel, {}", e.getMessage());
             } finally {
                 IOUtils.closeQuietly(channel);
             }

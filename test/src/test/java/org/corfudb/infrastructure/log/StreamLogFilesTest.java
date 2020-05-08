@@ -1,23 +1,7 @@
 package org.corfudb.infrastructure.log;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
 import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
@@ -35,6 +19,22 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
+
 
 /**
  * Created by maithem on 11/2/16.
@@ -48,11 +48,30 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     private ServerContext getContext() {
         String path = getDirPath();
         return new ServerContextBuilder()
-            .setLogPath(path)
-            .setMemory(false)
-            .build();
+                .setLogPath(path)
+                .setMemory(false)
+                .build();
     }
-    
+
+    private static final String READ_WRITE = "rw";
+    private static final Random random = new Random();
+
+    private static void scramble(String filePath, int scrambledByteCount) throws IOException {
+        RandomAccessFile file = new RandomAccessFile(filePath, READ_WRITE);
+
+        long fileLength = file.length();
+        for (int count = 0; count < scrambledByteCount; count++) {
+            long nextPosition = Math.floorMod(random.nextLong(), fileLength);
+            file.seek(nextPosition);
+
+            byte[] scrambleByte = new byte[1];
+            random.nextBytes(scrambleByte);
+            file.write(scrambleByte);
+        }
+
+        file.close();
+    }
+
     @Test
     public void testWriteReadWithChecksum() {
         // Enable checksum, then append and read the same entry
@@ -426,7 +445,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Write to multiple segments
         final int segments = 3;
         long lastAddress = segments * StreamLogFiles.RECORDS_PER_LOG_FILE;
-        for (long x = 0; x <= lastAddress; x++){
+        for (long x = 0; x <= lastAddress; x++) {
             writeToLog(log, x);
             assertThat(log.getLogTail()).isEqualTo(x);
         }
@@ -437,7 +456,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Advance the tail some more
         final long tailDelta = 5;
-        for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++){
+        for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++) {
             writeToLog(log, x);
             assertThat(log.getLogTail()).isEqualTo(x);
         }
@@ -454,7 +473,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Write 50 segments and trim the first 25
         final long numSegments = 50;
-        for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
+        for (long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
             writeToLog(log, x);
         }
 
@@ -496,9 +515,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         long trimmedExceptions = 0;
 
         // Try to read trimmed addresses
-        for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
+        for (long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
             ILogData logData = log.read(x);
-            if(logData.isTrimmed()) {
+            if (logData.isTrimmed()) {
                 trimmedExceptions++;
             }
         }
@@ -735,5 +754,217 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         assertThat(parentSize).isEqualTo(parentDirFilePayloadSize + childDirFilePayloadSize);
         assertThat(childDirSize).isEqualTo(childDirFilePayloadSize);
+    }
+
+
+    /**
+     * Generates and writes 3 files worth data. Then suffix trim the stream log and verifies that
+     * files and data after commit tail is cleared.
+     */
+    @Test
+    public void testSuffixTrim() {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
+
+        final long numSegments = 3;
+        for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+            writeToLog(log, x);
+        }
+
+        final long offset = 200;
+        final long commitTail = RECORDS_PER_LOG_FILE + offset;
+        log.updateCommittedTail(commitTail);
+        log.suffixTrim();
+
+        File logsDir = new File(logDir);
+
+        final int expectedFilesNum = (int) (commitTail / RECORDS_PER_LOG_FILE);
+        final long expectedGlobalTail = RECORDS_PER_LOG_FILE * expectedFilesNum - 1;
+        final long expectedTrimMark = 0;
+        assertThat(logsDir.list()).hasSize(expectedFilesNum);
+        assertThat(log.getLogTail()).isEqualTo(expectedGlobalTail);
+        assertThat(log.getTrimMark()).isEqualTo(expectedTrimMark);
+    }
+
+    /**
+     * Generates and writes 5 files worth data. Perform a prefix trim, then suffix trim
+     * the stream log and verifies that files and corresponding data is cleared.
+     */
+    @Test
+    public void testSuffixTrimWithTrimMark() {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
+
+        final long numSegments = 5;
+        for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+            writeToLog(log, x);
+        }
+
+        final long filesToBeTrimmed = 1;
+        log.prefixTrim(RECORDS_PER_LOG_FILE * filesToBeTrimmed);
+        log.compact();
+
+        File logsDir = new File(logDir);
+
+        final int expectedFilesBeforeSuffixTrim = (int) (numSegments - filesToBeTrimmed);
+        final long globalTailBeforeSuffixTrim = (RECORDS_PER_LOG_FILE * numSegments) - 1;
+        final long trimMarkBeforeSuffix = RECORDS_PER_LOG_FILE * filesToBeTrimmed + 1;
+        assertThat(logsDir.list()).hasSize(expectedFilesBeforeSuffixTrim);
+        assertThat(log.getLogTail()).isEqualTo(globalTailBeforeSuffixTrim);
+        assertThat(log.getTrimMark()).isEqualTo(trimMarkBeforeSuffix);
+
+        final long offset = 200;
+        final long commitTail = RECORDS_PER_LOG_FILE * 3 + offset;
+        log.updateCommittedTail(commitTail);
+        log.suffixTrim();
+
+        logsDir = new File(logDir);
+
+        final int expectedFilesNum = (int) (commitTail / RECORDS_PER_LOG_FILE - filesToBeTrimmed);
+        final long expectedGlobalTail = RECORDS_PER_LOG_FILE * (expectedFilesNum + filesToBeTrimmed) - 1;
+        final long expectedTrimMark = RECORDS_PER_LOG_FILE * filesToBeTrimmed + 1;
+        assertThat(logsDir.list()).hasSize(expectedFilesNum);
+        assertThat(log.getLogTail()).isEqualTo(expectedGlobalTail);
+        assertThat(log.getTrimMark()).isEqualTo(expectedTrimMark);
+    }
+
+    /**
+     * Generates and writes 3 files worth data. TrimMark is larger than committed tail.
+     * Then suffix trim the stream log should reset the log.
+     */
+    @Test
+    public void testSuffixTrimWithSmallCommittedTail() {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
+
+        final long numSegments = 3;
+        for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+            writeToLog(log, x);
+        }
+
+        final long filesToBeTrimmed = 2;
+        log.prefixTrim(RECORDS_PER_LOG_FILE * filesToBeTrimmed);
+        log.compact();
+
+        final long offset = 200;
+        final long commitTail = RECORDS_PER_LOG_FILE + offset;
+        log.updateCommittedTail(commitTail);
+        log.suffixTrim();
+
+        File logsDir = new File(logDir);
+
+        final int expectedFilesNum = 0;
+        final long expectedGlobalTail = Address.NON_ADDRESS;
+        final long expectedTrimMark = 0;
+        assertThat(logsDir.list()).hasSize(expectedFilesNum);
+        assertThat(log.getLogTail()).isEqualTo(expectedGlobalTail);
+        assertThat(log.getTrimMark()).isEqualTo(expectedTrimMark);
+    }
+
+    /**
+     * Generates and writes 3 files worth data. Set an abnormal committed tail.
+     * Then suffix trim the stream log and verifies that suffix trim degrade successfully.
+     */
+    @Test
+    public void testSuffixTrimDegradation() {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
+
+        // set committed tail larger than global tail
+        final long numSegments = 3;
+        for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+            writeToLog(log, x);
+        }
+
+        final long commitTail1 = RECORDS_PER_LOG_FILE * (numSegments + 3);
+        log.updateCommittedTail(commitTail1);
+        log.suffixTrim();
+
+        File logsDir1 = new File(logDir);
+        assertThat(logsDir1.list()).hasSize(0);
+        assertThat(log.getLogTail()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(log.getTrimMark()).isEqualTo(0);
+
+        // set committed tail a negative value
+        for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+            writeToLog(log, x);
+        }
+
+        final long commitTail2 = Address.NON_ADDRESS;
+        log.updateCommittedTail(commitTail2);
+        log.suffixTrim();
+
+        File logsDir2 = new File(logDir);
+        assertThat(logsDir2.list()).hasSize(0);
+        assertThat(log.getLogTail()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(log.getTrimMark()).isEqualTo(0);
+    }
+
+    /**
+     * Generates and writes 3 files worth data. Corrupt one log file.
+     * Then suffix trim the stream log and verifies that suffix trim degrade successfully.
+     */
+    @Test
+    public void testSuffixTrimDegradationWithCorruptedFile() throws IOException {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
+
+        final long numSegments = 3;
+        for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+            writeToLog(log, x);
+        }
+
+        File logsDir1 = new File(logDir);
+        final int fileSize = 3;
+        assertThat(logsDir1.list()).hasSize(fileSize);
+
+        final long commitTail = RECORDS_PER_LOG_FILE * numSegments - 1;
+        log.updateCommittedTail(commitTail);
+
+        // corrupt one log file
+        File logFile = new File(logDir + File.separator + "1.log");
+        assertThat(logFile.exists()).isTrue();
+
+        final int bytes = 10;
+        scramble(logDir + File.separator + "1.log", bytes);
+        log.suffixTrim();
+        File logsDir = new File(logDir);
+        assertThat(logsDir.list()).hasSize(0);
+        assertThat(log.getLogTail()).isEqualTo(Address.NON_ADDRESS);
+        assertThat(log.getTrimMark()).isEqualTo(0);
+    }
+
+    /**
+     * Generates and writes 3 files worth data. Delete one log file.
+     * Then suffix trim the stream log and verifies that suffix trim degrade successfully.
+     */
+    @Test
+    public void testSuffixTrimDegradationWithMissingFile() throws IOException {
+        String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
+
+        final long numSegments = 3;
+        for (long x = 0; x < RECORDS_PER_LOG_FILE * numSegments; x++) {
+            writeToLog(log, x);
+        }
+
+        File logsDir1 = new File(logDir);
+        final int fileSize = 3;
+        assertThat(logsDir1.list()).hasSize(fileSize);
+
+        final long commitTail = RECORDS_PER_LOG_FILE * numSegments - 1;
+        log.updateCommittedTail(commitTail);
+
+        // delete one log file
+        File logFile = new File(logDir + File.separator + "1.log");
+        assertThat(logFile.exists()).isTrue();
+
+        if (logFile.delete()) {
+            log.suffixTrim();
+            File logsDir = new File(logDir);
+            assertThat(logsDir.list()).hasSize(0);
+            assertThat(log.getLogTail()).isEqualTo(Address.NON_ADDRESS);
+            assertThat(log.getTrimMark()).isEqualTo(0);
+        }
     }
 }
