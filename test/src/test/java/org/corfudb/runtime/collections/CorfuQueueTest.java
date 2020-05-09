@@ -46,8 +46,6 @@ public class CorfuQueueTest extends AbstractViewTest {
         final int middleEntryIndex = 1;
         // Remove the middle entry
         corfuQueue.removeEntry(corfuQueue.entryList().get(middleEntryIndex).getRecordId());
-        assertThat(records.get(0).getRecordId().asUUID().getLeastSignificantBits())
-                .isEqualTo(records.get(0).getRecordId().getEntryId());
 
         List<CorfuQueueRecord<String>> records2 =
                     corfuQueue.entryList(Short.MAX_VALUE);

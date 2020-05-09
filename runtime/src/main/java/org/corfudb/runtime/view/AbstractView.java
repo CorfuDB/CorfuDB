@@ -15,7 +15,6 @@ import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.Sleep;
-import org.corfudb.util.Utils;
 
 /**
  * All views inherit from AbstractView.
@@ -86,16 +85,15 @@ public abstract class AbstractView {
             // If an error or an unchecked exception is thrown by the layout.get() completable
             // future, the exception will materialize as an ExecutionException. In that case,
             // we need to propagate this Error or unchecked exception.
-            final Throwable cause = Utils.extractCauseWithCompleteStacktrace(ex);
-            if (cause instanceof Error) {
+            if (ex.getCause() instanceof Error) {
                 log.error("getLayoutUninterruptibly: Encountered error. Aborting layoutHelper", ex);
-                throw (Error) cause;
+                throw (Error) ex.getCause();
             }
 
-            if (cause instanceof RuntimeException) {
+            if (ex.getCause() instanceof RuntimeException) {
                 log.error("getLayoutUninterruptibly: Encountered unchecked exception. "
                         + "Aborting layoutHelper", ex);
-                throw (RuntimeException) cause;
+                throw (RuntimeException) ex.getCause();
             }
 
             log.error("getLayoutUninterruptibly: Encountered exception while fetching layout");

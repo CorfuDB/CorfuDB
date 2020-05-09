@@ -29,6 +29,7 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.util.serializer.ISerializer;
@@ -178,17 +179,30 @@ public class TableRegistry {
                 log.debug("registerTable: new schema:"+tableDescriptors.getFileDescriptorsMap());
             }
         }
-        try {
-            this.runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
-            if (hasSchemaChanged) {
-                this.registryTable.put(tableNameKey,
-                        new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
-            } else {
-                this.registryTable.putIfAbsent(tableNameKey,
-                        new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+        int numRetries = 3; // Since this is an internal transaction, retry a few times before giving up.
+        long finalAddress = Address.NON_ADDRESS;
+        while (numRetries-- > 0) {
+            try {
+                this.runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
+                if (hasSchemaChanged) {
+                    this.registryTable.put(tableNameKey,
+                            new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+                } else {
+                    this.registryTable.putIfAbsent(tableNameKey,
+                            new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+                }
+                finalAddress = this.runtime.getObjectsView().TXEnd();
+            } catch (TransactionAbortedException txAbort) {
+                if (numRetries <= 0) {
+                    throw txAbort;
+                }
+                log.info("registerTable: commit failed. Will retry {} times. Cause {}", numRetries, txAbort);
+                continue;
+            } finally {
+                if (finalAddress == Address.NON_ADDRESS) { // Transaction failed or an exception occurred.
+                    this.runtime.getObjectsView().TXAbort(); // clear Txn context so thread can be reused.
+                }
             }
-        } finally {
-            this.runtime.getObjectsView().TXEnd();
         }
     }
 
