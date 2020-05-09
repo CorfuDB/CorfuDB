@@ -209,7 +209,7 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         LogData logData = (LogData) msg.getPayload().getData();
-        log.debug("log write: type: {}, address: {}, streams: {}", logData.getType(),
+        log.trace("log write: type: {}, address: {}, streams: {}", logData.getType(),
                 logData.getToken(), logData.getBackpointerMap());
 
         // Its not clear that making all holes high priority is the right thing to do, but since
