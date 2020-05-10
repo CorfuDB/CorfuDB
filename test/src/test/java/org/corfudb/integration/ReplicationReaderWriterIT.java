@@ -270,7 +270,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeLogEntryMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         LogEntryWriter writer = new LogEntryWriter(rt, config, persistedWriterMetadata);
 
         if (msgQ.isEmpty()) {
@@ -338,7 +338,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeSnapLogMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
 
         if (msgQ.isEmpty()) {
@@ -591,7 +591,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public void testPersistentTable() throws IOException {
         setupEnv();
         try {
-            PersistedWriterMetadata meta = new PersistedWriterMetadata(writerRuntime, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+            PersistedWriterMetadata meta = new PersistedWriterMetadata(writerRuntime, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
             meta.getLastProcessedLogTimestamp();
         } catch (Exception e) {
             e.getStackTrace();

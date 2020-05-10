@@ -36,6 +36,7 @@ public class LogReplicationServer extends AbstractServer {
 
     private final ExecutorService executor;
 
+    @Getter
     private final SinkManager sinkManager;
 
     @Getter
