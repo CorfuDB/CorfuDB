@@ -1,10 +1,9 @@
 package org.corfudb.logreplication.infrastructure;
 
-import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.util.GitRepositoryState;
@@ -187,7 +186,7 @@ public class CorfuReplicationServer implements Runnable {
 
     public CorfuReplicationServer(String[] inputs) {
         this.args = inputs;
-        this.siteManagerAdapter = new DefaultSiteManager(false);
+        this.siteManagerAdapter = new DefaultSiteManager(true);
     }
 
     CorfuReplicationServer(String[] inputs, CorfuReplicationSiteManagerAdapter adapter) {
