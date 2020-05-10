@@ -14,9 +14,11 @@ import java.util.Map;
 
 @Slf4j
 public class CrossSiteConfiguration {
-    long epoch;
     @Getter
-    SiteInfo primarySite;
+    private long epoch;
+
+    @Getter
+    private SiteInfo primarySite;
 
     @Getter
     Map<String, SiteInfo> standbySites;
@@ -70,7 +72,7 @@ public class CrossSiteConfiguration {
         public SiteInfo(SiteInfo info, RoleType roleType) {
             this.siteId = info.siteId;
             this.roleType = roleType;
-            this.nodesInfo = new ArrayList<>(info.nodesInfo);
+            this.nodesInfo = new ArrayList<>();
             for ( NodeInfo nodeInfo : info.nodesInfo) {
                 NodeInfo newNode = new NodeInfo(nodeInfo.getIpAddress(), nodeInfo.getPortNum(), roleType, nodeInfo.getCorfuPortNum());
                 this.nodesInfo.add(newNode);

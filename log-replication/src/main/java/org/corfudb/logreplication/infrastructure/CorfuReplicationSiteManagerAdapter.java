@@ -30,7 +30,7 @@ public abstract class CorfuReplicationSiteManagerAdapter {
         if (crossSiteConfiguration == null) {
             //If the the config hasn't been initialized, set the config
             crossSiteConfiguration = newConfiguration;
-        } else if (newConfiguration.epoch > crossSiteConfiguration.epoch) {
+        } else if (newConfiguration.getEpoch() > crossSiteConfiguration.getEpoch()) {
             //If the newCongig has higher epoch, update it
 
             //TODO: enforce stop replication work and get into idle state

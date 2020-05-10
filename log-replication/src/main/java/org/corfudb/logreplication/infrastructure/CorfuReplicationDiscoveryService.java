@@ -2,6 +2,7 @@ package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.PersistedWriterMetadata;
 
 import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.StandbySite;
 import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.PrimarySite;
@@ -13,6 +14,15 @@ import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.R
  */
 @Slf4j
 public class CorfuReplicationDiscoveryService implements Runnable {
+
+    /**
+     * Used by both primary site and standby site.
+     */
+    private final CorfuReplicationServerNode replicationServerNode;
+
+    /**
+     * Used by the primary site
+     */
     @Getter
     private final CorfuReplicationManager replicationManager;
     private CorfuReplicationSiteManagerAdapter siteManager;
@@ -21,7 +31,8 @@ public class CorfuReplicationDiscoveryService implements Runnable {
     CrossSiteConfiguration crossSiteConfig;
     CrossSiteConfiguration.NodeInfo nodeInfo = null;
 
-    public CorfuReplicationDiscoveryService(String endpoint, CorfuReplicationSiteManagerAdapter siteManager) {
+    public CorfuReplicationDiscoveryService(String endpoint, CorfuReplicationServerNode serverNode, CorfuReplicationSiteManagerAdapter siteManager) {
+        this.replicationServerNode = serverNode;
         this.replicationManager = new CorfuReplicationManager();
         this.localEndpoint = endpoint;
         this.siteManager = siteManager;
@@ -76,10 +87,14 @@ public class CorfuReplicationDiscoveryService implements Runnable {
                         throw ie;
                     }
                     replicationManager.startLogReplication(crossSiteConfig);
+
                     return;
                 } else if (nodeInfo.getRoleType() == StandbySite) {
                     // Standby Site
                     // The LogReplicationServer (server handler) will initiate the SinkManager
+                    // Update the siteEpoch metadata.
+                    replicationServerNode.getLogReplicationServer().getSinkManager().getPersistedWriterMetadata().
+                            setupEpoch(crossSiteConfig.getEpoch());
                     log.info("Start as Sink (receiver) on node {} ", nodeInfo);
                 }
             }
