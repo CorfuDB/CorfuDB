@@ -7,8 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.logreplication.SourceManager;
-import org.corfudb.logreplication.infrastructure.CorfuReplicationManager;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.logreplication.send.PersistedReaderMetadata;
@@ -314,6 +312,13 @@ public class LogReplicationFSM {
         from.onExit(to);
         to.clear();
         to.onEntry(from);
+    }
+
+    public void startConsumer() {
+        if (state.getType() == LogReplicationStateType.STOPPED) {
+            this.state = states.get(LogReplicationStateType.INITIALIZED);
+            logReplicationFSMConsumer.submit(this::consume);
+        }
     }
 
     public void setSiteEpoch(long siteEpoch) {
