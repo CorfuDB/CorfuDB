@@ -36,15 +36,17 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
 
     SiteManagerCallback siteManagerCallback;
     Thread thread = new Thread(siteManagerCallback);
-
-    DefaultSiteManager() {
-        //notification = new Semaphore(0);
+    boolean siteFlip = false;
+    DefaultSiteManager(boolean siteFlip) {
+        this.siteFlip = siteFlip;
     }
 
     public void start() {
-        siteManagerCallback = new SiteManagerCallback(this);
-        thread = new Thread(siteManagerCallback);
-        thread.start();
+        if (siteFlip) {
+            siteManagerCallback = new SiteManagerCallback(this);
+            thread = new Thread(siteManagerCallback);
+            thread.start();
+        }
         //System.out.print("\nstart the listener");
     }
 
@@ -97,7 +99,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
 
             reader.close();
             log.info("Primary Site Info {}; Backup Site Info {}", primarySite, standbySites);
-            return new CrossSiteConfiguration(epoch++, primarySite, standbySites);
+            return new CrossSiteConfiguration(0, primarySite, standbySites);
         } catch (Exception e) {
             log.warn("Caught an exception while reading the config file: {}", e);
             throw e;
@@ -130,7 +132,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             }
         }
 
-        CrossSiteConfiguration newSiteConf = new CrossSiteConfiguration(epoch++, newPrimary, standbys);
+        CrossSiteConfiguration newSiteConf = new CrossSiteConfiguration(1, newPrimary, standbys);
         return newSiteConf;
     }
 
@@ -153,7 +155,8 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                     //System.out.print("\nwill sleep then change the site role");
                     sleep(changeInveral);
                     if (shouldChange) {
-                        siteManager.update(changePrimary(siteManager.getCrossSiteConfiguration()));
+                        CrossSiteConfiguration newConfig = changePrimary(siteManager.getCrossSiteConfiguration());
+                        siteManager.update(newConfig);
                         shouldChange = false;
                     }
                 } catch (Exception e) {
