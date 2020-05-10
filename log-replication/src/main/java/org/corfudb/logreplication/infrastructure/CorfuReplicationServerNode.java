@@ -181,7 +181,7 @@ public class CorfuReplicationServerNode implements AutoCloseable {
      *                            the server.
      * @param router              A {@link NettyServerRouter} which will process incoming
      *                            messages.
-     * @param port                The port the {@link ServerChannel} will be created on.
+     * @param port                The port will be created on.
      * @return A {@link ChannelFuture} which can be used to wait for the server to be shutdown.
      */
     public ChannelFuture bindServer(@Nonnull EventLoopGroup bossGroup,
@@ -229,7 +229,6 @@ public class CorfuReplicationServerNode implements AutoCloseable {
 
     /**
      * Obtain a {@link ChannelInitializer} which initializes the channel pipeline
-     * for a new {@link ServerChannel}.
      *
      * @param context The {@link ServerContext} to use.
      * @param router  The {@link NettyServerRouter} to initialize the channel with.
@@ -330,5 +329,9 @@ public class CorfuReplicationServerNode implements AutoCloseable {
                 log.info("***** Finished");
             }
         };
+    }
+
+    LogReplicationServer getLogReplicationServer() {
+        return (LogReplicationServer)serverMap.get(LogReplicationServer.class);
     }
 }

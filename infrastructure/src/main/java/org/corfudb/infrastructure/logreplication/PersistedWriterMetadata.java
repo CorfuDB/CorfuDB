@@ -99,7 +99,7 @@ public class PersistedWriterMetadata {
                 persistedTs = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
 
                 if (ts >= persistedTs) {
-                    writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), ++persistedEpic);
+                    writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), persistedEpic);
                     writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), ts);
                     writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), Address.NON_ADDRESS);
                     //TODO:  clean persistentQue if no AR

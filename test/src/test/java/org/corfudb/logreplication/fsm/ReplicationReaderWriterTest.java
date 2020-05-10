@@ -65,7 +65,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
         UUID uuid = UUID.randomUUID();
         LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(), PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(readerRuntime, uuid, uuid);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(readerRuntime, 0, uuid, uuid);
         logEntryReader = new StreamsLogEntryReader(readerRuntime, config);
         logEntryWriter = new LogEntryWriter(writerRuntime, config, persistedWriterMetadata);
     }
@@ -104,7 +104,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
     void writeMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         UUID uuid = UUID.randomUUID();
         LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, uuid, uuid);
+        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, 0, uuid, uuid);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
 
         writer.reset(msgQ.get(0).getMetadata().getSnapshotTimestamp());

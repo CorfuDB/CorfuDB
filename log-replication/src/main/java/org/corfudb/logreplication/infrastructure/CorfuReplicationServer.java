@@ -180,14 +180,14 @@ public class CorfuReplicationServer implements Runnable {
 
 
     public static void main(String[] args) {
-        CorfuReplicationSiteManagerAdapter siteManagerAdapter = new DefaultSiteManager();
+        CorfuReplicationSiteManagerAdapter siteManagerAdapter = new DefaultSiteManager(false);
         CorfuReplicationServer corfuReplicationServer = new CorfuReplicationServer(args, siteManagerAdapter);
         corfuReplicationServer.run();
     }
 
     public CorfuReplicationServer(String[] inputs) {
         this.args = inputs;
-        this.siteManagerAdapter = new DefaultSiteManager();
+        this.siteManagerAdapter = new DefaultSiteManager(false);
     }
 
     CorfuReplicationServer(String[] inputs, CorfuReplicationSiteManagerAdapter adapter) {
@@ -244,11 +244,12 @@ public class CorfuReplicationServer implements Runnable {
                     // acquiring lock, retrieving Site Manager Info and processing this info
                     // so this node is initialized as Source (sender) or Sink (receiver)
                     String endpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).toEndpointUrl();
-                    Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(endpoint, siteManagerAdapter);
+                    activeServer = new CorfuReplicationServerNode(serverContext);
+
+                    Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(endpoint, activeServer, siteManagerAdapter);
                     Thread replicationDiscoveryThread = new Thread(replicationDiscoveryRunnable);
                     replicationDiscoveryThread.start();
 
-                    activeServer = new CorfuReplicationServerNode(serverContext);
 
                     // Start Corfu Replication Server Node
                     activeServer.startAndListen();

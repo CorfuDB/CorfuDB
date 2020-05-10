@@ -107,7 +107,7 @@ public class SinkManager implements DataReceiver {
     public LogReplicationEntry receive(LogReplicationEntry message) {
         log.info("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
         siteEpoch = Math.max(siteEpoch, message.getMetadata().getSiteEpoch());
-        System.out.print("\nSink manager received " + message.getMetadata() + " while in " + rxState);
+        //System.out.print("\nSink manager received " + message.getMetadata() + " while in " + rxState);
         if (!receivedValidMessage(message)) {
             // If we received a start marker for snapshot sync while in LOG_ENTRY_SYNC, switch rxState
             if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_START)) {
