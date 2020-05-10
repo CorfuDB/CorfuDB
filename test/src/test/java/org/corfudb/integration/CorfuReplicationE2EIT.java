@@ -10,11 +10,10 @@ import org.junit.Test;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class CorfuReplicationE2EIT extends AbstractIT {
-    static final int MAX_RETRY = 4;
+    static final int MAX_RETRY = 8;
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
@@ -30,7 +29,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             final String activeEndpoint = DEFAULT_HOST + ":" + activeSiteCorfuPort;
             final String standbyEndpoint = DEFAULT_HOST + ":" + standbySiteCorfuPort;
 
-            final int numWrites = 10;
+            final int numWrites = 4;
 
             // Start Single Corfu Node Cluster on Active Site
             activeCorfu = runServer(activeSiteCorfuPort, true);
@@ -161,15 +160,21 @@ public class CorfuReplicationE2EIT extends AbstractIT {
                     .open();
 
             // Will fix this part later
-            int retry = 0;
-            while (!mapA1.keySet().containsAll(mapAStandby.keySet()) && retry++ < MAX_RETRY) {
-                System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
-                System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
+
+            System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
+            System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
+
+            while (mapA1.keySet().size() != mapAStandby.keySet().size()) {
             }
 
+            System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
+            System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
+
             for (int i = 0; i < 2*numWrites ; i++) {
-                //assertThat(mapA.containsKey(String.valueOf(i)));
+                assertThat(mapA.containsKey(String.valueOf(i)));
             }
+
+            System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
 
         } finally {
             executorService.shutdownNow();
