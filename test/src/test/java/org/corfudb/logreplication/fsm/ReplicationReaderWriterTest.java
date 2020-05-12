@@ -170,10 +170,10 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
     /**
      * Test the TxBuilder logUpdate API work properly.
-     * It first populate tableA with some data.
-     * Then read tableA with stream API and ude logUpdate API,
-     * apply the smrEntries to tableB.
+     * It first populate tableA with some data. Then read tableA with stream API,
+     * then apply the smrEntries to tableB with logUpdate API.
      * Verify that tableB contains all the keys that A has.
+     *
      * @throws NoSuchMethodException
      * @throws IllegalAccessException
      * @throws InvocationTargetException
@@ -226,14 +226,12 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         Stream streamA = (new OpaqueStream(runtime2, runtime2.getStreamsView().
                 get(uuidA, options))).streamUpTo(runtime2.getAddressSpaceView().getLogTail());
 
-        //OpaqueStream txStream = new OpaqueStream(runtime2, runtime2.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID));
         IStreamView txStream = runtime2.getStreamsView()
                 .getUnsafe(ObjectsView.TRANSACTION_STREAM_ID, StreamOptions.builder()
                         .cacheEntries(false)
                         .build());
         long tail = runtime2.getAddressSpaceView().getLogTail();
 
-        // read from streamA and write entries in trasactions to streamB.
         Iterator<OpaqueEntry> iterator = streamA.iterator();
         while (iterator.hasNext()) {
             CorfuStoreMetadata.Timestamp timestamp = corfuStore2.getTimestamp();
