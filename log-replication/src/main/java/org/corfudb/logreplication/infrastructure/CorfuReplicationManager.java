@@ -60,7 +60,8 @@ public class CorfuReplicationManager {
                     log.info("connect to site {} lead node {}:{}", remoteSite.getSiteId(), leader.getIpAddress(), leader.getPortNum());
                     remoteSiteRuntimeMap.put(remoteSite.getSiteId(), leader.getRuntime());
                 } catch (Exception e) {
-                    log.error("Failed to connect to remote sit {}. Retry after 1 second.", remoteSite.getSiteId());
+                    log.error("Exception {}.  Failed to connect to remote site {}. Retry after 1 second.",
+                        e, remoteSite.getSiteId());
                     throw new RetryNeededException();
                 }
                 return null;
