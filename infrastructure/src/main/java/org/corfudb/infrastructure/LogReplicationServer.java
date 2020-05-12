@@ -15,6 +15,10 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -46,13 +50,18 @@ public class LogReplicationServer extends AbstractServer {
         this.serverContext = context;
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
-        LogReplicationConfig config = LogReplicationConfig.fromFile(configFilePath);
+        LogReplicationConfig config = getDefaultLogReplicationConfig();
 
         // TODO (hack): where can we obtain the local corfu endpoint? site manager? or can we always assume port is 9000?
         String corfuPort = serverContext.getLocalEndpoint().equals("localhost:9020") ? ":9001" : ":9000";
         String corfuEndpoint = serverContext.getNodeLocator().getHost() + corfuPort;
         log.info("Initialize Sink Manager with CorfuRuntime to {}", corfuEndpoint);
         this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, config);
+    }
+
+    private LogReplicationConfig getDefaultLogReplicationConfig() {
+        Set<String> streamsToReplicate = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
+        return new LogReplicationConfig(streamsToReplicate, UUID.randomUUID(), UUID.randomUUID());
     }
 
     /* ************ Override Methods ************ */
