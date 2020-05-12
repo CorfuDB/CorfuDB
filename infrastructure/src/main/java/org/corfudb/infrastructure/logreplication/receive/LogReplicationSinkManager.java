@@ -6,6 +6,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.logreplication.DefaultSiteConfig;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
@@ -13,7 +14,9 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.io.IOException;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
@@ -89,24 +92,27 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     private void readConfig() {
+        File configFile = new File(config_file);
         try {
-            File configFile = new File(config_file);
             FileReader reader = new FileReader(configFile);
-
             Properties props = new Properties();
             props.load(reader);
 
-            bufferSize = Integer.parseInt(props.getProperty("log_writer_queue_size", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
-            logEntryWriter.setMaxMsgQueSize(bufferSize);
-
-            ackCycleCnt = Integer.parseInt(props.getProperty("log_writer_ack_cycle_count", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
-            ackCycleTime = Integer.parseInt(props.getProperty("log_writer_ack_cycle_time", Integer.toString(DEFAULT_RESENT_TIMER)));
+            bufferSize = Integer.parseInt(props.getProperty("log_writer_queue_size"));
+            ackCycleCnt = Integer.parseInt(props.getProperty("log_writer_ack_cycle_count"));
+            ackCycleTime = Integer.parseInt(props.getProperty("log_writer_ack_cycle_time"));
             reader.close();
-            log.info("Log writer config queue size {} ackCycleCnt {} ackCycleTime {}",
-                    bufferSize, ackCycleCnt, ackCycleTime);
-        } catch (Exception e) {
-            log.warn("Caught an exception while reading the config file: {}", e.getCause());
+        } catch (FileNotFoundException e) {
+            log.warn("Config file {} does not exist.  Using default configs", config_file);
+            bufferSize = DefaultSiteConfig.getLogWriterQueueSize();
+            ackCycleCnt = DefaultSiteConfig.getLogWriterAckCycleCount();
+            ackCycleTime = DefaultSiteConfig.getLogWriterAckCycleTime();
+        } catch (IOException e) {
+            log.error("IO Exception when reading config file", e);
         }
+        logEntryWriter.setMaxMsgQueSize(bufferSize);
+        log.info("Log writer config queue size {} ackCycleCnt {} ackCycleTime {}",
+                bufferSize, ackCycleCnt, ackCycleTime);
     }
 
     @Override

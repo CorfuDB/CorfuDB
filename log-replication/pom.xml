@@ -86,6 +86,11 @@
       <groupId>org.corfudb</groupId>
       <artifactId>infrastructure</artifactId>
       <version>${revision}</version>
+  </dependency>
+    <dependency>
+      <groupId>org.corfudb</groupId>
+      <artifactId>utils</artifactId>
+      <version>${revision}</version>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>

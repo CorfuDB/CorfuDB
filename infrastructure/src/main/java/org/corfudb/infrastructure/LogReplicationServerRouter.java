@@ -34,7 +34,7 @@ import java.util.Optional;
 public class LogReplicationServerRouter implements IServerRouter {
 
     // TODO(Anny): perhaps move this to LogReplicationParameters and accept in command line.
-    public static String TRANSPORT_CONFIG_FILE_PATH = "/config/corfu/corfu_transport_config.properties";
+    public static String PLUGIN_CONFIG_FILE_PATH = "/config/corfu/corfu_plugin_config.properties";
 
     @Getter
     private IServerChannelAdapter serverAdapter;
@@ -70,7 +70,7 @@ public class LogReplicationServerRouter implements IServerRouter {
 
     private IServerChannelAdapter getAdapter(int port) {
 
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(TRANSPORT_CONFIG_FILE_PATH);
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(PLUGIN_CONFIG_FILE_PATH);
         File jar = new File(config.getTransportAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {

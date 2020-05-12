@@ -3,13 +3,17 @@ package org.corfudb.logreplication.infrastructure;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.DefaultSiteConfig;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteStatus;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -19,7 +23,7 @@ import static java.lang.Thread.sleep;
 @Slf4j
 public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     public static long epoch = 0;
-    public static final int changeInveral = 5000;
+    public static final int changeInterval = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
     private static final String DEFAULT_PRIMARY_SITE_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_SITE_NAME = "standby_site";
@@ -53,57 +57,87 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     public static CrossSiteConfiguration readConfig() throws IOException {
         CrossSiteConfiguration.SiteInfo primarySite;
         Map<String, CrossSiteConfiguration.SiteInfo> standbySites = new HashMap<>();
-        try {
-            File configFile = new File(config_file);
-            FileReader reader = new FileReader(configFile);
+        List<String> primaryNodeNames = new ArrayList<>();
+        List<String> standbyNodeNames = new ArrayList<>();
+        List<String> primaryIpAddresses = new ArrayList<>();
+        List<String> standbyIpAddresses = new ArrayList<>();
+        String primarySiteName;
+        String primaryCorfuPort;
+        String primaryLogReplicationPort;
 
+        String standbySiteName;
+        String standbyCorfuPort;
+        String standbyLogReplicationPort;
+
+        File configFile = new File(config_file);
+        try {
+            FileReader reader = new FileReader(configFile);
             Properties props = new Properties();
             props.load(reader);
 
             Set<String> names = props.stringPropertyNames();
 
-            // Setup primary site information
-            primarySite = new CrossSiteConfiguration.SiteInfo(props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME), SiteStatus.ACTIVE);
-            String corfuPortNum = props.getProperty(PRIMARY_SITE_CORFU_PORTNUM);
-            String portNum = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
-
-
+            primarySiteName = props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME);
+            primaryCorfuPort = props.getProperty(PRIMARY_SITE_CORFU_PORTNUM);
+            primaryLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
                 String nodeName = PRIMARY_SITE_NODE + i;
-                log.info("primary site ipaddress for node {}", nodeName);
                 if (!names.contains(nodeName)) {
                     continue;
                 }
-                String ipAddress = props.getProperty(nodeName);
-                log.info("primary site ipaddress {} for node {}", ipAddress, nodeName);
-                LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(ipAddress, portNum, SiteStatus.ACTIVE, corfuPortNum);
-                primarySite.nodesInfo.add(nodeInfo);
+                primaryNodeNames.add(nodeName);
+                primaryIpAddresses.add(props.getProperty(nodeName));
             }
 
-            // Setup backup site information
-            standbySites = new HashMap<>();
-            standbySites.put(STANDBY_SITE_NAME, new CrossSiteConfiguration.SiteInfo(props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME), SiteStatus.STANDBY));
-            corfuPortNum = props.getProperty(STANDBY_SITE_CORFU_PORTNUM);
-            portNum = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
+            standbySiteName = props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME);
+            standbyCorfuPort = props.getProperty(STANDBY_SITE_CORFU_PORTNUM);
+            standbyLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
                 String nodeName = STANDBY_SITE_NODE + i;
-                log.info("standby site ipaddress for node {}", nodeName);
                 if (!names.contains(nodeName)) {
                     continue;
                 }
-                String ipAddress = props.getProperty(STANDBY_SITE_NODE + i);
-                log.info("standby site ipaddress {} for node {}", ipAddress, i);
-                LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(ipAddress, portNum, SiteStatus.STANDBY, corfuPortNum);
-                standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);
+                standbyNodeNames.add(nodeName);
+                standbyIpAddresses.add(props.getProperty(nodeName));
             }
-
             reader.close();
-            log.info("Primary Site Info {}; Backup Site Info {}", primarySite, standbySites);
-            return new CrossSiteConfiguration(0, primarySite, standbySites);
-        } catch (Exception e) {
-            log.warn("Caught an exception while reading the config file: {}", e);
-            throw e;
+        } catch (FileNotFoundException e) {
+            log.warn("Site Config File {} does not exist.  Using default configs", config_file);
+            primarySiteName = DefaultSiteConfig.getPrimarySiteName();
+            primaryCorfuPort = DefaultSiteConfig.getPrimaryCorfuPort();
+            primaryLogReplicationPort = DefaultSiteConfig.getPrimaryLogReplicationPort();
+            primaryNodeNames.addAll(DefaultSiteConfig.getPrimaryNodeNames());
+            primaryIpAddresses.addAll(DefaultSiteConfig.getPrimaryIpAddresses());
+
+            standbySiteName = DefaultSiteConfig.getStandbySiteName();
+            standbyCorfuPort = DefaultSiteConfig.getStandbyCorfuPort();
+            standbyLogReplicationPort = DefaultSiteConfig.getStandbyLogReplicationPort();
+            standbyNodeNames.addAll(DefaultSiteConfig.getStandbyNodeNames());
+            standbyIpAddresses.addAll(DefaultSiteConfig.getStandbyIpAddresses());
+
         }
+        primarySite = new CrossSiteConfiguration.SiteInfo(primarySiteName, SiteStatus.ACTIVE);
+
+        for (int i = 0; i < primaryNodeNames.size(); i++) {
+            log.info("Primary Site Name {}, IpAddress {}", primaryNodeNames.get(i), primaryIpAddresses.get(i));
+            LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(primaryIpAddresses.get(i),
+                    primaryLogReplicationPort, SiteStatus.ACTIVE, primaryCorfuPort);
+            primarySite.nodesInfo.add(nodeInfo);
+        }
+
+        // Setup backup site information
+        standbySites = new HashMap<>();
+        standbySites.put(STANDBY_SITE_NAME, new CrossSiteConfiguration.SiteInfo(standbySiteName, SiteStatus.STANDBY));
+
+        for (int i = 0; i < standbyNodeNames.size(); i++) {
+            log.info("Standby Site Name {}, IpAddress {}", standbyNodeNames.get(i), standbyIpAddresses.get(i));
+            LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(standbyIpAddresses.get(i),
+                    standbyLogReplicationPort, SiteStatus.STANDBY, standbyCorfuPort);
+            standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);
+        }
+
+        log.info("Primary Site Info {}; Backup Site Info {}", primarySite, standbySites);
+        return new CrossSiteConfiguration(0, primarySite, standbySites);
     }
 
 
@@ -172,7 +206,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         public void run() {
             while (true) {
                 try {
-                    sleep(changeInveral);
+                    sleep(changeInterval);
                     if (siteFlip) {
                         CrossSiteConfiguration newConfig = changePrimary(siteManager.getSiteConfig());
                         siteManager.updateSiteConfig(newConfig.convert2msg());
