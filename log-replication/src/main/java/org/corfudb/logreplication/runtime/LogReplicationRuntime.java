@@ -1,28 +1,44 @@
 package org.corfudb.logreplication.runtime;
 
+import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.protobuf.Message;
 import io.netty.channel.EventLoopGroup;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.SourceManager;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.NodeRouterPool;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.serializer.DynamicProtobufSerializer;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
+import org.corfudb.utils.CommonTypes;
+import org.corfudb.utils.LogReplicationStreams.Namespace;
+import org.corfudb.utils.LogReplicationStreams.TableInfo;
+
 
 import javax.annotation.Nonnull;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
+import java.io.File;
+import java.lang.reflect.InvocationTargetException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.*;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Function;
 
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class LogReplicationRuntime {
@@ -44,6 +60,11 @@ public class LogReplicationRuntime {
     private LogReplicationClient client;
 
     /**
+     * Streams to Replicate
+     */
+    private Set<String> streamsToReplicate;
+
+    /**
      * Log Replication Source Manager - to local Corfu Log Unit
      */
     @Getter
@@ -55,6 +76,12 @@ public class LogReplicationRuntime {
     @Getter
     private final EventLoopGroup nettyEventLoop;
 
+    /**
+     * External Plugin which fetches the streams names to replicate
+     */
+    @Getter
+    private LogReplicationStreamNameFetcher logReplicationStreamNameFetcher;
+
     public LogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters) {
 
         this.parameters = parameters;
@@ -64,6 +91,27 @@ public class LogReplicationRuntime {
 
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
+        initStreamNameFetcherPlugin();
+
+        // Initialize the streamsToReplicate
+        if (!streamsToReplicateTableExists()) {
+            initializeReplicationStreamsTable(logReplicationStreamNameFetcher.fetchStreamsToReplicate());
+        }
+        // TODO - pankti - check the version.  If the table version is <(current version), delete the table and wait
+        // for it to get created
+        streamsToReplicate = getStreamsToReplicateFromTable();
+    }
+
+    private void initStreamNameFetcherPlugin() {
+        File jar = new File("nsx-framework-1.0.jar");
+        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
+            Class plugin = Class.forName("NsxLogReplicationStreamFetcherPlugin", true, child);
+            logReplicationStreamNameFetcher= (LogReplicationStreamNameFetcher) plugin.getDeclaredConstructor()
+                .newInstance();
+        } catch (Exception e) {
+            log.error("Fatal error: Failed to get Stream Fetcher Plugin", e);
+            throw new UnrecoverableCorfuError(e);
+        }
     }
 
     /**
@@ -127,12 +175,48 @@ public class LogReplicationRuntime {
         IClientRouter router = getRouter(parameters.getRemoteLogReplicationServerEndpoint());
         client = new LogReplicationClient(router);
 
-        // TODO (Anny) TEMP fix the tables to replicate
-        Set<String> tablesToReplicate = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, UUID.randomUUID(), UUID.randomUUID());
+        LogReplicationConfig config = new LogReplicationConfig(streamsToReplicate, UUID.randomUUID(), UUID.randomUUID());
         log.info("Set Source Manager to connect to local Corfu on {}", parameters.getLocalCorfuEndpoint());
         sourceManager = new SourceManager(parameters.getLocalCorfuEndpoint(),
                 client, config);
+    }
+
+    private boolean streamsToReplicateTableExists() {
+        CorfuRuntime runtime = new CorfuRuntime();
+        CorfuStore corfuStore = new CorfuStore(runtime);
+        if (corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, "LogReplicationStreams") == null) {
+            return false;
+        }
+        return true;
+    }
+
+    private void initializeReplicationStreamsTable(Map<String, String> streams) {
+        CorfuRuntime runtime = new CorfuRuntime();
+        CorfuStore corfuStore = new CorfuStore(runtime);
+        try {
+            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, "LogReplicationStreams", TableInfo.class,
+                    Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
+            for (Map.Entry<String, String> entry : streams.entrySet()) {
+                TableInfo tableInfo = TableInfo.newBuilder().setName(entry.getKey()).build();
+                Namespace namespace = Namespace.newBuilder().setName(entry.getValue()).build();
+                corfuStore.tx(CORFU_SYSTEM_NAMESPACE).create("LogReplicationStreams", tableInfo, namespace,
+                        null);
+            }
+            corfuStore.tx(CORFU_SYSTEM_NAMESPACE).commit();
+        } catch(NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            log.warn("Exception when opening the table {}", e);
+        }
+    }
+
+    private Set<String> getStreamsToReplicateFromTable() {
+        CorfuRuntime runtime = new CorfuRuntime();
+        CorfuStore corfuStore = new CorfuStore(runtime);
+        corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, "LogReplicationStreams");
+        Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
+        Set<TableInfo> tables = q.keySet("LogReplicationStreams", null);
+        Set<String> tableNames = new HashSet<>();
+        tables.forEach(table -> tableNames.add(table.getName()));
+        return tableNames;
     }
 
     public LogReplicationQueryLeaderShipResponse queryLeadership() throws Exception {

@@ -111,7 +111,7 @@ public class CorfuReplicationManager {
         try {
             log.info("Start Negotiation");
             LogReplicationNegotiationResponse negotiationResponse = logReplicationRuntime.startNegotiation();
-            log.info("Negotiation Response received: " + negotiationResponse);
+            log.info("Negotiation Response received: {}" + negotiationResponse);
             // Determine if we should proceed with Snapshot Sync or Log Entry Sync
             return processNegotiationResponse(negotiationResponse);
         } catch (Exception e) {

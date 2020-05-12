@@ -31,7 +31,6 @@ public class LogReplicationConfig {
      */
     private UUID remoteSiteID;
 
-    private static final String STREAMS_TO_REPLICATE_KEY = "StreamsToReplicate";
     private static final String REMOTE_SITE_UUID_KEY = "RemoteSiteId";
 
     /**
@@ -46,35 +45,10 @@ public class LogReplicationConfig {
         this.remoteSiteID = remoteSiteID;
     }
 
-    public static LogReplicationConfig fromFile(String filePath) {
-
-        try (InputStream input = new FileInputStream(filePath)) {
-
-            Properties prop = new Properties();
-
-            if (input == null) {
-                log.info("Log Replication Config {} not found, DEFAULT values will be used.", filePath);
-                return getDefaultConfig();
-
-            }
-
-            // Load the properties file
-            prop.load(input);
-
-            // Get Values by Keys from Properties File
-            Set<String> streamsToReplicate = new HashSet<>(Arrays.asList(prop.getProperty(STREAMS_TO_REPLICATE_KEY).split(",")));
-            UUID remoteSiteId = UUID.fromString(prop.getProperty(REMOTE_SITE_UUID_KEY));
-
-            log.info("Loaded log replication config: streams to replicate [{}], remote site id {}", streamsToReplicate, remoteSiteId);
-            return new LogReplicationConfig(streamsToReplicate, UUID.randomUUID(), remoteSiteId);
-
-        } catch (Exception e) {
-            log.error("Caught exception while reading log replication config file {}", filePath, e);
-        }
-
-        return getDefaultConfig();
-    }
-
+    /**
+     * TODO: Perhaps we want to keep this for testing?
+     * @return
+     */
     private static LogReplicationConfig getDefaultConfig() {
         Set<String> streamsToReplicate = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
         return new LogReplicationConfig(streamsToReplicate, UUID.randomUUID(), UUID.randomUUID());

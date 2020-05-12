@@ -13,4 +13,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
     private String remoteLogReplicationServerEndpoint;
 
+    private String StreamToReplicateFilePath;
+
 }
