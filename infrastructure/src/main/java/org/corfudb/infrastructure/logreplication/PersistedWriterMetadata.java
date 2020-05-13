@@ -22,10 +22,6 @@ public class PersistedWriterMetadata {
     private static final int NUM_RETRY_WRITE = 3;
     String writerMetadataTableName;
 
-    // this is for internal use to check if the lastBaseSnapshotStart has been changed by
-    // another node or process.
-    private long lastBaseSnapshotStart;
-
     private CorfuTable<String, Long> writerMetaDataTable;
 
     CorfuRuntime runtime;
@@ -68,8 +64,6 @@ public class PersistedWriterMetadata {
             log.warn("Transaction is aborted with writerMetadataTable.size {} ", writerMetaDataTable.size());
         } finally {
             runtime.getObjectsView().TXEnd();
-            //siteEpoch = writerMetaDataTable.get(PersistedWriterMetadataType.SiteEpoch.getVal());
-            lastBaseSnapshotStart = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
         }
     }
 
@@ -87,7 +81,7 @@ public class PersistedWriterMetadata {
      * @param ts
      * @return
      */
-    public long setSrcBaseSnapshotStart(long ts) {
+    public long setSrcBaseSnapshotStart(long epoch, long ts) {
         long persistedEpic = 0;
         long persistedTs = 0;
         int retry = 0;
@@ -98,7 +92,7 @@ public class PersistedWriterMetadata {
                 persistedEpic = writerMetaDataTable.get(PersistedWriterMetadataType.SiteEpoch.getVal());
                 persistedTs = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
 
-                if (ts >= persistedTs) {
+                if (epoch == persistedEpic && ts >= persistedTs) {
                     writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), persistedEpic);
                     writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), ts);
                     writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), Address.NON_ADDRESS);
@@ -115,13 +109,10 @@ public class PersistedWriterMetadata {
                 log.warn("While trying to update lastSnapStart value to {}, aborted with retry {}", ts, retry);
             } finally {
                 runtime.getObjectsView().TXEnd();
-                persistedTs = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
             }
         }
 
-        //siteEpoch = writerMetaDataTable.get(PersistedWriterMetadataType.SiteEpoch.getVal());
-        lastBaseSnapshotStart = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
-        return lastBaseSnapshotStart;
+        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
     }
 
     /**
@@ -133,7 +124,7 @@ public class PersistedWriterMetadata {
             runtime.getObjectsView().TXBegin();
             long epoch = writerMetaDataTable.get(PersistedWriterMetadataType.SiteEpoch.getVal());
             long ts = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
-            if (epoch == entry.getMetadata().getSiteEpoch() && lastBaseSnapshotStart == ts) {
+            if (epoch == entry.getMetadata().getSiteEpoch() && ts == entry.getMetadata().getSnapshotTimestamp()) {
                 writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), epoch);
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapTransferDone.getVal(), ts);
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapApplyDone.getVal(), ts);
@@ -142,7 +133,7 @@ public class PersistedWriterMetadata {
                 log.info("update lastSnapTransferDone {} ", ts);
             } else {
                 log.warn("skip update lastSnapTransferDone as Epic curent {} != persist {} or BaseSnapStart: current {} != persist {}",
-                        entry.getMetadata().getSiteEpoch(), epoch, lastBaseSnapshotStart, ts);
+                        entry.getMetadata().getSiteEpoch(), epoch, entry.getMetadata().getSnapshotTimestamp(), ts);
             }
         } catch (TransactionAbortedException e) {
             log.warn("Transaction is aborted. The snapshot has been updated by someone else");

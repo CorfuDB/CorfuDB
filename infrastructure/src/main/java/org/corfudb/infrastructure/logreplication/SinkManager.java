@@ -233,7 +233,7 @@ public class SinkManager implements DataReceiver {
                 entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
 
         // If we are just starting snapshot sync, initialize base snapshot start
-        timestamp = persistedWriterMetadata.setSrcBaseSnapshotStart(timestamp);
+        timestamp = persistedWriterMetadata.setSrcBaseSnapshotStart(entry.getMetadata().getSiteEpoch(), timestamp);
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
         snapshotWriter.reset(timestamp);
