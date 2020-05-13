@@ -7,16 +7,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.LogEntrySender;
-import org.corfudb.logreplication.send.PersistedReaderMetadata;
 import org.corfudb.logreplication.send.ReadProcessor;
 import org.corfudb.logreplication.send.SnapshotReader;
 import org.corfudb.logreplication.send.SnapshotSender;
 import org.corfudb.logreplication.send.StreamsLogEntryReader;
 import org.corfudb.logreplication.send.StreamsSnapshotReader;
-import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -135,11 +135,6 @@ public class LogReplicationFSM {
     private ObservableValue numTransitions = new ObservableValue(0);
 
     /**
-     * Metadata to persist in the Sender
-     */
-    PersistedReaderMetadata persistedReaderMetadata;
-
-    /**
      *
      */
     LogEntryReader logEntryReader;
@@ -148,6 +143,18 @@ public class LogReplicationFSM {
      *
      */
     SnapshotReader snapshotReader;
+
+    /**
+     *
+     */
+    @Getter
+    long baseSnapshot = Address.NON_ADDRESS;
+
+    /**
+     *
+     */
+    @Getter
+    long ackedTimestamp = Address.NON_ADDRESS;
 
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
@@ -198,7 +205,6 @@ public class LogReplicationFSM {
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build());
-        this.persistedReaderMetadata = new PersistedReaderMetadata(runtime, config.getRemoteSiteID());
 
         logReplicationFSMConsumer.submit(this::consume);
 
@@ -269,7 +275,7 @@ public class LogReplicationFSM {
                 if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC &&
                         state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
                     log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
-                    persistedReaderMetadata.setLastAckedTimestamp(event.getMetadata().getSyncTimestamp());
+                    ackedTimestamp = event.getMetadata().getSyncTimestamp();
                 }
             } else {
                 if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE) {
@@ -277,8 +283,7 @@ public class LogReplicationFSM {
                     if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC &&
                             state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
                         log.debug("Snapshot Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
-                        // Retrieve the base snapshot timestamp associated to this snapshot sync request from the send
-                        persistedReaderMetadata.setLastSentBaseSnapshotTimestamp(event.getMetadata().getSyncTimestamp());
+                        baseSnapshot = event.getMetadata().getSyncTimestamp();
                     }
                 }
 
