@@ -124,10 +124,10 @@ public class InLogEntrySyncState implements LogReplicationState {
             // address and send incremental updates from this point onwards.
             if (from.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC
                     || from.getType() == LogReplicationStateType.INITIALIZED) {
-                logEntrySender.reset(fsm.persistedReaderMetadata);
+                logEntrySender.reset(fsm.getBaseSnapshot(), fsm.getAckedTimestamp());
             }
 
-            logEntrySender.updateAckTs(fsm.persistedReaderMetadata.getLastAckedTimestamp());
+            logEntrySender.updateAckTs(fsm.getAckedTimestamp());
             logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() -> logEntrySender.send(transitionEventId));
 
         } catch (Throwable t) {
