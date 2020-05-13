@@ -2,10 +2,11 @@ package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.PersistedWriterMetadata;
 
-import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.StandbySite;
+import java.util.concurrent.LinkedBlockingQueue;
+
 import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.PrimarySite;
+import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.StandbySite;
 
 /**
  * This class represents the Replication Discovery Service.
@@ -31,6 +32,11 @@ public class CorfuReplicationDiscoveryService implements Runnable {
     CrossSiteConfiguration crossSiteConfig;
     CrossSiteConfiguration.NodeInfo nodeInfo = null;
 
+    /**
+     * A queue of events.
+     */
+    private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
+
     public CorfuReplicationDiscoveryService(String endpoint, CorfuReplicationServerNode serverNode, CorfuReplicationSiteManagerAdapter siteManager) {
         this.replicationServerNode = serverNode;
         this.replicationManager = new CorfuReplicationManager();
@@ -44,11 +50,18 @@ public class CorfuReplicationDiscoveryService implements Runnable {
 
         while (shouldRun) {
             try {
-                //notification.drainPermits();
-                synchronized (siteManager) {
-                    runService();
-                    siteManager.wait();
-                    //System.out.print("\n *****site switch");
+                //discover the current site configuration.
+                runService();
+
+                // blocking on the event queue.
+                // will unblock untill there is a new epoch for site information.
+                synchronized (eventQueue) {
+                    while (true) {
+                        DiscoveryServiceEvent event = eventQueue.take();
+                        if (event.crossSiteConfiguration.getEpoch() > crossSiteConfig.getEpoch()) {
+                            break;
+                        }
+                    }
                 }
                 replicationManager.stopLogReplication(crossSiteConfig);
             } catch (Exception e) {
@@ -109,6 +122,11 @@ public class CorfuReplicationDiscoveryService implements Runnable {
         }
     }
 
+    public synchronized void putEvent(DiscoveryServiceEvent event) {
+        eventQueue.add(event);
+        notifyAll();
+    }
+
     /**
      * Attempt to acquire lock, to become the lead replication node of this cluster.
      *
@@ -120,5 +138,26 @@ public class CorfuReplicationDiscoveryService implements Runnable {
 
     private void releaseLock() {
 
+    }
+
+    public enum DiscoveryServiceEventType {
+        DiscoverySite("SiteChange");
+
+        @Getter
+        String val;
+        DiscoveryServiceEventType(String newVal) {
+            val = newVal;
+        }
+    }
+
+    static class DiscoveryServiceEvent {
+        DiscoveryServiceEventType type;
+        @Getter
+        CrossSiteConfiguration crossSiteConfiguration;
+
+        DiscoveryServiceEvent(DiscoveryServiceEventType type, CrossSiteConfiguration config) {
+            this.type = type;
+            this.crossSiteConfiguration = config;
+        }
     }
 }
