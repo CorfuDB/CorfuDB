@@ -52,6 +52,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
     static private final int START_VAL = 1;
     static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
     static final UUID REMOTE_SITE_ID = UUID.randomUUID();
+    static final int NUM_KEYS = 4;
 
     CorfuRuntime srcDataRuntime = null;
     CorfuRuntime dstDataRuntime = null;
@@ -204,7 +205,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         //System.out.print("\n uuidA " + uuidA + " uuidB " + uuidB + " uuidC " + uuidC);
 
         //update tableA
-        for (int i = 0; i < 4; i ++) {
+        for (int i = 0; i < NUM_KEYS; i ++) {
             UUID uuid = UUID.randomUUID();
             Uuid key = Uuid.newBuilder()
                     .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
