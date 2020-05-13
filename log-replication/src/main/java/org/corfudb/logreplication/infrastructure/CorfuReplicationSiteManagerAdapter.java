@@ -4,7 +4,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.io.IOException;
-import java.util.concurrent.Semaphore;
+
+import static org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService.DiscoveryServiceEventType.DiscoverySite;
 
 public abstract class CorfuReplicationSiteManagerAdapter {
     @Getter
@@ -15,10 +16,8 @@ public abstract class CorfuReplicationSiteManagerAdapter {
     CrossSiteConfiguration crossSiteConfiguration;
 
     public synchronized CrossSiteConfiguration fetchSiteConfiguration() throws IOException {
-        if (crossSiteConfiguration == null) {
-            crossSiteConfiguration = query();
-        }
-        return crossSiteConfiguration;
+        crossSiteConfiguration = query();
+       return crossSiteConfiguration;
     }
 
     /**
@@ -27,23 +26,14 @@ public abstract class CorfuReplicationSiteManagerAdapter {
      * @return
      */
     synchronized void update(CrossSiteConfiguration newConfiguration) {
-        if (crossSiteConfiguration == null) {
-            //If the the config hasn't been initialized, set the config
-            crossSiteConfiguration = newConfiguration;
-        } else if (newConfiguration.getEpoch() > crossSiteConfiguration.getEpoch()) {
-            //If the newCongig has higher epoch, update it
-
-            //TODO: enforce stop replication work and get into idle state
-            //need to call disconnect to stop the current router?
-            getCorfuReplicationDiscoveryService().getReplicationManager().stopLogReplication(crossSiteConfiguration);
-            crossSiteConfiguration = newConfiguration;
-
             //System.out.print("\nnotify the site change");
-            notifyAll();
-        }
+            if (newConfiguration.getEpoch() > crossSiteConfiguration.getEpoch()) {
+                crossSiteConfiguration = newConfiguration;
+                corfuReplicationDiscoveryService.putEvent(new CorfuReplicationDiscoveryService.DiscoveryServiceEvent(DiscoverySite, newConfiguration));
+            }
     }
 
-    public synchronized CrossSiteConfiguration query() throws IOException {
+    public CrossSiteConfiguration query() throws IOException {
         return null;
     };
 

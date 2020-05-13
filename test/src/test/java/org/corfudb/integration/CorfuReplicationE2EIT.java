@@ -1,8 +1,8 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationServer;
-import org.corfudb.logreplication.infrastructure.CorfuReplicationSiteManagerAdapter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
@@ -133,10 +133,11 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             System.out.print("\nmapA1 keySet " + mapA.keySet() + " mapAstandby " + mapAStandby.keySet());
             System.out.print("\nwait for site switch " + activeRuntime.getAddressSpaceView().getLogTail());
 
-            CorfuReplicationSiteManagerAdapter siteManagerAdapter = serverA.getSiteManagerAdapter();
-            synchronized (siteManagerAdapter) {
-                serverA.getSiteManagerAdapter().wait();
+            CorfuReplicationDiscoveryService discoveryService = serverA.getReplicationDiscoveryService();
+            synchronized (discoveryService) {
+                discoveryService.wait();
             }
+
             currentPimary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
             assertThat(currentPimary).isNotEqualTo(primary);
             System.out.print("\nVerified Site Role Change " + activeRuntime.getAddressSpaceView().getLogTail());
