@@ -5,24 +5,17 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.PersistedWriterMetadata;
+import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 import org.corfudb.logreplication.SourceManager;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.LogReplicationStateType;
 import org.corfudb.logreplication.fsm.ObservableAckMsg;
-
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.infrastructure.logreplication.PersistedWriterMetadata;
-
-import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
-
-import org.corfudb.logreplication.send.PersistedReaderMetadata;
-
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
-
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -42,15 +35,12 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 
 import static java.lang.Thread.sleep;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed;
 import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapApplyDone;
 import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart;
-import static org.corfudb.logreplication.send.PersistedReaderMetadata.PersistedMetaDataType.LastLogSync;
-import static org.corfudb.logreplication.send.PersistedReaderMetadata.PersistedMetaDataType.LastSnapSync;
+import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 
 /**
  * Start two servers, one as the src, the other as the dst.
