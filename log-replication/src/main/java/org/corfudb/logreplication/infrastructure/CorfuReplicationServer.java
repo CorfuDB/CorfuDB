@@ -174,6 +174,9 @@ public class CorfuReplicationServer implements Runnable {
     @Getter
     private CorfuReplicationSiteManagerAdapter siteManagerAdapter = null;
 
+    @Getter
+    CorfuReplicationDiscoveryService replicationDiscoveryService;
+
     final ServerContext serverContext = null;
     String[] args;
 
@@ -245,8 +248,8 @@ public class CorfuReplicationServer implements Runnable {
                     String endpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).toEndpointUrl();
                     activeServer = new CorfuReplicationServerNode(serverContext);
 
-                    Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(endpoint, activeServer, siteManagerAdapter);
-                    Thread replicationDiscoveryThread = new Thread(replicationDiscoveryRunnable);
+                    replicationDiscoveryService = new CorfuReplicationDiscoveryService(endpoint, activeServer, siteManagerAdapter);
+                    Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService);
                     replicationDiscoveryThread.start();
 
 
