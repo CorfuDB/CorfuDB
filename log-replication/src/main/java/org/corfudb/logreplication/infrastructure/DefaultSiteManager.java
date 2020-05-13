@@ -10,14 +10,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.Semaphore;
 
 import static java.lang.Thread.sleep;
 
 @Slf4j
 public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     public static long epoch = 0;
-    public static final int changeInveral = 10000;
+    public static final int changeInveral = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
     private static final String DEFAULT_PRIMARY_SITE_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_SITE_NAME = "standby_site";
@@ -108,7 +107,10 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
 
     @Override
     public synchronized CrossSiteConfiguration query() throws IOException {
-        return readConfig();
+        if (crossSiteConfiguration == null) {
+            crossSiteConfiguration = readConfig();
+        }
+        return crossSiteConfiguration;
     }
 
     /**
@@ -152,7 +154,6 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             boolean shouldChange = true;
             while (shouldChange) {
                 try {
-                    //System.out.print("\nwill sleep then change the site role");
                     sleep(changeInveral);
                     if (shouldChange) {
                         CrossSiteConfiguration newConfig = changePrimary(siteManager.getCrossSiteConfiguration());
