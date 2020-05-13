@@ -102,11 +102,26 @@ public class TxBuilder {
 
     /**
      *
-     * @param streamId      The stream to perform the update.
+     * @param tableName      The talbeName to perform the update.
      * @param updateEntry   The entry to be applied to the stream.
      * @return TxBuilder Instance
      */
-    public TxBuilder logUpdate(UUID streamId, SMREntry updateEntry) {
+    public TxBuilder logUpdate(String tableName, SMREntry updateEntry) {
+
+        try {
+            if (tableRegistry.getTable(namespace, tableName) != null) {
+                throw new UnsupportedOperationException("The provided table is already opened. "
+                        + "The logUpdate operaton could not be applied to an opened table. table "
+                        + tableName + " in namespace " + namespace);
+            }
+        } catch (Exception e) {
+            //This is the correct exception.
+            if (!(e instanceof IllegalArgumentException)) {
+                throw e;
+            }
+        }
+
+        UUID streamId = UUID.nameUUIDFromBytes((TableRegistry.getFullyQualifiedTableName(namespace, tableName).getBytes()));
         operations.add(() -> {
         TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntry);
         });

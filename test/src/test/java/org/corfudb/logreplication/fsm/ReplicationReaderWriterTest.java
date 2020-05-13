@@ -246,7 +246,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
             txBuilder.update(tableCName, key, key, key);
             OpaqueEntry opaqueEntry = iterator.next();
             for( SMREntry smrEntry : opaqueEntry.getEntries().get(uuidA)) {
-                    txBuilder.logUpdate(uuidB, smrEntry);
+                    txBuilder.logUpdate(tableBName, smrEntry);
             }
             txBuilder.commit(timestamp);
         }
@@ -263,7 +263,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         Set<Uuid> aSet = q.keySet(tableAName, null);
         Set<Uuid> bSet = q.keySet(tableBName, null);
 
-        //System.out.print(" aSet " + aSet + " bSet " + bSet);
+        System.out.print("\naSet " + aSet + "\n\nbSet " + bSet);
         assertThat(bSet.containsAll(aSet)).isTrue();
         assertThat(aSet.containsAll(bSet)).isTrue();
     }
