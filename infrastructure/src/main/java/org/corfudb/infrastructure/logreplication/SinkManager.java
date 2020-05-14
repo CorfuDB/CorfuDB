@@ -227,16 +227,17 @@ public class SinkManager implements DataReceiver {
     }
 
     private void initializeSnapshotSync(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry) {
+        long siteEpoch = entry.getMetadata().getSiteEpoch();
         long timestamp = entry.getMetadata().getSnapshotTimestamp();
 
         log.debug("Received snapshot sync start marker for {} on base snapshot timestamp {}",
                 entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
 
         // If we are just starting snapshot sync, initialize base snapshot start
-        timestamp = persistedWriterMetadata.setSrcBaseSnapshotStart(timestamp);
+        timestamp = persistedWriterMetadata.setSrcBaseSnapshotStart(siteEpoch, timestamp);
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
-        snapshotWriter.reset(timestamp);
+        snapshotWriter.reset(siteEpoch, timestamp);
 
         // Retrieve snapshot request ID to be used for ACK of snapshot sync complete
         snapshotRequestId = entry.getMetadata().getSyncRequestId();
