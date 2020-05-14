@@ -6,14 +6,9 @@ import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.runtime.LogReplicationClient;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
-import org.corfudb.util.CFUtils;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
 
 @Slf4j
 public class CorfuDataSender implements DataSender {

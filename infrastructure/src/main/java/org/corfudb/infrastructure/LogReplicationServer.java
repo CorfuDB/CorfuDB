@@ -98,7 +98,7 @@ public class LogReplicationServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP)
     private void handleLogReplicationQueryLeadership(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("******Log Replication Query Leadership Request received by Server.");
-        //TODO: setup
+        //TODO(Anny-Lock): if lock is acquired by this node, properly set the response.
         LogReplicationQueryLeaderShipResponse resp = new LogReplicationQueryLeaderShipResponse(0, true);
         r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE.payloadMsg(resp));
     }

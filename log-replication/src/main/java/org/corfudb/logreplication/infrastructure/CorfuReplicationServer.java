@@ -4,12 +4,14 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.LogReplicationTransportType;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
+import java.util.Arrays;
 import java.util.Map;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
@@ -44,6 +46,7 @@ public class CorfuReplicationServer {
                     + "[-z <tls-protocols>]] [-H <seconds>] "
                     + "[-T <threads>] [-B <size>] "
                     + "[--metrics] [--metrics-port <metrics_port>] "
+                    + "[--custom-transport] "
                     + "[-P <prefix>] [-R <retention>] [--agent] <port> \n"
                     + "\n"
                     + "Options:\n"
@@ -152,6 +155,8 @@ public class CorfuReplicationServer {
                     + " --agent      Run with byteman agent to enable runtime code injection.\n  "
                     + " --metrics                                                                "
                     + "              Enable metrics provider.\n                                  "
+                    + " --custom-transport                                                       "
+                    + "              Enable custom transport layer (defined plugin).\n           "
                     + " --metrics-port=<metrics_port>                                            "
                     + "              Metrics provider server port [default: 9999].\n             "
                     + " -h, --help                                                               "
@@ -159,29 +164,31 @@ public class CorfuReplicationServer {
                     + " --version                                                                "
                     + "              Show version\n";
 
-        // Active Corfu Server Node.
-        private static volatile CorfuReplicationServerNode activeServer;
+    // Active Corfu Server Node.
+    private static volatile CorfuReplicationServerNode activeServer;
 
-        // Flag if set to true - causes the Corfu Server to shutdown.
-        private static volatile boolean shutdownServer = false;
-        // If set to true - triggers a reset of the server by wiping off all the data.
-        private static volatile boolean cleanupServer = false;
-        // Error code required to detect an ungraceful shutdown.
-        private static final int EXIT_ERROR_CODE = 100;
+    // Flag if set to true - causes the Corfu Server to shutdown.
+    private static volatile boolean shutdownServer = false;
 
-        /**
-         * Main program entry point.
-         *
-         * @param args command line argument strings
-         */
-        public static void main(String[] args) {
-            try {
-                startServer(args);
-            } catch (Throwable err) {
-                log.error("Exit. Unrecoverable error", err);
-                throw err;
-            }
+    // If set to true - triggers a reset of the server by wiping off all the data.
+    private static volatile boolean cleanupServer = false;
+
+    // Error code required to detect an ungraceful shutdown.
+    private static final int EXIT_ERROR_CODE = 100;
+
+    /**
+     * Main program entry point.
+     *
+     * @param args command line argument strings
+     */
+    public static void main(String[] args) {
+        try {
+            startServer(args);
+        } catch (Throwable err) {
+            log.error("Exit. Unrecoverable error", err);
+            throw err;
         }
+    }
 
     private static void startServer(String[] args) {
             // Parse the options given, using docopt.
@@ -192,7 +199,7 @@ public class CorfuReplicationServer {
             printStartupMsg(opts);
             configureLogger(opts);
 
-            log.debug("Started with arguments: {}", opts);
+            log.info("Started with arguments: {}", opts);
 
             // Bind to all interfaces only if no address or interface specified by the user.
             // Fetch the address if given a network interface.
@@ -216,32 +223,36 @@ public class CorfuReplicationServer {
 
             // Manages the lifecycle of the Corfu Server.
             while (!shutdownServer) {
-                final ServerContext serverContext = new ServerContext(opts);
-                try {
-                    activeServer = new CorfuReplicationServerNode(serverContext);
+                    final ServerContext serverContext = new ServerContext(opts);
+                    try {
+                        activeServer = new CorfuReplicationServerNode(serverContext);
 
-                    // Start LogReplicationDiscovery Service, responsible for
-                    // acquiring lock, retrieving Site Manager Info and processing this info
-                    // so this node is initialized as Source (sender) or Sink (receiver)
-                    Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(NodeLocator.parseString(serverContext.getLocalEndpoint()));
-                    Thread replicationDiscoveryThread = new Thread(replicationDiscoveryRunnable);
-                    replicationDiscoveryThread.start();
+                        // Start LogReplicationDiscovery Service, responsible for
+                        // acquiring lock, retrieving Site Manager Info and processing this info
+                        // so this node is initialized as Source (sender) or Sink (receiver)
+                        LogReplicationTransportType transport = serverContext.getServerConfig()
+                                .get("--custom-transport") != null ? LogReplicationTransportType.CUSTOM :
+                                LogReplicationTransportType.NETTY;
+                        Runnable replicationDiscoveryRunnable = new CorfuReplicationDiscoveryService(NodeLocator.parseString(serverContext.getLocalEndpoint()),
+                                transport);
+                        Thread replicationDiscoveryThread = new Thread(replicationDiscoveryRunnable);
+                        replicationDiscoveryThread.start();
 
-                    // Start Corfu Replication Server Node
-                    activeServer.startAndListen();
-                } catch (Throwable th) {
-                    log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
-                    System.exit(EXIT_ERROR_CODE);
+                        // Start Corfu Replication Server Node
+                        activeServer.startAndListen();
+                    } catch (Throwable th) {
+                        log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
+                        System.exit(EXIT_ERROR_CODE);
+                    }
+
+                    if (cleanupServer) {
+                        cleanupServer = false;
+                    }
+
+                    if (!shutdownServer) {
+                        log.info("main: Server restarting.");
+                    }
                 }
-
-                if (cleanupServer) {
-                    cleanupServer = false;
-                }
-
-                if (!shutdownServer) {
-                    log.info("main: Server restarting.");
-                }
-            }
 
             log.info("main: Server exiting due to shutdown");
         }

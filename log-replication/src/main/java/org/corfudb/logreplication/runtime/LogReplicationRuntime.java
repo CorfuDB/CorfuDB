@@ -6,6 +6,11 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.CorfuReplicationTransportConfig;
+import org.corfudb.infrastructure.CustomClientRouter;
+import org.corfudb.infrastructure.CustomServerRouter;
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.LogReplicationTransportType;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.SourceManager;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
@@ -13,9 +18,13 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLead
 import org.corfudb.runtime.NodeRouterPool;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.NettyClientRouter;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
+import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -32,6 +41,8 @@ public class LogReplicationRuntime {
      */
     @Getter
     private final LogReplicationRuntimeParameters parameters;
+
+    private LogReplicationTransportType transport;
 
     /**
      * Node Router Pool.
@@ -57,6 +68,8 @@ public class LogReplicationRuntime {
     public LogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters) {
 
         this.parameters = parameters;
+
+        this.transport = parameters.getTransport();
 
         // Generate or set the NettyEventLoop
         nettyEventLoop =  getNewEventLoopGroup();
@@ -90,10 +103,30 @@ public class LogReplicationRuntime {
     @Getter
     private final Function<String, IClientRouter> getRouterFunction = (address) -> {
                 NodeLocator node = NodeLocator.parseString(address);
-                // Generate a new router, start it and add it to the table.
-                NettyClientRouter newRouter = new NettyClientRouter(node,
-                        getNettyEventLoop(),
-                        getParameters());
+                IClientRouter newRouter;
+
+                log.trace("Get Router for underlying {} transport on {}", transport, address);
+
+                if (transport.equals(LogReplicationTransportType.CUSTOM)) {
+
+                    CorfuReplicationTransportConfig config = new CorfuReplicationTransportConfig(CustomServerRouter.TRANSPORT_CONFIG_FILE_PATH);
+
+                    File jar = new File(config.getAdapterJARPath());
+
+                    try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
+                        Class adapter = Class.forName(config.getAdapterClientClassName(), true, child);
+                        newRouter = new CustomClientRouter(node, getParameters(), adapter);
+                    } catch (Exception e) {
+                        log.error("Fatal error: Failed to create channel", e);
+                        throw new UnrecoverableCorfuError(e);
+                    }
+
+                } else {
+                    newRouter = new NettyClientRouter(node,
+                            getNettyEventLoop(),
+                            getParameters());
+                }
+
                 log.debug("Connecting to new router {}", node);
                 try {
                     newRouter.addClient(new LogReplicationHandler());
@@ -135,13 +168,13 @@ public class LogReplicationRuntime {
     }
 
     public LogReplicationQueryLeaderShipResponse queryLeadership() throws Exception {
-        log.info("***** Send QueryLeadership Request");
+        log.info("***** Send QueryLeadership Request on a client to: {}", client.getRouter().getPort());
         return client.sendQueryLeadership().get();
     }
 
 
     public LogReplicationNegotiationResponse startNegotiation() throws Exception {
-        log.info("Send Notification Request");
+        log.info("Send Negotiation Request");
         return client.sendNegotiationRequest().get();
     }
 
@@ -163,4 +196,5 @@ public class LogReplicationRuntime {
     public void startLogEntrySync() {
         sourceManager.startReplication();
     }
+
 }

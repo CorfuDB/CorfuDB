@@ -56,7 +56,7 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE)
     private static Object handleLogReplicationQueryLeadershipResponse(CorfuPayloadMsg<LogReplicationQueryLeaderShipResponse> msg,
                                                                       ChannelHandlerContext ctx, IClientRouter r) {
-        log.info("********Handle log replication query leadership response msg {}", msg);
+        log.info("Handle log replication query leadership response msg {}", msg);
         return msg.getPayload();
     }
 

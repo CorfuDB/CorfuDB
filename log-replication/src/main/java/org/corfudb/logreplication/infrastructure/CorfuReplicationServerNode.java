@@ -16,13 +16,17 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
+import org.corfudb.infrastructure.CustomServerRouter;
+import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.NettyServerRouter;
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerHandshakeHandler;
 import org.corfudb.infrastructure.ServerThreadFactory;
+
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
@@ -32,6 +36,7 @@ import org.corfudb.util.Version;
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.Optional;
@@ -51,12 +56,14 @@ public class CorfuReplicationServerNode implements AutoCloseable {
     private final Map<Class, AbstractServer> serverMap;
 
     @Getter
-    private final NettyServerRouter router;
+    private final IServerRouter router;
 
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;
 
     private ChannelFuture bindFuture;
+
+    private boolean useNetty = true;
 
     /**
      * Corfu Server initialization.
@@ -82,20 +89,32 @@ public class CorfuReplicationServerNode implements AutoCloseable {
                                       @Nonnull Map<Class, AbstractServer> serverMap) {
         this.serverContext = serverContext;
         this.serverMap = serverMap;
-        router = new NettyServerRouter(new ArrayList<>(serverMap.values()));
-        this.serverContext.setServerRouter(router);
         this.close = new AtomicBoolean(false);
+
+        // If custom-transport is not specified by user, it will default to use Netty
+        if (serverContext.getServerConfig().get("--custom-transport") != null) {
+            useNetty = false;
+            router = new CustomServerRouter(new ArrayList<>(serverMap.values()),
+                    Integer.parseInt((String) serverContext.getServerConfig().get("<port>")));
+            log.info("Corfu Replication Server initialized for CUSTOM transport.");
+        } else {
+            log.info("Corfu Replication Server initialized for NETTY transport.");
+            router = new NettyServerRouter(new ArrayList<>(serverMap.values()));
+        }
+
+        this.serverContext.setServerRouter(router);
     }
 
+
     /**
-     * Start the Corfu Server by listening on the specified port.
+     * Start the Corfu Replication Server by listening on the specified port.
      */
-    public ChannelFuture start() {
+    private ChannelFuture start() {
         bindFuture = bindServer(serverContext.getBossGroup(),
                 serverContext.getWorkerGroup(),
                 this::configureBootstrapOptions,
                 serverContext,
-                router,
+                (NettyServerRouter) router,
                 (String) serverContext.getServerConfig().get("--address"),
                 Integer.parseInt((String) serverContext.getServerConfig().get("<port>")));
 
@@ -106,8 +125,16 @@ public class CorfuReplicationServerNode implements AutoCloseable {
      * Wait on Corfu Server Channel until it closes.
      */
     public void startAndListen() {
-        // Wait on it to close.
-        this.start().channel().closeFuture().syncUninterruptibly();
+        if (useNetty) {
+            // Wait on it to close.
+            start().channel().closeFuture().syncUninterruptibly();
+        } else {
+            try {
+                ((CustomServerRouter) this.router).getServerAdapter().start().get();
+            } catch (Exception e) {
+                throw new UnrecoverableCorfuError(e);
+            }
+        }
     }
 
     /**
@@ -123,7 +150,10 @@ public class CorfuReplicationServerNode implements AutoCloseable {
 
         log.info("close: Shutting down Corfu server and cleaning resources");
         serverContext.close();
-        bindFuture.channel().close().syncUninterruptibly();
+
+        if (useNetty) {
+            bindFuture.channel().close().syncUninterruptibly();
+        }
 
         // A executor service to create the shutdown threads
         // plus name the threads correctly.
@@ -237,8 +267,6 @@ public class CorfuReplicationServerNode implements AutoCloseable {
      */
     private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
                                                                   @Nonnull NettyServerRouter router) {
-
-        log.info("****** get Server Channel Initializer");
 
         // Generate the initializer.
         return new ChannelInitializer() {
