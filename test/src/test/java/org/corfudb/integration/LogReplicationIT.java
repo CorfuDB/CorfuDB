@@ -1254,7 +1254,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // If expected a ackTs, release semaphore / unblock the wait
         if (observableAckMsg.getDataMessage() != null) {
             LogReplicationEntry logReplicationEntry = observableAckMsg.getDataMessage();
-            System.out.print("\nackMsg " + logReplicationEntry.getMetadata());
+            //System.out.print("\nackMsg " + logReplicationEntry.getMetadata());
             switch (testConfig.waitOn) {
                 case ON_ACK:
                     verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
