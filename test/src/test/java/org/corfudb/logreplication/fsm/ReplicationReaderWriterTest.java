@@ -126,7 +126,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, 0, uuid, uuid);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
 
-        writer.reset(msgQ.get(0).getMetadata().getSnapshotTimestamp());
+        writer.reset(msgQ.get(0).getMetadata().getSiteEpoch(), msgQ.get(0).getMetadata().getSnapshotTimestamp());
 
         for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
@@ -158,14 +158,11 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
         verifyNoData(srcTables);
 
-        //openStreams(shadowTables, srcDataRuntime, true);
-        //clear all tables, play messages
-        writeMsgs(msgQ, hashMap.keySet(), writerRuntime);
+        ReplicationReaderWriterIT.writeSnapLogMsgs(msgQ, srcTables.keySet(), writerRuntime);
 
-
-        openStreams(dstTables, dstDataRuntime);
 
         //verify data with hashtable
+        openStreams(dstTables, dstDataRuntime);
         verifyData("after writing log entry at dst", dstTables, hashMap);
     }
 
