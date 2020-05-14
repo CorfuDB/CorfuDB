@@ -5,12 +5,14 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.LogReplicationTransportType;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
+import java.util.Arrays;
 import java.util.Map;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
@@ -45,6 +47,7 @@ public class CorfuReplicationServer implements Runnable {
                     + "[-z <tls-protocols>]] [-H <seconds>] "
                     + "[-T <threads>] [-B <size>] "
                     + "[--metrics] [--metrics-port <metrics_port>] "
+                    + "[--custom-transport] "
                     + "[-P <prefix>] [-R <retention>] [--agent] <port> \n"
                     + "\n"
                     + "Options:\n"
@@ -153,6 +156,8 @@ public class CorfuReplicationServer implements Runnable {
                     + " --agent      Run with byteman agent to enable runtime code injection.\n  "
                     + " --metrics                                                                "
                     + "              Enable metrics provider.\n                                  "
+                    + " --custom-transport                                                       "
+                    + "              Enable custom transport layer (defined plugin).\n           "
                     + " --metrics-port=<metrics_port>                                            "
                     + "              Metrics provider server port [default: 9999].\n             "
                     + " -h, --help                                                               "
@@ -208,69 +213,73 @@ public class CorfuReplicationServer implements Runnable {
     }
 
     private void startServer() {
-            // Parse the options given, using docopt.
-            Map<String, Object> opts = new Docopt(USAGE)
-                    .withVersion(GitRepositoryState.getRepositoryState().describe)
-                    .parse(args);
+        // Parse the options given, using docopt.
+        Map<String, Object> opts = new Docopt(USAGE)
+                .withVersion(GitRepositoryState.getRepositoryState().describe)
+                .parse(args);
 
-            printStartupMsg(opts);
-            configureLogger(opts);
+        printStartupMsg(opts);
+        configureLogger(opts);
 
-            log.debug("Started with arguments: {}", opts);
+        log.info("Started with arguments: {}", opts);
 
-            // Bind to all interfaces only if no address or interface specified by the user.
-            // Fetch the address if given a network interface.
-            if (opts.get("--network-interface") != null) {
-                opts.put("--address", getAddressFromInterfaceName((String) opts.get("--network-interface")));
-                opts.put("--bind-to-all-interfaces", false);
-            } else if (opts.get("--address") == null) {
-                // Default the address to localhost and set the bind to all interfaces flag to true,
-                // if the address and interface is not specified.
-                opts.put("--bind-to-all-interfaces", true);
-                opts.put("--address", "localhost");
-            } else {
-                // Address is specified by the user.
-                opts.put("--bind-to-all-interfaces", false);
-            }
-
-            // Register shutdown handler
-            Thread shutdownThread = new Thread(new CleanupRunnable(this));
-            shutdownThread.setName("ShutdownThread");
-            Runtime.getRuntime().addShutdownHook(shutdownThread);
-
-            // Manages the lifecycle of the Corfu Server.
-            while (!shutdownServer) {
-                final ServerContext serverContext = new ServerContext(opts);
-                try {
-                    // Start LogReplicationDiscovery Service, responsible for
-                    // acquiring lock, retrieving Site Manager Info and processing this info
-                    // so this node is initialized as Source (sender) or Sink (receiver)
-                    String endpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).toEndpointUrl();
-                    activeServer = new CorfuReplicationServerNode(serverContext);
-
-                    replicationDiscoveryService = new CorfuReplicationDiscoveryService(endpoint, activeServer, siteManagerAdapter);
-                    Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService);
-                    replicationDiscoveryThread.start();
-
-
-                    // Start Corfu Replication Server Node
-                    activeServer.startAndListen();
-                } catch (Throwable th) {
-                    log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
-                    System.exit(EXIT_ERROR_CODE);
-                }
-
-                if (cleanupServer) {
-                    cleanupServer = false;
-                }
-
-                if (!shutdownServer) {
-                    log.info("main: Server restarting.");
-                }
-            }
-
-            log.info("main: Server exiting due to shutdown");
+        // Bind to all interfaces only if no address or interface specified by the user.
+        // Fetch the address if given a network interface.
+        if (opts.get("--network-interface") != null) {
+            opts.put("--address", getAddressFromInterfaceName((String) opts.get("--network-interface")));
+            opts.put("--bind-to-all-interfaces", false);
+        } else if (opts.get("--address") == null) {
+            // Default the address to localhost and set the bind to all interfaces flag to true,
+            // if the address and interface is not specified.
+            opts.put("--bind-to-all-interfaces", true);
+            opts.put("--address", "localhost");
+        } else {
+            // Address is specified by the user.
+            opts.put("--bind-to-all-interfaces", false);
         }
+
+        // Register shutdown handler
+        Thread shutdownThread = new Thread(new CleanupRunnable(this));
+        shutdownThread.setName("ShutdownThread");
+        Runtime.getRuntime().addShutdownHook(shutdownThread);
+
+        // Manages the lifecycle of the Corfu Server.
+        while (!shutdownServer) {
+            final ServerContext serverContext = new ServerContext(opts);
+            try {
+                // Start LogReplicationDiscovery Service, responsible for
+                // acquiring lock, retrieving Site Manager Info and processing this info
+                // so this node is initialized as Source (sender) or Sink (receiver)
+                String endpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).toEndpointUrl();
+                activeServer = new CorfuReplicationServerNode(serverContext);
+
+                LogReplicationTransportType transport = serverContext.getServerConfig()
+                        .get("--custom-transport") != null ? LogReplicationTransportType.CUSTOM :
+                        LogReplicationTransportType.NETTY;
+
+                replicationDiscoveryService = new CorfuReplicationDiscoveryService(endpoint, activeServer, siteManagerAdapter, transport);
+                Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService);
+                replicationDiscoveryThread.start();
+
+
+                // Start Corfu Replication Server Node
+                activeServer.startAndListen();
+            } catch (Throwable th) {
+                log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
+                System.exit(EXIT_ERROR_CODE);
+            }
+
+            if (cleanupServer) {
+                cleanupServer = false;
+            }
+
+            if (!shutdownServer) {
+                log.info("main: Server restarting.");
+            }
+        }
+
+        log.info("main: Server exiting due to shutdown");
+    }
 
         /**
          * Setup logback logger

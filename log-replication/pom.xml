@@ -61,8 +61,11 @@
             <includeStdTypes>true</includeStdTypes>
             <addProtoSources>inputs</addProtoSources>
             <includeMavenTypes>direct</includeMavenTypes>
+            <includeDirectories>
+              <includeDirectory>proto</includeDirectory>
+            </includeDirectories>
             <inputDirectories>
-              <inputDirectory>proto</inputDirectory>
+              <include>proto</include>
             </inputDirectories>
             <outputDirectory>
               target/generated-sources
@@ -73,7 +76,6 @@
     </plugin>
   </plugins>
   </build>
-
   <dependencies>
     <dependency>
       <groupId>org.corfudb</groupId>
@@ -90,6 +92,11 @@
       <artifactId>protobuf-java</artifactId>
       <version>3.1.0</version>
     </dependency>
+    <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-classic</artifactId>
+        <version>${logback.classic.version}</version>
+      </dependency>
   </dependencies>
 
 </project>
