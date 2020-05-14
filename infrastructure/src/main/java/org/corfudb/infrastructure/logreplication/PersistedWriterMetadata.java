@@ -115,6 +115,10 @@ public class PersistedWriterMetadata {
         return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
     }
 
+    public void setSrcBaseSnapshotStart(long ts) {
+        writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), ts);
+    }
+
     /**
      * If the persistent data show it is my epic and my snapshot value, will update the
      * snapshot timestamp and the lastlog processed timestamp
@@ -126,6 +130,7 @@ public class PersistedWriterMetadata {
             long ts = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
             if (epoch == entry.getMetadata().getSiteEpoch() && ts == entry.getMetadata().getSnapshotTimestamp()) {
                 writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), epoch);
+                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), ts);
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapTransferDone.getVal(), ts);
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapApplyDone.getVal(), ts);
                 writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), ts);
@@ -185,6 +190,14 @@ public class PersistedWriterMetadata {
 
     public long getLastSnapSeqNum() {
         return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapSeqNum.getVal());
+    }
+
+    public void setSiteEpoch(long ts) {
+        writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), ts);
+    }
+
+    public long getSiteEpoch() {
+        return writerMetaDataTable.get(PersistedWriterMetadataType.SiteEpoch.getVal());
     }
 
     public enum PersistedWriterMetadataType {

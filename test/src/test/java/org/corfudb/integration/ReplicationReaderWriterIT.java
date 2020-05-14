@@ -1,10 +1,8 @@
 package org.corfudb.integration;
 
-import com.esotericsoftware.kryo.Serializer;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogEntryWriter;
-
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.PersistedWriterMetadata;
 import org.corfudb.infrastructure.logreplication.StreamsSnapshotWriter;
@@ -223,6 +221,24 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
+    public static void verifyTable(String tag, HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, CorfuTable<Long, Long>> hashMap) {
+        System.out.println("\n" + tag);
+        for (String name : hashMap.keySet()) {
+            CorfuTable<Long, Long> table = tables.get(name);
+            CorfuTable<Long, Long> mapKeys = hashMap.get(name);
+            System.out.println("table " + name + " key size " + table.keySet().size() +
+                    " hashMap size " + mapKeys.size());
+
+            assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
+            assertThat(table.keySet().containsAll(mapKeys.keySet())).isTrue();
+            assertThat(table.keySet().size() == mapKeys.keySet().size()).isTrue();
+
+            for (Long key : mapKeys.keySet()) {
+                assertThat(table.get(key)).isEqualTo(mapKeys.get(key));
+            }
+        }
+    }
+
     public static void verifyNoData(HashMap<String, CorfuTable<Long, Long>> tables) {
         for (CorfuTable table : tables.values()) {
             assertThat(table.keySet().isEmpty()).isTrue();
@@ -341,13 +357,21 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
 
+
+
         if (msgQ.isEmpty()) {
             System.out.println("msgQ is empty");
         }
-        writer.reset(msgQ.get(0).getMetadata().getSnapshotTimestamp());
+
+        long siteEpoch = msgQ.get(0).getMetadata().getSiteEpoch();
+        long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
+        persistedWriterMetadata.setSrcBaseSnapshotStart(siteEpoch, snapshot);
+        writer.reset(siteEpoch, snapshot);
+
         for (org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
         }
+
         Long seq = writer.getPersistedWriterMetadata().getLastSnapSeqNum() + 1;
         writer.applyShadowStreams(seq);
     }
@@ -630,8 +654,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         printTails("after writing to server2", srcDataRuntime, dstDataRuntime);
 
         //verify data with hashtable
-        openStreams(dstTables, dstDataRuntime);
-        verifyData("after snap write at dst", dstTables, srcHashMap);
+        verifyTable("after snap write at dst", dstTables, srcTables);
         System.out.println("test done");
     }
 
