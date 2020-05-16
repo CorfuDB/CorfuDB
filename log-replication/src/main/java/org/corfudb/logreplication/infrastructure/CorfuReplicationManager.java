@@ -1,19 +1,14 @@
 package org.corfudb.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.logreplication.runtime.LogReplicationRuntime;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.runtime.exceptions.RetryExhaustedException;
-import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeoutException;
 
 @Slf4j
 public class CorfuReplicationManager {
@@ -38,7 +33,7 @@ public class CorfuReplicationManager {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     for (Map.Entry<String, CrossSiteConfiguration.SiteInfo> entry : config.getStandbySites().entrySet()) {
-                        entry.getValue().setupLogReplicationRemoteRuntime(nodeInfo);
+                        entry.getValue().setupLogReplicationRemoteRuntime(nodeInfo, config.getEpoch());
                         log.info("setupReplicationLeaderRuntime {}", entry);
                         CrossSiteConfiguration.NodeInfo leader = entry.getValue().getRemoteLeader();
                         logReplicationRuntimes.put(entry.getKey(), leader.runtime);
@@ -68,17 +63,16 @@ public class CorfuReplicationManager {
             LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
             log.info("Log Replication Negotiation with {} result {}", endpoint, negotiationResult);
             startReplication(config.getEpoch(), runtime, negotiationResult);
-            runtime.getSourceManager().getLogReplicationFSM().startConsumer();
+            runtime.getSourceManager().getLogReplicationFSM().startConsumer(config);
         }
     }
 
     public void stopLogReplication(CrossSiteConfiguration config) {
+        System.out.print("Log Replication stop " + config);
+
         for(Map.Entry<String, LogReplicationRuntime> entry: logReplicationRuntimes.entrySet()) {
             String endpoint = entry.getKey();
             LogReplicationRuntime runtime = entry.getValue();
-
-            LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
-            log.info("Log Replication Negotiation with {} result {}", endpoint, negotiationResult);
             runtime.stop();
         }
     }

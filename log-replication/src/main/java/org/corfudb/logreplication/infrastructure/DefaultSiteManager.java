@@ -1,7 +1,8 @@
 package org.corfudb.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.collections.StreamingSubscriptionContext;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
 import java.io.File;
 import java.io.FileReader;
@@ -62,7 +63,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             Set<String> names = props.stringPropertyNames();
 
             // Setup primary site information
-            primarySite = new CrossSiteConfiguration.SiteInfo(props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME), CrossSiteConfiguration.RoleType.PrimarySite);
+            primarySite = new CrossSiteConfiguration.SiteInfo(props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME), GlobalManagerStatus.ACTIVE);
             String corfuPortNum = props.getProperty(PRIMARY_SITE_CORFU_PORTNUM);
             String portNum = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
 
@@ -75,13 +76,13 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                 }
                 String ipAddress = props.getProperty(nodeName);
                 log.info("primary site ipaddress {} for node {}", ipAddress, nodeName);
-                CrossSiteConfiguration.NodeInfo nodeInfo = new CrossSiteConfiguration.NodeInfo(ipAddress, portNum, CrossSiteConfiguration.RoleType.PrimarySite, corfuPortNum);
+                CrossSiteConfiguration.NodeInfo nodeInfo = new CrossSiteConfiguration.NodeInfo(ipAddress, portNum, GlobalManagerStatus.ACTIVE, corfuPortNum);
                 primarySite.nodesInfo.add(nodeInfo);
             }
 
             // Setup backup site information
             standbySites = new HashMap<>();
-            standbySites.put(STANDBY_SITE_NAME, new CrossSiteConfiguration.SiteInfo(props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME), CrossSiteConfiguration.RoleType.StandbySite));
+            standbySites.put(STANDBY_SITE_NAME, new CrossSiteConfiguration.SiteInfo(props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME), GlobalManagerStatus.STANDBY));
             corfuPortNum = props.getProperty(STANDBY_SITE_CORFU_PORTNUM);
             portNum = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
@@ -92,7 +93,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                 }
                 String ipAddress = props.getProperty(STANDBY_SITE_NODE + i);
                 log.info("standby site ipaddress {} for node {}", ipAddress, i);
-                CrossSiteConfiguration.NodeInfo nodeInfo = new CrossSiteConfiguration.NodeInfo(ipAddress, portNum, CrossSiteConfiguration.RoleType.StandbySite, corfuPortNum);
+                CrossSiteConfiguration.NodeInfo nodeInfo = new CrossSiteConfiguration.NodeInfo(ipAddress, portNum, GlobalManagerStatus.STANDBY, corfuPortNum);
                 standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);
             }
 
@@ -105,12 +106,28 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         }
     }
 
-    @Override
-    public synchronized CrossSiteConfiguration query() throws IOException {
-        if (crossSiteConfiguration == null) {
+
+    public static SiteConfigurationMsg constructSiteConfigMsg() {
+        CrossSiteConfiguration crossSiteConfiguration = null;
+        SiteConfigurationMsg siteConfigurationMsg = null;
+
+        try {
             crossSiteConfiguration = readConfig();
+        } catch (Exception e) {
+            System.out.print("\n caught an exception" + e);
         }
-        return crossSiteConfiguration;
+
+        siteConfigurationMsg = crossSiteConfiguration.convert2msg();
+        return siteConfigurationMsg;
+    }
+
+    @Override
+    public SiteConfigurationMsg querySiteConfig() {
+        if (siteConfigMsg == null) {
+            siteConfigMsg = constructSiteConfigMsg();
+        }
+        //System.out.print("new site config msg " + siteConfigMsg);
+        return siteConfigMsg;
     }
 
     /**
@@ -118,7 +135,8 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
      * @return
      */
     public static CrossSiteConfiguration changePrimary(CrossSiteConfiguration siteConfig) {
-        CrossSiteConfiguration.SiteInfo oldPrimary = new CrossSiteConfiguration.SiteInfo(siteConfig.getPrimarySite(), CrossSiteConfiguration.RoleType.StandbySite);
+        CrossSiteConfiguration.SiteInfo oldPrimary = new CrossSiteConfiguration.SiteInfo(siteConfig.getPrimarySite(),
+                GlobalManagerStatus.STANDBY);
         Map<String, CrossSiteConfiguration.SiteInfo> standbys = new HashMap<>();
         CrossSiteConfiguration.SiteInfo newPrimary = null;
         CrossSiteConfiguration.SiteInfo standby;
@@ -127,9 +145,9 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         for (String endpoint : siteConfig.getStandbySites().keySet()) {
             CrossSiteConfiguration.SiteInfo info = siteConfig.getStandbySites().get(endpoint);
             if (newPrimary == null) {
-                newPrimary = new CrossSiteConfiguration.SiteInfo(info, CrossSiteConfiguration.RoleType.PrimarySite);
+                newPrimary = new CrossSiteConfiguration.SiteInfo(info, GlobalManagerStatus.ACTIVE);
             } else {
-                standby = new CrossSiteConfiguration.SiteInfo(info, CrossSiteConfiguration.RoleType.StandbySite);
+                standby = new CrossSiteConfiguration.SiteInfo(info, GlobalManagerStatus.STANDBY);
                 standbys.put(standby.getSiteId(), standby);
             }
         }
@@ -143,22 +161,21 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
      */
     static class SiteManagerCallback implements Runnable {
         CorfuReplicationSiteManagerAdapter siteManager;
-        private StreamingSubscriptionContext notification;
-
         SiteManagerCallback(CorfuReplicationSiteManagerAdapter siteManagerAdapter) {
             this.siteManager = siteManagerAdapter;
         }
 
         @Override
         public void run() {
-            boolean shouldChange = true;
-            while (shouldChange) {
+            boolean shouldChangeOnce = true;
+            while (true) {
                 try {
                     sleep(changeInveral);
-                    if (shouldChange) {
-                        CrossSiteConfiguration newConfig = changePrimary(siteManager.getCrossSiteConfiguration());
-                        siteManager.update(newConfig);
-                        shouldChange = false;
+                    if (shouldChangeOnce) {
+                        CrossSiteConfiguration newConfig = changePrimary(siteManager.getSiteConfig());
+                        siteManager.updateSiteConfig(newConfig.convert2msg());
+                        System.out.print("\n*** change the site config");
+                        shouldChangeOnce = false;
                     }
                 } catch (Exception e) {
                     log.error("caught an exception " + e);
