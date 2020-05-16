@@ -209,7 +209,7 @@ public class LogReplicationFSM {
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build());
 
-        //logReplicationFSMConsumer.submit(this::consume);
+        logReplicationFSMConsumer.submit(this::consume);
 
         log.info("Log Replication FSM initialized, streams to replicate {} to remote site {}",
                 config.getStreamsToReplicate(), config.getSiteID());
@@ -324,7 +324,7 @@ public class LogReplicationFSM {
 
     public void startConsumer(CrossSiteConfiguration siteConfig) {
         this.siteConfig = siteConfig;
-        if (state.getType() == LogReplicationStateType.STOPPED || state.getType() == LogReplicationStateType.INITIALIZED) {
+        if (state.getType() == LogReplicationStateType.STOPPED) {
             this.state = states.get(LogReplicationStateType.INITIALIZED);
             logReplicationFSMConsumer.submit(this::consume);
         }

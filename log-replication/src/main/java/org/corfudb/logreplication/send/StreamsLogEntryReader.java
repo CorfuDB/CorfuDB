@@ -106,12 +106,12 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     continue;
                 }
                 LogReplicationEntry txMessage = generateMessage(opaqueEntry, logEntryRequestId);
-                System.out.print("\nread a message " + txMessage.getMetadata());
+                //System.out.print("\nread a message " + txMessage.getMetadata());
                 return txMessage;
             }
         } catch (Exception e) {
             log.warn("Caught an exception {}", e);
-            System.out.print("\ncaught an exception " + e);
+            //System.out.print("\ncaught an exception " + e);
             throw e;
         }
 
