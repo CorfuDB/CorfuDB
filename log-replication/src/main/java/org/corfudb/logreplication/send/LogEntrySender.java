@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -228,13 +229,13 @@ public class LogEntrySender {
             // Read and Send Log Entries
             try {
                 message = logEntryReader.read(logEntrySyncEventId);
-                // readProcessor.process(message);
 
                 if (message != null) {
                     pendingEntries.append(message, getCurrentTime());
                     CompletableFuture<LogReplicationEntry> cf = dataSender.send(message);
                     pendingLogEntriesAcked.put(message.getMetadata().getTimestamp(), cf);
                     log.trace("send message " + message.getMetadata().getTimestamp());
+                    System.out.print("\nLogEntryRead message " + message.getMetadata());
                 } else {
                     // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
                     // take over the shared thread pool of the state machine
@@ -255,6 +256,9 @@ public class LogEntrySender {
                 // intended for replication). Shutdown.
                 log.error("IllegalTransactionStreamsException, log replication will be TERMINATED.", se);
                 cancelLogEntrySync(LogReplicationError.ILLEGAL_TRANSACTION, LogReplicationEventType.REPLICATION_SHUTDOWN, logEntrySyncEventId);
+                return;
+            } catch (RejectedExecutionException e) {
+                log.error("Caught exception at LogEntrySender", e);
                 return;
             } catch (Exception e) {
                 log.error("Caught exception at LogEntrySender", e);
