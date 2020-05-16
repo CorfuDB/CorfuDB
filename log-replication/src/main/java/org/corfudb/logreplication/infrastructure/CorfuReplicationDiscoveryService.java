@@ -78,7 +78,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
     public void runService() {
         try {
             log.info("Run Corfu Replication Discovery");
-            System.out.print("\nRun Corfu Replication Discovery Service");
+            //System.out.print("\nRun Corfu Replication Discovery Service");
 
             // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
             crossSiteConfig = siteManager.fetchSiteConfig();
@@ -94,7 +94,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
                 if (nodeInfo.getRoleType() == GlobalManagerStatus.ACTIVE) {
                     crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
                     log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
-                    System.out.print("\nStart as Source (sender/replicator) on node " + nodeInfo + " siteConig " + crossSiteConfig);
+                    //System.out.print("\nStart as Source (sender/replicator) on node " + nodeInfo + " siteConig " + crossSiteConfig);
 
                     try {
                         replicationManager.setupReplicationLeaderRuntime(nodeInfo, crossSiteConfig);
@@ -113,7 +113,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
                     replicationServerNode.getLogReplicationServer().getSinkManager().getPersistedWriterMetadata().
                             setupEpoch(crossSiteConfig.getEpoch());
                     log.info("Start as Sink (receiver) on node {} ", nodeInfo);
-                    System.out.print("\nStart as Sink (receiver) on node " + nodeInfo + " siteConig " + crossSiteConfig);
+                    //System.out.print("\nStart as Sink (receiver) on node " + nodeInfo + " siteConig " + crossSiteConfig);
                 }
             }
             // Todo: Re-schedule periodically, attempt to acquire lock
