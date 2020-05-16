@@ -212,11 +212,10 @@ public class SourceManager implements DataReceiver {
      * Termination of the Log Replication State Machine, to enable replication a JVM restart is required.
      */
     public void shutdown() {
-        this.runtime.shutdown();
-
         log.info("Shutdown Log Replication. To enable Log Replication a JVM restart is required.");
         // Enqueue event into Log Replication FSM
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_SHUTDOWN));
+        this.runtime.shutdown();
     }
 
     @Override
