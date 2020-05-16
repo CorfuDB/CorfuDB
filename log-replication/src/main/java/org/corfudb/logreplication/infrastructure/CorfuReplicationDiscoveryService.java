@@ -2,11 +2,12 @@ package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
 import java.util.concurrent.LinkedBlockingQueue;
 
-import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.PrimarySite;
-import static org.corfudb.logreplication.infrastructure.CrossSiteConfiguration.RoleType.StandbySite;
+//import org.corfudb.utils.LogReplicationSiteInfo;
 
 /**
  * This class represents the Replication Discovery Service.
@@ -58,7 +59,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
                 synchronized (eventQueue) {
                     while (true) {
                         DiscoveryServiceEvent event = eventQueue.take();
-                        if (event.crossSiteConfiguration.getEpoch() > crossSiteConfig.getEpoch()) {
+                        if (event.siteConfigMsg.getEpoch() > crossSiteConfig.getEpoch()) {
                             break;
                         }
                     }
@@ -77,10 +78,10 @@ public class CorfuReplicationDiscoveryService implements Runnable {
     public void runService() {
         try {
             log.info("Run Corfu Replication Discovery");
-            //System.out.print("\nRun Corfu Replication Discovery Service");
+            System.out.print("\nRun Corfu Replication Discovery Service");
 
             // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
-            crossSiteConfig = siteManager.fetchSiteConfiguration();
+            crossSiteConfig = siteManager.fetchSiteConfig();
             //System.out.print("\n Primary Site " + crossSiteConfig.getPrimarySite());
 
             // Get the current node information.
@@ -90,25 +91,29 @@ public class CorfuReplicationDiscoveryService implements Runnable {
             nodeInfo.setLeader(acquireLock());
 
             if (nodeInfo.isLeader()) {
-                if (nodeInfo.getRoleType() == PrimarySite) {
+                if (nodeInfo.getRoleType() == GlobalManagerStatus.ACTIVE) {
                     crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
                     log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
+                    System.out.print("\nStart as Source (sender/replicator) on node " + nodeInfo + " siteConig " + crossSiteConfig);
+
                     try {
                         replicationManager.setupReplicationLeaderRuntime(nodeInfo, crossSiteConfig);
                     } catch (InterruptedException ie) {
                         log.error("Corfu Replication Discovery Service is interrupted", ie);
                         throw ie;
                     }
+
                     replicationManager.startLogReplication(crossSiteConfig);
 
                     return;
-                } else if (nodeInfo.getRoleType() == StandbySite) {
+                } else if (nodeInfo.getRoleType() == GlobalManagerStatus.STANDBY) {
                     // Standby Site
                     // The LogReplicationServer (server handler) will initiate the SinkManager
                     // Update the siteEpoch metadata.
                     replicationServerNode.getLogReplicationServer().getSinkManager().getPersistedWriterMetadata().
                             setupEpoch(crossSiteConfig.getEpoch());
                     log.info("Start as Sink (receiver) on node {} ", nodeInfo);
+                    System.out.print("\nStart as Sink (receiver) on node " + nodeInfo + " siteConig " + crossSiteConfig);
                 }
             }
             // Todo: Re-schedule periodically, attempt to acquire lock
@@ -153,11 +158,11 @@ public class CorfuReplicationDiscoveryService implements Runnable {
     static class DiscoveryServiceEvent {
         DiscoveryServiceEventType type;
         @Getter
-        CrossSiteConfiguration crossSiteConfiguration;
+        SiteConfigurationMsg siteConfigMsg;
 
-        DiscoveryServiceEvent(DiscoveryServiceEventType type, CrossSiteConfiguration config) {
+        DiscoveryServiceEvent(DiscoveryServiceEventType type, SiteConfigurationMsg siteConfigMsg) {
             this.type = type;
-            this.crossSiteConfiguration = config;
+            this.siteConfigMsg = siteConfigMsg;
         }
     }
 }

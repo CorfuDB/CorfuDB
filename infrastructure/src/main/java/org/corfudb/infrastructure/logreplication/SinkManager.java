@@ -116,6 +116,8 @@ public class SinkManager implements DataReceiver {
                 // Invalid message // Drop the message
                 log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
                         message.getMetadata().getMessageMetadataType());
+                System.out.print("****Sink Manager in state " + rxState + " and received message {}. Dropping Message." +
+                        message.getMetadata());
                 return null;
             }
         }
