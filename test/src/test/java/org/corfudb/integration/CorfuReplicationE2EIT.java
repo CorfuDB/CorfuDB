@@ -152,14 +152,8 @@ public class CorfuReplicationE2EIT extends AbstractIT {
                     })
                     .open();
 
-            // Will fix this part later
-
-            int retry = 0;
-            while (retry ++ < 2) {
-                System.out.print("\nbefore write delta keySize " + mapA1.keySet() + " real active " + mapAStandby.keySet());
-                System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
-                sleep(sleepTime);
-            }
+            System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
+            sleep(sleepTime);
 
             System.out.print("\nwriting to the new active new data");
             // Add new updates (deltas)
@@ -175,7 +169,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             System.out.print("\nmapAstandby tail " + standbyRuntime.getAddressSpaceView().getLogTail() + " mapA tail " + activeRuntime.getAddressSpaceView().getLogTail());
             System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
 
-            retry = 0;
+            int retry = 0;
             while (mapA1.keySet().size() != mapAStandby.keySet().size() && retry++ < MAX_RETRY) {
                 System.out.print("\nafter writing keySize " + mapA1.keySet() + " real active " + mapAStandby.keySet());
                 System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());

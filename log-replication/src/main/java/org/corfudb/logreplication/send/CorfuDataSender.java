@@ -35,7 +35,7 @@ public class CorfuDataSender implements DataSender {
         CompletableFuture<LogReplicationEntry> tmp;
 
         for (LogReplicationEntry message :  messages) {
-            System.out.print("\nsend message " + message.getMetadata());
+            //System.out.print("\nsend message " + message.getMetadata());
             tmp = send(message);
             try {
                 sleep(1000);

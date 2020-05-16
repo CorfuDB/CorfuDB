@@ -235,7 +235,7 @@ public class LogEntrySender {
                     CompletableFuture<LogReplicationEntry> cf = dataSender.send(message);
                     pendingLogEntriesAcked.put(message.getMetadata().getTimestamp(), cf);
                     log.trace("send message " + message.getMetadata().getTimestamp());
-                    System.out.print("\nLogEntryRead message " + message.getMetadata());
+                    //System.out.print("\nLogEntryRead message " + message.getMetadata());
                 } else {
                     // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
                     // take over the shared thread pool of the state machine
