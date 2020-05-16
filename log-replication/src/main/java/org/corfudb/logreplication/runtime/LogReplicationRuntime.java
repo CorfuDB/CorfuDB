@@ -26,6 +26,7 @@ import java.util.function.Function;
 
 @Slf4j
 public class LogReplicationRuntime {
+    long siteEpoch;
 
     /**
      * The parameters used to configure this {@link LogReplicationRuntime}.
@@ -55,8 +56,8 @@ public class LogReplicationRuntime {
     @Getter
     private final EventLoopGroup nettyEventLoop;
 
-    public LogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters) {
-
+    public LogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters, long siteEpoch) {
+        this.siteEpoch = siteEpoch;
         this.parameters = parameters;
 
         // Generate or set the NettyEventLoop

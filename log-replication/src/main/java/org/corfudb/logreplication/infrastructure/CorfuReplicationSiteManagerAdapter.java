@@ -2,6 +2,7 @@ package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
 import java.io.IOException;
 
@@ -13,29 +14,33 @@ public abstract class CorfuReplicationSiteManagerAdapter {
     CorfuReplicationDiscoveryService corfuReplicationDiscoveryService;
 
     @Getter
-    CrossSiteConfiguration crossSiteConfiguration;
+    SiteConfigurationMsg siteConfigMsg;
 
-    public synchronized CrossSiteConfiguration fetchSiteConfiguration() throws IOException {
-        crossSiteConfiguration = query();
-       return crossSiteConfiguration;
+    @Getter
+    CrossSiteConfiguration siteConfig;
+
+    public synchronized CrossSiteConfiguration fetchSiteConfig() throws IOException {
+        siteConfigMsg = querySiteConfig();
+        siteConfig = new CrossSiteConfiguration(siteConfigMsg);
+        return siteConfig;
     }
 
     /**
      * Will be called when the site change and a new configuration is sent over
-     * @param newConfiguration
+     * @param newSiteConfigMsg
      * @return
      */
-    synchronized void update(CrossSiteConfiguration newConfiguration) {
-            //System.out.print("\nnotify the site change");
-            if (newConfiguration.getEpoch() > crossSiteConfiguration.getEpoch()) {
-                crossSiteConfiguration = newConfiguration;
-                corfuReplicationDiscoveryService.putEvent(new CorfuReplicationDiscoveryService.DiscoveryServiceEvent(DiscoverySite, newConfiguration));
+    synchronized void updateSiteConfig(SiteConfigurationMsg newSiteConfigMsg) {
+            //System.out.print("\nupdate the site change msg " + newSiteConfigMsg);
+            if (newSiteConfigMsg.getEpoch() > siteConfigMsg.getEpoch()) {
+                siteConfigMsg = newSiteConfigMsg;
+                siteConfig = new CrossSiteConfiguration(siteConfigMsg);
+                corfuReplicationDiscoveryService.putEvent(
+                        new CorfuReplicationDiscoveryService.DiscoveryServiceEvent(DiscoverySite, newSiteConfigMsg));
             }
     }
 
-    public CrossSiteConfiguration query() throws IOException {
-        return null;
-    };
+    public abstract SiteConfigurationMsg querySiteConfig();
 
     public abstract void start();
 }

@@ -10,10 +10,12 @@ import org.junit.Test;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class CorfuReplicationE2EIT extends AbstractIT {
-    static final int MAX_RETRY = 8;
+    static final int MAX_RETRY = 20;
+    static final long sleepTime = 2000;
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
@@ -95,7 +97,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
 
 
             // Wait until data is fully replicated
-            System.out.println("Wait ... Data is being replicated ...");
+            System.out.println("Wait ... Snapshot Data is being replicated ...");
             while (mapAStandby.size() != numWrites) {
                 //
             }
@@ -111,7 +113,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             }
 
             // Verify data is present in Standby Site
-            System.out.println("Wait ... Data is being replicated ...");
+            System.out.println("Wait ... Delta Data is being replicated ...");
             while (mapAStandby.size() != (numWrites + numWrites/2)) {
                 //
             }
@@ -124,12 +126,12 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             }
             assertThat(mapAStandby.keySet().containsAll(mapA.keySet()));
 
-            String primary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
-            String currentPimary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
+            String primary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
+            String currentPimary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
 
             // Wait till site role change and new transfer done.
             assertThat(currentPimary).isEqualTo(primary);
-            System.out.print("\ncurrent standbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
+            System.out.print("\ncurrent mapAstandby tail " + standbyRuntime.getAddressSpaceView().getLogTail() + " mapA tail " + activeRuntime.getAddressSpaceView().getLogTail());
             System.out.print("\nmapA1 keySet " + mapA.keySet() + " mapAstandby " + mapAStandby.keySet());
             System.out.print("\nwait for site switch " + activeRuntime.getAddressSpaceView().getLogTail());
 
@@ -138,19 +140,9 @@ public class CorfuReplicationE2EIT extends AbstractIT {
                 discoveryService.wait();
             }
 
-            currentPimary = serverA.getSiteManagerAdapter().getCrossSiteConfiguration().getPrimarySite().getSiteId();
+            currentPimary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
             assertThat(currentPimary).isNotEqualTo(primary);
             System.out.print("\nVerified Site Role Change " + activeRuntime.getAddressSpaceView().getLogTail());
-
-            // Add new updates (deltas)
-            for (int i=numWrites/2; i < numWrites; i++) {
-                standbyRuntime.getObjectsView().TXBegin();
-                mapAStandby.put(String.valueOf(numWrites + i), numWrites + i);
-                standbyRuntime.getObjectsView().TXEnd();
-            }
-
-            // Verify data is present in Standby Site
-            System.out.println("\nWait ... Data is being replicated ...");
 
             // Write to StreamA on Active Site
             CorfuTable<String, Integer> mapA1 = activeRuntime1.getObjectsView()
@@ -162,20 +154,42 @@ public class CorfuReplicationE2EIT extends AbstractIT {
 
             // Will fix this part later
 
-            System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
-            System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
-
-            while (mapA1.keySet().size() != mapAStandby.keySet().size()) {
+            int retry = 0;
+            while (retry ++ < 2) {
+                System.out.print("\nbefore write delta keySize " + mapA1.keySet() + " real active " + mapAStandby.keySet());
+                System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
+                sleep(sleepTime);
             }
 
-            System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
+            System.out.print("\nwriting to the new active new data");
+            // Add new updates (deltas)
+            for (int i=numWrites/2; i < numWrites; i++) {
+                standbyRuntime.getObjectsView().TXBegin();
+                mapAStandby.put(String.valueOf(numWrites + i), numWrites + i);
+                standbyRuntime.getObjectsView().TXEnd();
+            }
+
+            // Verify data is present in Standby Site
+            System.out.println("\nWait ... Data is being replicated ...");
+
+            System.out.print("\nmapAstandby tail " + standbyRuntime.getAddressSpaceView().getLogTail() + " mapA tail " + activeRuntime.getAddressSpaceView().getLogTail());
+            System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
+
+            retry = 0;
+            while (mapA1.keySet().size() != mapAStandby.keySet().size() && retry++ < MAX_RETRY) {
+                System.out.print("\nafter writing keySize " + mapA1.keySet() + " real active " + mapAStandby.keySet());
+                System.out.print("\nstandbyTail " + standbyRuntime.getAddressSpaceView().getLogTail() + " activeTail " + activeRuntime.getAddressSpaceView().getLogTail());
+                sleep(sleepTime);
+            }
+
             System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
 
             for (int i = 0; i < 2*numWrites ; i++) {
-                assertThat(mapA.containsKey(String.valueOf(i)));
+                assertThat(mapA1.containsKey(String.valueOf(i))).isTrue();
             }
 
             System.out.print("\nmapA1 keySet " + mapA1.keySet() + " mapAstandby " + mapAStandby.keySet());
+            System.out.print("\nmapA keySet " + mapA.keySet() + " mapAstandby " + mapAStandby.keySet());
 
         } finally {
             executorService.shutdownNow();

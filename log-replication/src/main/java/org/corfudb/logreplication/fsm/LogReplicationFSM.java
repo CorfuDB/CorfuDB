@@ -8,6 +8,7 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.logreplication.infrastructure.CrossSiteConfiguration;
 import org.corfudb.logreplication.send.LogEntryReader;
 import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.logreplication.send.ReadProcessor;
@@ -95,6 +96,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  */
 @Slf4j
 public class LogReplicationFSM {
+
+    private CrossSiteConfiguration siteConfig;
 
     @Getter
     private long siteEpoch;
@@ -206,7 +209,7 @@ public class LogReplicationFSM {
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("replication-fsm-consumer").build());
 
-        logReplicationFSMConsumer.submit(this::consume);
+        //logReplicationFSMConsumer.submit(this::consume);
 
         log.info("Log Replication FSM initialized, streams to replicate {} to remote site {}",
                 config.getStreamsToReplicate(), config.getSiteID());
@@ -258,6 +261,7 @@ public class LogReplicationFSM {
      */
     private void consume() {
         try {
+            //System.out.print ("\nsrc state " + state.getType());
             if (state.getType() == LogReplicationStateType.STOPPED) {
                 log.info("Log Replication State Machine has been stopped. No more events will be processed.");
                 return;
@@ -266,7 +270,6 @@ public class LogReplicationFSM {
             // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
             //   Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
-
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
                 log.info("Log Replication FSM consume event {}", event);
             }
@@ -319,8 +322,9 @@ public class LogReplicationFSM {
         to.onEntry(from);
     }
 
-    public void startConsumer() {
-        if (state.getType() == LogReplicationStateType.STOPPED) {
+    public void startConsumer(CrossSiteConfiguration siteConfig) {
+        this.siteConfig = siteConfig;
+        if (state.getType() == LogReplicationStateType.STOPPED || state.getType() == LogReplicationStateType.INITIALIZED) {
             this.state = states.get(LogReplicationStateType.INITIALIZED);
             logReplicationFSMConsumer.submit(this::consume);
         }
