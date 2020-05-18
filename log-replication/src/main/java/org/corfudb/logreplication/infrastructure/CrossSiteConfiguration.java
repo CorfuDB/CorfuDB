@@ -149,7 +149,7 @@ public class CrossSiteConfiguration {
                 LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
                         .localCorfuEndpoint(localNode.getCorfuEndpoint())
                         .remoteLogReplicationServerEndpoint(nodeInfo.getEndpoint()).build();
-                LogReplicationRuntime replicationRuntime = new LogReplicationRuntime(parameters, siteEpoch);
+                LogReplicationRuntime replicationRuntime = new LogReplicationRuntime(parameters);
                 replicationRuntime.connect();
                 nodeInfo.runtime = replicationRuntime;
             }

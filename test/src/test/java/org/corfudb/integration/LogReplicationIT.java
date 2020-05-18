@@ -1229,7 +1229,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Override
     public void update(Observable o, Object arg) {
         if (o == ackMessages) {
-            System.out.println("Ack " + ackMessages.getValue());
+            //System.out.println("Ack " + ackMessages.getValue());
             verifyExpectedAckMessage((ObservableAckMsg)o);
         } else if (o == errorsLogEntrySync) {
             verifyExpectedValue(expectedErrors, errorsLogEntrySync.getValue());

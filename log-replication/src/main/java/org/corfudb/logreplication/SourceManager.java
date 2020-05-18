@@ -186,15 +186,6 @@ public class SourceManager implements DataReceiver {
     }
 
     /**
-     * Signal to stop log replication.
-     */
-    public void stopReplication() {
-        log.info("Stop Log Replication");
-        // Enqueue event into Log Replication FSM
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
-    }
-
-    /**
      * Signal to cancel snapshot send.
      *
      * @param snapshotSyncId identifier of the snapshot sync task to cancel.
@@ -212,9 +203,20 @@ public class SourceManager implements DataReceiver {
      * Termination of the Log Replication State Machine, to enable replication a JVM restart is required.
      */
     public void shutdown() {
-        log.info("Shutdown Log Replication. To enable Log Replication a JVM restart is required.");
         // Enqueue event into Log Replication FSM
-        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_SHUTDOWN));
+        LogReplicationEvent logReplicationEvent = new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP);
+        logReplicationFSM.input(logReplicationEvent);
+
+        try {
+            synchronized (logReplicationEvent) {
+                logReplicationEvent.wait();
+            }
+        } catch (InterruptedException e) {
+            log.error("Caught an exception ", e);
+            //System.out.print("\n**** caught an exception");
+        }
+
+        log.info("Shutdown Log Replication.");
         this.runtime.shutdown();
     }
 
