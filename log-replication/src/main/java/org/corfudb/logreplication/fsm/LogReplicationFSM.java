@@ -301,6 +301,13 @@ public class LogReplicationFSM {
                 }
             }
 
+            if (event.getType() == LogReplicationEventType.REPLICATION_STOP) {
+                System.out.print("\n****notify the stop replication is done");
+                synchronized (event) {
+                    event.notifyAll();
+                }
+            }
+
             // Consume one event in the queue and re-submit, this is done so events are consumed in
             // a round-robin fashion for the case of multi-site replication.
             logReplicationFSMConsumer.submit(this::consume);

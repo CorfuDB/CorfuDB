@@ -71,7 +71,6 @@ public class CorfuReplicationManager {
         System.out.print("Log Replication stop " + config);
 
         for(Map.Entry<String, LogReplicationRuntime> entry: logReplicationRuntimes.entrySet()) {
-            String endpoint = entry.getKey();
             LogReplicationRuntime runtime = entry.getValue();
             runtime.stop();
         }
