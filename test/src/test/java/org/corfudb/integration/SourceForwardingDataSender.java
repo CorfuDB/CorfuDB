@@ -71,7 +71,7 @@ public class SourceForwardingDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
-        System.out.println("Send message: " + message.getMetadata().getMessageMetadataType() + " for:: " + message.getMetadata().getTimestamp());
+        //System.out.println("Send message: " + message.getMetadata().getMessageMetadataType() + " for:: " + message.getMetadata().getTimestamp());
         if (ifDropMsg > 0 && message.getMetadata().timestamp == firstDrop) {
             System.out.println("****** Drop log entry " + message.getMetadata().timestamp);
             if (ifDropMsg == DROP_MSG_ONCE) {

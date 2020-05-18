@@ -60,10 +60,12 @@ public class CorfuReplicationManager {
             String endpoint = entry.getKey();
             LogReplicationRuntime runtime = entry.getValue();
 
+            //If we start from a stop state due to site switch over, we need to restart the consumer.
+            runtime.getSourceManager().getLogReplicationFSM().startConsumer(config);
+
             LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
             log.info("Log Replication Negotiation with {} result {}", endpoint, negotiationResult);
             startReplication(config.getEpoch(), runtime, negotiationResult);
-            runtime.getSourceManager().getLogReplicationFSM().startConsumer(config);
         }
     }
 
@@ -71,7 +73,6 @@ public class CorfuReplicationManager {
         System.out.print("Log Replication stop " + config);
 
         for(Map.Entry<String, LogReplicationRuntime> entry: logReplicationRuntimes.entrySet()) {
-            String endpoint = entry.getKey();
             LogReplicationRuntime runtime = entry.getValue();
             runtime.stop();
         }

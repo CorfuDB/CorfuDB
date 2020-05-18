@@ -301,6 +301,13 @@ public class LogReplicationFSM {
                 }
             }
 
+            if (event.getType() == LogReplicationEventType.REPLICATION_STOP) {
+                System.out.print("\n****notify the stop replication is done");
+                synchronized (event) {
+                    event.notifyAll();
+                }
+            }
+
             // Consume one event in the queue and re-submit, this is done so events are consumed in
             // a round-robin fashion for the case of multi-site replication.
             logReplicationFSMConsumer.submit(this::consume);
@@ -322,9 +329,15 @@ public class LogReplicationFSM {
         to.onEntry(from);
     }
 
+    /**
+     * Start consumer again due to site switch.
+     * It will clean the queue first and prepare the new transfer
+     * @param siteConfig
+     */
     public void startConsumer(CrossSiteConfiguration siteConfig) {
         this.siteConfig = siteConfig;
         if (state.getType() == LogReplicationStateType.STOPPED) {
+            eventQueue.clear();
             this.state = states.get(LogReplicationStateType.INITIALIZED);
             logReplicationFSMConsumer.submit(this::consume);
         }
