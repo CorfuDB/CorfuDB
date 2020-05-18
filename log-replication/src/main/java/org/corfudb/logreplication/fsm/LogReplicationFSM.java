@@ -329,9 +329,15 @@ public class LogReplicationFSM {
         to.onEntry(from);
     }
 
+    /**
+     * Start consumer again due to site switch.
+     * It will clean the queue first and prepare the new transfer
+     * @param siteConfig
+     */
     public void startConsumer(CrossSiteConfiguration siteConfig) {
         this.siteConfig = siteConfig;
         if (state.getType() == LogReplicationStateType.STOPPED) {
+            eventQueue.clear();
             this.state = states.get(LogReplicationStateType.INITIALIZED);
             logReplicationFSMConsumer.submit(this::consume);
         }
