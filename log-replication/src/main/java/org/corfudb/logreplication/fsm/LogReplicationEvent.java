@@ -32,8 +32,6 @@ public class LogReplicationEvent {
                                     // JVM restart can enable log replication after this)
     }
 
-    private long siteEpoch;
-
     /*
      *  Log Replication Event Identifier
      */
