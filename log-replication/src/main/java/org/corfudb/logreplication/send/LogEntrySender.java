@@ -257,9 +257,6 @@ public class LogEntrySender {
                 log.error("IllegalTransactionStreamsException, log replication will be TERMINATED.", se);
                 cancelLogEntrySync(LogReplicationError.ILLEGAL_TRANSACTION, LogReplicationEventType.REPLICATION_SHUTDOWN, logEntrySyncEventId);
                 return;
-            } catch (RejectedExecutionException e) {
-                log.error("Caught exception at LogEntrySender", e);
-                return;
             } catch (Exception e) {
                 log.error("Caught exception at LogEntrySender", e);
                 cancelLogEntrySync(LogReplicationError.UNKNOWN, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
