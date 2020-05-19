@@ -3,9 +3,16 @@ package org.corfudb.protocols.wireprotocol.logreplication;
 import io.netty.buffer.ByteBuf;
 import lombok.Data;
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
+import org.corfudb.runtime.Messages;
 
 import java.util.UUID;
 
+/**
+ * This message represents a log entry to be replicated across remote sites. It is also used
+ * as an ACK for a replicated entry, where the payload is empty.
+ *
+ * @author annym
+ */
 @Data
 public class LogReplicationEntry implements ICorfuPayload<LogReplicationEntry> {
 
@@ -31,6 +38,11 @@ public class LogReplicationEntry implements ICorfuPayload<LogReplicationEntry> {
 
     public static LogReplicationEntry generateAck(LogReplicationEntryMetadata metadata) {
         return new LogReplicationEntry(metadata, new byte[0]);
+    }
+
+    public static LogReplicationEntry fromProto(Messages.LogReplicationEntry proto) {
+        LogReplicationEntryMetadata metadata = LogReplicationEntryMetadata.fromProto(proto.getMetadata());
+        return new LogReplicationEntry(metadata, proto.getData().toByteArray());
     }
 
     @Override
