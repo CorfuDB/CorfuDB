@@ -85,7 +85,6 @@ public class LogReplicationServer extends AbstractServer {
             long ts = ack.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_REPLICATED) ?
                     ack.getMetadata().getTimestamp() : ack.getMetadata().getSnapshotTimestamp();
             log.info("Sending ACK {} on {} to Client ", ack.getMetadata(), ts);
-            //System.out.print("\nSending ACK {} on {} to Client " +  ack.getMetadata() + " " + ts);
             r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_ENTRY.payloadMsg(ack));
         }
     }
@@ -100,7 +99,7 @@ public class LogReplicationServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP)
     private void handleLogReplicationQueryLeadership(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("******Log Replication Query Leadership Request received by Server.");
-        //TODO: setup
+        //TODO(Anny-Lock): if lock is acquired by this node, properly set the response.
         LogReplicationQueryLeaderShipResponse resp = new LogReplicationQueryLeaderShipResponse(0, true);
         r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE.payloadMsg(resp));
     }

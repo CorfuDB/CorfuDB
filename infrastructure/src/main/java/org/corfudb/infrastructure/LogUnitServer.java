@@ -473,6 +473,24 @@ public class LogUnitServer extends AbstractServer {
         streamLog.prefixTrim(trimAddress);
     }
 
+    private void readData(long address, boolean cacheable, ReadResponse rr) {
+
+        ILogData logData;
+
+        // For consistency, if the log has been trimmed, do not return cached data
+        if(address < streamLog.getTrimMark()) {
+            logData = LogData.getTrimmed(address);
+        } else {
+            logData = dataCache.get(address, cacheable);
+        }
+
+        if (logData == null) {
+            rr.put(address, LogData.getEmpty(address));
+        } else {
+            rr.put(address, (LogData) logData);
+        }
+    }
+
     /**
      * Log unit server parameters.
      */

@@ -28,7 +28,7 @@ public abstract class AbstractClient implements IClient {
     @Setter
     private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
 
-    AbstractClient(IClientRouter router, long epoch, UUID clusterID) {
+    public AbstractClient(IClientRouter router, long epoch, UUID clusterID) {
         this.router = router;
         this.epoch = epoch;
         this.clusterID = clusterID;
