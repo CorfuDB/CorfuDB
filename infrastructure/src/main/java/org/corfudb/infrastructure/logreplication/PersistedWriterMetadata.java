@@ -1,15 +1,24 @@
 package org.corfudb.infrastructure.logreplication;
 
-import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationWriterMetadata.LogReplicationMetadataKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationWriterMetadata.LogReplicationMetadataVal;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.serializer.Serializers;
 
+import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -18,26 +27,52 @@ import java.util.UUID;
  */
 @Slf4j
 public class PersistedWriterMetadata {
+    private static final String namespace = "CORFU_SYSTEM";
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
     private static final int NUM_RETRY_WRITE = 3;
-    String writerMetadataTableName;
+    String metadataTableName;
 
-    private CorfuTable<String, Long> writerMetaDataTable;
+    private CorfuStore corfuStore;
+
+    Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable;
 
     CorfuRuntime runtime;
 
-    public PersistedWriterMetadata(CorfuRuntime rt, long siteEpoch, UUID primary, UUID dst) {
+    public PersistedWriterMetadata(CorfuRuntime rt, long siteEpoch, UUID primary, UUID dst) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
         this.runtime = rt;
-        writerMetadataTableName = getPersistedWriterMetadataTableName(primary, dst);
-        writerMetaDataTable = rt.getObjectsView()
-                .build()
-                .setStreamName(writerMetadataTableName)
-                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
-                })
-                .setSerializer(Serializers.PRIMITIVE)
-                .open();
+        metadataTableName = getPersistedWriterMetadataTableName(primary, dst);
+        metadataTable = this.corfuStore.openTable(namespace,
+                metadataTableName,
+                LogReplicationMetadataKey.class,
+                LogReplicationMetadataVal.class,
+                null,
+                TableOptions.builder().build());
 
         setupEpoch(siteEpoch);
+    }
+
+
+    long query(CorfuStoreMetadata.Timestamp timestamp, PersistedWriterMetadataType key) {
+        LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
+        CorfuRecord record = corfuStore.query(namespace).getRecord(metadataTableName, timestamp, txKey);
+        LogReplicationMetadataVal metadataVal = null;
+        long val = -1;
+
+        if (record != null) {
+            metadataVal = (LogReplicationMetadataVal)record.getPayload();
+        }
+
+        if (metadataVal != null) {
+            val = metadataVal.getVal();
+        }
+
+        return val;
+    }
+
+    void appendUpdate(TxBuilder txBuilder, PersistedWriterMetadataType key, long val) {
+        LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
+        LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(val).build();
+        txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
     /**
@@ -45,26 +80,24 @@ public class PersistedWriterMetadata {
      * @param epoch
      */
     public void setupEpoch(long epoch) {
-        try {
-            runtime.getObjectsView().TXBegin();
-            if (writerMetaDataTable.isEmpty() || writerMetaDataTable.get(PersistedWriterMetadataType.SiteEpoch.getVal()) < epoch) {
-                writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), epoch);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), Address.NON_ADDRESS);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapTransferDone.getVal(), Address.NON_ADDRESS);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapApplyDone.getVal(), Address.NON_ADDRESS);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), Address.NON_ADDRESS);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), Address.NON_ADDRESS);
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
 
-                log.info("Init all persistedMetadata to {}", Address.NON_ADDRESS);
-            } else {
-                log.warn("Skip init persistedMetadata as its size is  {}", writerMetaDataTable.size());
+        long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
+
+        if (epoch <= persistEpoch)
+            return;
+
+        TxBuilder txBuilder = corfuStore.tx(namespace);
+
+        for (PersistedWriterMetadataType key : PersistedWriterMetadataType.values()) {
+            long val = Address.NON_ADDRESS;
+            if (key == PersistedWriterMetadataType.SiteEpoch) {
+                val = epoch;
             }
-        } catch (TransactionAbortedException e) {
-            log.debug("Caught an exception {}", e.getStackTrace());
-            log.warn("Transaction is aborted with writerMetadataTable.size {} ", writerMetaDataTable.size());
-        } finally {
-            runtime.getObjectsView().TXEnd();
-        }
+            appendUpdate(txBuilder, key, val);
+         }
+
+        txBuilder.commit(timestamp);
     }
 
     public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {
@@ -81,6 +114,12 @@ public class PersistedWriterMetadata {
      * @param ts
      * @return
      */
+    public long setSrcBaseSnapshotStartnew(long epoch, long ts) {
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+        return 0;
+    }
+
+
     public long setSrcBaseSnapshotStart(long epoch, long ts) {
         long persistedEpic = 0;
         long persistedTs = 0;
