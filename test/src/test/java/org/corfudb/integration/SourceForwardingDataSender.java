@@ -34,8 +34,6 @@ public class SourceForwardingDataSender implements DataSender {
 
     private ExecutorService channelExecutorWorkers;
 
-    private int receivedMessages = 0;
-
     private int errorCount = 0;
 
     @VisibleForTesting

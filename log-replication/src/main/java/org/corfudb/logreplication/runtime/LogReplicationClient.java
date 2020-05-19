@@ -22,7 +22,7 @@ public class LogReplicationClient extends AbstractClient {
     private IClientRouter router;
 
     public LogReplicationClient(IClientRouter router, long epoch) {
-        super(router, epoch);
+        super(router, epoch, null);
         setRouter(router);
     }
 

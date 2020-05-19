@@ -1,7 +1,6 @@
-package org.corfudb.logreplication.runtime;
+package org.corfudb.infrastructure;
 
 import lombok.Data;
-import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 import org.corfudb.runtime.RuntimeParameters;
 
@@ -12,5 +11,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
     private String localCorfuEndpoint;
 
     private String remoteLogReplicationServerEndpoint;
+
+    private LogReplicationTransportType transport = LogReplicationTransportType.CUSTOM;
 
 }

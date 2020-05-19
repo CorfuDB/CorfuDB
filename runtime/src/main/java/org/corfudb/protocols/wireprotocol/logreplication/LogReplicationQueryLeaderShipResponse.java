@@ -3,7 +3,7 @@ package org.corfudb.protocols.wireprotocol.logreplication;
 import io.netty.buffer.ByteBuf;
 import lombok.Data;
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.Messages;
 
 @Data
 public class LogReplicationQueryLeaderShipResponse implements ICorfuPayload<LogReplicationQueryLeaderShipResponse> {
@@ -18,6 +18,10 @@ public class LogReplicationQueryLeaderShipResponse implements ICorfuPayload<LogR
     public LogReplicationQueryLeaderShipResponse(ByteBuf buf) {
         epoch = ICorfuPayload.fromBuffer(buf, Long.class);
         isLeader = ICorfuPayload.fromBuffer(buf, Boolean.class);
+    }
+
+    public static LogReplicationQueryLeaderShipResponse fromProto(Messages.LogReplicationQueryLeadershipResponse proto) {
+        return new LogReplicationQueryLeaderShipResponse(proto.getEpoch(), proto.getIsLeader());
     }
 
     @Override

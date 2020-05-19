@@ -771,13 +771,13 @@ public class CorfuMapTest extends AbstractViewTest {
                 .setStreamID(stream)
                 .option(ObjectOpenOption.NO_CACHE)
                 .open();
-        // Do a get to prompt the send
+        // Do a get to prompt the sync
         assertThat(testMap2.get(Integer.toString(0)))
                 .isEqualTo(Integer.toString(0));
         long endTime = System.nanoTime();
 
         final int MILLISECONDS_TO_MICROSECONDS = 1000;
-        testStatus += "Time to send whole stream=" + String.format("%d us",
+        testStatus += "Time to sync whole stream=" + String.format("%d us",
                 (endTime - startTime) / MILLISECONDS_TO_MICROSECONDS);
     }
 

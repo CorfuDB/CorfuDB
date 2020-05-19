@@ -261,7 +261,6 @@ public class LogReplicationFSM {
      */
     private void consume() {
         try {
-            //System.out.print ("\nsrc state " + state.getType());
             if (state.getType() == LogReplicationStateType.STOPPED) {
                 log.info("Log Replication State Machine has been stopped. No more events will be processed.");
                 return;
@@ -302,7 +301,6 @@ public class LogReplicationFSM {
             }
 
             if (event.getType() == LogReplicationEventType.REPLICATION_STOP) {
-                System.out.print("\n****notify the stop replication is done");
                 synchronized (event) {
                     event.notifyAll();
                 }

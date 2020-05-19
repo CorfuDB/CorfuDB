@@ -1,6 +1,8 @@
 package org.corfudb.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
+
+import org.corfudb.infrastructure.LogReplicationTransportType;
 import org.corfudb.logreplication.runtime.LogReplicationRuntime;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.util.retry.IRetry;
@@ -13,8 +15,8 @@ import java.util.Map;
 @Slf4j
 public class CorfuReplicationManager {
 
-    // Keep map of remote site endpoints and the associated log replication client
-    Map<String, LogReplicationRuntime> logReplicationRuntimes = new HashMap<>();
+    // Keep map of remote site endpoints and the associated log replication runtime (client)
+    Map<String, LogReplicationRuntime> remoteSiteRuntimeMap = new HashMap<>();
 
     enum LogReplicationNegotiationResult {
         SNAPSHOT_SYNC,
@@ -25,24 +27,27 @@ public class CorfuReplicationManager {
         UNKNOWN
     }
 
-    public void setupReplicationLeaderRuntime(CrossSiteConfiguration.NodeInfo nodeInfo, CrossSiteConfiguration config)
-            throws InterruptedException {
-        log.info("setupReplicationLeaderRuntime config {}", config);
+    /**
+     * Connect and connect log replication to a remote site.
+     *
+     * * @throws InterruptedException
+     */
+    public void connect(CrossSiteConfiguration.NodeInfo localNode, CrossSiteConfiguration.SiteInfo remoteSite,
+                        LogReplicationTransportType transport) throws InterruptedException {
+
+        log.trace("Setup runtime's from local node to remote site {}", remoteSite.getSiteId());
 
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    for (Map.Entry<String, CrossSiteConfiguration.SiteInfo> entry : config.getStandbySites().entrySet()) {
-                        entry.getValue().setupLogReplicationRemoteRuntime(nodeInfo, config.getEpoch());
-                        log.info("setupReplicationLeaderRuntime {}", entry);
-                        CrossSiteConfiguration.NodeInfo leader = entry.getValue().getRemoteLeader();
-                        logReplicationRuntimes.put(entry.getKey(), leader.runtime);
-                    }
+                    remoteSite.connect(localNode, transport);
+                    CrossSiteConfiguration.NodeInfo leader = remoteSite.getRemoteLeader();
+                    log.info("connect to site {} lead node {}:{}", remoteSite.getSiteId(), leader.getIpAddress(), leader.getPortNum());
+                    remoteSiteRuntimeMap.put(remoteSite.getSiteId(), leader.getRuntime());
                 } catch (Exception e) {
-                    log.error("Failed to connect to a remote site. Retry after 1 second.");
+                    log.error("Failed to connect to remote sit {}. Retry after 1 second.", remoteSite.getSiteId());
                     throw new RetryNeededException();
                 }
-
                 return null;
             }).run();
         } catch (InterruptedException e) {
@@ -52,71 +57,67 @@ public class CorfuReplicationManager {
     }
 
     /**
-     * Once determined this is a Lead Sender (on primary site), start log replication.
+     * Once determined this is a Lead Sender (on primary site), connect log replication.
      */
-    public void startLogReplication(CrossSiteConfiguration config) {
-        log.info("Start Log Replication to Standby Sites {}", logReplicationRuntimes.keySet());
-        for(Map.Entry<String, LogReplicationRuntime> entry: logReplicationRuntimes.entrySet()) {
-            String endpoint = entry.getKey();
-            LogReplicationRuntime runtime = entry.getValue();
+    public void startLogReplication(String siteId, CrossSiteConfiguration config) throws LogReplicationNegotiationException {
+        log.info("Start Log Replication to Standby Site {}", siteId);
+        LogReplicationRuntime runtime = remoteSiteRuntimeMap.get(siteId);
 
-            //If we start from a stop state due to site switch over, we need to restart the consumer.
-            runtime.getSourceManager().getLogReplicationFSM().startConsumer(config);
+        //If we start from a stop state due to site switch over, we need to restart the consumer.
+        runtime.getSourceManager().getLogReplicationFSM().startConsumer(config);
 
-            LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
-            log.info("Log Replication Negotiation with {} result {}", endpoint, negotiationResult);
-            startReplication(config.getEpoch(), runtime, negotiationResult);
-        }
+        LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
+        log.info("Log Replication Negotiation with {} result {}", siteId, negotiationResult);
+        replicate(runtime, negotiationResult, config.getEpoch());
     }
 
-    public void stopLogReplication(CrossSiteConfiguration config) {
-        System.out.print("Log Replication stop " + config);
+    private void replicate(LogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult, long siteEpoch) {
+            runtime.getSourceManager().getLogReplicationFSM().setSiteEpoch(siteEpoch);
 
-        for(Map.Entry<String, LogReplicationRuntime> entry: logReplicationRuntimes.entrySet()) {
-            LogReplicationRuntime runtime = entry.getValue();
-            runtime.stop();
-        }
-    }
-
-    private void startReplication(long siteEpoch, LogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult) {
-        runtime.getSourceManager().getLogReplicationFSM().setSiteEpoch(siteEpoch);
-
-        switch (negotiationResult) {
+            switch (negotiationResult) {
             case SNAPSHOT_SYNC:
                 log.info("Start Snapshot Sync Replication");
-                //System.out.print("\nStart Snapshot Sync Replication ");
                 runtime.startSnapshotSync();
                 break;
             case LOG_ENTRY_SYNC:
                 log.info("Start Log Entry Sync Replication");
-                //System.out.print("\nStart Log Entry Sync Replication");
                 runtime.startLogEntrySync();
                 break;
-            case LEADERSHIP_LOST:
-            case CONNECTION_LOST:
-            case UNKNOWN:
+            default:
                 log.info("Invalid Negotiation result. Re-trigger discovery.");
-                //System.out.print("\nInvalid Negotiation result. Re-trigger discovery.");
-                // Re-Trigger Discovery Leader Receiver
                 break;
         }
     }
 
-    private LogReplicationNegotiationResult startNegotiation(LogReplicationRuntime logReplicationRuntime) {
-        try {
-            log.info("Start Negotiation");
-            LogReplicationNegotiationResponse negotiationResponse = logReplicationRuntime.startNegotiation();
-            log.info("Negotiation Response received: " + negotiationResponse);
-            // Determine if we should proceed with Snapshot Sync or Log Entry Sync
-            return processNegotiationResponse(negotiationResponse);
-        } catch (Exception e) {
-            log.error("Caught an exception during log replication negotiation", e);
-            return LogReplicationNegotiationResult.ERROR;
+        public void stopLogReplication(CrossSiteConfiguration config) {
+            for(Map.Entry<String, LogReplicationRuntime> entry: remoteSiteRuntimeMap.entrySet()) {
+                LogReplicationRuntime runtime = entry.getValue();
+                runtime.stop();
+            }
         }
+
+    private LogReplicationNegotiationResult startNegotiation(LogReplicationRuntime logReplicationRuntime)
+            throws LogReplicationNegotiationException {
+
+        LogReplicationNegotiationResponse negotiationResponse;
+
+        try {
+            negotiationResponse = logReplicationRuntime.startNegotiation();
+            log.trace("Negotiation Response received: {} ", negotiationResponse);
+        } catch (Exception e) {
+            log.error("Caught exception during log replication negotiation to {}", logReplicationRuntime.getParameters().getRemoteLogReplicationServerEndpoint());
+            throw new LogReplicationNegotiationException(LogReplicationNegotiationResult.UNKNOWN);
+        }
+
+        // Determine if we should proceed with Snapshot Sync or Log Entry Sync
+        return processNegotiationResponse(negotiationResponse);
+
     }
 
-    private LogReplicationNegotiationResult processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse) {
-        // TODO (TEMP): for now default always to snapshot sync
+    private LogReplicationNegotiationResult processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
+            throws LogReplicationNegotiationException {
+
+        // TODO (Anny): for now default always to snapshot sync
         return LogReplicationNegotiationResult.SNAPSHOT_SYNC;
     }
 }
