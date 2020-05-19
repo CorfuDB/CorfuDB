@@ -70,7 +70,7 @@ import org.corfudb.util.Sleep;
  */
 @Slf4j
 @ChannelHandler.Sharable
-public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
+public class  NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         implements IClientRouter {
 
     /**
@@ -151,6 +151,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         log.info("Creating Client Router {} ", parameters);
         this.node = node;
         this.parameters = parameters;
+        this.connectionFuture = new CompletableFuture<>();
+        this.handlerMap = new ConcurrentHashMap<>();
 
         // Set timer mapping
         ImmutableMap.Builder<CorfuMsgType, String> mapBuilder = ImmutableMap.builder();
@@ -165,9 +167,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         timeoutResponse = parameters.getRequestTimeout().toMillis();
         timeoutRetry = parameters.getConnectionRetryRate().toMillis();
 
-        connectionFuture = new CompletableFuture<>();
 
-        handlerMap = new ConcurrentHashMap<>();
         clientList = new ArrayList<>();
         requestID = new AtomicLong();
         outstandingRequests = new ConcurrentHashMap<>();
@@ -224,6 +224,14 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         return this;
     }
 
+    public Integer getPort() {
+        return node.getPort();
+    }
+
+    public String getHost() {
+        return node.getHost();
+    }
+
     /**
      * Gets a client that matches a particular type.
      *
@@ -237,18 +245,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         return (T) clientList.stream()
             .filter(clientType::isInstance)
             .findFirst().get();
-    }
-
-    /**
-     * {@inheritDoc}.
-     *
-     * @deprecated The router automatically starts now, so this function call is no
-     *             longer necessary
-     */
-    @Override
-    @Deprecated
-    public synchronized void start() {
-        // Do nothing, legacy call
     }
 
     /** Get the {@link ChannelInitializer} used for initializing the Netty channel pipeline.
@@ -372,27 +368,15 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         }
     }
 
-    /** {@inheritDoc}
-     *  @deprecated  Deprecated, stopping a router without shutting it down is no longer supported.
-     *               Please use {@link this#stop()}.
-     */
-    @Override
-    @Deprecated
-    public void stop(boolean shutdown) {
-        stop();
-    }
-
     /**
      * Send a message and get a completable future to be fulfilled by the reply.
      *
-     * @param ctx     The channel handler context to send the message under.
      * @param message The message to send.
      * @param <T>     The type of completable to return.
      * @return A completable future which will be fulfilled by the reply,
      *     or a timeout in the case there is no response.
      */
-    public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
-        @NonNull CorfuMsg message) {
+    public <T> CompletableFuture<T> sendMessageAndGetCompletable(@NonNull CorfuMsg message) {
 
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return a exceptionally completed with the timeout.
@@ -430,11 +414,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         outstandingRequests.put(thisRequest, cf);
 
         // Write the message out to the channel.
-        if (ctx == null) {
-            channel.writeAndFlush(message, channel.voidPromise());
-        } else {
-            ctx.writeAndFlush(message, ctx.voidPromise());
-        }
+        channel.writeAndFlush(message, channel.voidPromise());
+
         log.trace("Sent message: {}", message);
 
         // Generate a benchmarked future to measure the underlying request
@@ -459,16 +440,16 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             }
             return null;
         });
+
         return cfTimeout;
     }
 
     /**
      * Send a one way message, without adding a completable future.
      *
-     * @param ctx     The context to send the message under.
      * @param message The message to send.
      */
-    public void sendMessage(ChannelHandlerContext ctx, CorfuMsg message) {
+    public void sendMessage(CorfuMsg message) {
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
         // Set the base fields for this message.
@@ -477,20 +458,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         // Write this message out on the channel.
         channel.writeAndFlush(message, channel.voidPromise());
         log.trace("Sent one-way message: {}", message);
-    }
-
-
-    /**
-     * Send a netty message through this router, setting the fields in the outgoing message.
-     *
-     * @param ctx    Channel handler context to use.
-     * @param inMsg  Incoming message to respond to.
-     * @param outMsg Outgoing message.
-     */
-    public void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
-        outMsg.copyBaseFields(inMsg);
-        ctx.writeAndFlush(outMsg, ctx.voidPromise());
-        log.trace("Sent response: {}", outMsg);
     }
 
     /**
@@ -583,7 +550,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             return;
         }
         // Send a keep alive message to server which ignores epoch
-        sendMessageAndGetCompletable(null, CorfuMsgType.KEEP_ALIVE.msg());
+        sendMessageAndGetCompletable(CorfuMsgType.KEEP_ALIVE.msg());
         log.trace("keepAlive: sent keep alive to {}", this.channel.remoteAddress());
     }
 
@@ -672,15 +639,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                     .build()), parameters);
     }
 
-    @Deprecated
-    @Override
-    public Integer getPort() {
-        return node.getPort();
-    }
-
-    @Deprecated
-    public String getHost() {
-        return node.getHost();
-    }
     // endregion
+
 }

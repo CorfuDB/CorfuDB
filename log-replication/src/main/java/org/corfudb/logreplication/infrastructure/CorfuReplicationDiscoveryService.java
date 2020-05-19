@@ -2,17 +2,21 @@ package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
-import java.util.concurrent.LinkedBlockingQueue;
+import org.corfudb.infrastructure.LogReplicationTransportType;
 
-//import org.corfudb.utils.LogReplicationSiteInfo;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * This class represents the Replication Discovery Service.
- * It allows to discover all sites, acquire the lock and determine
- * the role of the current node: Source (sender) or Sink (receiver)
+ *
+ * It manages the following:
+ * - Site discovery (active and standby)
+ * - Lock Acquisition (leader election)
+ * - Log Replication Node role: Source (sender) or Sink (receiver)
  */
 @Slf4j
 public class CorfuReplicationDiscoveryService implements Runnable {
@@ -33,20 +37,24 @@ public class CorfuReplicationDiscoveryService implements Runnable {
     CrossSiteConfiguration crossSiteConfig;
     CrossSiteConfiguration.NodeInfo nodeInfo = null;
 
+    private final LogReplicationTransportType transport;
+
     /**
      * A queue of events.
      */
     private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
 
-    public CorfuReplicationDiscoveryService(String endpoint, CorfuReplicationServerNode serverNode, CorfuReplicationSiteManagerAdapter siteManager) {
+    public CorfuReplicationDiscoveryService(String endpoint, CorfuReplicationServerNode serverNode, CorfuReplicationSiteManagerAdapter siteManager, LogReplicationTransportType transport) {
         this.replicationServerNode = serverNode;
         this.replicationManager = new CorfuReplicationManager();
         this.localEndpoint = endpoint;
         this.siteManager = siteManager;
         this.siteManager.setCorfuReplicationDiscoveryService(this);
+        this.transport = transport;
     }
 
     public void run() {
+
         siteManager.start();
 
         while (shouldRun) {
@@ -63,8 +71,8 @@ public class CorfuReplicationDiscoveryService implements Runnable {
                             break;
                         }
                     }
+                    replicationManager.stopLogReplication(crossSiteConfig);
                 }
-                replicationManager.stopLogReplication(crossSiteConfig);
             } catch (Exception e) {
                 log.error("caught an exception ", e);
                 shouldRun = false;
@@ -77,8 +85,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
 
     public void runService() {
         try {
-            log.info("Run Corfu Replication Discovery");
-            //System.out.print("\nRun Corfu Replication Discovery Service");
+            log.info("Running Corfu Replication Discovery Service");
 
             // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
             crossSiteConfig = siteManager.fetchSiteConfig();
@@ -92,20 +99,18 @@ public class CorfuReplicationDiscoveryService implements Runnable {
 
             if (nodeInfo.isLeader()) {
                 if (nodeInfo.getRoleType() == GlobalManagerStatus.ACTIVE) {
+
                     crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
                     log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
-                    //System.out.print("\nStart as Source (sender/replicator) on node " + nodeInfo + " siteConig " + crossSiteConfig);
-
-                    try {
-                        replicationManager.setupReplicationLeaderRuntime(nodeInfo, crossSiteConfig);
-                    } catch (InterruptedException ie) {
-                        log.error("Corfu Replication Discovery Service is interrupted", ie);
-                        throw ie;
+                    // TODO(Anny): parallel? or not really, cause each site should have it's own state machine?
+                    for (CrossSiteConfiguration.SiteInfo remoteSite : crossSiteConfig.getStandbySites().values()) {
+                        try {
+                            replicationManager.connect(nodeInfo, remoteSite, transport);
+                            replicationManager.startLogReplication(remoteSite.siteId, crossSiteConfig);
+                        } catch (Exception e) {
+                            log.error("Failed to start log replication to remote site {}", remoteSite.getSiteId());
+                        }
                     }
-
-                    replicationManager.startLogReplication(crossSiteConfig);
-
-                    return;
                 } else if (nodeInfo.getRoleType() == GlobalManagerStatus.STANDBY) {
                     // Standby Site
                     // The LogReplicationServer (server handler) will initiate the SinkManager
@@ -122,9 +127,10 @@ public class CorfuReplicationDiscoveryService implements Runnable {
                 log.error("Caught Exception while discovering remote sites, retry. ", e);
         } finally {
             if (nodeInfo != null && nodeInfo.isLeader()) {
-                    releaseLock();
+                releaseLock();
             }
         }
+        //}
     }
 
     public synchronized void putEvent(DiscoveryServiceEvent event) {
@@ -138,6 +144,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
      * @return True if lock has been acquired by this node. False, otherwise.
      */
     private boolean acquireLock() {
+        // TODO(Anny): Add Distributed Lock logic here
         return true;
     }
 
