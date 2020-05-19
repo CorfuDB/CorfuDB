@@ -87,7 +87,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                 }
 
                 rt.getObjectsView().TXEnd();
-                log.info("Clear stream {} ", streamID);
+                log.trace("Clear stream {} ", streamID);
                 doRetry = false;
             } catch (TransactionAbortedException e) {
                 log.warn("Caught an exception {} will retry {}", e, numRetry);

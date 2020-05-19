@@ -168,14 +168,12 @@ public class TestClientRouter implements IClientRouter {
     /**
      * Send a message and get a completable future to be fulfilled by the reply.
      *
-     * @param ctx     The channel handler context to send the message under.
      * @param message The message to send.
      * @return A completable future which will be fulfilled by the reply,
      * or a timeout in the case there is no response.
      */
     @Override
-    public <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
-                                                                 @NonNull CorfuMsg message) {
+    public <T> CompletableFuture<T> sendMessageAndGetCompletable(@NonNull CorfuMsg message) {
         // Simulate a "disconnected endpoint"
         if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
@@ -234,11 +232,10 @@ public class TestClientRouter implements IClientRouter {
     /**
      * Send a one way message, without adding a completable future.
      *
-     * @param ctx     The context to send the message under.
      * @param message The message to send.
      */
     @Override
-    public void sendMessage(ChannelHandlerContext ctx, CorfuMsg message) {
+    public void sendMessage(CorfuMsg message) {
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
         message.setClientID(clientID);
@@ -249,25 +246,6 @@ public class TestClientRouter implements IClientRouter {
                 .allMatch(x -> x)) {
             // Write the message out to the channel.
                 routeMessage(message);
-        }
-    }
-
-    /**
-     * Send a netty message through this router, setting the fields in the outgoing message.
-     *
-     * @param ctx    Channel handler context to use.
-     * @param inMsg  Incoming message to respond to.
-     * @param outMsg Outgoing message.
-     */
-    @Override
-    public void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
-        outMsg.copyBaseFields(inMsg);
-        if (rules.stream()
-                .map(x -> x.evaluate(outMsg, this))
-                .allMatch(x -> x)) {
-            // Write the message out to the channel.
-                ctx.writeAndFlush(outMsg);
-                log.trace("Sent response: {}", outMsg);
         }
     }
 
@@ -322,14 +300,6 @@ public class TestClientRouter implements IClientRouter {
     }
 
     /**
-     * Starts routing requests.
-     */
-    @Override
-    public void start() {
-
-    }
-
-    /**
      * Stops routing requests.
      */
     @Override
@@ -337,10 +307,6 @@ public class TestClientRouter implements IClientRouter {
         //TODO - pause pipeline
     }
 
-    @Override
-    public void stop(boolean unused) {
-        //TODO - pause pipeline
-    }
 
     public CorfuMsg simulateSerialization(CorfuMsg message) {
         /* simulate serialization/deserialization */

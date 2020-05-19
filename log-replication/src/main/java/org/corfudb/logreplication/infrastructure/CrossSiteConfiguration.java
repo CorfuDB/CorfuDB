@@ -4,12 +4,16 @@ import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+
+import org.apache.maven.model.Site;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.AphInfoMsg;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteMsg;
+
+import org.corfudb.infrastructure.LogReplicationTransportType;
 import org.corfudb.logreplication.runtime.LogReplicationRuntime;
-import org.corfudb.logreplication.runtime.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 
 import java.util.ArrayList;
@@ -66,6 +70,59 @@ public class CrossSiteConfiguration {
         return configMsg;
     }
 
+
+//    private void readConfig() {
+//        try {
+//            // TODO: [TEMP] Reading Site Info from a config file ---until this is pulled from an external system
+//            // providing Site Info (Site Manager)--- This will be removed
+//            File configFile = new File(config_file);
+//            FileReader reader = new FileReader(configFile);
+//
+//            Properties props = new Properties();
+//            props.load(reader);
+//
+//            Set<String> names = props.stringPropertyNames();
+//
+//            // Setup primary site information
+//            primarySite = new Site(props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME));
+//            String corfuPortNum = props.getProperty(PRIMARY_SITE_CORFU_PORTNUM);
+//            String portNum = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
+//
+//            for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
+//                String nodeName = PRIMARY_SITE_NODE + i;
+//                if (!names.contains(nodeName)) {
+//                    continue;
+//                }
+//                String ipAddress = props.getProperty(nodeName);
+//                log.info("Primary site[{}] Node {} on {}:{}", primarySite.getSiteId(), nodeName, ipAddress, portNum);
+//                NodeInfo nodeInfo = new NodeInfo(ipAddress, portNum, RoleType.PrimarySite, corfuPortNum);
+//                primarySite.nodesInfo.add(nodeInfo);
+//            }
+//
+//            // Setup backup site information
+//            standbySites = new HashMap<>();
+//            standbySites.put(STANDBY_SITE_NAME, new Site(props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME)));
+//            corfuPortNum = props.getProperty(STANDBY_SITE_CORFU_PORTNUM);
+//            portNum = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
+//
+//            for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
+//                String nodeName = STANDBY_SITE_NODE + i;
+//                if (!names.contains(nodeName)) {
+//                    continue;
+//                }
+//                String ipAddress = props.getProperty(STANDBY_SITE_NODE + i);
+//                log.trace("Standby site[{}] Node {} on {}:{}", standbySites.get(STANDBY_SITE_NAME).getSiteId(), nodeName, ipAddress, portNum);
+//                NodeInfo nodeInfo = new NodeInfo(ipAddress, portNum, RoleType.StandbySite, corfuPortNum);
+//                standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);
+//            }
+//
+//            reader.close();
+//            log.info("Primary Site: {}; Standby Site(s): {}", primarySite, standbySites);
+//        } catch (Exception e) {
+//            log.warn("Caught an exception while reading the config file: {}", e);
+//        }
+//>>>>>>> Corfu Log Replication Plugin Transport Layer
+
     public NodeInfo getNodeInfo(String endpoint) {
         List<SiteInfo> sites = new ArrayList<>(standbySites.values());
 
@@ -73,7 +130,7 @@ public class CrossSiteConfiguration {
         NodeInfo nodeInfo = getNodeInfo(sites, endpoint);
 
         if (nodeInfo == null) {
-            log.warn("No Site has node with IP  {} ", endpoint);
+            log.warn("No Site has node with IP {} ", endpoint);
         }
 
         return nodeInfo;
@@ -93,6 +150,7 @@ public class CrossSiteConfiguration {
     }
 
     public static class SiteInfo {
+
         @Getter
         String siteId;
 
@@ -144,14 +202,18 @@ public class CrossSiteConfiguration {
             return siteMsg;
         }
 
-        public void setupLogReplicationRemoteRuntime(NodeInfo localNode, long siteEpoch) {
+
+        public void connect(NodeInfo localNode, LogReplicationTransportType transport) {
+            // TODO (Xiaoqin Ma): shouldn't it connect only to the lead node on the remote site?
             for (NodeInfo nodeInfo : nodesInfo) {
                 LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
                         .localCorfuEndpoint(localNode.getCorfuEndpoint())
-                        .remoteLogReplicationServerEndpoint(nodeInfo.getEndpoint()).build();
+                        .remoteLogReplicationServerEndpoint(nodeInfo.getEndpoint())
+                        .transport(transport)
+                        .build();
                 LogReplicationRuntime replicationRuntime = new LogReplicationRuntime(parameters);
                 replicationRuntime.connect();
-                nodeInfo.runtime = replicationRuntime;
+                nodeInfo.setRuntime(replicationRuntime);
             }
         }
 
