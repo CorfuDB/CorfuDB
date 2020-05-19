@@ -1,11 +1,14 @@
 package org.corfudb.protocols.wireprotocol.logreplication;
 
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.view.Address;
 
 import java.util.UUID;
 
 @Data
+@Slf4j
 public class LogReplicationEntryMetadata {
     /*
      * Used to keep track of the site config history.
@@ -65,6 +68,39 @@ public class LogReplicationEntryMetadata {
     public LogReplicationEntryMetadata(MessageType type, long epoch,  UUID syncRequestId, long entryTimeStamp, long snapshotTimestamp, UUID snapshotRequestId) {
         this(type, epoch, syncRequestId,  entryTimeStamp, Address.NON_EXIST, snapshotTimestamp, Address.NON_EXIST);
         this.syncRequestId = snapshotRequestId;
+    }
+
+    public static LogReplicationEntryMetadata fromProto(Messages.LogReplicationEntryMetadata proto) {
+        // Parse protoBuf Message
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata();
+        metadata.setMessageMetadataType(getType(proto.getType()));
+        metadata.setSyncRequestId(new UUID(proto.getSyncRequestId().getMsb(), proto.getSyncRequestId().getLsb()));
+        metadata.setTimestamp(proto.getTimestamp());
+        metadata.setPreviousTimestamp(proto.getPreviousTimestamp());
+        metadata.setSnapshotTimestamp(proto.getSnapshotTimestamp());
+        metadata.setSnapshotSyncSeqNum(proto.getSnapshotSyncSeqNum());
+
+        return metadata;
+    }
+
+    private static MessageType getType(Messages.LogReplicationEntryType type) {
+        switch(type) {
+            case LOG_ENTRY_MESSAGE:
+                return MessageType.LOG_ENTRY_MESSAGE;
+            case SNAPSHOT_MESSAGE:
+                return MessageType.SNAPSHOT_MESSAGE;
+            case SNAPSHOT_START:
+                return MessageType.SNAPSHOT_START;
+            case SNAPSHOT_END:
+                return MessageType.SNAPSHOT_END;
+            case SNAPSHOT_REPLICATED:
+                return MessageType.SNAPSHOT_REPLICATED;
+            case LOG_ENTRY_REPLICATED:
+                return MessageType.LOG_ENTRY_REPLICATED;
+            default:
+                log.error("Found unknown log entry message type {}", type);
+                return null;
+        }
     }
 }
 
