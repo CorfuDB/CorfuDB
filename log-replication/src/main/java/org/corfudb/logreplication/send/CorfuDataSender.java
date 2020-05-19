@@ -10,8 +10,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import static java.lang.Thread.sleep;
-
 @Slf4j
 public class CorfuDataSender implements DataSender {
 
@@ -35,13 +33,7 @@ public class CorfuDataSender implements DataSender {
         CompletableFuture<LogReplicationEntry> tmp;
 
         for (LogReplicationEntry message :  messages) {
-            //System.out.print("\nsend message " + message.getMetadata());
             tmp = send(message);
-            try {
-                sleep(1000);
-            } catch (Exception e) {
-
-            }
             if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END) ||
                     message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
                 lastSentMessage = tmp;
