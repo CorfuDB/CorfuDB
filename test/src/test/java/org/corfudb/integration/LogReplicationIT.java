@@ -934,7 +934,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Test
     public void testLogEntrySyncWithTrim() throws Exception {
         final int RX_MESSAGES_LIMIT = 2;
-        final int TRIM_RATIO = NUM_KEYS_LARGE - 20;
 
         // Setup Environment: two corfu servers (source & destination)
         setupEnv();

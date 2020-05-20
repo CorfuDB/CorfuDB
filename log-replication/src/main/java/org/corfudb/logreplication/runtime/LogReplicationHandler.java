@@ -16,6 +16,7 @@ import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.IHandler;
 
 import java.lang.invoke.MethodHandles;
+import java.util.UUID;
 
 
 /**
@@ -61,7 +62,7 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     }
 
     @Override
-    public LogReplicationClient getClient(long epoch) {
+    public LogReplicationClient getClient(long epoch, UUID clusterID) {
         return new LogReplicationClient(router, epoch);
     }
 }

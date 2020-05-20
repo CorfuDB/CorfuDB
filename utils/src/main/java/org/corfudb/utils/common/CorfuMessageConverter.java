@@ -116,10 +116,10 @@ public class CorfuMessageConverter {
                             .setBuf(buf)
                             .setEpoch(epoch);
                 case LOG_REPLICATION_NEGOTIATION_REQUEST:
-                    return new CorfuMsg(clientId, requestId, epoch, null,
+                    return new CorfuMsg(clientId, null, requestId, epoch, null,
                             CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST, priorityLevel);
                 case LOG_REPLICATION_QUERY_LEADERSHIP:
-                    return new CorfuMsg(clientId, requestId, epoch, null,
+                    return new CorfuMsg(clientId, null, requestId, epoch, null,
                             CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP, priorityLevel);
                 case LOG_REPLICATION_NEGOTIATION_RESPONSE:
                         LogReplicationNegotiationResponse negotiationResponse = LogReplicationNegotiationResponse
