@@ -7,6 +7,12 @@ import org.corfudb.runtime.Messages;
 
 import java.util.UUID;
 
+/**
+ * This message represents a log entry to be replicated across remote sites. It is also used
+ * as an ACK for a replicated entry, where the payload is empty.
+ *
+ * @author annym
+ */
 @Data
 public class LogReplicationEntry implements ICorfuPayload<LogReplicationEntry> {
 

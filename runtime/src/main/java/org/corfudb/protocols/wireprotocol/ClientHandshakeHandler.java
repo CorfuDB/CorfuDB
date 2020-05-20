@@ -153,7 +153,8 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         log.info("channelActive: Outgoing connection established to: {}", ctx.channel().remoteAddress());
 
         // Write the handshake & add a timeout listener.
-        CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE.payloadMsg(new HandshakeMsg(this.clientId, this.nodeId));
+        CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE
+            .payloadMsg(new HandshakeMsg(this.clientId, this.nodeId));
 
         log.debug("channelActive: Initiate handshake. Send handshake message.");
         ctx.writeAndFlush(handshake);

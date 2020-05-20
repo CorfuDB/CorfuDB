@@ -9,7 +9,6 @@ import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
-import org.corfudb.runtime.Messages.LogReplicationEntryType;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.LambdaMetafactory;
@@ -44,9 +43,6 @@ public class HandlerMethods {
     /** The handler map. */
     private final Map<CorfuMsgType, HandlerMethod> handlerMap;
 
-    /** The handler map. */
-    private final Map<LogReplicationEntryType, HandlerMethod> protoHandlerMap;
-
     /**
      * A functional interface for server message handlers. Server message handlers should
      * be fast and not block. If a handler blocks for an extended period of time, it will
@@ -71,7 +67,6 @@ public class HandlerMethods {
     /** Construct a new instance of HandlerMethods. */
     public HandlerMethods() {
         handlerMap = new EnumMap<>(CorfuMsgType.class);
-        protoHandlerMap = new EnumMap<>(LogReplicationEntryType.class);
     }
 
 
@@ -129,15 +124,13 @@ public class HandlerMethods {
         if (!method.getParameterTypes()[0].isAssignableFrom(annotation.type().messageType
                 .getRawType())) {
             throw new UnrecoverableCorfuError("Incorrect message type, expected "
-                    + annotation.type().messageType.getRawType() + " but provided "
-                    + method.getParameterTypes()[0]);
+                + annotation.type().messageType.getRawType() + " but provided "
+                + method.getParameterTypes()[0]);
         }
-
         if (handlerMap.containsKey(annotation.type())) {
             throw new UnrecoverableCorfuError("HandlerMethod for " + annotation.type()
                 + " already registered!");
         }
-
         // convert the method into a Java8 Lambda for maximum execution speed...
         try {
             HandlerMethod<CorfuMsg> h;
@@ -162,16 +155,10 @@ public class HandlerMethods {
                     mh.type().dropParameterTypes(0, 1)).getTarget()
                     .bindTo(server).invoke();
             }
-
-            if (annotation.type() != null) {
-                // Install pre-conditions on handler
-                final HandlerMethod<CorfuMsg> handler = generateConditionalHandler(annotation.type(), h);
-                // Install the handler in the map
-                handlerMap.put(annotation.type(), handler);
-            } else {
-                // Install the handler in the map
-                handlerMap.put(annotation.type(), h);
-            }
+            // Install pre-conditions on handler
+            final HandlerMethod<CorfuMsg> handler = generateConditionalHandler(annotation.type(), h);
+            // Install the handler in the map
+            handlerMap.put(annotation.type(), handler);
         } catch (Throwable e) {
             log.error("Exception during message handler registration", e);
             throw new UnrecoverableCorfuError(e);
