@@ -122,9 +122,9 @@ public enum CorfuMsgType {
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true, false),
 
     LOG_REPLICATION_ENTRY(201, new TypeToken<CorfuPayloadMsg<LogReplicationEntry>>() {}, true, true),
-    LOG_REPLICATION_NEGOTIATION_REQUEST(202, TypeToken.of(CorfuMsg.class)),
+    LOG_REPLICATION_NEGOTIATION_REQUEST(202, TypeToken.of(CorfuMsg.class), true, true),
     LOG_REPLICATION_NEGOTIATION_RESPONSE(203, new TypeToken<CorfuPayloadMsg<LogReplicationNegotiationResponse>>() {}, true, true),
-    LOG_REPLICATION_QUERY_LEADERSHIP(204, TypeToken.of(CorfuMsg.class)),
+    LOG_REPLICATION_QUERY_LEADERSHIP(204, TypeToken.of(CorfuMsg.class), true, true),
     LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE(205, new TypeToken<CorfuPayloadMsg<LogReplicationQueryLeaderShipResponse>>(){}, true, true),
     ;
 

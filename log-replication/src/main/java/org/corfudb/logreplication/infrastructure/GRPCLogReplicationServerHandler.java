@@ -10,31 +10,44 @@ import org.corfudb.runtime.LogReplicationChannelGrpc;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-
 /**
- * Log Replication GRPC Server - used for end to end test of the transport layer,
- * which can run on NETTY or any other custom protocol.
+ * GRPC Log Replication Service Stub Implementation.
  *
+ * Note: GRPC is used to test the plugin-based transport architecture for log replication.
+ *
+ * @author annym 05/15/20
  */
 @Slf4j
 public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.LogReplicationChannelImplBase {
 
-    CustomServerRouter adapter;
+    /*
+     * Corfu Message Router (internal to Corfu)
+     */
+    CustomServerRouter router;
 
+    /*
+     * Map of Request ID to Stream Observer to send responses back to the client. Used for blocking calls.
+     */
     Map<Long, StreamObserver<CorfuMessage>> streamObserverMap;
 
-    // TODO(Anny): to avoid unpacking, perhaps store requestId and retrieve the lowest one...
+    /*
+     * Map of Sync Request ID to Stream Observer to send responses back to the client. Used for async calls.
+     *
+     * Note: we cannot rely on the request ID, because for client streaming APIs this will change for each
+     * message, despite being part of the same stream.
+     */
+    // TODO(Anny): to avoid unpacking, perhaps store requestId and retrieve the lowest one?
     Map<Messages.Uuid, StreamObserver<CorfuMessage>> replicationStreamObserverMap;
 
-    public GRPCLogReplicationServerHandler(CustomServerRouter adapter) {
-        this.adapter = adapter;
+    public GRPCLogReplicationServerHandler(CustomServerRouter router) {
+        this.router = router;
         this.streamObserverMap = new ConcurrentHashMap<>();
     }
 
     @Override
     public void negotiate(CorfuMessage request, StreamObserver<CorfuMessage> responseObserver) {
         log.trace("Received[{}]: {}", request.getRequestID(), request.getType().name());
-        adapter.receive(request);
+        router.receive(request);
         streamObserverMap.put(request.getRequestID(), responseObserver);
     }
 
@@ -42,32 +55,32 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     public void queryLeadership(CorfuMessage request, StreamObserver<CorfuMessage> responseObserver) {
         log.info("Received[{}]: {}", request.getRequestID(), request.getType().name());
         streamObserverMap.put(request.getRequestID(), responseObserver);
-        adapter.receive(request);
+        router.receive(request);
     }
 
     @Override
     public StreamObserver<CorfuMessage> replicate(StreamObserver<CorfuMessage> responseObserver) {
 
         return new StreamObserver<CorfuMessage>() {
-
             @Override
             public void onNext(CorfuMessage replicationCorfuMessage) {
                 log.trace("Received[{}]: {}", replicationCorfuMessage.getRequestID(), replicationCorfuMessage.getType().name());
-                adapter.receive(replicationCorfuMessage);
-
+                // Forward the received message to the router
+                router.receive(replicationCorfuMessage);
                 try {
                     // Obtain Snapshot Sync Identifier, to uniquely identify this replication process
-                    Messages.LogReplicationEntry protoEntry = replicationCorfuMessage.getPayload().unpack(Messages.LogReplicationEntry.class);
+                    Messages.LogReplicationEntry protoEntry = replicationCorfuMessage.getPayload()
+                            .unpack(Messages.LogReplicationEntry.class);
                     replicationStreamObserverMap.putIfAbsent(protoEntry.getMetadata().getSyncRequestId(), responseObserver);
-
                 } catch (Exception e) {
-
+                    log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
+                            replicationCorfuMessage.getRequestID());
                 }
             }
 
             @Override
             public void onError(Throwable t) {
-                log.error("Encountered error in log replicate.", t);
+                log.error("Encountered error while attempting replication.", t);
             }
 
             @Override
@@ -78,10 +91,8 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     }
 
     public void send(CorfuMessage msg) {
-
-        // Send ACK
+        // Case: message to send is an ACK (async observers)
         if (msg.getType().equals(Messages.CorfuMessageType.LOG_REPLICATION_ENTRY)) {
-
             try {
                 // Extract Sync Request Id from Payload
                 Messages.Uuid uuid = msg.getPayload().unpack(Messages.LogReplicationEntry.class).getMetadata().getSyncRequestId();

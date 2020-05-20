@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.infrastructure;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -38,6 +39,8 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -99,7 +102,8 @@ public class CorfuReplicationServerNode implements AutoCloseable {
             log.info("Corfu Replication Server initialized for CUSTOM transport.");
         } else {
             log.info("Corfu Replication Server initialized for NETTY transport.");
-            router = new NettyServerRouter(new ArrayList<>(serverMap.values()));
+            ImmutableList<AbstractServer> servers = ImmutableList.of((AbstractServer)serverMap.values());
+            router = new NettyServerRouter(servers, serverContext);
         }
 
         this.serverContext.setServerRouter(router);

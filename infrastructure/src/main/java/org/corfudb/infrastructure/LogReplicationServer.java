@@ -85,7 +85,6 @@ public class LogReplicationServer extends AbstractServer {
             long ts = ack.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_REPLICATED) ?
                     ack.getMetadata().getTimestamp() : ack.getMetadata().getSnapshotTimestamp();
             log.info("Sending ACK {} on {} to Client ", ack.getMetadata(), ts);
-            //System.out.print("\nSending ACK {} on {} to Client " +  ack.getMetadata() + " " + ts);
             r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_ENTRY.payloadMsg(ack));
         }
     }
