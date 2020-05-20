@@ -167,7 +167,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
 
         @Override
         public void run() {
-            boolean shouldChangeOnce = true;
+            boolean shouldChangeOnce = false;
             while (true) {
                 try {
                     sleep(changeInveral);
