@@ -73,6 +73,7 @@ public class BaseClient implements IClient {
                 new CorfuMsg(CorfuMsgType.VERSION_REQUEST).setEpoch(epoch).setClusterID(clusterId));
     }
 
+
     /**
      * Ping the endpoint, asynchronously.
      *
