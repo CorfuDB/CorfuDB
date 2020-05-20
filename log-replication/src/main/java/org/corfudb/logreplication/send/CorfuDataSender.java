@@ -21,14 +21,13 @@ public class CorfuDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
-        log.info("Send single log entry");
-        // Todo (hack): I believe we need to somehow keep these CF until any is completed...
+        log.trace("Send single log entry for request {}", message.getMetadata().getSyncRequestId());
         return client.sendLogEntry(message);
     }
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages) {
-        log.info("Send multiple log entries");
+        log.trace("Send multiple log entries [{}] for request {}", messages.size(), messages.get(0).getMetadata().getSyncRequestId());
         CompletableFuture<LogReplicationEntry> lastSentMessage = new CompletableFuture<>();
         CompletableFuture<LogReplicationEntry> tmp;
 
