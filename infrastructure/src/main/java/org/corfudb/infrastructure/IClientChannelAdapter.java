@@ -5,8 +5,12 @@ import lombok.NonNull;
 import org.corfudb.runtime.Messages.CorfuMessage;
 
 /**
- * If Log Replication Service will rely on a custom transport protocol for inter-site communication,
- * this interface must be extended by the client-side adapter for the custom channel implementation.
+ * Client Transport Adapter.
+ *
+ * If Log Replication relies on a custom transport protocol for communication across servers,
+ * this interface must be extended by the client-side adapter to implement a custom channel.
+ *
+ * @author annym 05/15/2020
  */
 public abstract class IClientChannelAdapter {
 
@@ -35,10 +39,7 @@ public abstract class IClientChannelAdapter {
     /**
      * Adapter initialization.
      *
-     * If any setup is required in advance, this will be triggered upon instantiation.
+     * If any setup is required in advance, this will be triggered upon adapter creation.
      */
-    public void start() {
-
-    }
-
+    public void start() {}
 }

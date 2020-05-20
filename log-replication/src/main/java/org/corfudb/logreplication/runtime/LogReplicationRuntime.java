@@ -6,7 +6,7 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.infrastructure.logreplication.CorfuReplicationTransportConfig;
+import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.CustomClientRouter;
 import org.corfudb.infrastructure.CustomServerRouter;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
@@ -108,12 +108,12 @@ public class LogReplicationRuntime {
 
                 if (transport.equals(LogReplicationTransportType.CUSTOM)) {
 
-                    CorfuReplicationTransportConfig config = new CorfuReplicationTransportConfig(CustomServerRouter.TRANSPORT_CONFIG_FILE_PATH);
+                    LogReplicationPluginConfig config = new LogReplicationPluginConfig(CustomServerRouter.TRANSPORT_CONFIG_FILE_PATH);
 
-                    File jar = new File(config.getAdapterJARPath());
+                    File jar = new File(config.getTransportAdapterJARPath());
 
                     try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-                        Class adapter = Class.forName(config.getAdapterClientClassName(), true, child);
+                        Class adapter = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
                         newRouter = new CustomClientRouter(node, getParameters(), adapter);
                     } catch (Exception e) {
                         log.error("Fatal error: Failed to create channel", e);

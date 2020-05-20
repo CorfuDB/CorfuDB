@@ -68,7 +68,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     @Before
     public void setRuntime() {
         runtime = getDefaultRuntime();
-        runtime.getParameters().setCodecType(Codec.Type.NONE.toString());
+        runtime.getParameters().setCodecType(Codec.Type.NONE);
     }
 
     /**

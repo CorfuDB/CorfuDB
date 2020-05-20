@@ -10,11 +10,22 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Server GRPC Transport Adapter
+ *
+ * This router is a default implementation used for transport plugin tests.
+ */
 @Slf4j
 public class GRPCLogReplicationServerChannel extends IServerChannelAdapter {
 
+    /*
+     * GRPC Server used for listening and dispatching incoming calls.
+     */
     private final Server server;
 
+    /*
+     * GRPC Service Stub
+     */
     private final GRPCLogReplicationServerHandler service;
 
     private CompletableFuture<Boolean> serverCompletable;
@@ -22,14 +33,15 @@ public class GRPCLogReplicationServerChannel extends IServerChannelAdapter {
     public GRPCLogReplicationServerChannel(Integer port, CustomServerRouter adapter) {
         super(port, adapter);
         this.service = new GRPCLogReplicationServerHandler(adapter);
-        this.server = ServerBuilder.forPort(port).addService(service)
-                .build();
+        this.server = ServerBuilder.forPort(port).addService(service).build();
     }
 
+    @Override
     public void send(CorfuMessage msg) {
         service.send(msg);
     }
 
+    @Override
     public CompletableFuture<Boolean> start() {
         try {
             serverCompletable = new CompletableFuture<>();
@@ -43,7 +55,9 @@ public class GRPCLogReplicationServerChannel extends IServerChannelAdapter {
         return serverCompletable;
     }
 
+    @Override
     public void stop() {
+        log.info("Stop GRPC service.");
         server.shutdownNow();
         serverCompletable.complete(true);
     }

@@ -6,8 +6,12 @@ import org.corfudb.runtime.Messages.CorfuMessage;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * If Log Replication relies on a custom transport protocol for inter-site communication,
- * this interface must be extended by the server-side adapter for the custom channel implementation.
+ * Server Transport Adapter.
+ *
+ * If Log Replication relies on a custom transport protocol for communication across servers,
+ * this interface must be extended by the server-side adapter to implement a custom channel.
+ *
+ * @author annym 05/15/2020
  */
 public abstract class IServerChannelAdapter {
 

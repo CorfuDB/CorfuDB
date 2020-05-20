@@ -75,6 +75,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
                 log.info("Send replication entry: {}", msg.getRequestID());
                 if (responseObserver != null) {
+                    // Send log replication entries across channel
                     requestObserver.onNext(msg);
                 }
                 break;
