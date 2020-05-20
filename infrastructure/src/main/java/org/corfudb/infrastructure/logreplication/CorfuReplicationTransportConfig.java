@@ -1,11 +1,13 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.logreplication;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.File;
 import java.util.Properties;
 
 /**
@@ -19,16 +21,13 @@ import java.util.Properties;
 @Slf4j
 public class CorfuReplicationTransportConfig {
 
-    // TODO(Anny): make this automatically point to current directory root
-    public static final String DEFAULT_JAR_PATH = "/Users/amartinezman/annym/workspace/CorfuDB/log-replication/target/log-replication-0.3.0-SNAPSHOT.jar";
+    public static final String DEFAULT_JAR_PATH = "/log-replication/target/log-replication-0.3.0-SNAPSHOT.jar";
     public static final String DEFAULT_SERVER_CLASSNAME = "org.corfudb.logreplication.infrastructure.GRPCLogReplicationServerChannel";
     public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.logreplication.runtime.GRPCLogReplicationClientChannelAdapter";
 
-    private String adapterJARPath = DEFAULT_JAR_PATH;
-
-    private String adapterServerClassName = DEFAULT_SERVER_CLASSNAME;
-
-    private String adapterClientClassName = DEFAULT_CLIENT_CLASSNAME;
+    private String adapterJARPath;
+    private String adapterServerClassName;
+    private String adapterClientClassName;
 
     public CorfuReplicationTransportConfig(String filepath) {
         try (InputStream input = new FileInputStream(filepath)) {
@@ -40,6 +39,21 @@ public class CorfuReplicationTransportConfig {
         } catch (IOException e) {
             log.warn("Exception caught while trying to load transport configuration from {}. Default configuration " +
                     "will be used.", filepath);
+            // Default Configuration
+            this.adapterJARPath = getParentDir() + DEFAULT_JAR_PATH;
+            this.adapterClientClassName = DEFAULT_CLIENT_CLASSNAME;
+            this.adapterServerClassName = DEFAULT_SERVER_CLASSNAME;
+        }
+    }
+
+    private static String getParentDir() {
+        try {
+            File directory = new File("../infrastructure");
+            return directory.getCanonicalFile().getParent();
+        } catch (Exception e) {
+            String message = "Failed to load default JAR for channel adapter";
+            log.error(message, e);
+            throw new UnrecoverableCorfuError(message);
         }
     }
 }
