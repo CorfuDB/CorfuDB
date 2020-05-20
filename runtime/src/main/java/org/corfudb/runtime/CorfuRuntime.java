@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -49,6 +50,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -252,42 +254,6 @@ public class CorfuRuntime {
          */
         @Default
         private Codec.Type codecType = Codec.Type.ZSTD;
-
-        // Register handlers region
-
-        // These two handlers are provided to give some control on what happen when system is down.
-        // For applications that want to have specific behaviour when a the system appears
-        // unavailable, they can register their own handler for both before the rpc request and
-        // upon cluster unreachability.
-        // An example of how to use these handlers implementing timeout is given in
-        // test/src/test/java/org/corfudb/runtime/CorfuRuntimeTest.java
-
-        /**
-         * SystemDownHandler is invoked at any point when the Corfu client attempts to make an RPC
-         * request to the Corfu cluster but is unable to complete this.
-         * NOTE: This will also be invoked during connect if the cluster is unreachable.
-         */
-        @Default
-        volatile Runnable systemDownHandler = () -> {
-        };
-
-        /**
-         * BeforeRPCHandler callback is invoked every time before an RPC call.
-         */
-        @Default
-        volatile Runnable beforeRpcHandler = () -> {
-        };
-        //endregion
-
-        /**
-         * Get the netty channel options to be used by the netty client implementation.
-         *
-         * @return A map containing options which should be applied to each netty channel.
-         */
-        public Map<ChannelOption, Object> getNettyChannelOptions() {
-            return customNettyChannelOptions.size() == 0
-                    ? DEFAULT_CHANNEL_OPTIONS : customNettyChannelOptions;
-        }
     }
 
     /**

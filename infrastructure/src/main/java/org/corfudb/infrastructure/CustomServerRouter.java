@@ -6,12 +6,13 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.infrastructure.logreplication.CorfuReplicationTransportConfig;
+import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.Layout;
 import org.corfudb.utils.common.CorfuMessageConverter;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
@@ -21,6 +22,7 @@ import java.net.URLClassLoader;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * This class represents the Corfu interface to route incoming messages from external adapters when
@@ -68,11 +70,11 @@ public class CustomServerRouter implements IServerRouter {
 
     private IServerChannelAdapter getAdapter(int port) {
 
-        CorfuReplicationTransportConfig config = new CorfuReplicationTransportConfig(TRANSPORT_CONFIG_FILE_PATH);
-        File jar = new File(config.getAdapterJARPath());
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(TRANSPORT_CONFIG_FILE_PATH);
+        File jar = new File(config.getTransportAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class adapter = Class.forName(config.getAdapterServerClassName(), true, child);
+            Class adapter = Class.forName(config.getTransportServerClassCanonicalName(), true, child);
             return (IServerChannelAdapter) adapter.getDeclaredConstructor(Integer.class, CustomServerRouter.class).newInstance(port, this);
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
@@ -95,8 +97,18 @@ public class CustomServerRouter implements IServerRouter {
     }
 
     @Override
+    public Optional<Layout> getCurrentLayout() {
+        return Optional.empty();
+    }
+
+    @Override
     public List<AbstractServer> getServers() {
         return servers;
+    }
+
+    @Override
+    public void setServerContext(ServerContext serverContext) {
+
     }
 
     /**
@@ -108,6 +120,7 @@ public class CustomServerRouter implements IServerRouter {
     public void receive(CorfuMessage protoMessage) {
         CorfuMsg corfuMsg;
         try {
+            log.info("Received message {}", protoMessage.getType().name());
             // Transform protoBuf into CorfuMessage
             corfuMsg = CorfuMessageConverter.fromProtoBuf(protoMessage);
         } catch (CorfuMessageProtoBufException e) {
@@ -150,10 +163,10 @@ public class CustomServerRouter implements IServerRouter {
     private boolean validateEpoch(CorfuMsg msg) {
         long serverEpoch = getServerEpoch();
         if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != serverEpoch) {
-            sendResponse(null, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH,
-                    serverEpoch));
             log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
                     msg.getEpoch(), serverEpoch, msg);
+            sendResponse(null, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH,
+                    serverEpoch));
             return false;
         }
         return true;

@@ -12,7 +12,6 @@ import java.util.Collection;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RunWith(Parameterized.class)
@@ -110,7 +109,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
 //            });
 
             // Wait until data is fully replicated
-            System.out.println("Wait ... Data is being replicated ...");
+            System.out.println("Wait ... Snapshot log replication in progress ...");
             while (mapAStandby.size() != numWrites) {
                 //
             }
@@ -126,7 +125,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             }
 
             // Verify data is present in Standby Site
-            System.out.println("Wait ... Data is being replicated ...");
+            System.out.println("Wait ... Delta log replication in progress ...");
             while (mapAStandby.size() != (numWrites + numWrites/2)) {
                 //
             }
