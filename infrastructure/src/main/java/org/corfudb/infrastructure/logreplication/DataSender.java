@@ -10,8 +10,6 @@ import java.util.concurrent.CompletableFuture;
  *
  * Application is expected to transmit messages from source to sink, and ACKs
  * from sink to source.
- *
- *
  */
 public interface DataSender {
 
