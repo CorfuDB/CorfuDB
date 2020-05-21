@@ -21,10 +21,22 @@ import com.github.benmanes.caffeine.cache.Cache;
 import io.netty.buffer.PooledByteBufAllocator;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.io.Writer;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import io.prometheus.client.Collector;
+import io.prometheus.client.Collector.MetricFamilySamples;
+import io.prometheus.client.Collector.MetricFamilySamples.Sample;
+import io.prometheus.client.CollectorRegistry;
+import io.prometheus.client.dropwizard.DropwizardExports;
+import io.prometheus.client.exporter.common.TextFormat;
 import org.corfudb.common.metrics.MetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer.Config;
@@ -122,18 +134,30 @@ public class MetricsUtils {
      * -Dcorfu.metrics.log.interval=60}
      */
     private static void loadVmProperties() {
-        metricsLocalCollectionEnabled = Boolean.valueOf(System.getProperty(
-                PROPERTY_LOCAL_METRICS_COLLECTION));
+        metricsLocalCollectionEnabled = getBoolProperty(PROPERTY_LOCAL_METRICS_COLLECTION);
 
-        metricsJmxReportingEnabled = Boolean.valueOf(System.getProperty(PROPERTY_JMX_REPORTING));
-        metricsJvmCollectionEnabled = Boolean.valueOf(System.getProperty(PROPERTY_JVM_METRICS_COLLECTION));
+        metricsJmxReportingEnabled = getBoolProperty(PROPERTY_JMX_REPORTING);
+        metricsJvmCollectionEnabled = getBoolProperty(PROPERTY_JVM_METRICS_COLLECTION);
 
-        metricsLogInterval = Long.valueOf(System.getProperty(PROPERTY_LOG_INTERVAL, "0"));
+        metricsLogInterval = getLongProperty(PROPERTY_LOG_INTERVAL);
         metricsSlf4jReportingEnabled = metricsLogInterval > 0;
 
-        metricsCsvInterval = Long.valueOf(System.getProperty(PROPERTY_CSV_INTERVAL, "0"));
-        metricsCsvFolder = String.valueOf(System.getProperty(PROPERTY_CSV_FOLDER));
+        metricsCsvInterval = getLongProperty(PROPERTY_CSV_INTERVAL);
+        metricsCsvFolder = getProperty(PROPERTY_CSV_FOLDER);
+
         metricsCsvReportingEnabled = metricsCsvInterval > 0;
+    }
+
+    private static boolean getBoolProperty(String prop){
+        return Boolean.parseBoolean(System.getProperty(prop));
+    }
+
+    private static long getLongProperty(String prop){
+        return Long.parseLong(System.getProperty(prop, "0"));
+    }
+
+    private static String getProperty(String prop){
+        return System.getProperty(prop);
     }
 
     /**
@@ -145,6 +169,81 @@ public class MetricsUtils {
      */
     public static boolean isMetricsReportingSetUp(@NonNull MetricRegistry metrics) {
         return metrics.getNames().contains(mpTrigger);
+    }
+
+    public static void main(String[] args) throws InterruptedException, IOException {
+        log.error("START!!!!!");
+
+        System.setProperty(PROPERTY_LOCAL_METRICS_COLLECTION, "true");
+        System.setProperty(PROPERTY_CSV_INTERVAL, "0");
+        System.setProperty(PROPERTY_JVM_METRICS_COLLECTION, "true");
+        System.setProperty(PROPERTY_CSV_FOLDER, "metricsss");
+        System.setProperty(PROPERTY_LOG_INTERVAL, "100");
+
+        final MetricRegistry metricRegistry = new MetricRegistry();
+        metricsReportingSetup(metricRegistry);
+
+        CollectorRegistry.defaultRegistry.register(new DropwizardExports(metricRegistry));
+
+        Enumeration<MetricFamilySamples> samples = CollectorRegistry.defaultRegistry
+                .filteredMetricFamilySamples(new HashSet<>());
+
+        try (Writer writer = new StringWriter()) {
+            write004(writer, samples);
+            writer.flush();
+
+            System.out.println("!!!!! " +  writer.toString());
+        }
+
+        Thread.sleep(10000);
+    }
+
+    public static void write004(Writer writer, Enumeration<MetricFamilySamples> mfs) throws IOException {
+        /* See http://prometheus.io/docs/instrumenting/exposition_formats/
+         * for the output format specification. */
+        while(mfs.hasMoreElements()) {
+            MetricFamilySamples metricFamilySamples = mfs.nextElement();
+
+            for (Sample sample: metricFamilySamples.samples) {
+                writer.write(sample.name);
+                if (!sample.labelNames.isEmpty()) {
+                    writer.write('{');
+                    for (int i = 0; i < sample.labelNames.size(); ++i) {
+                        writer.write(sample.labelNames.get(i));
+                        writer.write("=\"");
+                        writeEscapedLabelValue(writer, sample.labelValues.get(i));
+                        writer.write("\",");
+                    }
+                    writer.write('}');
+                }
+                writer.write(' ');
+                writer.write(Collector.doubleToGoString(sample.value));
+                if (sample.timestampMs != null){
+                    writer.write(' ');
+                    writer.write(sample.timestampMs.toString());
+                }
+                writer.write('\n');
+            }
+        }
+    }
+
+    private static void writeEscapedLabelValue(Writer writer, String s) throws IOException {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\\':
+                    writer.append("\\\\");
+                    break;
+                case '\"':
+                    writer.append("\\\"");
+                    break;
+                case '\n':
+                    writer.append("\\n");
+                    break;
+                default:
+                    writer.append(c);
+            }
+        }
     }
 
     /**
@@ -209,13 +308,13 @@ public class MetricsUtils {
     private static void setupSlf4jReporting(MetricRegistry metrics) {
         if (!metricsSlf4jReportingEnabled) return;
 
-        MetricFilter mpTriggerFilter = (name, metric) -> !name.equals(mpTrigger);
+        //MetricFilter mpTriggerFilter = (name, metric) -> !name.equals(mpTrigger);
 
         Slf4jReporter slf4jReporter = Slf4jReporter.forRegistry(metrics)
                 .convertDurationsTo(TimeUnit.MICROSECONDS)
                 .convertRatesTo(TimeUnit.SECONDS)
                 .outputTo(LoggerFactory.getLogger("org.corfudb.metricsdata"))
-                .filter(mpTriggerFilter)
+                //.filter(mpTriggerFilter)
                 .build();
         slf4jReporter.start(metricsLogInterval, TimeUnit.SECONDS);
     }
@@ -225,6 +324,7 @@ public class MetricsUtils {
         if (!metricsCsvReportingEnabled) return;
 
         final File directory = new File(metricsCsvFolder);
+        directory.mkdirs();
 
         if (!directory.isDirectory() ||
             !directory.exists() ||
@@ -307,16 +407,15 @@ public class MetricsUtils {
      * @return a gauge that provides an estimate of deep size for the provided object
      *         as long as there exist a strong reference to that object.
      */
-    public static Gauge<Long> addMemoryMeasurerFor(@NonNull MetricRegistry metrics,
-                                                   Object object) {
-        String simpleClassName = object == null ?
-                "Object" :
-                object.getClass().getSimpleName();
+    public static Gauge<Long> addMemoryMeasurerFor(@NonNull MetricRegistry metrics, Object object) {
+        String simpleClassName = Optional.ofNullable(object)
+                .map(obj -> obj.getClass().getSimpleName())
+                .orElse("Object");
 
-        return  metrics.register(String.format("deep-sizeof.%s@%04x",
-                                               simpleClassName,
-                                               System.identityHashCode(object)),
-                                 getSizeGauge(object));
+        String metricName = String.format(
+                "deep-sizeof.%s@%04x", simpleClassName, System.identityHashCode(object)
+        );
+        return  metrics.register(metricName, getSizeGauge(object));
     }
 
     /**
