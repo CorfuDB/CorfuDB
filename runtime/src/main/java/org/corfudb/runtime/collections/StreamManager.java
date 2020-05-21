@@ -1,20 +1,9 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.Message;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
-
-import javax.annotation.Nonnull;
-
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
@@ -24,12 +13,27 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.CFUtils;
+
+import javax.annotation.Nonnull;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /**
  * A simple thread based subscription engine where each subscriber or listener gets
  * a thread which will listen on the tables of interest to it and moves at a rate
  * which is the same as the consumption.
- *
+ * <p>
  * Created by hisundar on 04/28/2020.
  */
 @Slf4j
@@ -120,7 +124,7 @@ public class StreamManager {
 
         /**
          * Tables of interest.
-         *
+         * <p>
          * Map of (Stream Id - TableSchema)
          */
         @Getter
@@ -140,6 +144,13 @@ public class StreamManager {
         @Getter
         private final IStreamView txnStream;
 
+        private final ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                .setDaemon(true)
+                .setNameFormat("StreamManager-%d")
+                .build();
+
+        private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(threadFactory);
+
         public void run() {
             try {
                 log.info("{}:Seeking txStream to {}", listener.toString(), startAddress + 1);
@@ -151,46 +162,41 @@ public class StreamManager {
                 return;
             }
 
-            try {
-                while (!shutdown.get()) {
-                    while (!txnStream.hasNext()) {
-                        log.trace("{}::run() all caught up. Taking a 50ms nap", listener.toString());
-                        final int defaultTimeoutInMilli = 50;
-                        TimeUnit.MILLISECONDS.sleep(defaultTimeoutInMilli);
-                    }
-                    ILogData logData = txnStream.nextUpTo(Address.MAX);
-                    MultiObjectSMREntry multiObjSMREntry = (MultiObjectSMREntry) logData.getPayload(runtime);
-                    long epoch = logData.getEpoch();
-                    Map<TableSchema, List<CorfuStreamEntry>> entries = new HashMap<>();
-                    // first only filter by the stream IDs of interest that are present in this logData
-                    logData.getStreams().stream().filter(tablesOfInterest::containsKey)
-                            .forEach(streamId -> entries.put(tablesOfInterest.get(streamId),
-                                    // Only extract the list of updates per stream as a list
-                                    multiObjSMREntry.getSMRUpdates(streamId).stream().map(smrEntry ->
-                                            CorfuStreamEntry.fromSMREntry(smrEntry,
-                                                    epoch,
-                                                    tablesOfInterest.get(streamId).getKeyClass(),
-                                                    tablesOfInterest.get(streamId).getPayloadClass(),
-                                                    tablesOfInterest.get(streamId).getMetadataClass())
-                                    ).collect(Collectors.toList())));
+            Runnable task = () -> {
+                if(!txnStream.hasNext()) {
+                    return;
+                }
 
-                    if (!entries.isEmpty()) {
-                        CorfuStreamEntries callbackResult = new CorfuStreamEntries(entries);
-                        log.debug("{}::onNext with {} updates", listener.toString(), entries.size());
-                        long onNextStart = System.nanoTime();
-                        listener.onNext(callbackResult);
-                        long onNextEnd = System.nanoTime();
-                        if (TimeUnit.NANOSECONDS.toSeconds(onNextEnd - onNextStart) > 0) {
-                            log.debug("{}::onNext took {}s", listener.toString(),
-                                    TimeUnit.NANOSECONDS.toSeconds(onNextEnd - onNextStart));
-                        }
+                ILogData logData = txnStream.nextUpTo(Address.MAX);
+                MultiObjectSMREntry multiObjSMREntry = (MultiObjectSMREntry) logData.getPayload(runtime);
+                long epoch = logData.getEpoch();
+                Map<TableSchema, List<CorfuStreamEntry>> entries = new HashMap<>();
+                // first only filter by the stream IDs of interest that are present in this logData
+                logData.getStreams().stream().filter(tablesOfInterest::containsKey)
+                        .forEach(streamId -> entries.put(tablesOfInterest.get(streamId),
+                                // Only extract the list of updates per stream as a list
+                                multiObjSMREntry.getSMRUpdates(streamId).stream().map(smrEntry ->
+                                        CorfuStreamEntry.fromSMREntry(smrEntry,
+                                                epoch,
+                                                tablesOfInterest.get(streamId).getKeyClass(),
+                                                tablesOfInterest.get(streamId).getPayloadClass(),
+                                                tablesOfInterest.get(streamId).getMetadataClass())
+                                ).collect(Collectors.toList())));
+
+                if (!entries.isEmpty()) {
+                    CorfuStreamEntries callbackResult = new CorfuStreamEntries(entries);
+                    log.debug("{}::onNext with {} updates", listener.toString(), entries.size());
+                    long onNextStart = System.nanoTime();
+                    listener.onNext(callbackResult);
+                    long onNextEnd = System.nanoTime();
+                    if (TimeUnit.NANOSECONDS.toSeconds(onNextEnd - onNextStart) > 0) {
+                        log.debug("{}::onNext took {}s", listener.toString(),
+                                TimeUnit.NANOSECONDS.toSeconds(onNextEnd - onNextStart));
                     }
                 }
-            } catch (Throwable throwable) {
-                log.warn("{}::onError: {}", listener.toString(), throwable.toString());
-                listener.onError(throwable);
-                streamManager.unsubscribe(listener);
-            }
+            };
+
+            scheduler.scheduleWithFixedDelay(task, 0, 0, TimeUnit.MILLISECONDS);
         }
 
         public SubscriptionThread(@Nonnull StreamManager streamManager,
@@ -198,7 +204,7 @@ public class StreamManager {
                                   @Nonnull String namespace,
                                   @Nonnull List<TableSchema> tableSchemas,
                                   long startAddress) {
-            super(String.format("CorfuSubscriber: {}:{}", listener.toString(), namespace));
+            super(String.format("CorfuSubscriber: %s:%s", listener, namespace));
             this.streamManager = streamManager;
             this.listener = listener;
             this.namespace = namespace;
