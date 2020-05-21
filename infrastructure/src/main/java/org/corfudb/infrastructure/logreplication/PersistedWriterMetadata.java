@@ -87,7 +87,7 @@ public class PersistedWriterMetadata {
             val = metadataVal.getVal();
         }
 
-        System.out.print("\nquery timestamp " + timestamp + " record " + record + " metadataVal " + metadataVal + " val " + val);
+        //System.out.print("\nquery timestamp " + timestamp + " record " + record + " metadataVal: " + metadataVal + " val " + val);
         return val;
     }
 
@@ -128,7 +128,7 @@ public class PersistedWriterMetadata {
      */
     public void setupEpoch(long epoch) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        System.out.print("\ntimestamp " + timestamp);
+        System.out.print("\nSetupEpoch timestamp " + timestamp);
         long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
 
         if (epoch <= persistEpoch) {
@@ -197,8 +197,8 @@ public class PersistedWriterMetadata {
 
         log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
-        System.out.print("\nCommit message Set snapshotStart epoch " + epoch + " ts " + ts +
-                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        //System.out.print("\nCommit message Set snapshotStart epoch " + epoch + " ts " + ts +
+        //        " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
 
         return;
     }
@@ -213,9 +213,9 @@ public class PersistedWriterMetadata {
         long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
         long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
 
-        log.debug("Set snapshotStart epoch " + epoch + " ts " + ts +
+        log.debug("setLastSnapTransferDone snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
-        System.out.print("\nSet snapshotStart epoch " + epoch + " ts " + ts +
+        System.out.print("\nsetLastSnapTransferDone snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
 
         // It means the site config has changed, ingore the update operation.
@@ -239,7 +239,7 @@ public class PersistedWriterMetadata {
 
         log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
-        System.out.print("\nCommit message Set snapshotStart epoch " + epoch + " ts " + ts +
+        System.out.print("\nTransferDone Commit message Set snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
 
         return;
@@ -272,7 +272,7 @@ public class PersistedWriterMetadata {
 
         log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
-        System.out.print("\nCommit message Set snapshotStart epoch " + epoch + " ts " + ts +
+        System.out.print("\nSnapshotDone Commit message Set snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
 
         return;
@@ -281,7 +281,7 @@ public class PersistedWriterMetadata {
 
 
     public void setSiteEpoch(long ts) {
-        writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), ts);
+        //writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), ts);
     }
 
 
@@ -292,7 +292,7 @@ public class PersistedWriterMetadata {
      */
     public void setLastProcessedLogTimestamp(long ts) {
         //appendUpdate(PersistedWriterMetadataType.LastSnapStart, ts);
-        writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), ts);
+        //writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), ts);
     }
 
     public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {

@@ -71,44 +71,43 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
     }
 
-
-    void clearTable(long siteEpoch, UUID streamID) {
-        boolean doRetry = true;
-        int numRetry = 0;
-        while (doRetry && numRetry++ < MAX_NUM_TX_RETRY) {
-            try {
-                rt.getObjectsView().TXBegin();
-
-                if (siteEpoch == persistedWriterMetadata.getSiteEpoch() &&
-                        srcGlobalSnapshot == persistedWriterMetadata.getLastSnapStartTimestamp()) {
-                    SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-                    TransactionalContext.getCurrentContext().logUpdate(streamID, entry);
-                    persistedWriterMetadata.setSiteEpoch(siteEpoch);
-                    persistedWriterMetadata.setSrcBaseSnapshotStart(siteEpoch, srcGlobalSnapshot);
-                    //System.out.print("\nClear table " + streamID );
-                }
-
-                rt.getObjectsView().TXEnd();
-                log.info("Clear stream {} ", streamID);
-                doRetry = false;
-            } catch (TransactionAbortedException e) {
-                log.warn("Caught an exception {} will retry {}", e, numRetry);
-            }
-        }
-    }
-
     /**
      * clear all tables registered
      * TODO: replace with stream API
      */
     void clearTables() {
+        CorfuStoreMetadata.Timestamp timestamp = persistedWriterMetadata.getTimestamp();
+        long persistEpoch = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch);
+        long persistSnapStart = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart);
+        long persitSeqNum = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
+
+        //for transfer phase start
+        if (siteEpoch != persistEpoch || srcGlobalSnapshot != persistSnapStart ||
+                (persitSeqNum + 1)!= recvSeq) {
+            log.warn("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + recvSeq +
+                    " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
+                    " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
+            return;
+        }
+
+
+        TxBuilder txBuilder = persistedWriterMetadata.getTxBuilder();
+        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch, siteEpoch);
+        //persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart, srcGlobalSnapshot);
+        //persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum, persitSeqNum);
+
+
         for (UUID streamID : streamViewMap.keySet()) {
             UUID usedStreamID = streamID;
             if (phase == Phase.TransferPhase) {
                 usedStreamID = uuidMap.get(streamID);
             }
-            clearTable(siteEpoch, usedStreamID);
+
+            SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+            txBuilder.logUpdate(uuid2name(streamID), entry);
         }
+
+        txBuilder.commit(timestamp);
     }
 
     String uuid2name(UUID uuid) {
@@ -160,10 +159,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param dstUUID
      */
     void processOpaqueEntry(List<SMREntry> smrEntries, Long currentSeqNum, UUID dstUUID) {
-        int numRetry = 0;
-        boolean doRetry = true;
-        //long persistentSeqNum;
-
         CorfuStoreMetadata.Timestamp timestamp = persistedWriterMetadata.getTimestamp();
         long persistEpoch = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch);
         long persistSnapStart = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart);
