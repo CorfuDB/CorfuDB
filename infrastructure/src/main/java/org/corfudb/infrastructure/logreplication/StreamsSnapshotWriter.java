@@ -69,6 +69,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             streamViewMap.put(streamID, stream);
             shadowMap.put(shadowID, shadowStream);
         }
+
+        //System.out.print("stream names " + streamViewMap);
+        //System.out.print("shadow names " + shadowMap);
     }
 
     /**
@@ -104,7 +107,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             }
 
             SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-            txBuilder.logUpdate(uuid2name(streamID), entry);
+            txBuilder.logUpdate(usedStreamID, entry);
+            //System.out.print("\nclear table " + uuid2name(usedStreamID));
         }
 
         txBuilder.commit(timestamp);
@@ -117,8 +121,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
 
         if (name == null) {
-            log.error("Wrong uuid");
-            System.out.print("\nwrong uuid");
+            log.error("Wrong uuid" + uuid);
+            //System.out.print("\nwrong uuid");
         }
         return name;
     }
@@ -168,6 +172,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             log.warn("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
                     " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
                     " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
+
+            //System.out.print("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
+            //        " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
+            //        " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
+
             return;
         }
 
@@ -175,13 +184,21 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch, siteEpoch);
         persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart, srcGlobalSnapshot);
         persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum, currentSeqNum);
-
         for (SMREntry smrEntry : smrEntries) {
-            txBuilder.logUpdate(uuid2name(dstUUID), smrEntry);
+            txBuilder.logUpdate(dstUUID, smrEntry);
+            //System.out.print("\nlogUpdate to table name " + uuid2name(dstUUID));
         }
-        txBuilder.commit(timestamp);
 
+        try {
+            txBuilder.commit(timestamp);
+        } catch (Exception e) {
+            log.warn("Caught an exception ", e);
+            //System.out.print("\nprocessOpaqueEntry got an exception " + e);
+            throw e;
+        }
         log.debug("Process the entries {}  and set sequence number {} ", smrEntries, currentSeqNum);
+        //System.out.print("\nProcess the entries {}  and set sequence number " + currentSeqNum);
+        //System.out.print("\n***stream tail " + rt.getAddressSpaceView().getAllTails().getStreamTails().get(dstUUID));
     }
 
     @Override
@@ -230,6 +247,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         //Can we do a seek after open to ignore all entries that are earlier
         Stream shadowStream = (new OpaqueStream(rt, rt.getStreamsView().get(shadowUUID, options))).streamUpTo(snapshot);
 
+        //System.out.print("\n***apply showdowstream " + uuid2name(shadowUUID) + " to table " + uuid2name(uuid) + " stream tail " +
+        //        rt.getAddressSpaceView().getAllTails().getStreamTails().get(shadowUUID));
+
         Iterator<OpaqueEntry> iterator = shadowStream.iterator();
         while (iterator.hasNext()) {
             OpaqueEntry opaqueEntry = iterator.next();
@@ -270,7 +290,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         persistedWriterMetadata.setLastSnapTransferDoneTimestamp(siteEpoch, ts);
 
         //get the number of entries to apply
-        seqNum = persistedWriterMetadata.query(null, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
+        seqNum = 1 + persistedWriterMetadata.query(null, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
 
         // There is no snapshot data to apply
         if (seqNum == 0)

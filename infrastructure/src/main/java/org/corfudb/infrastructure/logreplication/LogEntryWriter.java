@@ -120,8 +120,7 @@ public class LogEntryWriter {
 
         for (UUID uuid : opaqueEntry.getEntries().keySet()) {
             for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
-                TransactionalContext.getCurrentContext().logUpdate(uuid, smrEntry);
-                txBuilder.logUpdate(streamMap.get(uuid), smrEntry);
+                txBuilder.logUpdate(uuid, smrEntry);
             }
         }
 

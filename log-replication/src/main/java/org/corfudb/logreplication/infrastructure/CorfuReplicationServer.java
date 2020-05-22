@@ -182,14 +182,14 @@ public class CorfuReplicationServer implements Runnable {
 
 
     public static void main(String[] args) {
-        CorfuReplicationSiteManagerAdapter siteManagerAdapter = new DefaultSiteManager(false);
+        CorfuReplicationSiteManagerAdapter siteManagerAdapter = new DefaultSiteManager();
         CorfuReplicationServer corfuReplicationServer = new CorfuReplicationServer(args, siteManagerAdapter);
         corfuReplicationServer.run();
     }
 
     public CorfuReplicationServer(String[] inputs) {
         this.args = inputs;
-        this.siteManagerAdapter = new DefaultSiteManager(true);
+        this.siteManagerAdapter = new DefaultSiteManager();
     }
 
     CorfuReplicationServer(String[] inputs, CorfuReplicationSiteManagerAdapter adapter) {

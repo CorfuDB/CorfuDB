@@ -53,7 +53,7 @@ public class PersistedWriterMetadata {
                     TableOptions.builder().build());
         } catch (Exception e) {
             log.error("Caught an exception while open the table");
-            System.out.print("\nCaught an exception while open the table " + e);
+            //System.out.print("\nCaught an exception while open the table " + e);
             throw new ReplicationWriterException(e);
         }
         setupEpoch(siteEpoch);
@@ -128,7 +128,7 @@ public class PersistedWriterMetadata {
      */
     public void setupEpoch(long epoch) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        System.out.print("\nSetupEpoch timestamp " + timestamp);
+        //System.out.print("\nSetupEpoch timestamp " + timestamp);
         long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
 
         if (epoch <= persistEpoch) {
@@ -171,15 +171,14 @@ public class PersistedWriterMetadata {
 
         log.debug("Set snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
-        System.out.print("\nSet snapshotStart epoch " + epoch + " ts " + ts +
-                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        //System.out.print("\nSet snapshotStart epoch " + epoch + " ts " + ts + " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
 
         // It means the site config has changed, ingore the update operation.
         if (epoch != persistEpoch || ts <= persistEpoch) {
             log.warn("The metadata is older than the presisted one. Set snapshotStart epoch " + epoch + " ts " + ts +
                     " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
-            System.out.print("\nWarn message Set snapshotStart epoch " + epoch + " ts " + ts +
-                    " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+            //System.out.print("\nWarn message Set snapshotStart epoch " + epoch + " ts " + ts +
+            //        " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
             return;
         }
 
@@ -215,15 +214,15 @@ public class PersistedWriterMetadata {
 
         log.debug("setLastSnapTransferDone snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
-        System.out.print("\nsetLastSnapTransferDone snapshotStart epoch " + epoch + " ts " + ts +
-                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        //System.out.print("\nsetLastSnapTransferDone snapshotStart epoch " + epoch + " ts " + ts +
+        //        " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
 
         // It means the site config has changed, ingore the update operation.
         if (epoch != persistEpoch || ts <= persistEpoch) {
             log.warn("The metadata is older than the presisted one. Set snapshotStart epoch " + epoch + " ts " + ts +
                     " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
-            System.out.print("\nWarn message Set snapshotStart epoch " + epoch + " ts " + ts +
-                    " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+            //System.out.print("\nWarn message Set snapshotStart epoch " + epoch + " ts " + ts +
+            //        " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
             return;
         }
 
@@ -239,8 +238,8 @@ public class PersistedWriterMetadata {
 
         log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
-        System.out.print("\nTransferDone Commit message Set snapshotStart epoch " + epoch + " ts " + ts +
-                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        //System.out.print("\nTransferDone Commit message Set snapshotStart epoch " + epoch + " ts " + ts +
+        //        " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
 
         return;
     }
@@ -272,8 +271,8 @@ public class PersistedWriterMetadata {
 
         log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
                 " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
-        System.out.print("\nSnapshotDone Commit message Set snapshotStart epoch " + epoch + " ts " + ts +
-                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        //System.out.print("\nSnapshotDone Commit message Set snapshotStart epoch " + epoch + " ts " + ts +
+        //        " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
 
         return;
 

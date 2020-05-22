@@ -64,7 +64,7 @@ public class SinkManager implements DataReceiver {
      * @param config log replication configuration
      */
     public SinkManager(String localCorfuEndpoint, LogReplicationConfig config) {
-        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
+        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build()).setTransactionLogging(true)
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.rxState = RxState.LOG_ENTRY_SYNC;
         this.config = config;

@@ -158,10 +158,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     /* ********* Configuration for Data Control Drop Tests ********** */
     private int SNAPSHOT_SYNC_DROPS = 2;
 
-
-    CorfuTable<String, Long> readerMetaDataTable;
     CorfuTable<String, Long> writerMetaDataTable;
-
+    PersistedWriterMetadata persistedWriterMetadata;
 
     /**
      * Setup Test Environment
@@ -214,6 +212,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
 
+        persistedWriterMetadata = new PersistedWriterMetadata(dstTestRuntime, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         writerMetaDataTable = dstTestRuntime.getObjectsView()
                 .build()
                 .setStreamName(PersistedWriterMetadata.getPersistedWriterMetadataTableName(PRIMARY_SITE_ID, REMOTE_SITE_ID))
@@ -798,7 +797,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
-        assertThat(expectedAckTimestamp).isEqualTo(writerMetaDataTable.get(LastLogProcessed.getVal()));
+        //assertThat(expectedAckTimestamp).isEqualTo(writerMetaDataTable.get(LastLogProcessed.getVal()));
+        assertThat(expectedAckTimestamp).isEqualTo(persistedWriterMetadata.getLastProcessedLogTimestamp());
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
     }
@@ -1267,15 +1267,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        long lastSnapStart = writerMetaDataTable.get(LastSnapStart.getVal());
-        long lastSnapDone = writerMetaDataTable.get(LastSnapApplyDone.getVal());
+        long lastSnapStart = persistedWriterMetadata.getLastSnapStartTimestamp(); //writerMetaDataTable.get(LastSnapStart.getVal());
+        long lastSnapDone = persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(); //writerMetaDataTable.get(LastSnapApplyDone.getVal());
 
         System.out.println("\nlastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
         assertThat(lastSnapStart == lastSnapDone).isTrue();
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = writerMetaDataTable.get(LastLogProcessed.getVal());
+        long lastLogProcessed = persistedWriterMetadata.getLastProcessedLogTimestamp(); //writerMetaDataTable.get(LastLogProcessed.getVal());
 
         System.out.println("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp);
         assertThat(expectedAckTimestamp == lastLogProcessed).isTrue();

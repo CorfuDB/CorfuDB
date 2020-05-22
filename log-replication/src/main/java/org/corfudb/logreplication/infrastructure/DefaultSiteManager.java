@@ -1,5 +1,7 @@
 package org.corfudb.logreplication.infrastructure;
 
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
@@ -34,20 +36,18 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     private static final String PRIMARY_SITE_NODE = "primary_site_node";
     private static final String STANDBY_SITE_NODE = "standby_site_node";
 
-    SiteManagerCallback siteManagerCallback;
+    @Getter
+    public SiteManagerCallback siteManagerCallback;
+
     Thread thread = new Thread(siteManagerCallback);
-    boolean siteFlip = false;
-    DefaultSiteManager(boolean siteFlip) {
-        this.siteFlip = siteFlip;
+
+    DefaultSiteManager() {
     }
 
     public void start() {
-        if (siteFlip) {
-            siteManagerCallback = new SiteManagerCallback(this);
-            thread = new Thread(siteManagerCallback);
-            thread.start();
-        }
-        //System.out.print("\nstart the listener");
+        siteManagerCallback = new SiteManagerCallback(this);
+        thread = new Thread(siteManagerCallback);
+        thread.start();
     }
 
     public static CrossSiteConfiguration readConfig() throws IOException {
@@ -159,23 +159,24 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     /**
      * Testing purpose to generate site role change.
      */
-    static class SiteManagerCallback implements Runnable {
-        CorfuReplicationSiteManagerAdapter siteManager;
-        SiteManagerCallback(CorfuReplicationSiteManagerAdapter siteManagerAdapter) {
+    public static class SiteManagerCallback implements Runnable {
+        public boolean siteFlip = false;
+        DefaultSiteManager siteManager;
+
+        SiteManagerCallback(DefaultSiteManager siteManagerAdapter) {
             this.siteManager = siteManagerAdapter;
         }
 
         @Override
         public void run() {
-            boolean shouldChangeOnce = false;
             while (true) {
                 try {
                     sleep(changeInveral);
-                    if (shouldChangeOnce) {
+                    if (siteFlip) {
                         CrossSiteConfiguration newConfig = changePrimary(siteManager.getSiteConfig());
                         siteManager.updateSiteConfig(newConfig.convert2msg());
                         System.out.print("\n*** change the site config");
-                        shouldChangeOnce = false;
+                        siteFlip = false;
                     }
                 } catch (Exception e) {
                     log.error("caught an exception " + e);

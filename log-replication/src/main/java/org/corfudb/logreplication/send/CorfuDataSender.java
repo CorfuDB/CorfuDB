@@ -37,7 +37,11 @@ public class CorfuDataSender implements DataSender {
         for (LogReplicationEntry message :  messages) {
             //System.out.print("\nsend message " + message.getMetadata());
             tmp = send(message);
+            try {
+                //sleep(1000);
+            } catch (Exception e) {
 
+            }
             if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END) ||
                     message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
                 lastSentMessage = tmp;
