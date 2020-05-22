@@ -38,6 +38,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
 
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
 
+    private final EnumMap<LogUnitMetadataType, Object> metadataMap;
+
     public static LogData getTrimmed(long address) {
         LogData logData = new LogData(DataType.TRIMMED);
         logData.setGlobalAddress(address);
@@ -129,7 +131,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         if (serializedCache == null) {
             serializedCache = Unpooled.buffer();
             doSerializeInternal(serializedCache);
-            lastKnownSize = serializedCache.array().length;
         } else {
             serializedCache.retain();
         }
@@ -140,16 +141,19 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         byte[] tempData = data;
         if (tempData != null) {
             return tempData.length;
-        } else if (lastKnownSize != NOT_KNOWN) {
+        }
+
+        if (lastKnownSize != NOT_KNOWN) {
             return lastKnownSize;
         }
-        log.warn("getSizeEstimate: LogData size estimate is defaulting to 1,"
-                + " this might cause leaks in the cache!");
+
         return 1;
     }
 
-    @Getter
-    final EnumMap<LogUnitMetadataType, Object> metadataMap;
+    @Override
+    public EnumMap<IMetadata.LogUnitMetadataType, Object> getMetadataMap() {
+        return metadataMap;
+    }
 
     /**
      * Return the payload.
@@ -282,8 +286,10 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 buf.writerIndex(lengthIndex);
                 buf.writeInt(size);
                 buf.writerIndex(lengthIndex + size + 4);
+                lastKnownSize = size;
             } else {
                 ICorfuPayload.serialize(buf, data);
+                lastKnownSize = data.length;
             }
         }
 

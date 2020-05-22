@@ -1,6 +1,7 @@
 package org.corfudb.runtime.clients;
 
 import com.codahale.metrics.Timer;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -70,7 +71,7 @@ import org.corfudb.util.Sleep;
 @Slf4j
 @ChannelHandler.Sharable
 public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
-        implements IClientRouter {
+        implements IClientRouter, AutoCloseable {
 
     /**
      * New connection timeout (milliseconds).
@@ -142,7 +143,20 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     volatile CompletableFuture<Void> connectionFuture;
 
     private SslContext sslContext;
+
     private final Map<CorfuMsgType, String> timerNameCache;
+
+    /**
+     * If true this instance will manage the life-cycle of the event loop.
+     * For example, when the router is stopped the event loop will be released
+     * for GC.
+     */
+    private final boolean manageEventLoop;
+
+    /**
+     * Thread pool for this channel to use
+     */
+    private final EventLoopGroup eventLoopGroup;
 
     /**
      * Creates a new NettyClientRouter connected to the specified host and port with the
@@ -154,10 +168,18 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      * @param parameters     A {@link CorfuRuntimeParameters} with the desired configuration.
      */
     public NettyClientRouter(@Nonnull NodeLocator node,
-        @Nonnull EventLoopGroup eventLoopGroup,
-        @Nonnull CorfuRuntimeParameters parameters) {
+                             @Nonnull EventLoopGroup eventLoopGroup,
+                             @Nonnull CorfuRuntimeParameters parameters) {
+        this(node, eventLoopGroup, parameters, false);
+    }
+    public NettyClientRouter(@Nonnull NodeLocator node,
+                             @Nonnull EventLoopGroup eventLoopGroup,
+                             @Nonnull CorfuRuntimeParameters parameters,
+                             boolean manageEventLoop) {
         this.node = node;
         this.parameters = parameters;
+        this.manageEventLoop = manageEventLoop;
+        this.eventLoopGroup = eventLoopGroup;
 
         // Set timer mapping
         ImmutableMap.Builder<CorfuMsgType, String> mapBuilder = ImmutableMap.builder();
@@ -231,20 +253,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         return this;
     }
 
-    /**
-     * Gets a client that matches a particular type.
-     *
-     * @param clientType The class of the client to match.
-     * @param <T>        The type of the client to match.
-     * @return The first client that matches that type.
-     * @throws NoSuchElementException If there are no clients matching that type.
-     */
-    @SuppressWarnings("unchecked")
-    public <T extends IClient> T getClient(Class<T> clientType) {
-        return (T) clientList.stream()
-            .filter(clientType::isInstance)
-            .findFirst().get();
-    }
 
     /**
      * {@inheritDoc}.
@@ -671,11 +679,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
     public NettyClientRouter(@Nonnull NodeLocator node,
         @Nonnull CorfuRuntimeParameters parameters) {
         this(node, parameters.getSocketType()
-            .getGenerator().generate(Runtime.getRuntime().availableProcessors() * 2,
+            .getGenerator().generate(parameters.getNettyEventLoopThreads(),
                 new ThreadFactoryBuilder()
                     .setDaemon(true)
                     .setNameFormat(parameters.getNettyEventLoopThreadFormat())
-                    .build()), parameters);
+                    .build()), parameters, true);
     }
 
     @Deprecated
@@ -689,4 +697,17 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         return node.getHost();
     }
     // endregion
+
+    @Override
+    public void close() {
+        stop();
+        if (manageEventLoop) {
+            this.eventLoopGroup.shutdownGracefully();
+        }
+    }
+
+    @VisibleForTesting
+    EventLoopGroup getEventLoopGroup() {
+        return eventLoopGroup;
+    }
 }

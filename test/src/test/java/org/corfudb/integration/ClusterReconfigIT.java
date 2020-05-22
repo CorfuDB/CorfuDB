@@ -44,6 +44,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.Semaphore;
@@ -373,12 +374,11 @@ public class ClusterReconfigIT extends AbstractIT {
 
         runtime = createDefaultRuntime();
         Layout layout = incrementClusterEpoch(runtime);
-        RebootUtil.restart(SERVER_0, runtime.getParameters(), retries, PARAMETERS.TIMEOUT_LONG);
-
+        RebootUtil.restart(SERVER_0, runtime.getParameters(), retries, PARAMETERS.TIMEOUT_LONG, Optional.of(layout.getClusterId()));
         waitForEpochChange(epoch -> epoch >= layout.getEpoch() + 1, runtime);
 
         runtime = createDefaultRuntime();
-        RebootUtil.reset(SERVER_0, runtime.getParameters(), retries, PARAMETERS.TIMEOUT_LONG);
+        RebootUtil.reset(SERVER_0, runtime.getParameters(), retries, PARAMETERS.TIMEOUT_LONG, Optional.of(layout.getClusterId()));
         runtime = createDefaultRuntime();
 
         waitForEpochChange(epoch -> epoch == 0, runtime);
@@ -547,9 +547,9 @@ public class ClusterReconfigIT extends AbstractIT {
                 CorfuRuntime.CorfuRuntimeParameters.builder().build());
         router.addClient(new LayoutHandler()).addClient(new BaseHandler());
         retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
-                new LayoutClient(router, layout.getEpoch()).bootstrapLayout(layout)));
+                new LayoutClient(router, layout.getEpoch(), layout.getClusterId()).bootstrapLayout(layout)));
         retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
-                new ManagementClient(router, layout.getEpoch()).bootstrapManagement(layout)));
+                new ManagementClient(router, layout.getEpoch(), layout.getClusterId()).bootstrapManagement(layout)));
 
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
@@ -579,7 +579,7 @@ public class ClusterReconfigIT extends AbstractIT {
         Layout wrongLayout = new Layout(layout);
         wrongLayout.getLayoutServers().add("localhost:9005");
         retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
-                new LayoutClient(router, layout.getEpoch()).bootstrapLayout(wrongLayout)));
+                new LayoutClient(router, layout.getEpoch(), layout.getClusterId()).bootstrapLayout(wrongLayout)));
 
         assertThatThrownBy(() -> BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT))
                 .hasCauseInstanceOf(AlreadyBootstrappedException.class);
@@ -608,7 +608,8 @@ public class ClusterReconfigIT extends AbstractIT {
                 .addClient(new ManagementHandler())
                 .addClient(new BaseHandler());
         Layout wrongLayout = new Layout(layout);
-        final ManagementClient managementClient = new ManagementClient(router, layout.getEpoch());
+        final ManagementClient managementClient =
+                new ManagementClient(router, layout.getEpoch(), layout.getClusterId());
         wrongLayout.getLayoutServers().add("localhost:9005");
         retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
                 managementClient.bootstrapManagement(wrongLayout)));

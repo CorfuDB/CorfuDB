@@ -22,6 +22,7 @@ import java.nio.channels.FileChannel;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -44,13 +45,20 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkOverwritesFail() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        ServerContext sc = new ServerContextBuilder()
                 .setLogPath(serviceDir)
+                .setSingle(true)
                 .setMemory(false)
-                .build());
+                .build();
 
-        this.router.reset();
-        this.router.addServer(s1);
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
 
         final long ADDRESS_0 = 0L;
         final long ADDRESS_1 = 100L;
@@ -89,13 +97,20 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void cantOpenReadOnlyLogFiles() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        ServerContext sc = new ServerContextBuilder()
                 .setLogPath(serviceDir)
+                .setSingle(true)
                 .setMemory(false)
-                .build());
+                .build();
 
-        this.router.reset();
-        this.router.addServer(s1);
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
 
         final long LOW_ADDRESS = 0L; final String low_payload = "0";
         final long MID_ADDRESS = 100L; final String mid_payload = "100";
@@ -134,13 +149,20 @@ public class LogUnitServerTest extends AbstractServerTest {
             throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        ServerContext sc = new ServerContextBuilder()
                 .setLogPath(serviceDir)
+                .setSingle(true)
                 .setMemory(false)
-                .build());
+                .build();
 
-        this.router.reset();
-        this.router.addServer(s1);
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
 
         final long LOW_ADDRESS = 0L; final String low_payload = "0";
         final long MID_ADDRESS = 100L; final String mid_payload = "100";
@@ -163,8 +185,8 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
-        this.router.reset();
-        this.router.addServer(s2);
+
+        setServer(s2);
 
         assertThat(s2)
                 .containsDataAtAddress(LOW_ADDRESS)
@@ -193,13 +215,20 @@ public class LogUnitServerTest extends AbstractServerTest {
             throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        ServerContext sc = new ServerContextBuilder()
                 .setLogPath(serviceDir)
+                .setSingle(true)
                 .setMemory(false)
-                .build());
+                .build();
 
-        this.router.reset();
-        this.router.addServer(s1);
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
 
         final long START_ADDRESS = 0L; final String low_payload = "0";
         final int num_iterations_very_low = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
@@ -226,8 +255,8 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
-        this.router.reset();
-        this.router.addServer(s2);
+
+        setServer(s2);
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s2)
@@ -258,8 +287,8 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
-        this.router.reset();
-        this.router.addServer(s3);
+
+        setServer(s3);
 
         for (int i = 0; i < num_iterations_very_low; i++)
             assertThat(s3)
@@ -298,13 +327,20 @@ public class LogUnitServerTest extends AbstractServerTest {
         final long trimMark = 15000L;
         UUID streamID = UUID.randomUUID();
 
-        LogUnitServer logUnitServer = new LogUnitServer(new ServerContextBuilder()
+        ServerContext sc = new ServerContextBuilder()
                 .setLogPath(serviceDir)
+                .setSingle(true)
                 .setMemory(false)
-                .build());
+                .build();
 
-        this.router.reset();
-        this.router.addServer(logUnitServer);
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
 
         // Write 10K entries in descending order for the range 20k-10K
         CompletableFuture<Boolean> future = null;
@@ -327,7 +363,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         future.join();
 
         // Retrieve address space from current log unit server (write path)
-        StreamAddressSpace addressSpace = logUnitServer.getStreamAddressSpace(streamID);
+        StreamAddressSpace addressSpace = s1.getStreamAddressSpace(streamID);
         assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(minAddress + 1);
 
@@ -357,13 +393,20 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkUnCachedWrites() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        ServerContext sc = new ServerContextBuilder()
                 .setLogPath(serviceDir)
+                .setSingle(true)
                 .setMemory(false)
-                .build());
+                .build();
 
-        this.router.reset();
-        this.router.addServer(s1);
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
 
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
@@ -384,8 +427,7 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .setMemory(false)
                 .build());
 
-        this.router.reset();
-        this.router.addServer(s1);
+        setServer(s1);
 
         ILogData entry = s1.getDataCache().get(globalAddress);
 
@@ -460,13 +502,20 @@ public class LogUnitServerTest extends AbstractServerTest {
     public void checkOverwriteExceptionIsNotThrownWhenTheRankIsHigher() throws Exception {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        LogUnitServer s1 = new LogUnitServer(new ServerContextBuilder()
+        ServerContext sc = new ServerContextBuilder()
                 .setLogPath(serviceDir)
+                .setSingle(true)
                 .setMemory(false)
-                .build());
+                .build();
 
-        this.router.reset();
-        this.router.addServer(s1);
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
 
         final long ADDRESS_0 = 0L;
         final long ADDRESS_1 = 100L;
@@ -519,14 +568,73 @@ public class LogUnitServerTest extends AbstractServerTest {
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .build());
-        this.router.reset();
-        this.router.addServer(s2);
+        setServer(s2);
 
         assertThat(s2)
                 .containsDataAtAddress(ADDRESS_0);
         assertThat(s2)
                 .matchesDataAtAddress(ADDRESS_0, "1".getBytes());
 
+    }
+
+    @Test
+    public void testLogDataRWLatency() {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+
+        ServerContext sc = new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setSingle(true)
+                .setMemory(false)
+                .build();
+
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
+
+        final int iterations = 1000;
+        long ADDRESS;
+
+        long start = System.currentTimeMillis();
+        for (int i=0; i<iterations; i++) {
+            ByteBuf buf = Unpooled.buffer();
+            Serializers.CORFU.serialize(Integer.toString(i).getBytes(), buf);
+            LogData ld = new LogData(DataType.DATA, buf);
+            WriteRequest m = WriteRequest.builder()
+                    .data(ld)
+                    .build();
+            ADDRESS = i;
+            m.setGlobalAddress(ADDRESS);
+            m.setRank(new IMetadata.DataRank(0));
+            m.setBackpointerMap(populateBackpointerMap());
+            m.setCheckpointedStreamId(UUID.randomUUID());
+            m.setCheckpointedStreamId(UUID.randomUUID());
+            m.setCheckpointId(UUID.randomUUID());
+            sendRequest(CorfuMsgType.WRITE.payloadMsg(m)).join();
+        }
+        long end = System.currentTimeMillis();
+        System.out.println("Total Write Time - " + (end - start));
+
+        start = System.currentTimeMillis();
+        for (int i=0; i<iterations; i++) {
+            ADDRESS = i;
+            sendRequest(CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(ADDRESS, true))).join();
+        }
+        end = System.currentTimeMillis();
+        System.out.println("Total Read Time -" + (end - start));
+    }
+
+    private Map<UUID, Long> populateBackpointerMap() {
+        final int numBackpointers = 20;
+        Map<UUID, Long> backPointerMap = new HashMap<>();
+        for (int i=0; i<numBackpointers; i++) {
+            backPointerMap.put(UUID.randomUUID(), new Random().nextLong());
+        }
+        return backPointerMap;
     }
 }
 

@@ -431,7 +431,8 @@ public class AddressSpaceView extends AbstractView {
                 throw new TrimmedException(trimmedAddresses);
             }
 
-            log.warn("read: ignoring trimmed addresses {}", trimmedAddresses);
+            // During streaming this message can flood logs, so modify log level with care.
+            log.debug("read: ignoring trimmed addresses {}", trimmedAddresses);
         }
 
 

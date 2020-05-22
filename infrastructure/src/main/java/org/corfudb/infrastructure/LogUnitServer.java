@@ -159,7 +159,7 @@ public class LogUnitServer extends AbstractServer {
     public void handleLogAddressSpaceRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         CorfuPayloadMsg<Void> payloadMsg = new CorfuPayloadMsg<>();
         payloadMsg.copyBaseFields(msg);
-        log.debug("handleLogAddressSpaceRequest: received a log address space request {}", msg);
+        log.trace("handleLogAddressSpaceRequest: received a log address space request {}", msg);
         batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
                 .thenAccept(tailsResp -> r.sendResponse(ctx, msg,
                         CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
@@ -174,7 +174,7 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST)
     public void handleTrimMarkRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("handleTrimMarkRequest: received a trim mark request {}", msg);
+        log.trace("handleTrimMarkRequest: received a trim mark request {}", msg);
         r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
     }
 
@@ -410,6 +410,7 @@ public class LogUnitServer extends AbstractServer {
      */
     @Override
     public void shutdown() {
+        log.info("Shutdown LogUnit server. Current epoch: {}, ", serverContext.getServerEpoch());
         super.shutdown();
         executor.shutdown();
         logCleaner.shutdown();

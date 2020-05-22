@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -278,8 +279,8 @@ public abstract class AbstractQueuedStreamView extends
             // If trimmed exceptions are ignored, the data retrieved by the read API might not correspond
             // to all requested addresses, for this reason we must filter out data entries not included (null).
             // Also, we need to preserve ordering for checkpoint logic.
-            return  addresses.stream().map(dataMap::get)
-                    .filter(data -> data != null)
+            return addresses.stream().map(dataMap::get)
+                    .filter(Objects::nonNull)
                     .collect(Collectors.toList());
         } catch (TrimmedException te) {
             processTrimmedException(te);
@@ -341,7 +342,17 @@ public abstract class AbstractQueuedStreamView extends
 
         // The list to store read results in
         List<ILogData> readFrom = readAll(toRead).stream()
-                .filter(x -> x.getType() == DataType.DATA)
+                // If the last address is a hole, we want to update the
+                // global pointer to include that address as well.
+                // During a checkpoint, a hole is appended at the end of each
+                // stream which might end up being used as a trim mark in the
+                // next trim cycle. If there are no updates between the checkpoint
+                // and the trim cycle for that stream, there is a chance that the
+                // last address (hole) will be trimmed, causing the TrimmedException
+                // to be thrown. By updating the global pointer to include the hole,
+                // we prevent that from happening.
+                .filter(x -> x.isData() || x.isHole())
+                // Case of Checkpoint will never load these addresses, cause this is another stream
                 .filter(x -> x.containsStream(context.id))
                 .collect(Collectors.toList());
 
@@ -360,11 +371,11 @@ public abstract class AbstractQueuedStreamView extends
         } else {
             // Clear the entries which were read
             context.readQueue.headSet(maxGlobal, true).clear();
+            context.readCpQueue.headSet(maxGlobal, true).clear();
         }
 
         // Transfer the addresses of the read entries to the resolved queue
-        readFrom.stream()
-                .forEach(x -> addToResolvedQueue(context, x.getGlobalAddress()));
+        readFrom.forEach(entry -> addToResolvedQueue(context, entry.getGlobalAddress()));
 
         // Update the global pointer
         if (readFrom.size() > 0) {
@@ -372,7 +383,11 @@ public abstract class AbstractQueuedStreamView extends
                     .getGlobalAddress());
         }
 
-        return readFrom;
+        // Make sure to filter out any entries that are holes,
+        // since the client does not care about those.
+        return readFrom.stream()
+                .filter(entry -> !entry.isHole())
+                .collect(Collectors.toList());
     }
 
     /**
@@ -592,7 +607,7 @@ public abstract class AbstractQueuedStreamView extends
      */
     @Override
     public boolean getHasNext(QueuedStreamContext context) {
-        return  !context.readQueue.isEmpty()
+        return !context.readQueue.isEmpty()
                 || runtime.getSequencerView().query(context.id)
                 > context.getGlobalPointer();
     }
@@ -900,6 +915,7 @@ public abstract class AbstractQueuedStreamView extends
             // remove anything in the read queue LESS
             // than global address.
             readQueue.headSet(globalAddress).clear();
+            readCpQueue.headSet(globalAddress).clear();
             // transfer from the resolved queue into
             // the read queue anything equal to or
             // greater than the global address

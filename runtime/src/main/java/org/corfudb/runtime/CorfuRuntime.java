@@ -951,7 +951,7 @@ public class CorfuRuntime {
                         IClientRouter router = getRouter(s);
                         // Try to get a layout.
                         CompletableFuture<Layout> layoutFuture =
-                                new LayoutClient(router, Layout.INVALID_EPOCH).getLayout();
+                                new LayoutClient(router, Layout.INVALID_EPOCH, Layout.INVALID_CLUSTER_ID).getLayout();
                         // Wait for layout
                         Layout l = layoutFuture.get();
 
@@ -982,6 +982,10 @@ public class CorfuRuntime {
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(
                                 "Interrupted during layout fetch", ie);
+                    } catch (WrongClusterException we) {
+                        // It is futile trying to re-connect to the wrong cluster
+                        log.warn("Giving up since cluster is incorrect or reconfigured!");
+                        throw we;
                     } catch (ExecutionException ee){
                         if (ee.getCause() instanceof TimeoutException) {
                             log.warn("Tried to get layout from {} but failed by timeout", s);

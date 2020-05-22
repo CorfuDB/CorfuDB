@@ -88,6 +88,12 @@ public class Layout {
      */
     public static final long INVALID_EPOCH = -1L;
 
+    /**
+     * Invalid cluster id.
+     * It is used to fetch layout by the corfu runtime.
+     */
+    public static final UUID INVALID_CLUSTER_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+
     /** The unique Id for the Corfu cluster represented by this layout.
      *  Should remain consistent for the lifetime of the layout. May be
      *  {@code null} in a legacy layout.

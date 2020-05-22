@@ -17,9 +17,11 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.CorfuStoreMetadata.TableMetadata;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
@@ -27,14 +29,12 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
-import org.rocksdb.CompactionOptionsUniversal;
-import org.rocksdb.CompressionType;
-import org.rocksdb.Options;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -49,6 +49,7 @@ import javax.annotation.Nullable;
  * <p>
  * Created by zlokhandwala on 2019-08-10.
  */
+@Slf4j
 public class TableRegistry {
 
     /**
@@ -84,7 +85,7 @@ public class TableRegistry {
      * This {@link CorfuTable} holds the schemas of the key, payload and metadata for every table created.
      */
     @Getter
-    private final CorfuTable<TableName, CorfuRecord<TableDescriptors, Message>> registryTable;
+    private final CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable;
 
     public TableRegistry(CorfuRuntime runtime) {
         this.runtime = runtime;
@@ -93,7 +94,7 @@ public class TableRegistry {
         this.protobufSerializer = new ProtobufSerializer(classMap);
         Serializers.registerSerializer(this.protobufSerializer);
         this.registryTable = this.runtime.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, Message>>>() {
+                .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
                 })
                 .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
                 .setSerializer(this.protobufSerializer)
@@ -102,6 +103,7 @@ public class TableRegistry {
         // Register the table schemas to schema table.
         addTypeToClassMap(TableName.getDefaultInstance());
         addTypeToClassMap(TableDescriptors.getDefaultInstance());
+        addTypeToClassMap(TableMetadata.getDefaultInstance());
 
         // Register the registry table itself.
         try {
@@ -109,7 +111,8 @@ public class TableRegistry {
                     REGISTRY_TABLE_NAME,
                     TableName.class,
                     TableDescriptors.class,
-                    null);
+                    TableMetadata.class,
+                    TableOptions.<TableName, TableDescriptors>builder().build());
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
@@ -135,7 +138,8 @@ public class TableRegistry {
                        @Nonnull String tableName,
                        @Nonnull Class<K> keyClass,
                        @Nonnull Class<V> payloadClass,
-                       @Nullable Class<M> metadataClass)
+                       @Nullable Class<M> metadataClass,
+                       @Nonnull final TableOptions<K, V> tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
         TableName tableNameKey = TableName.newBuilder()
@@ -160,12 +164,45 @@ public class TableRegistry {
         }
         TableDescriptors tableDescriptors = tableDescriptorsBuilder.build();
 
-        try {
-            this.runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
-            this.registryTable.putIfAbsent(tableNameKey,
-                    new CorfuRecord<>(tableDescriptors, null));
-        } finally {
-            this.runtime.getObjectsView().TXEnd();
+        TableMetadata.Builder metadataBuilder = TableMetadata.newBuilder();
+        metadataBuilder.setDiskBased(tableOptions.getPersistentDataPath().isPresent());
+
+        // Schema validation to ensure that there is either proper modification of the schema across open calls.
+        // Or no modification to the protobuf files.
+        boolean hasSchemaChanged = false;
+        CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
+        if (oldRecord != null) {
+            if (!oldRecord.getPayload().getFileDescriptorsMap().equals(tableDescriptors.getFileDescriptorsMap())) {
+                hasSchemaChanged = true;
+                log.error("registerTable: Schema update detected for table "+namespace+" "+ tableName);
+                log.debug("registerTable: old schema:"+oldRecord.getPayload().getFileDescriptorsMap());
+                log.debug("registerTable: new schema:"+tableDescriptors.getFileDescriptorsMap());
+            }
+        }
+        int numRetries = 3; // Since this is an internal transaction, retry a few times before giving up.
+        long finalAddress = Address.NON_ADDRESS;
+        while (numRetries-- > 0) {
+            try {
+                this.runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
+                if (hasSchemaChanged) {
+                    this.registryTable.put(tableNameKey,
+                            new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+                } else {
+                    this.registryTable.putIfAbsent(tableNameKey,
+                            new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
+                }
+                finalAddress = this.runtime.getObjectsView().TXEnd();
+            } catch (TransactionAbortedException txAbort) {
+                if (numRetries <= 0) {
+                    throw txAbort;
+                }
+                log.info("registerTable: commit failed. Will retry {} times. Cause {}", numRetries, txAbort);
+                continue;
+            } finally {
+                if (finalAddress == Address.NON_ADDRESS) { // Transaction failed or an exception occurred.
+                    this.runtime.getObjectsView().TXAbort(); // clear Txn context so thread can be reused.
+                }
+            }
         }
     }
 
@@ -302,7 +339,7 @@ public class TableRegistry {
                 mapSupplier, versionPolicy);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
-        registerTable(namespace, tableName, kClass, vClass, mClass);
+        registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
         return table;
     }
 
@@ -344,13 +381,26 @@ public class TableRegistry {
     }
 
     /**
-     * Deletes a table.
+     * Only clears a table, DOES not delete its file descriptors from metadata.
+     * This is because if the purpose of the delete is to upgrade from an old schema to a new schema
+     * Then we must first purge all SMR entries of the current (old) format from corfu stream.
+     * It is the checkpointer which actually purges via a trim operation.
+     * But to even get to the trim, it must be able to read the table, which it can't do if the table's
+     * metadata (TableRegistry entry) is also removed here.
+     * So what would be nice if we can place a marker indicating that this table is marked
+     * for deletion, so that on the next Re-open we will actually force update the table registry entry.
+     * For now, just force the openTable to always purge the prior entry assuming that the
+     * caller has done the good work of
+     * 1. table.clear() using the old version
+     * 2. running checkpoint and trim
+     * 3. re-open the table with new proto files.
      *
      * @param namespace Namespace of the table.
      * @param tableName Name of the table.
      */
     public void deleteTable(String namespace, String tableName) {
-        throw new UnsupportedOperationException("deleteTable unsupported for now");
+        Table<Message, Message, Message> table = getTable(namespace, tableName);
+        table.clear();
     }
 
     /**

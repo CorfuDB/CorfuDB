@@ -3,6 +3,7 @@ package org.corfudb.universe.group.cluster.vm;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedSet;
 import lombok.Builder;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.runtime.BootstrapUtil;
@@ -10,6 +11,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.node.server.vm.VmCorfuServer;
@@ -33,9 +35,9 @@ public class VmCorfuCluster extends AbstractCorfuCluster<VmCorfuServerParams, Vm
 
     @Builder
     protected VmCorfuCluster(CorfuClusterParams<VmCorfuServerParams> corfuClusterParams,
-                             VmUniverseParams universeParams,
-                             ImmutableMap<VmName, VmManager> vms) {
-        super(corfuClusterParams, universeParams);
+                             VmUniverseParams universeParams, ImmutableMap<VmName, VmManager> vms,
+                             @NonNull LoggingParams loggingParams) {
+        super(corfuClusterParams, universeParams, loggingParams);
         this.vms = vms;
 
         init();
@@ -71,6 +73,7 @@ public class VmCorfuCluster extends AbstractCorfuCluster<VmCorfuServerParams, Vm
                 .vmManager(vmManager)
                 .stress(stress)
                 .remoteOperationHelper(commandHelper)
+                .loggingParams(loggingParams)
                 .build();
     }
 

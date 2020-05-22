@@ -84,11 +84,13 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 // to be serviced immediately, rather than reading one entry at a time.
                 ld = read(currentRead, queue);
 
-                if (queue == getCurrentContext().readQueue && ld != null) {
+                if (queue == getCurrentContext().readQueue) {
                     // Validate that the data entry belongs to this stream, otherwise, skip.
                     // This verification protects from sequencer regression (tokens assigned in an older epoch
                     // that were never written to, and reassigned on a newer epoch)
-                    if (ld.containsStream(this.id) && ld.getType() == DataType.DATA) {
+                    if ((ld.containsStream(this.id) && ld.isData()) ||
+                            (ld.isHole() && (ld.getBackpointerMap().isEmpty() || ld.containsStream(this.id)))
+                    ) {
                         addToResolvedQueue(getCurrentContext(), currentRead);
                         readNext = false;
                     } else {
@@ -155,51 +157,72 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             if (checkpoint) {
                 processCheckpoint(streamAddressSpace, filter, queue);
             } else {
-                // Transfer discovered addresses to queue. We must limit to maxGlobal,
-                // as startAddress could be ahead of maxGlobal---in case it reflects
-                // the tail of the stream.
-                queue.addAll(streamAddressSpace.copyAddressesToSet(maxGlobal));
-
-                long trimMark = streamAddressSpace.getTrimMark();
-
-                // In case we are dealing with a stream that does not have the checkpoint
-                // capability, check to see if we are trying to access an address that has been
-                // previously trimmed.
-                if (!isCheckpointCapable()
-                        && Address.isAddress(trimMark)
-                        && trimMark > stopAddress) {
-                    String message = String.format("getStreamAddressMap[{%s}] stream has been " +
-                                    "trimmed at address %s and we are trying to access the " +
-                                    "stream starting at address %s. This stream does not have " +
-                                    "the checkpoint capability.", this, trimMark, stopAddress);
-                    log.info(message);
-                    throw new TrimmedException(message);
-                }
-                // Address maps might have been trimmed, hence not reflecting all updates to the stream
-                // For this reason, in the case of a valid trim mark, we must be sure this space is
-                // already resolved or loaded by a checkpoint.
-                if (isCheckpointCapable()
-                        && Address.isAddress(trimMark)
-                        && !isTrimCoveredByCheckpointOrLocalView(trimMark)) {
-                    if (getReadOptions().isIgnoreTrim()) {
-                        log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
-                                this, streamAddressSpace.getTrimMark());
-                    } else {
-                        String message = String.format("getStreamAddressMap[{%s}] [%d, %d] " +
-                                        "stream has been trimmed at address %s and this space is " +
-                                        "not covered by the loaded checkpoint with start " +
-                                        "address %s, while accessing the stream at version " +
-                                        "%s. Looking for a new checkpoint.",
-                                this, stopAddress, startAddress, trimMark,
-                                getCurrentContext().getCheckpoint().startAddress, maxGlobal);
-                        throw new TrimmedException(message);
-                    }
-                }
+                moveToReadQueue(streamAddressSpace, queue, startAddress, stopAddress, maxGlobal);
             }
         }
 
         addressCount += queue.size();
         return !queue.isEmpty();
+    }
+
+    private void moveToReadQueue(final StreamAddressSpace streamAddressSpace,
+                                  final NavigableSet<Long> queue,
+                                  final long startAddress,
+                                  final long stopAddress,
+                                  final long maxGlobal) {
+
+        // Transfer discovered addresses to queue. We must limit to maxGlobal,
+        // as startAddress could be ahead of maxGlobal---in case it reflects
+        // the tail of the stream.
+        queue.addAll(streamAddressSpace.copyAddressesToSet(maxGlobal));
+
+        final long trimMark = streamAddressSpace.getTrimMark();
+
+        // No valid trim-mark has been defined,
+        // thus we cannot run into trimmed address space.
+        if (!Address.isAddress(trimMark)) {
+            return;
+        }
+
+        // Trim-mark is below or equal to the lowest address,
+        // thus we cannot run into trimmed address space.
+        if (trimMark <= stopAddress) {
+            return;
+        }
+
+        // In case we are dealing with a stream that does not have the checkpoint
+        // capability (transactional stream for example), raise the exception.
+        if (!isCheckpointCapable()) {
+            String message = String.format("getStreamAddressMap[{%s}] stream has been " +
+                    "trimmed at address %s and we are trying to access the " +
+                    "stream starting at address %s. This stream does not have " +
+                    "the checkpoint capability.", this, trimMark, stopAddress);
+            log.info(message);
+            throw new TrimmedException(message);
+        }
+
+        // Address maps might have been trimmed, hence not reflecting all updates to the stream
+        // For this reason, in the case of a valid trim mark, we must be sure this space is
+        // already resolved or loaded by a checkpoint.
+        //
+        // In case of a raw stream (a stream that is not consumed as part of an SMR object),
+        // checkpoint start address and the trim mark will never match, causing the
+        // TrimmedException to be thrown whenever trimMark > stopAddress.
+        if (isCheckpointCapable() && !isTrimCoveredByCheckpointOrLocalView(trimMark)) {
+            if (getReadOptions().isIgnoreTrim()) {
+                log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
+                        this, streamAddressSpace.getTrimMark());
+            } else {
+                String message = String.format("getStreamAddressMap[{%s}] [%d, %d] " +
+                                "stream has been trimmed at address %s and this space is " +
+                                "not covered by the loaded checkpoint with start " +
+                                "address %s, while accessing the stream at version " +
+                                "%s. Looking for a new checkpoint.",
+                        this, stopAddress, startAddress, trimMark,
+                        getCurrentContext().getCheckpoint().startAddress, maxGlobal);
+                throw new TrimmedException(message);
+            }
+        }
     }
 
     private void processCheckpoint(StreamAddressSpace streamAddressSpace, Function<ILogData, Boolean> filter,
@@ -252,7 +275,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
      *         False, otherwise.
      */
     private void processCheckpointBatchByEntry(List<Long> batch,
-                                                  Function<ILogData, Boolean> filter) {
+                                               Function<ILogData, Boolean> filter) {
         log.debug("processCheckpointBatchByEntry[{}]: single step across {}", this, batch);
         try {
             boolean checkpointResolved;
@@ -285,7 +308,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             }
 
             log.trace("getStreamAddressMap[{}]: request stream address space between {} and {}.",
-                        streamId, startAddress, stopAddress);
+                    streamId, startAddress, stopAddress);
             return runtime.getSequencerView()
                     .getStreamAddressSpace(new StreamAddressRange(streamId, startAddress, stopAddress));
         }
@@ -369,4 +392,3 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         return addressCount;
     }
 }
-

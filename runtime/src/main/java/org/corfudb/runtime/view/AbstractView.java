@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.Sleep;
@@ -148,7 +149,10 @@ public abstract class AbstractView {
                             + "invalidate view", we.getCorrectEpoch());
                 } else if (re instanceof NetworkException) {
                     log.warn("layoutHelper: System seems unavailable", re);
-                } else {
+                } else if (re instanceof WrongClusterException) {
+                    log.warn("layoutHelper: Cluster reconfiguration or incorrect cluster", re);
+                    throw re;
+                }else {
                     throw re;
                 }
                 if (rethrowAllExceptions) {
