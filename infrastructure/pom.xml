@@ -168,7 +168,11 @@
             <artifactId>format</artifactId>
             <version>${project.version}</version>
         </dependency>
-
+        <dependency>
+            <groupId>org.corfudb</groupId>
+            <artifactId>utils</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!-- External Dependencies-->
         <dependency>
@@ -185,11 +189,6 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.classic.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.corfudb</groupId>
-            <artifactId>utils</artifactId>
-            <version>${project.version}</version>
         </dependency>
     </dependencies>
 

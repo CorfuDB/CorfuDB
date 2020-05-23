@@ -114,7 +114,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         try {
             crossSiteConfiguration = readConfig();
         } catch (Exception e) {
-            System.out.print("\n caught an exception" + e);
+            log.warn("caught an exception " + e);
         }
 
         siteConfigurationMsg = crossSiteConfiguration.convert2msg();
@@ -126,7 +126,8 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         if (siteConfigMsg == null) {
             siteConfigMsg = constructSiteConfigMsg();
         }
-        //System.out.print("new site config msg " + siteConfigMsg);
+
+        log.debug("new site config msg " + siteConfigMsg);
         return siteConfigMsg;
     }
 
@@ -175,7 +176,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                     if (siteFlip) {
                         CrossSiteConfiguration newConfig = changePrimary(siteManager.getSiteConfig());
                         siteManager.updateSiteConfig(newConfig.convert2msg());
-                        System.out.print("\n*** change the site config");
+                        log.warn("change the site config");
                         siteFlip = false;
                     }
                 } catch (Exception e) {

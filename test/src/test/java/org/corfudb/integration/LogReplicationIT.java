@@ -794,7 +794,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
-        //assertThat(expectedAckTimestamp).isEqualTo(writerMetaDataTable.get(LastLogProcessed.getVal()));
         assertThat(expectedAckTimestamp).isEqualTo(persistedWriterMetadata.getLastProcessedLogTimestamp());
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
@@ -1264,15 +1263,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        long lastSnapStart = persistedWriterMetadata.getLastSnapStartTimestamp(); //writerMetaDataTable.get(LastSnapStart.getVal());
-        long lastSnapDone = persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(); //writerMetaDataTable.get(LastSnapApplyDone.getVal());
+        long lastSnapStart = persistedWriterMetadata.getLastSnapStartTimestamp();
+        long lastSnapDone = persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp();
 
         System.out.println("\nlastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
         assertThat(lastSnapStart == lastSnapDone).isTrue();
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = persistedWriterMetadata.getLastProcessedLogTimestamp(); //writerMetaDataTable.get(LastLogProcessed.getVal());
+        long lastLogProcessed = persistedWriterMetadata.getLastProcessedLogTimestamp();
 
         System.out.println("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp);
         assertThat(expectedAckTimestamp == lastLogProcessed).isTrue();

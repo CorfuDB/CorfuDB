@@ -90,8 +90,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
         TxBuilder txBuilder = persistedWriterMetadata.getTxBuilder();
         persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch, siteEpoch);
-        //persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart, srcGlobalSnapshot);
-        //persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum, persitSeqNum);
 
 
         for (UUID streamID : streamViewMap.keySet()) {
@@ -152,11 +150,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             log.warn("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
                     " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
                     " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
-
-            //System.out.print("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
-            //        " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
-            //        " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
-
             return;
         }
 
