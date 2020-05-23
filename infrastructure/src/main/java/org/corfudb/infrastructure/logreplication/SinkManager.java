@@ -64,7 +64,7 @@ public class SinkManager implements DataReceiver {
      * @param config log replication configuration
      */
     public SinkManager(String localCorfuEndpoint, LogReplicationConfig config) {
-        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
+        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build()).setTransactionLogging(true)
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.rxState = RxState.LOG_ENTRY_SYNC;
         this.config = config;
@@ -180,7 +180,7 @@ public class SinkManager implements DataReceiver {
                 if (rxState == RxState.SNAPSHOT_SYNC) {
                     return applySnapshotSync(message);
                 } else if (rxState == RxState.LOG_ENTRY_SYNC) {
-                    applyLogEntrySync(message);
+                    logEntryWriter.apply(message);
                     // Log Entry ACK policy is handled by the caller
                     return null;
                 }
@@ -195,16 +195,6 @@ public class SinkManager implements DataReceiver {
         }
 
         return null;
-    }
-
-    private void applyLogEntrySync(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message) {
-        // Apply log entry sync message
-        long ackTs = logEntryWriter.apply(message);
-
-        // Send Ack for log entry
-        //if (ackTs > persistedWriterMetadata.getLastProcessedLogTimestamp()) {
-        //    persistedWriterMetadata.setLastProcessedLogTimestamp(message.metadata.getTimestamp());
-        //}
     }
 
     private LogReplicationEntry applySnapshotSync(LogReplicationEntry message) {
@@ -234,7 +224,7 @@ public class SinkManager implements DataReceiver {
                 entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
 
         // If we are just starting snapshot sync, initialize base snapshot start
-        timestamp = persistedWriterMetadata.setSrcBaseSnapshotStart(siteEpoch, timestamp);
+        persistedWriterMetadata.setSrcBaseSnapshotStart(siteEpoch, timestamp);
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
         snapshotWriter.reset(siteEpoch, timestamp);

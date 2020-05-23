@@ -190,14 +190,11 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         Table<Uuid, Uuid, Uuid> tableA = corfuStore1.openTable(namespace, tableAName,
                 Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
 
-        Table<Uuid, Uuid, Uuid> tableB = corfuStore1.openTable(namespace, tableBName,
-                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
 
         Table<Uuid, Uuid, Uuid> tableC = corfuStore1.openTable(namespace, tableCName,
                 Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
 
         UUID uuidA = CorfuRuntime.getStreamID(tableA.getFullyQualifiedTableName());
-        UUID uuidB = CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName());
         UUID uuidC = CorfuRuntime.getStreamID(tableC.getFullyQualifiedTableName());
         //System.out.print("\n uuidA " + uuidA + " uuidB " + uuidB + " uuidC " + uuidC);
 
@@ -231,6 +228,12 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         long tail = runtime2.getAddressSpaceView().getLogTail();
 
         Iterator<OpaqueEntry> iterator = streamA.iterator();
+
+        Table<Uuid, Uuid, Uuid> tableB = corfuStore1.openTable(namespace, tableBName,
+                Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
+
+        UUID uuidB = CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName());
+
         while (iterator.hasNext()) {
             CorfuStoreMetadata.Timestamp timestamp = corfuStore2.getTimestamp();
             TxBuilder txBuilder = corfuStore2.tx(namespace);
@@ -244,10 +247,11 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
             txBuilder.update(tableCName, key, key, key);
             OpaqueEntry opaqueEntry = iterator.next();
             for( SMREntry smrEntry : opaqueEntry.getEntries().get(uuidA)) {
-                    txBuilder.logUpdate(tableBName, smrEntry);
+                    txBuilder.logUpdate(CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName()), smrEntry);
             }
             txBuilder.commit(timestamp);
         }
+
 
         //verify data at B and C with runtime 1
         txStream.seek(tail);
@@ -256,6 +260,8 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
             ILogData data = iterator1.next();
             data.getStreams().contains(uuidB);
         }
+        System.out.print("\nstreamBTail " + runtime2.getAddressSpaceView().getAllTails().getStreamTails().get(uuidB));
+
 
         Query q = corfuStore1.query(namespace);
         Set<Uuid> aSet = q.keySet(tableAName, null);

@@ -1,0 +1,21 @@
+syntax = "proto3";
+package org.corfudb.infrastructure.logreplication.proto;
+
+message LogReplicationMetadataKey {
+  string key = 1;
+}
+
+message LogReplicationMetadataVal {
+  uint64 val = 1;
+}
+
+/*
+message PersistedWriterMetaData {
+  required uint64 snapStart = 1;
+  required uint64 snapTransferedDone = 2;
+  required uint64 snapAppliedDone = 3;
+  required uint64 lastLogProcessed = 4;
+  required uint64 lastSnapTransferedSeqNumber = 5;
+  required uint64 lastSnapAppliedSeqNumber = 6;
+}
+ */
