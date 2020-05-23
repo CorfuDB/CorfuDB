@@ -37,9 +37,6 @@ import java.util.concurrent.Semaphore;
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed;
-import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapApplyDone;
-import static org.corfudb.infrastructure.logreplication.PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart;
 import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 
 /**
@@ -158,10 +155,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     /* ********* Configuration for Data Control Drop Tests ********** */
     private int SNAPSHOT_SYNC_DROPS = 2;
 
-
-    CorfuTable<String, Long> readerMetaDataTable;
     CorfuTable<String, Long> writerMetaDataTable;
-
+    PersistedWriterMetadata persistedWriterMetadata;
 
     /**
      * Setup Test Environment
@@ -214,6 +209,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
 
+        persistedWriterMetadata = new PersistedWriterMetadata(dstTestRuntime, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         writerMetaDataTable = dstTestRuntime.getObjectsView()
                 .build()
                 .setStreamName(PersistedWriterMetadata.getPersistedWriterMetadataTableName(PRIMARY_SITE_ID, REMOTE_SITE_ID))
@@ -798,7 +794,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
-        assertThat(expectedAckTimestamp).isEqualTo(writerMetaDataTable.get(LastLogProcessed.getVal()));
+        assertThat(expectedAckTimestamp).isEqualTo(persistedWriterMetadata.getLastProcessedLogTimestamp());
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
     }
@@ -934,6 +930,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Test
     public void testLogEntrySyncWithTrim() throws Exception {
         final int RX_MESSAGES_LIMIT = 2;
+        final int TRIM_RATIO = NUM_KEYS_LARGE - 20;
 
         // Setup Environment: two corfu servers (source & destination)
         setupEnv();
@@ -1266,15 +1263,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        long lastSnapStart = writerMetaDataTable.get(LastSnapStart.getVal());
-        long lastSnapDone = writerMetaDataTable.get(LastSnapApplyDone.getVal());
+        long lastSnapStart = persistedWriterMetadata.getLastSnapStartTimestamp();
+        long lastSnapDone = persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp();
 
         System.out.println("\nlastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
         assertThat(lastSnapStart == lastSnapDone).isTrue();
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = writerMetaDataTable.get(LastLogProcessed.getVal());
+        long lastLogProcessed = persistedWriterMetadata.getLastProcessedLogTimestamp();
 
         System.out.println("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp);
         assertThat(expectedAckTimestamp == lastLogProcessed).isTrue();

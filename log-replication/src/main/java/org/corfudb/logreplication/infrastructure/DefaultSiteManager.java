@@ -1,5 +1,7 @@
 package org.corfudb.logreplication.infrastructure;
 
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
@@ -17,11 +19,11 @@ import static java.lang.Thread.sleep;
 @Slf4j
 public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     public static long epoch = 0;
-    public static final int changeInterval = 5000;
+    public static final int changeInveral = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
     private static final String DEFAULT_PRIMARY_SITE_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_SITE_NAME = "standby_site";
-    private static final int NUM_NODES_PER_CLUSTER = 1;
+    private static final int NUM_NODES_PER_CLUSTER = 3;
 
     private static final String PRIMARY_SITE_NAME = "primary_site";
     private static final String STANDBY_SITE_NAME = "standby_site";
@@ -34,19 +36,18 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     private static final String PRIMARY_SITE_NODE = "primary_site_node";
     private static final String STANDBY_SITE_NODE = "standby_site_node";
 
-    SiteManagerCallback siteManagerCallback;
+    @Getter
+    public SiteManagerCallback siteManagerCallback;
+
     Thread thread = new Thread(siteManagerCallback);
-    boolean siteFlip = false;
-    DefaultSiteManager(boolean siteFlip) {
-        this.siteFlip = siteFlip;
+
+    DefaultSiteManager() {
     }
 
     public void start() {
-        if (siteFlip) {
-            siteManagerCallback = new SiteManagerCallback(this);
-            thread = new Thread(siteManagerCallback);
-            thread.start();
-        }
+        siteManagerCallback = new SiteManagerCallback(this);
+        thread = new Thread(siteManagerCallback);
+        thread.start();
     }
 
     public static CrossSiteConfiguration readConfig() throws IOException {
@@ -113,6 +114,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         try {
             crossSiteConfiguration = readConfig();
         } catch (Exception e) {
+            log.warn("caught an exception " + e);
         }
 
         siteConfigurationMsg = crossSiteConfiguration.convert2msg();
@@ -124,6 +126,8 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         if (siteConfigMsg == null) {
             siteConfigMsg = constructSiteConfigMsg();
         }
+
+        log.debug("new site config msg " + siteConfigMsg);
         return siteConfigMsg;
     }
 
@@ -156,22 +160,24 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     /**
      * Testing purpose to generate site role change.
      */
-    static class SiteManagerCallback implements Runnable {
-        CorfuReplicationSiteManagerAdapter siteManager;
-        SiteManagerCallback(CorfuReplicationSiteManagerAdapter siteManagerAdapter) {
+    public static class SiteManagerCallback implements Runnable {
+        public boolean siteFlip = false;
+        DefaultSiteManager siteManager;
+
+        SiteManagerCallback(DefaultSiteManager siteManagerAdapter) {
             this.siteManager = siteManagerAdapter;
         }
 
         @Override
         public void run() {
-            boolean shouldChangeOnce = true;
             while (true) {
                 try {
-                    sleep(changeInterval);
-                    if (shouldChangeOnce) {
+                    sleep(changeInveral);
+                    if (siteFlip) {
                         CrossSiteConfiguration newConfig = changePrimary(siteManager.getSiteConfig());
                         siteManager.updateSiteConfig(newConfig.convert2msg());
-                        shouldChangeOnce = false;
+                        log.warn("change the site config");
+                        siteFlip = false;
                     }
                 } catch (Exception e) {
                     log.error("caught an exception " + e);
