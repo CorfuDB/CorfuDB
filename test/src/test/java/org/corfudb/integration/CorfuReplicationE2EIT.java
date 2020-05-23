@@ -7,27 +7,51 @@ import org.corfudb.logreplication.infrastructure.DefaultSiteManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static java.lang.Thread.sleep;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
+@RunWith(Parameterized.class)
 public class CorfuReplicationE2EIT extends AbstractIT {
     static final int MAX_RETRY = 20;
     static final long sleepTime = 1000;
+
+    private boolean useNetty;
+
+    public CorfuReplicationE2EIT(boolean netty) {
+        this.useNetty = netty;
+    }
+
+    // Static method that generates and returns test data (automatically test for two transport protocols: netty and GRPC)
+    @Parameterized.Parameters
+    public static Collection input() {
+        return Arrays.asList(Boolean.FALSE, Boolean.TRUE);
+    }
+
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
         Process activeCorfu = null;
         Process standbyCorfu = null;
 
+        Process activeReplicationServer = null;
+        Process standbyReplicationServer = null;
+
         try {
             final String streamA = "Table001";
 
             final int activeSiteCorfuPort = 9000;
             final int standbySiteCorfuPort = 9001;
+
+            final int activeReplicationServerPort = 9010;
+            final int standbyReplicationServerPort = 9020;
 
             final String activeEndpoint = DEFAULT_HOST + ":" + activeSiteCorfuPort;
             final String standbyEndpoint = DEFAULT_HOST + ":" + standbySiteCorfuPort;
@@ -48,14 +72,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             activeRuntime.parseConfigurationString(activeEndpoint);
             activeRuntime.connect();
 
-            CorfuRuntime activeRuntime1 = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
-            activeRuntime1.parseConfigurationString(activeEndpoint);
-            activeRuntime1.connect();
-
-            //CorfuRuntime standbyRuntime = new CorfuRuntime(standbyEndpoint).setTransactionLogging(true).connect();
-            CorfuRuntime standbyRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
-            standbyRuntime.parseConfigurationString(standbyEndpoint);
-            standbyRuntime.connect();
+            CorfuRuntime standbyRuntime = new CorfuRuntime(standbyEndpoint).connect();
 
             // Write to StreamA on Active Site
             CorfuTable<String, Integer> mapA = activeRuntime.getObjectsView()
@@ -85,16 +102,11 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             // Confirm data does not exist on Standby Site
             assertThat(mapAStandby.size()).isEqualTo(0);
 
-            // Start Log Replication Server on Standby Site
-            CorfuReplicationServer serverA = new CorfuReplicationServer(new String[]{"9010"});
-            Thread siteAThread = new Thread(serverA);
-            System.out.println("Start Corfu Log Replication Server on 9010");
-            siteAThread.start();
-
-            CorfuReplicationServer serverB = new CorfuReplicationServer(new String[]{"9020"});
-            Thread siteBThread = new Thread(serverB);
-            System.out.println("Start Corfu Log Replication Server on 9020");
-            siteBThread.start();
+            // Start Log Replication Server on Active Site
+             activeReplicationServer = runReplicationServer(activeReplicationServerPort, useNetty);
+//            executorService.submit(() -> {
+//                CorfuReplicationServer.main(new String[]{"--custom-transport", String.valueOf(activeReplicationServerPort)});
+//            });
 
             // Wait until data is fully replicated
             System.out.print("\nWait ... Snapshot Data is being replicated ...");
@@ -266,7 +278,8 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             for (int i = 0; i < (numWrites + numWrites/2) ; i++) {
                 assertThat(mapAStandby.containsKey(String.valueOf(i)));
             }
-            assertThat(mapAStandby.keySet().containsAll(mapA.keySet()));
+
+          assertThat(mapAStandby.keySet().containsAll(mapA.keySet()));
 
             String primary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
             String currentPimary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
@@ -343,6 +356,14 @@ public class CorfuReplicationE2EIT extends AbstractIT {
 
             if (standbyCorfu != null) {
                 standbyCorfu.destroy();
+            }
+
+            if (activeReplicationServer != null) {
+                activeReplicationServer.destroy();
+            }
+
+            if (standbyReplicationServer != null) {
+                standbyReplicationServer.destroy();
             }
         }
     }

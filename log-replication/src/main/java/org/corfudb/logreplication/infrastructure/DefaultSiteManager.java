@@ -19,11 +19,11 @@ import static java.lang.Thread.sleep;
 @Slf4j
 public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
     public static long epoch = 0;
-    public static final int changeInveral = 5000;
+    public static final int changeInterval = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
     private static final String DEFAULT_PRIMARY_SITE_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_SITE_NAME = "standby_site";
-    private static final int NUM_NODES_PER_CLUSTER = 3;
+    private static final int NUM_NODES_PER_CLUSTER = 1;
 
     private static final String PRIMARY_SITE_NAME = "primary_site";
     private static final String STANDBY_SITE_NAME = "standby_site";
@@ -114,7 +114,6 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         try {
             crossSiteConfiguration = readConfig();
         } catch (Exception e) {
-            System.out.print("\n caught an exception" + e);
         }
 
         siteConfigurationMsg = crossSiteConfiguration.convert2msg();
@@ -126,7 +125,6 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         if (siteConfigMsg == null) {
             siteConfigMsg = constructSiteConfigMsg();
         }
-        //System.out.print("new site config msg " + siteConfigMsg);
         return siteConfigMsg;
     }
 

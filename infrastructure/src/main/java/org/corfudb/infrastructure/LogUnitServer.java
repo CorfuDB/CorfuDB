@@ -274,18 +274,7 @@ public class LogUnitServer extends AbstractServer {
 
         ReadResponse rr = new ReadResponse();
         try {
-            ILogData logData;
-            if(address < streamLog.getTrimMark()) {
-                logData = LogData.getTrimmed(address);
-            } else {
-                logData = dataCache.get(address, cacheable);
-            }
-
-            if (logData == null) {
-                rr.put(address, LogData.getEmpty(address));
-            } else {
-                rr.put(address, (LogData) logData);
-            }
+            readData(address, cacheable, rr);
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
         } catch (DataCorruptionException e) {
             log.error("Data corruption exception while reading address {}", address, e);
@@ -301,19 +290,7 @@ public class LogUnitServer extends AbstractServer {
         ReadResponse rr = new ReadResponse();
         try {
             for (Long address : msg.getPayload().getAddresses()) {
-                ILogData logData;
-
-                if(address < streamLog.getTrimMark()) {
-                    logData = LogData.getTrimmed(address);
-                } else {
-                    logData = dataCache.get(address, cacheable);
-                }
-
-                if (logData == null) {
-                    rr.put(address, LogData.getEmpty(address));
-                } else {
-                    rr.put(address, (LogData) logData);
-                }
+                readData(address, cacheable, rr);
             }
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
         } catch (DataCorruptionException e) {
@@ -452,6 +429,24 @@ public class LogUnitServer extends AbstractServer {
     @VisibleForTesting
     void prefixTrim(long trimAddress) {
         streamLog.prefixTrim(trimAddress);
+    }
+
+    private void readData(long address, boolean cacheable, ReadResponse rr) {
+
+        ILogData logData;
+
+        // For consistency, if the log has been trimmed, do not return cached data
+        if(address < streamLog.getTrimMark()) {
+            logData = LogData.getTrimmed(address);
+        } else {
+            logData = dataCache.get(address, cacheable);
+        }
+
+        if (logData == null) {
+            rr.put(address, LogData.getEmpty(address));
+        } else {
+            rr.put(address, (LogData) logData);
+        }
     }
 
     /**

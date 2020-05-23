@@ -69,9 +69,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             streamViewMap.put(streamID, stream);
             shadowMap.put(shadowID, shadowStream);
         }
-
-        //System.out.print("stream names " + streamViewMap);
-        //System.out.print("shadow names " + shadowMap);
     }
 
     /**
