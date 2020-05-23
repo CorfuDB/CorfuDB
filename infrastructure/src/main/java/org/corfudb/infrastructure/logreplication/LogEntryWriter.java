@@ -11,14 +11,13 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,7 +35,7 @@ public class LogEntryWriter {
     @Setter
     private int maxMsgQueSize = SinkManager.DEFAULT_READER_QUEUE_SIZE; //The max size of the msgQ.
 
-    private Set<UUID> streamUUIDs; //the set of streams that log entry writer will work on.
+    private HashMap<UUID, String> streamMap; //the set of streams that log entry writer will work on.
     HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the stream view.
     CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
@@ -48,10 +47,10 @@ public class LogEntryWriter {
         this.persistedWriterMetadata = persistedWriterMetadata;
 
         Set<String> streams = config.getStreamsToReplicate();
-        streamUUIDs = new HashSet<>();
+        streamMap = new HashMap<>();
 
         for (String s : streams) {
-            streamUUIDs.add(CorfuRuntime.getStreamID(s));
+            streamMap.put(CorfuRuntime.getStreamID(s), s);
         }
 
         srcGlobalSnapshot = Address.NON_ADDRESS;
@@ -59,7 +58,7 @@ public class LogEntryWriter {
 
         streamViewMap = new HashMap<>();
 
-        for (UUID uuid : streamUUIDs) {
+        for (UUID uuid : streamMap.keySet()) {
             streamViewMap.put(uuid, rt.getStreamsView().getUnsafe(uuid));
         }
     }
@@ -83,48 +82,47 @@ public class LogEntryWriter {
      * @param txMessage
      */
     void processMsg(LogReplicationEntry txMessage) {
-        boolean doRetry = true;
-        int numRetry = 0;
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getPayload()));
         Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
 
-        if (!streamUUIDs.containsAll(map.keySet())) {
-            log.error("txMessage contains noisy streams {}, expecting {}", map.keySet(), streamUUIDs);
+        if (!streamMap.keySet().containsAll(map.keySet())) {
+            log.error("txMessage contains noisy streams {}, expecting {}", map.keySet(), streamMap);
             throw new ReplicationWriterException("Wrong streams set");
         }
 
 
+        CorfuStoreMetadata.Timestamp timestamp = persistedWriterMetadata.getTimestamp();
+        long persistEpoch = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch);
+        long persistSnapStart = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart);
+        long persistSnapDone= persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapApplyDone);
+        long persistLogTS = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed);
+
         long epoch = txMessage.getMetadata().getSiteEpoch();
-        long msgTs = txMessage.getMetadata().timestamp;
-        long persistTs = Address.NON_ADDRESS;
+        long ts = txMessage.getMetadata().getSnapshotTimestamp();
+        long entryTS= txMessage.getMetadata().getTimestamp();
 
-        while (doRetry && numRetry++ < MAX_NUM_TX_RETRY) {
-            try {
-                rt.getObjectsView().TXBegin();
-                persistTs = persistedWriterMetadata.getLastProcessedLogTimestamp();
-                if (epoch == persistedWriterMetadata.getSiteEpoch() && msgTs > persistTs ) {
-                    for (UUID uuid : opaqueEntry.getEntries().keySet()) {
-                        for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
-                            TransactionalContext.getCurrentContext().logUpdate(uuid, smrEntry);
-                        }
-                    }
+        lastMsgTs = Math.max(persistLogTS, lastMsgTs);
 
-                    persistedWriterMetadata.setSiteEpoch(epoch);
-                    persistedWriterMetadata.setLastProcessedLogTimestamp(msgTs);
-                    log.trace("Will append msg {} as its timestamp is not later than the persisted one {}",
-                            txMessage.getMetadata(), persistTs);
-                } else {
-                    log.warn("Skip write this msg {} as its timestamp is later than the persisted one {}",
-                            txMessage.getMetadata(), persistTs);
-                }
-                doRetry = false;
-            } catch (TransactionAbortedException e) {
-                log.warn("Caught an exception {} , will retry", e);
-            } finally {
-                rt.getObjectsView().TXEnd();
+        if (epoch != persistEpoch || ts != persistSnapStart || ts != persistSnapDone ||
+                txMessage.getMetadata().getPreviousTimestamp() != persistLogTS) {
+            log.warn("Skip write this msg {} as its timestamp is later than the persisted one " +
+                    txMessage.getMetadata() +  " persisteEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart +
+                    " persistSnapDone " + persistSnapDone + " persistLogTs " + persistLogTS);
+            return;
+        }
+
+        TxBuilder txBuilder = persistedWriterMetadata.getTxBuilder();
+        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch, epoch);
+        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed, entryTS);
+
+        for (UUID uuid : opaqueEntry.getEntries().keySet()) {
+            for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
+                txBuilder.logUpdate(uuid, smrEntry);
             }
         }
-        lastMsgTs = Math.max(persistTs, msgTs);
+
+        txBuilder.commit(timestamp);
+        lastMsgTs = Math.max(entryTS, lastMsgTs);
     }
 
     /**

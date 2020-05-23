@@ -5,7 +5,6 @@ import io.netty.buffer.Unpooled;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -95,6 +94,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         preMsgTs = currentMsgTs;
         sequence++;
         log.debug("Generate TxMsg {}", txMsg.getMetadata());
+        //System.out.print("\nGenerate TxMsg {} " +  txMsg.getMetadata());
         return txMsg;
     }
 
