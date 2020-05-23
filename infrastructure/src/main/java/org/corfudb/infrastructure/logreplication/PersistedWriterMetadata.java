@@ -1,15 +1,18 @@
 package org.corfudb.infrastructure.logreplication;
 
-import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationWriterMetadata.LogReplicationMetadataKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationWriterMetadata.LogReplicationMetadataVal;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.serializer.Serializers;
-
 import java.util.UUID;
 
 /**
@@ -18,26 +21,95 @@ import java.util.UUID;
  */
 @Slf4j
 public class PersistedWriterMetadata {
+    private static final String namespace = "CORFU_SYSTEM";
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
-    private static final int NUM_RETRY_WRITE = 3;
-    String writerMetadataTableName;
+    String metadataTableName;
 
-    private CorfuTable<String, Long> writerMetaDataTable;
+    private CorfuStore corfuStore;
+
+    Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable;
 
     CorfuRuntime runtime;
 
     public PersistedWriterMetadata(CorfuRuntime rt, long siteEpoch, UUID primary, UUID dst) {
         this.runtime = rt;
-        writerMetadataTableName = getPersistedWriterMetadataTableName(primary, dst);
-        writerMetaDataTable = rt.getObjectsView()
-                .build()
-                .setStreamName(writerMetadataTableName)
-                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
-                })
-                .setSerializer(Serializers.PRIMITIVE)
-                .open();
-
+        this.corfuStore = new CorfuStore(runtime);
+        metadataTableName = getPersistedWriterMetadataTableName(primary, dst);
+        try {
+            metadataTable = this.corfuStore.openTable(namespace,
+                    metadataTableName,
+                    LogReplicationMetadataKey.class,
+                    LogReplicationMetadataVal.class,
+                    null,
+                    TableOptions.builder().build());
+        } catch (Exception e) {
+            log.error("Caught an exception while open the table");
+            throw new ReplicationWriterException(e);
+        }
         setupEpoch(siteEpoch);
+    }
+
+    CorfuStoreMetadata.Timestamp getTimestamp() {
+        return corfuStore.getTimestamp();
+    }
+
+    TxBuilder getTxBuilder() {
+        return corfuStore.tx(namespace);
+    }
+
+    long query(CorfuStoreMetadata.Timestamp timestamp, PersistedWriterMetadataType key) {
+        LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
+        CorfuRecord record;
+        if (timestamp == null) {
+            record = corfuStore.query(namespace).getRecord(metadataTableName, txKey);
+        } else {
+            record = corfuStore.query(namespace).getRecord(metadataTableName, timestamp, txKey);
+        }
+
+        LogReplicationMetadataVal metadataVal = null;
+        long val = -1;
+
+        if (record != null) {
+            metadataVal = (LogReplicationMetadataVal)record.getPayload();
+        }
+
+        if (metadataVal != null) {
+            val = metadataVal.getVal();
+        }
+
+        //System.out.print("\nquery timestamp " + timestamp + " record " + record + " metadataVal: " + metadataVal + " val " + val);
+        return val;
+    }
+
+    public long getSiteEpoch() {
+        return query(null, PersistedWriterMetadataType.SiteEpoch);
+    }
+
+    public long getLastSnapStartTimestamp() {
+        return query(null, PersistedWriterMetadataType.LastSnapStart);
+    }
+
+
+    public long getLastSnapTransferDoneTimestamp() {
+        return query(null, PersistedWriterMetadataType.LastSnapTransferDone);
+    }
+
+    public long getLastSrcBaseSnapshotTimestamp() {
+        return query(null, PersistedWriterMetadataType.LastSnapApplyDone);
+    }
+
+    public long getLastSnapSeqNum() {
+        return query(null, PersistedWriterMetadataType.LastSnapSeqNum);
+    }
+
+    public long getLastProcessedLogTimestamp() {
+        return query(null, PersistedWriterMetadataType.LastLogProcessed);
+    }
+
+    void appendUpdate(TxBuilder txBuilder, PersistedWriterMetadataType key, long val) {
+        LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
+        LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(val).build();
+        txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
     /**
@@ -45,159 +117,139 @@ public class PersistedWriterMetadata {
      * @param epoch
      */
     public void setupEpoch(long epoch) {
-        try {
-            runtime.getObjectsView().TXBegin();
-            if (writerMetaDataTable.isEmpty() || writerMetaDataTable.get(PersistedWriterMetadataType.SiteEpoch.getVal()) < epoch) {
-                writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), epoch);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), Address.NON_ADDRESS);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapTransferDone.getVal(), Address.NON_ADDRESS);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapApplyDone.getVal(), Address.NON_ADDRESS);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), Address.NON_ADDRESS);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), Address.NON_ADDRESS);
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+        long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
 
-                log.info("Init all persistedMetadata to {}", Address.NON_ADDRESS);
-            } else {
-                log.warn("Skip init persistedMetadata as its size is  {}", writerMetaDataTable.size());
-            }
-        } catch (TransactionAbortedException e) {
-            log.debug("Caught an exception {}", e.getStackTrace());
-            log.warn("Transaction is aborted with writerMetadataTable.size {} ", writerMetaDataTable.size());
-        } finally {
-            runtime.getObjectsView().TXEnd();
+        if (epoch <= persistEpoch) {
+            log.warn("Skip setupEpoch. the current epoch " + epoch + " is not larger than the persistEpoch " + persistEpoch);
+            return;
         }
-    }
 
-    public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {
-        return TABLE_PREFIX_NAME + primarySite.toString() + "-to-" + dst.toString();
-    }
+        TxBuilder txBuilder = corfuStore.tx(namespace);
 
+        for (PersistedWriterMetadataType key : PersistedWriterMetadataType.values()) {
+            long val = Address.NON_ADDRESS;
+            if (key == PersistedWriterMetadataType.SiteEpoch) {
+                val = epoch;
+            }
+            appendUpdate(txBuilder, key, val);
+         }
+
+        txBuilder.commit(timestamp);
+    }
 
     /**
-     * If the current ts is smaller than the persisted ts, ingore it.
-     * If the current ts is equal or bigger than the current ts, will
-     * bump the epic number, and also update the ts, cleanup the persistentQueue for prepare
-     * snapshot transfer.
+     * If the current epoch is not the same as the persisted epoch, ignore the operation.
+     * If the current ts is smaller than the persisted snapStart, it is an old operation,
+     * ignore it it.
+     * Otherwise, update the snapStart. The update of epoch just want to fence off any other metadata
+     * updates in another transaction.
      *
-     * @param ts
-     * @return
+     * @param epoch the current operation's epoch
+     * @param ts the snapshotStart snapshot time for the epoch.
+     * @return the persistent snapshotStart
      */
-    public long setSrcBaseSnapshotStart(long epoch, long ts) {
-        long persistedEpic = 0;
-        long persistedTs = 0;
-        int retry = 0;
-        boolean doRetry = true;
-        while (retry++ < NUM_RETRY_WRITE && doRetry) {
-            try {
-                runtime.getObjectsView().TXBegin();
-                persistedEpic = writerMetaDataTable.get(PersistedWriterMetadataType.SiteEpoch.getVal());
-                persistedTs = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
+    public void setSrcBaseSnapshotStart(long epoch, long ts) {
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+        long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
+        long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
 
-                if (epoch == persistedEpic && ts >= persistedTs) {
-                    writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), persistedEpic);
-                    writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), ts);
-                    writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), Address.NON_ADDRESS);
-                    //TODO:  clean persistentQue if no AR
-                    log.info("Update the snapshot epic {} lastSnapStart {} lastSnapSeqNum {} ",
-                            persistedTs, ts, Address.NON_ADDRESS);
-                } else {
-                    log.warn("the current snapStart is not larger than the persisted snapStart {}, skip the update ",
-                            ts, persistedTs);
-                }
-                doRetry = false;
-            } catch (TransactionAbortedException e) {
-                log.debug("Caught transaction aborted exception {}", e.getStackTrace());
-                log.warn("While trying to update lastSnapStart value to {}, aborted with retry {}", ts, retry);
-            } finally {
-                runtime.getObjectsView().TXEnd();
-            }
+        log.debug("Set snapshotStart epoch " + epoch + " ts " + ts +
+                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+
+        // It means the site config has changed, ingore the update operation.
+        if (epoch != persistEpoch || ts <= persistEpoch) {
+            log.warn("The metadata is older than the presisted one. Set snapshotStart epoch " + epoch + " ts " + ts +
+                    " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+            return;
         }
 
-        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
+        TxBuilder txBuilder = corfuStore.tx(namespace);
+
+        //Update the siteEpoch to fence all other transactions that update the metadata at the same time
+        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteEpoch, epoch);
+
+        //Setup the LastSnapStart
+        appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapStart, ts);
+
+        //Setup LastSnapSeqNum
+        appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapSeqNum, Address.NON_ADDRESS);
+        txBuilder.commit(timestamp);
+
+        log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
+                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+
+        return;
     }
 
-    public void setSrcBaseSnapshotStart(long ts) {
-        writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), ts);
-    }
-
-    /**
-     * If the persistent data show it is my epic and my snapshot value, will update the
-     * snapshot timestamp and the lastlog processed timestamp
-     */
-    public void setSrcBaseSnapshotDone(LogReplicationEntry entry) {
-        try {
-            runtime.getObjectsView().TXBegin();
-            long epoch = writerMetaDataTable.get(PersistedWriterMetadataType.SiteEpoch.getVal());
-            long ts = writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
-            if (epoch == entry.getMetadata().getSiteEpoch() && ts == entry.getMetadata().getSnapshotTimestamp()) {
-                writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), epoch);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapStart.getVal(), ts);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapTransferDone.getVal(), ts);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapApplyDone.getVal(), ts);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), ts);
-                writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), Address.NON_ADDRESS);
-                log.info("update lastSnapTransferDone {} ", ts);
-            } else {
-                log.warn("skip update lastSnapTransferDone as Epic curent {} != persist {} or BaseSnapStart: current {} != persist {}",
-                        entry.getMetadata().getSiteEpoch(), epoch, entry.getMetadata().getSnapshotTimestamp(), ts);
-            }
-        } catch (TransactionAbortedException e) {
-            log.warn("Transaction is aborted. The snapshot has been updated by someone else");
-        } finally {
-            runtime.getObjectsView().TXEnd();
-        }
-    }
-
-    public long getLastSnapStartTimestamp() {
-        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapStart.getVal());
-    }
-
-    public long getLastSrcBaseSnapshotTimestamp() {
-        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapApplyDone.getVal());
-    }
-
-    /**
-     * This call should be done in a transaction while applying a log entry message.
-     * Only update the lastLogProcesed timestamp
-     * @param ts
-     */
-    public void setLastProcessedLogTimestamp(long ts) {
-        writerMetaDataTable.put(PersistedWriterMetadataType.LastLogProcessed.getVal(), ts);
-    }
-
-    public long getLastProcessedLogTimestamp() {
-        return writerMetaDataTable.get(PersistedWriterMetadataType.LastLogProcessed.getVal());
-    }
 
     /**
      * This call should be done in a transaction after a transfer done and before apply the snapshot.
      * @param ts
      */
-    public void setLastSnapTransferDoneTimestamp(long ts) {
-        writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapTransferDone.getVal(), ts);
+    public void setLastSnapTransferDoneTimestamp(long epoch, long ts) {
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+        long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
+        long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
+
+        log.debug("setLastSnapTransferDone snapshotStart epoch " + epoch + " ts " + ts +
+                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+
+        // It means the site config has changed, ingore the update operation.
+        if (epoch != persistEpoch || ts <= persistEpoch) {
+            log.warn("The metadata is older than the presisted one. Set snapshotStart epoch " + epoch + " ts " + ts +
+                    " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+            return;
+        }
+
+        TxBuilder txBuilder = corfuStore.tx(namespace);
+
+        //Update the siteEpoch to fence all other transactions that update the metadata at the same time
+        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteEpoch, epoch);
+
+        //Setup the LastSnapStart
+        appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapTransferDone, ts);
+
+        txBuilder.commit(timestamp);
+
+        log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
+                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        return;
     }
 
-    public long getLastSnapTransferDoneTimestamp() {
-        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapTransferDone.getVal());
+    public void setSrcBaseSnapshotDone(LogReplicationEntry entry) {
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+        long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
+        long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
+        long persistSnapTranferDone = query(timestamp, PersistedWriterMetadataType.LastSnapTransferDone);
+        long epoch = entry.getMetadata().getSiteEpoch();
+        long ts = entry.getMetadata().getSnapshotTimestamp();
+
+        if (epoch != persistEpoch || ts != persistSnapStart || ts != persistSnapTranferDone) {
+            return;
+        }
+
+        TxBuilder txBuilder = corfuStore.tx(namespace);
+
+        //Update the siteEpoch to fence all other transactions that update the metadata at the same time
+        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteEpoch, epoch);
+
+        appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapApplyDone, ts);
+        appendUpdate(txBuilder, PersistedWriterMetadataType.LastLogProcessed, ts);
+
+        //may not need
+        appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapSeqNum, Address.NON_ADDRESS);
+
+        txBuilder.commit(timestamp);
+
+        log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
+                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+
+        return;
     }
 
-    /**
-     * This should be called in a transaction context while applying a snapshot replication entry.
-     * @param ts
-     */
-    public void setLastSnapSeqNum(long ts) {
-        writerMetaDataTable.put(PersistedWriterMetadataType.LastSnapSeqNum.getVal(), ts);
-    }
-
-    public long getLastSnapSeqNum() {
-        return writerMetaDataTable.get(PersistedWriterMetadataType.LastSnapSeqNum.getVal());
-    }
-
-    public void setSiteEpoch(long ts) {
-        writerMetaDataTable.put(PersistedWriterMetadataType.SiteEpoch.getVal(), ts);
-    }
-
-    public long getSiteEpoch() {
-        return writerMetaDataTable.get(PersistedWriterMetadataType.SiteEpoch.getVal());
+    public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {
+        return TABLE_PREFIX_NAME + primarySite.toString() + "-to-" + dst.toString();
     }
 
     public enum PersistedWriterMetadataType {

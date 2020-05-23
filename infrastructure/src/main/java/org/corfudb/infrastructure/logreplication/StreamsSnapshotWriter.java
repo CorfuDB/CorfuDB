@@ -9,8 +9,8 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.util.serializer.Serializers;
@@ -31,7 +31,6 @@ import java.util.stream.Stream;
 @Slf4j
 @NotThreadSafe
 public class StreamsSnapshotWriter implements SnapshotWriter {
-    private final static int MAX_NUM_TX_RETRY = 4;
     final static String SHADOW_STREAM_NAME_SUFFIX = "_shadow";
     HashMap<UUID, String> streamViewMap; // It contains all the streams registered for write to.
     HashMap<UUID, String> shadowMap;
@@ -69,44 +68,41 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
     }
 
-
-    void clearTable(long siteEpoch, UUID streamID) {
-        boolean doRetry = true;
-        int numRetry = 0;
-        while (doRetry && numRetry++ < MAX_NUM_TX_RETRY) {
-            try {
-                rt.getObjectsView().TXBegin();
-
-                if (siteEpoch == persistedWriterMetadata.getSiteEpoch() &&
-                        srcGlobalSnapshot == persistedWriterMetadata.getLastSnapStartTimestamp()) {
-                    SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-                    TransactionalContext.getCurrentContext().logUpdate(streamID, entry);
-                    persistedWriterMetadata.setSiteEpoch(siteEpoch);
-                    persistedWriterMetadata.setSrcBaseSnapshotStart(srcGlobalSnapshot);
-                    //System.out.print("\nClear table " + streamID );
-                }
-
-                rt.getObjectsView().TXEnd();
-                log.trace("Clear stream {} ", streamID);
-                doRetry = false;
-            } catch (TransactionAbortedException e) {
-                log.warn("Caught an exception {} will retry {}", e, numRetry);
-            }
-        }
-    }
-
     /**
      * clear all tables registered
      * TODO: replace with stream API
      */
     void clearTables() {
+        CorfuStoreMetadata.Timestamp timestamp = persistedWriterMetadata.getTimestamp();
+        long persistEpoch = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch);
+        long persistSnapStart = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart);
+        long persitSeqNum = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
+
+        //for transfer phase start
+        if (siteEpoch != persistEpoch || srcGlobalSnapshot != persistSnapStart ||
+                (persitSeqNum + 1)!= recvSeq) {
+            log.warn("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + recvSeq +
+                    " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
+                    " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
+            return;
+        }
+
+
+        TxBuilder txBuilder = persistedWriterMetadata.getTxBuilder();
+        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch, siteEpoch);
+
+
         for (UUID streamID : streamViewMap.keySet()) {
             UUID usedStreamID = streamID;
             if (phase == Phase.TransferPhase) {
                 usedStreamID = uuidMap.get(streamID);
             }
-            clearTable(siteEpoch, usedStreamID);
+
+            SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+            txBuilder.logUpdate(usedStreamID, entry);
         }
+
+        txBuilder.commit(timestamp);
     }
 
     /**
@@ -145,44 +141,33 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param dstUUID
      */
     void processOpaqueEntry(List<SMREntry> smrEntries, Long currentSeqNum, UUID dstUUID) {
-        int numRetry = 0;
-        boolean doRetry = true;
-        long persistentSeqNum;
+        CorfuStoreMetadata.Timestamp timestamp = persistedWriterMetadata.getTimestamp();
+        long persistEpoch = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch);
+        long persistSnapStart = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart);
+        long persitSeqNum = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
 
-        while (doRetry && numRetry++ < MAX_NUM_TX_RETRY){
-            try {
-                rt.getObjectsView().TXBegin();
-                // read persistentMetadata's snapshot seq number
-                persistentSeqNum = persistedWriterMetadata.getLastSnapSeqNum();
-
-                if (siteEpoch == persistedWriterMetadata.getSiteEpoch() &&
-                        srcGlobalSnapshot == persistedWriterMetadata.getLastSnapStartTimestamp() &&
-                        currentSeqNum == (persistentSeqNum + 1)) {
-                    for (SMREntry smrEntry : smrEntries) {
-                        TransactionalContext.getCurrentContext().logUpdate(dstUUID, smrEntry);
-                    }
-
-                    persistedWriterMetadata.setSiteEpoch(siteEpoch);
-                    persistedWriterMetadata.setSrcBaseSnapshotStart(srcGlobalSnapshot);
-                    persistedWriterMetadata.setLastSnapSeqNum(currentSeqNum);
-                    log.debug("Process the entries {}  and set sequence number {} ", smrEntries, currentSeqNum);
-                } else {
-                    log.warn("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
-                            " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
-                            " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
-
-                    //System.out.print("\nSkip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
-                    //        " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
-                    //        " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
-                }
-                // We have succeed update successful, don't need retry any more.
-                doRetry = false;
-            } catch (TransactionAbortedException e) {
-                log.warn("Caught an exception {}, will retry {}.", e, numRetry);
-             } finally {
-                rt.getObjectsView().TXEnd();
-            }
+        if (siteEpoch != persistEpoch || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
+            log.warn("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
+                    " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
+                    " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
+            return;
         }
+
+        TxBuilder txBuilder = persistedWriterMetadata.getTxBuilder();
+        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch, siteEpoch);
+        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart, srcGlobalSnapshot);
+        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum, currentSeqNum);
+        for (SMREntry smrEntry : smrEntries) {
+            txBuilder.logUpdate(dstUUID, smrEntry);
+        }
+
+        try {
+            txBuilder.commit(timestamp);
+        } catch (Exception e) {
+            log.warn("Caught an exception ", e);
+            throw e;
+        }
+        log.debug("Process the entries {}  and set sequence number {} ", smrEntries, currentSeqNum);
     }
 
     @Override
@@ -265,22 +250,15 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         //verify that the snapshot Apply hasn't started yet and set it as started and set the seqNumber
         long ts = entry.getMetadata().getSnapshotTimestamp();
         long seqNum = 0;
-        try {
-            rt.getObjectsView().TXBegin();
-            if (persistedWriterMetadata.getSiteEpoch() == entry.getMetadata().getSiteEpoch() &&
-                    persistedWriterMetadata.getLastSnapStartTimestamp() == ts &&
-                    persistedWriterMetadata.getLastSnapTransferDoneTimestamp() <= ts) {
-                persistedWriterMetadata.setSiteEpoch(entry.getMetadata().getSiteEpoch());
-                persistedWriterMetadata.setSrcBaseSnapshotStart(ts);
-                persistedWriterMetadata.setLastSnapTransferDoneTimestamp(ts);
-                seqNum = persistedWriterMetadata.getLastSnapSeqNum() + 1;
-            }
-        } catch (Exception e) {
-            log.warn("caught an exception ", e);
-        } finally {
-            rt.getObjectsView().TXEnd();
-        }
+        siteEpoch = entry.getMetadata().getSiteEpoch();
 
+        //update the metadata
+        persistedWriterMetadata.setLastSnapTransferDoneTimestamp(siteEpoch, ts);
+
+        //get the number of entries to apply
+        seqNum = 1 + persistedWriterMetadata.query(null, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
+
+        // There is no snapshot data to apply
         if (seqNum == 0)
             return;
 
