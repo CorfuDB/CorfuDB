@@ -7,12 +7,12 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.logreplication.send.DefaultReadProcessor;
-import org.corfudb.logreplication.send.LogEntryReader;
+import org.corfudb.logreplication.send.logreader.DefaultReadProcessor;
+import org.corfudb.logreplication.send.logreader.LogEntryReader;
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
-import org.corfudb.logreplication.send.SnapshotReader;
+import org.corfudb.logreplication.send.logreader.SnapshotReader;
 import org.corfudb.logreplication.send.SnapshotSender;
-import org.corfudb.logreplication.send.StreamsSnapshotReader;
+import org.corfudb.logreplication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
@@ -415,13 +415,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         switch(readerImpl) {
             case EMPTY:
-                // Empty implementations of reader and listener - used for testing transitions
+                // Empty implementations of logreader and listener - used for testing transitions
                 snapshotReader = new EmptySnapshotReader();
                 dataSender = new EmptyDataSender();
                 break;
             case TEST:
-                // Dummy implementations of reader and listener for testing
-                // The reader queries the log for the config provided (stream name, number of entries)
+                // Dummy implementations of logreader and listener for testing
+                // The logreader queries the log for the config provided (stream name, number of entries)
                 // The listener inserts what it receives into a queue
                 TestReaderConfiguration testConfig = TestReaderConfiguration.builder()
                         .endpoint(getDefaultEndpoint())
