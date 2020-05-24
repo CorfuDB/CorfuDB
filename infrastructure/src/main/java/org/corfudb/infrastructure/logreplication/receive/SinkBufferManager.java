@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication;
+package org.corfudb.infrastructure.logreplication.receive;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -21,7 +21,7 @@ import java.util.HashMap;
 public class SinkBufferManager {
     // It is implemented as a hashmap.
     HashMap<Long, LogReplicationEntry> buffer;
-    SinkManager sinkManager;
+    LogReplicationSinkManager sinkManager;
     MessageType type;
     int size;
 
@@ -41,7 +41,7 @@ public class SinkBufferManager {
     // entry has been processed.
     long nextKey;
 
-    public SinkBufferManager(MessageType type, int ackCycleTime, int ackCycleCnt, int size, long nextKey, SinkManager sinkManager) {
+    public SinkBufferManager(MessageType type, int ackCycleTime, int ackCycleCnt, int size, long nextKey, LogReplicationSinkManager sinkManager) {
         this.type = type;
         this.ackCycleTime = ackCycleTime;
         this.ackCycleCnt = ackCycleCnt;

@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
+import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -205,6 +206,11 @@ public class ServerContext implements AutoCloseable {
     public int getManagementServerThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--management-server-threads");
         return threadCount == null ? 4 : threadCount;
+    }
+
+    public LogReplicationTransportType getTransportType() {
+        return getServerConfig().get("--custom-transport") != null ? LogReplicationTransportType.CUSTOM :
+                LogReplicationTransportType.NETTY;
     }
 
     /**

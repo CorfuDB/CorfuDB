@@ -1,9 +1,10 @@
-package org.corfudb.infrastructure.logreplication;
+package org.corfudb.infrastructure.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -33,7 +34,7 @@ public class LogEntryWriter {
     private final static int MAX_NUM_TX_RETRY = 3;
 
     @Setter
-    private int maxMsgQueSize = SinkManager.DEFAULT_READER_QUEUE_SIZE; //The max size of the msgQ.
+    private int maxMsgQueSize = LogReplicationSinkManager.DEFAULT_READER_QUEUE_SIZE; //The max size of the msgQ.
 
     private HashMap<UUID, String> streamMap; //the set of streams that log entry writer will work on.
     HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the stream view.
@@ -126,7 +127,7 @@ public class LogEntryWriter {
     }
 
     /**
-     * Apply message generate by log entry reader and will apply at the destination corfu cluster.
+     * Apply message generate by log entry logreader and will apply at the destination corfu cluster.
      * @param msg
      * @return long: the last processed message timestamp if apply processing any messages.
      * @throws ReplicationWriterException

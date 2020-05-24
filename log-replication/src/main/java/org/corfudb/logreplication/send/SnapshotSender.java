@@ -9,6 +9,9 @@ import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
+import org.corfudb.logreplication.send.logreader.ReadProcessor;
+import org.corfudb.logreplication.send.logreader.SnapshotReadMessage;
+import org.corfudb.logreplication.send.logreader.SnapshotReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -249,7 +252,7 @@ public class SnapshotSender {
         // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data
         baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
 
-        // Starting a new snapshot sync, reset the reader's snapshot timestamp
+        // Starting a new snapshot sync, reset the logreader's snapshot timestamp
         snapshotReader.reset(baseSnapshotTimestamp);
 
         stopSnapshotSync = false;

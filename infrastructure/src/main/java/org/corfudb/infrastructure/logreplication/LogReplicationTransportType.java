@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.logreplication;
 
 /**
  * Represents the type of transport between Log Replication Servers.

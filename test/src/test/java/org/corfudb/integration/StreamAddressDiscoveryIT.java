@@ -1216,7 +1216,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     }
 
     /**
-     * This test is similar to the previous, but enforces the hole from a reader, as reader hole fill
+     * This test is similar to the previous, but enforces the hole from a logreader, as logreader hole fill
      * does not contain stream information to build address map.
      * @throws Exception
      */
@@ -1266,7 +1266,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             UUID checkpointId = CorfuRuntime.getCheckpointStreamIdFromId(streamID);
 
             if (readerHole) {
-                // Generate hole from a reader
+                // Generate hole from a logreader
                 runtime.getSequencerView().next(streamID).getToken();
                 assertThat(mA.size()).isEqualTo(0);
                 extraEntry = 1;

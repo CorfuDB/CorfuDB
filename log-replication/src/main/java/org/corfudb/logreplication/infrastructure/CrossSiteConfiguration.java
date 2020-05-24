@@ -5,14 +5,13 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.apache.maven.model.Site;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.AphInfoMsg;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteMsg;
 
-import org.corfudb.infrastructure.LogReplicationTransportType;
-import org.corfudb.logreplication.runtime.LogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
+import org.corfudb.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 
@@ -76,10 +75,10 @@ public class CrossSiteConfiguration {
 //            // TODO: [TEMP] Reading Site Info from a config file ---until this is pulled from an external system
 //            // providing Site Info (Site Manager)--- This will be removed
 //            File configFile = new File(config_file);
-//            FileReader reader = new FileReader(configFile);
+//            FileReader logreader = new FileReader(configFile);
 //
 //            Properties props = new Properties();
-//            props.load(reader);
+//            props.load(logreader);
 //
 //            Set<String> names = props.stringPropertyNames();
 //
@@ -116,7 +115,7 @@ public class CrossSiteConfiguration {
 //                standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);
 //            }
 //
-//            reader.close();
+//            logreader.close();
 //            log.info("Primary Site: {}; Standby Site(s): {}", primarySite, standbySites);
 //        } catch (Exception e) {
 //            log.warn("Caught an exception while reading the config file: {}", e);
@@ -211,7 +210,7 @@ public class CrossSiteConfiguration {
                         .remoteLogReplicationServerEndpoint(nodeInfo.getEndpoint())
                         .transport(transport)
                         .build();
-                LogReplicationRuntime replicationRuntime = new LogReplicationRuntime(parameters);
+                CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters);
                 replicationRuntime.connect();
                 nodeInfo.setRuntime(replicationRuntime);
             }
@@ -267,7 +266,7 @@ public class CrossSiteConfiguration {
 
         boolean leader;
 
-        LogReplicationRuntime runtime;
+        CorfuLogReplicationRuntime runtime;
 
         NodeInfo(String ipAddress, String portNum, GlobalManagerStatus roleType, String corfuPortNum) {
             this.leader = false;
