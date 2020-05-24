@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication;
+package org.corfudb.infrastructure.logreplication.receive;
 
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 

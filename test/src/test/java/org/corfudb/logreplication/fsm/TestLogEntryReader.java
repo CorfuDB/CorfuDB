@@ -1,7 +1,7 @@
 package org.corfudb.logreplication.fsm;
 
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.logreplication.send.LogEntryReader;
+import org.corfudb.logreplication.send.logreader.LogEntryReader;
 
 import java.util.UUID;
 

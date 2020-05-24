@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.send;
+package org.corfudb.logreplication.send.logreader;
 
 
 import lombok.NonNull;
@@ -6,9 +6,9 @@ import lombok.NonNull;
 import java.util.UUID;
 
 /**
- * An Interface for snapshot reader.
+ * An Interface for snapshot logreader.
  *
- * A snapshot reader provides the functionality for reading data from Corfu.
+ * A snapshot logreader provides the functionality for reading data from Corfu.
  */
 public interface SnapshotReader {
 
@@ -23,7 +23,7 @@ public interface SnapshotReader {
     SnapshotReadMessage read(UUID snapshotRequestId);
 
     /**
-     * Reset reader in between snapshot syncs.
+     * Reset logreader in between snapshot syncs.
      *
      * @param snapshotTimestamp new snapshot timestamp.
      */

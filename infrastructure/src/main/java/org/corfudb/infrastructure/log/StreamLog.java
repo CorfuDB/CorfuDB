@@ -141,7 +141,7 @@ public interface StreamLog {
             } else if (entry.getData() != null && currentEntry.getData() != null &&
                     currentEntry.getData().length == entry.getData().length) {
                 // If the entry is already present and it is not a hole, the write
-                // might have been propagated by a fast reader from part of the chain.
+                // might have been propagated by a fast logreader from part of the chain.
                 // Compare based on data length. Based on this info client will do an actual
                 // verification on the data
                 cause = OverwriteCause.SAME_DATA;
