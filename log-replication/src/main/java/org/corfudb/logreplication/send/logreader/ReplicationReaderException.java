@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.send;
+package org.corfudb.logreplication.send.logreader;
 
 public class ReplicationReaderException extends RuntimeException {
     public ReplicationReaderException() { }
