@@ -31,7 +31,6 @@ public abstract class CorfuReplicationSiteManagerAdapter {
      * @return
      */
     synchronized void updateSiteConfig(SiteConfigurationMsg newSiteConfigMsg) {
-            //System.out.print("\nupdate the site change msg " + newSiteConfigMsg);
             if (newSiteConfigMsg.getEpoch() > siteConfigMsg.getEpoch()) {
                 siteConfigMsg = newSiteConfigMsg;
                 siteConfig = new CrossSiteConfiguration(siteConfigMsg);

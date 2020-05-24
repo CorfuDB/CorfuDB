@@ -1,9 +1,10 @@
-package org.corfudb.logreplication.send;
+package org.corfudb.logreplication.send.logreader;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.logreplication.send.IllegalTransactionStreamsException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -34,7 +35,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private TxOpaqueStream txStream;
    
 
-    // the base snapshot the log entry reader starts to poll transaction logs
+    // the base snapshot the log entry logreader starts to poll transaction logs
     private long globalBaseSnapshot;
     // timestamp of the transaction log that is the previous message
     private long preMsgTs;

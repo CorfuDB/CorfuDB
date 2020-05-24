@@ -179,7 +179,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
 
     /**
      * This test checks if optimistic transactions are aborted in the scenario of slow writers and
-     * fast readers accessing the same stream, i.e., a reader accesses the address already given to
+     * fast readers accessing the same stream, i.e., a logreader accesses the address already given to
      * the slow writer before this one gets to actually write into it. This causes the address to
      * be hole filled and therefore the transaction is aborted after several tries.
      * The cause of abort of this transaction is reported as OVERWRITE given that the position
@@ -276,7 +276,7 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
     /**
      * This test checks if optimistic transactions succeed whenever the same data is already present
      * in the given address. This might happen for the case of chain replication and partial
-     * writes of a slow writer. A fast reader might propagate its write through the chain, and when
+     * writes of a slow writer. A fast logreader might propagate its write through the chain, and when
      * attempting to complete the writes find the data already there.
      */
     @Test

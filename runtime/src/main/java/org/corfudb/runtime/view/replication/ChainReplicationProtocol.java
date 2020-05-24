@@ -87,7 +87,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      * are encountered.
      * - If the waitForWrite flag is set to true, when an empty address is encountered,
      * it waits for one hole to be filled. All the rest empty addresses within the list
-     * are hole filled directly and the reader does not wait.
+     * are hole filled directly and the logreader does not wait.
      * - In case the flag is set to false, none of the reads wait for write completion and
      * the empty addresses are hole filled right away.
      *

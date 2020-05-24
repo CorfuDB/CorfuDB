@@ -21,9 +21,9 @@ public abstract class IClientChannelAdapter {
     private final String host;
 
     @Getter
-    private final CustomClientRouter router;
+    private final LogReplicationClientRouter router;
 
-    public IClientChannelAdapter(int port, String host, @NonNull CustomClientRouter router) {
+    public IClientChannelAdapter(int port, String host, @NonNull LogReplicationClientRouter router) {
         this.port = port;
         this.host = host;
         this.router = router;

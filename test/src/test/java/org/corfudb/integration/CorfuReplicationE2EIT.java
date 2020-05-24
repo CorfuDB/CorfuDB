@@ -97,15 +97,15 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             assertThat(mapAStandby.size()).isEqualTo(0);
 
             // Start Log Replication Server on Active Site
-             activeReplicationServer = runReplicationServer(activeReplicationServerPort, useNetty);
+            activeReplicationServer = runReplicationServer(activeReplicationServerPort, useNetty);
 //            executorService.submit(() -> {
-//                CorfuReplicationServer.main(new String[]{"--custom-transport", String.valueOf(activeReplicationServerPort)});
+//                CorfuInterClusterReplicationServer.main(new String[]{"--custom-transport", String.valueOf(activeReplicationServerPort)});
 //            });
 
             // Start Log Replication Server on Standby Site
             standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, useNetty);
 //            executorService.submit(() -> {
-//                CorfuReplicationServer.main(new String[]{"--custom-transport", String.valueOf(standbyReplicationServerPort)});
+//                CorfuInterClusterReplicationServer.main(new String[]{"--custom-transport", String.valueOf(standbyReplicationServerPort)});
 //            });
 
             // Wait until data is fully replicated

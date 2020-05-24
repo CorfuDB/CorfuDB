@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.logreplication.DataControl;
-import org.corfudb.logreplication.SourceManager;
+import org.corfudb.logreplication.LogReplicationSourceManager;
 
 import static org.assertj.core.api.Assertions.fail;
 
@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.fail;
 public class DefaultDataControl implements DataControl {
 
     @Setter
-    private SourceManager sourceManager;
+    private LogReplicationSourceManager sourceManager;
 
     private int controlCallsCount = 0;
 

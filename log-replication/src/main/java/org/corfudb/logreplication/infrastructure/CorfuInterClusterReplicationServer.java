@@ -5,7 +5,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.LogReplicationTransportType;
+import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
@@ -23,7 +23,7 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
  * A discovery mechanism will enable a site as Source (Sender) and another as Sink (Receiver).
  */
 @Slf4j
-public class CorfuReplicationServer implements Runnable {
+public class CorfuInterClusterReplicationServer implements Runnable {
 
     /**
      * This string defines the command line arguments,
@@ -165,7 +165,7 @@ public class CorfuReplicationServer implements Runnable {
                     + "              Show version\n";
 
     // Active Corfu Server Node.
-    private volatile CorfuReplicationServerNode activeServer;
+    private volatile CorfuInterClusterReplicationServerNode activeServer;
 
     // Flag if set to true - causes the Corfu Server to shutdown.
     private volatile boolean shutdownServer = false;
@@ -176,27 +176,25 @@ public class CorfuReplicationServer implements Runnable {
     private static final int EXIT_ERROR_CODE = 100;
 
     @Getter
-    private CorfuReplicationSiteManagerAdapter siteManagerAdapter = null;
+    private CorfuReplicationSiteManagerAdapter siteManagerAdapter;
 
     @Getter
     CorfuReplicationDiscoveryService replicationDiscoveryService;
 
-    final ServerContext serverContext = null;
     String[] args;
-
 
     public static void main(String[] args) {
         CorfuReplicationSiteManagerAdapter siteManagerAdapter = new DefaultSiteManager();
-        CorfuReplicationServer corfuReplicationServer = new CorfuReplicationServer(args, siteManagerAdapter);
+        CorfuInterClusterReplicationServer corfuReplicationServer = new CorfuInterClusterReplicationServer(args, siteManagerAdapter);
         corfuReplicationServer.run();
     }
 
-    public CorfuReplicationServer(String[] inputs) {
+    public CorfuInterClusterReplicationServer(String[] inputs) {
         this.args = inputs;
         this.siteManagerAdapter = new DefaultSiteManager();
     }
 
-    CorfuReplicationServer(String[] inputs, CorfuReplicationSiteManagerAdapter adapter) {
+    CorfuInterClusterReplicationServer(String[] inputs, CorfuReplicationSiteManagerAdapter adapter) {
         this.args = inputs;
         this.siteManagerAdapter = adapter;
     }
@@ -249,17 +247,11 @@ public class CorfuReplicationServer implements Runnable {
                 // Start LogReplicationDiscovery Service, responsible for
                 // acquiring lock, retrieving Site Manager Info and processing this info
                 // so this node is initialized as Source (sender) or Sink (receiver)
-                String endpoint = NodeLocator.parseString(serverContext.getLocalEndpoint()).toEndpointUrl();
-                activeServer = new CorfuReplicationServerNode(serverContext);
+                activeServer = new CorfuInterClusterReplicationServerNode(serverContext);
 
-                LogReplicationTransportType transport = serverContext.getServerConfig()
-                        .get("--custom-transport") != null ? LogReplicationTransportType.CUSTOM :
-                        LogReplicationTransportType.NETTY;
-
-                replicationDiscoveryService = new CorfuReplicationDiscoveryService(endpoint, activeServer, siteManagerAdapter, transport);
+                replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, activeServer, siteManagerAdapter);
                 Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService);
                 replicationDiscoveryThread.start();
-
 
                 // Start Corfu Replication Server Node
                 activeServer.startAndListen();
@@ -361,8 +353,8 @@ public class CorfuReplicationServer implements Runnable {
 
 
     static class CleanupRunnable implements Runnable {
-            CorfuReplicationServer server;
-            CleanupRunnable(CorfuReplicationServer server) {
+            CorfuInterClusterReplicationServer server;
+            CleanupRunnable(CorfuInterClusterReplicationServer server) {
                 this.server = server;
             }
             @Override

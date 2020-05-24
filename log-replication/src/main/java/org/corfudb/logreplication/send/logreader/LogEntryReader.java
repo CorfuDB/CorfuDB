@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.send;
+package org.corfudb.logreplication.send.logreader;
 
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
@@ -7,7 +7,7 @@ import java.util.UUID;
 /**
  * An Interface for Log Entry Reader
  *
- * A log entry reader provides the functionality for reading incremental updates from Corfu.
+ * A log entry logreader provides the functionality for reading incremental updates from Corfu.
  */
 public interface LogEntryReader {
 

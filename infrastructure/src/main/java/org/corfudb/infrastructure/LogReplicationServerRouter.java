@@ -31,7 +31,7 @@ import java.util.Optional;
  * Created by annym on 14/5/20.
  */
 @Slf4j
-public class CustomServerRouter implements IServerRouter {
+public class LogReplicationServerRouter implements IServerRouter {
 
     // TODO(Anny): perhaps move this to LogReplicationParameters and accept in command line.
     public static String TRANSPORT_CONFIG_FILE_PATH = "/config/corfu/corfu_transport_config.properties";
@@ -51,7 +51,7 @@ public class CustomServerRouter implements IServerRouter {
     @Setter
     volatile long serverEpoch;
 
-    /** The {@link AbstractServer}s this {@link CustomServerRouter} routes messages for. */
+    /** The {@link AbstractServer}s this {@link LogReplicationServerRouter} routes messages for. */
     final List<AbstractServer> servers;
 
     /** Construct a new {@link NettyServerRouter}.
@@ -59,7 +59,7 @@ public class CustomServerRouter implements IServerRouter {
      * @param servers   A list of {@link AbstractServer}s this router will route
      *                  messages for.
      */
-    public CustomServerRouter(List<AbstractServer> servers, int port) {
+    public LogReplicationServerRouter(List<AbstractServer> servers, int port) {
         this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
         this.servers = ImmutableList.copyOf(servers);
         this.handlerMap = new EnumMap<>(CorfuMsgType.class);
@@ -75,7 +75,7 @@ public class CustomServerRouter implements IServerRouter {
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getTransportServerClassCanonicalName(), true, child);
-            return (IServerChannelAdapter) adapter.getDeclaredConstructor(Integer.class, CustomServerRouter.class).newInstance(port, this);
+            return (IServerChannelAdapter) adapter.getDeclaredConstructor(Integer.class, LogReplicationServerRouter.class).newInstance(port, this);
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);

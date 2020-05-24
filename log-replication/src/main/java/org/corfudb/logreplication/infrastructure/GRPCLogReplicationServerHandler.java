@@ -2,7 +2,7 @@ package org.corfudb.logreplication.infrastructure;
 
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.CustomServerRouter;
+import org.corfudb.infrastructure.LogReplicationServerRouter;
 import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.LogReplicationChannelGrpc;
@@ -23,7 +23,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     /*
      * Corfu Message Router (internal to Corfu)
      */
-    CustomServerRouter router;
+    LogReplicationServerRouter router;
 
     /*
      * Map of Request ID to Stream Observer to send responses back to the client. Used for blocking calls.
@@ -39,9 +39,10 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
     // TODO(Anny): to avoid unpacking, perhaps store requestId and retrieve the lowest one?
     Map<Messages.Uuid, StreamObserver<CorfuMessage>> replicationStreamObserverMap;
 
-    public GRPCLogReplicationServerHandler(CustomServerRouter router) {
+    public GRPCLogReplicationServerHandler(LogReplicationServerRouter router) {
         this.router = router;
         this.streamObserverMap = new ConcurrentHashMap<>();
+        this.replicationStreamObserverMap = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -74,7 +75,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                     replicationStreamObserverMap.putIfAbsent(protoEntry.getMetadata().getSyncRequestId(), responseObserver);
                 } catch (Exception e) {
                     log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
-                            replicationCorfuMessage.getRequestID());
+                            replicationCorfuMessage.getRequestID(), e);
                 }
             }
 

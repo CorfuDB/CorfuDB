@@ -3,7 +3,7 @@ package org.corfudb.logreplication.infrastructure;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.CustomServerRouter;
+import org.corfudb.infrastructure.LogReplicationServerRouter;
 import org.corfudb.infrastructure.IServerChannelAdapter;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -30,7 +30,7 @@ public class GRPCLogReplicationServerChannel extends IServerChannelAdapter {
 
     private CompletableFuture<Boolean> serverCompletable;
 
-    public GRPCLogReplicationServerChannel(Integer port, CustomServerRouter adapter) {
+    public GRPCLogReplicationServerChannel(Integer port, LogReplicationServerRouter adapter) {
         super(port, adapter);
         this.service = new GRPCLogReplicationServerHandler(adapter);
         this.server = ServerBuilder.forPort(port).addService(service).build();

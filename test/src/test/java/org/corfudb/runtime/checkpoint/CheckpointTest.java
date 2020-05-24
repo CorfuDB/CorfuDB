@@ -727,7 +727,7 @@ public class CheckpointTest extends AbstractObjectTest {
         CorfuRuntime newRt = getNewRuntime();
 
         Supplier<StreamingMap<String, String>> readerMapSupplier = () ->
-                new PersistedStreamingMap<>(Paths.get(path + tableId + "reader"),
+                new PersistedStreamingMap<>(Paths.get(path + tableId + "logreader"),
                         PersistedStreamingMap.getPersistedStreamingMapOptions(),
                         Serializers.JSON, rt);
 

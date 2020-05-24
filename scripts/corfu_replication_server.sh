@@ -47,4 +47,4 @@ else
       byteman=""
 fi
 
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.logreplication.infrastructure.CorfuReplicationServer $*
+"$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer $*

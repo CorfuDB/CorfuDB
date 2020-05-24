@@ -4,7 +4,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.SinkManager;
+import org.corfudb.infrastructure.logreplication.receive.LogReplicationSinkManager;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -37,7 +37,7 @@ public class LogReplicationServer extends AbstractServer {
     private final ExecutorService executor;
 
     @Getter
-    private final SinkManager sinkManager;
+    private final LogReplicationSinkManager sinkManager;
 
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
@@ -52,7 +52,7 @@ public class LogReplicationServer extends AbstractServer {
         String corfuPort = serverContext.getLocalEndpoint().equals("localhost:9020") ? ":9001" : ":9000";
         String corfuEndpoint = serverContext.getNodeLocator().getHost() + corfuPort;
         log.info("Initialize Sink Manager with CorfuRuntime to {}", corfuEndpoint);
-        this.sinkManager = new SinkManager(corfuEndpoint, config);
+        this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, config);
     }
 
     /* ************ Override Methods ************ */

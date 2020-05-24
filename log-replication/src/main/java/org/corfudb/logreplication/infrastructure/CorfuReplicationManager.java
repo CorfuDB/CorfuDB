@@ -2,8 +2,8 @@ package org.corfudb.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.infrastructure.LogReplicationTransportType;
-import org.corfudb.logreplication.runtime.LogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
+import org.corfudb.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -16,7 +16,7 @@ import java.util.Map;
 public class CorfuReplicationManager {
 
     // Keep map of remote site endpoints and the associated log replication runtime (client)
-    Map<String, LogReplicationRuntime> remoteSiteRuntimeMap = new HashMap<>();
+    Map<String, CorfuLogReplicationRuntime> remoteSiteRuntimeMap = new HashMap<>();
 
     enum LogReplicationNegotiationResult {
         SNAPSHOT_SYNC,
@@ -61,7 +61,7 @@ public class CorfuReplicationManager {
      */
     public void startLogReplication(String siteId, CrossSiteConfiguration config) throws LogReplicationNegotiationException {
         log.info("Start Log Replication to Standby Site {}", siteId);
-        LogReplicationRuntime runtime = remoteSiteRuntimeMap.get(siteId);
+        CorfuLogReplicationRuntime runtime = remoteSiteRuntimeMap.get(siteId);
 
         //If we start from a stop state due to site switch over, we need to restart the consumer.
         runtime.getSourceManager().getLogReplicationFSM().startConsumer(config);
@@ -71,7 +71,7 @@ public class CorfuReplicationManager {
         replicate(runtime, negotiationResult, config.getEpoch());
     }
 
-    private void replicate(LogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult, long siteEpoch) {
+    private void replicate(CorfuLogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult, long siteEpoch) {
             runtime.getSourceManager().getLogReplicationFSM().setSiteEpoch(siteEpoch);
 
             switch (negotiationResult) {
@@ -90,18 +90,19 @@ public class CorfuReplicationManager {
     }
 
         public void stopLogReplication(CrossSiteConfiguration config) {
-            for(Map.Entry<String, LogReplicationRuntime> entry: remoteSiteRuntimeMap.entrySet()) {
-                LogReplicationRuntime runtime = entry.getValue();
+            for(Map.Entry<String, CorfuLogReplicationRuntime> entry: remoteSiteRuntimeMap.entrySet()) {
+                CorfuLogReplicationRuntime runtime = entry.getValue();
                 runtime.stop();
             }
         }
 
-    private LogReplicationNegotiationResult startNegotiation(LogReplicationRuntime logReplicationRuntime)
+    private LogReplicationNegotiationResult startNegotiation(CorfuLogReplicationRuntime logReplicationRuntime)
             throws LogReplicationNegotiationException {
 
         LogReplicationNegotiationResponse negotiationResponse;
 
         try {
+            // TODO(Anny) : IRetry...
             negotiationResponse = logReplicationRuntime.startNegotiation();
             log.trace("Negotiation Response received: {} ", negotiationResponse);
         } catch (Exception e) {

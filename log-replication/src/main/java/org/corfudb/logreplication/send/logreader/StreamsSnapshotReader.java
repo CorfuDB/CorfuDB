@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.send;
+package org.corfudb.logreplication.send.logreader;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -30,7 +30,7 @@ import java.util.stream.Stream;
 @Slf4j
 @NotThreadSafe
 /**
- *  Default snapshot reader implementation
+ *  Default snapshot logreader implementation
  *
  *  This implementation provides reads at the stream level (no coalesced state).
  *  It generates TxMessages which will be transmitted by the DataSender (provided by the application).
@@ -157,7 +157,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                     break;
                 } else {
                     // Skip process this stream as it has no entries to process, will poll the next one.
-                    log.info("Snapshot reader will skip reading stream {} as there are no entries to send",
+                    log.info("Snapshot logreader will skip reading stream {} as there are no entries to send",
                             currentStreamInfo.uuid);
                 }
             }
@@ -168,11 +168,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
         }
 
         if (!currentStreamInfo.iterator.hasNext()) {
-            log.debug("Snapshot reader finished reading stream {}", currentStreamInfo.uuid);
+            log.debug("Snapshot logreader finished reading stream {}", currentStreamInfo.uuid);
             currentStreamInfo = null;
 
             if (streamsToSend.isEmpty()) {
-                log.info("Snapshot reader finished reading all streams {}", streams);
+                log.info("Snapshot logreader finished reading all streams {}", streams);
                 endSnapshotSync = true;
             }
         }

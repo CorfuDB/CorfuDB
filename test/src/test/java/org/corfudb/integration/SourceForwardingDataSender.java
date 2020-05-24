@@ -5,8 +5,8 @@ import lombok.Getter;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.SinkManager;
-import org.corfudb.logreplication.SourceManager;
+import org.corfudb.infrastructure.logreplication.receive.LogReplicationSinkManager;
+import org.corfudb.logreplication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.fsm.ObservableAckMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
@@ -24,7 +24,7 @@ public class SourceForwardingDataSender implements DataSender {
     private CorfuRuntime runtime;
 
     // Manager in remote/destination site, to emulate the channel, we instantiate the destination receiver
-    private SinkManager destinationLogReplicationManager;
+    private LogReplicationSinkManager destinationLogReplicationManager;
 
     // Destination DataSender
     private AckDataSender destinationDataSender;
@@ -62,7 +62,7 @@ public class SourceForwardingDataSender implements DataSender {
                 .connect();
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(false, 0));
-        this.destinationLogReplicationManager = new SinkManager(runtime.getLayoutServers().get(0), config);
+        this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0), config);
         this.channelExecutorWorkers = Executors.newSingleThreadExecutor();
         this.ifDropMsg = ifDropMsg;
     }
@@ -123,13 +123,13 @@ public class SourceForwardingDataSender implements DataSender {
     /*
      * Auxiliary Methods
      */
-    public void setSourceManager(SourceManager sourceManager) {
+    public void setSourceManager(LogReplicationSourceManager sourceManager) {
         destinationDataSender.setSourceManager(sourceManager);
         destinationDataControl.setSourceManager(sourceManager);
     }
 
-    // Used for testing purposes to access the SinkManager in Test
-    public SinkManager getSinkManager() {
+    // Used for testing purposes to access the LogReplicationSinkManager in Test
+    public LogReplicationSinkManager getSinkManager() {
         return destinationLogReplicationManager;
     }
 

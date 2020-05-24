@@ -1,10 +1,11 @@
-package org.corfudb.infrastructure.logreplication;
+package org.corfudb.infrastructure.logreplication.receive;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -26,7 +27,7 @@ import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAP
  *
  * */
 @Slf4j
-public class SinkManager implements DataReceiver {
+public class LogReplicationSinkManager implements DataReceiver {
     private static final String config_file = "/config/corfu/corfu_replication_config.properties";
 
     public static final int DEFAULT_READER_QUEUE_SIZE = 1;
@@ -63,7 +64,7 @@ public class SinkManager implements DataReceiver {
      * @param localCorfuEndpoint endpoint for local corfu server
      * @param config log replication configuration
      */
-    public SinkManager(String localCorfuEndpoint, LogReplicationConfig config) {
+    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config) {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.rxState = RxState.LOG_ENTRY_SYNC;

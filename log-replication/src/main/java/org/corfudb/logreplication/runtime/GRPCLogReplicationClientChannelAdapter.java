@@ -4,7 +4,7 @@ import io.grpc.Channel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.CustomClientRouter;
+import org.corfudb.infrastructure.LogReplicationClientRouter;
 import org.corfudb.infrastructure.IClientChannelAdapter;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.LogReplicationChannelGrpc;
@@ -27,7 +27,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private StreamObserver<CorfuMessage> responseObserver;
 
     /** Construct client for accessing LogReplicationService server using the existing channel. */
-    public GRPCLogReplicationClientChannelAdapter(Integer port, String host, CustomClientRouter adapter) {
+    public GRPCLogReplicationClientChannelAdapter(Integer port, String host, LogReplicationClientRouter adapter) {
         super(port, host, adapter);
         channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
         blockingStub = LogReplicationChannelGrpc.newBlockingStub(channel);

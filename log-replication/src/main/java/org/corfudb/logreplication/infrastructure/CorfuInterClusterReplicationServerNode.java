@@ -17,7 +17,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
-import org.corfudb.infrastructure.CustomServerRouter;
+import org.corfudb.infrastructure.LogReplicationServerRouter;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.NettyServerRouter;
 import org.corfudb.infrastructure.LogReplicationServer;
@@ -39,8 +39,6 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -50,7 +48,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 @Slf4j
-public class CorfuReplicationServerNode implements AutoCloseable {
+public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
 
     @Getter
     private final ServerContext serverContext;
@@ -73,7 +71,7 @@ public class CorfuReplicationServerNode implements AutoCloseable {
      *
      * @param serverContext Initialized Server Context.
      */
-    public CorfuReplicationServerNode(@Nonnull ServerContext serverContext) {
+    public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext) {
         this(serverContext,
                 ImmutableMap.<Class, AbstractServer>builder()
                         .put(BaseServer.class, new BaseServer(serverContext))
@@ -88,8 +86,8 @@ public class CorfuReplicationServerNode implements AutoCloseable {
      * @param serverContext Initialized Server Context.
      * @param serverMap     Server Map with all components.
      */
-    public CorfuReplicationServerNode(@Nonnull ServerContext serverContext,
-                                      @Nonnull Map<Class, AbstractServer> serverMap) {
+    public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
+                                                  @Nonnull Map<Class, AbstractServer> serverMap) {
         this.serverContext = serverContext;
         this.serverMap = serverMap;
         this.close = new AtomicBoolean(false);
@@ -97,7 +95,7 @@ public class CorfuReplicationServerNode implements AutoCloseable {
         // If custom-transport is not specified by user, it will default to use Netty
         if (serverContext.getServerConfig().get("--custom-transport") != null) {
             useNetty = false;
-            router = new CustomServerRouter(new ArrayList<>(serverMap.values()),
+            router = new LogReplicationServerRouter(new ArrayList<>(serverMap.values()),
                     Integer.parseInt((String) serverContext.getServerConfig().get("<port>")));
             log.info("Corfu Replication Server initialized for CUSTOM transport.");
         } else {
@@ -134,7 +132,7 @@ public class CorfuReplicationServerNode implements AutoCloseable {
             start().channel().closeFuture().syncUninterruptibly();
         } else {
             try {
-                ((CustomServerRouter) this.router).getServerAdapter().start().get();
+                ((LogReplicationServerRouter) this.router).getServerAdapter().start().get();
             } catch (Exception e) {
                 throw new UnrecoverableCorfuError(e);
             }

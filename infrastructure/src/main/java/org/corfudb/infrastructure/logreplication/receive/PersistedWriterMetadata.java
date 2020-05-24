@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication;
+package org.corfudb.infrastructure.logreplication.receive;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +17,7 @@ import java.util.UUID;
 
 /**
  * The table persisted at the replication writer side.
- * It records the reader cluster's snapshot timestamp  and last log entry's timestamp, it has received and processed.
+ * It records the logreader cluster's snapshot timestamp  and last log entry's timestamp, it has received and processed.
  */
 @Slf4j
 public class PersistedWriterMetadata {

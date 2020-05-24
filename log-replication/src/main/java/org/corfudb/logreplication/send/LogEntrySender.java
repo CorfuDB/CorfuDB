@@ -9,6 +9,8 @@ import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.logreplication.send.logreader.LogEntryReader;
+import org.corfudb.logreplication.send.logreader.ReadProcessor;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
@@ -23,7 +25,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -116,7 +117,7 @@ public class LogEntrySender {
      * Constructor
      *
      * @param runtime corfu runtime
-     * @param logEntryReader log entry reader implementation
+     * @param logEntryReader log entry logreader implementation
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
      */
@@ -148,7 +149,7 @@ public class LogEntrySender {
         } catch (Exception e) {
             log.warn("The config file is not available {} , will use the default vaules for config.", e.getCause());
         } finally {
-            log.info("log reader config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",
+            log.info("log logreader config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",
                     maxRetry, readerBatchSize, msgTimer, errorOnMsgTimeout);
         }
     }

@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import lombok.Data;
 import lombok.experimental.SuperBuilder;
+import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.runtime.RuntimeParameters;
 
 @Data

@@ -4,7 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.DataReceiver;
+import org.corfudb.infrastructure.logreplication.receive.DataReceiver;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
@@ -14,9 +14,9 @@ import org.corfudb.logreplication.runtime.LogReplicationClient;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.logreplication.send.CorfuDataSender;
-import org.corfudb.logreplication.send.DefaultReadProcessor;
+import org.corfudb.logreplication.send.logreader.DefaultReadProcessor;
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
-import org.corfudb.logreplication.send.ReadProcessor;
+import org.corfudb.logreplication.send.logreader.ReadProcessor;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
@@ -37,7 +37,7 @@ import java.util.concurrent.Executors;
  **/
 @Data
 @Slf4j
-public class SourceManager implements DataReceiver {
+public class LogReplicationSourceManager implements DataReceiver {
 
     private CorfuRuntime runtime;
     /*
@@ -65,26 +65,26 @@ public class SourceManager implements DataReceiver {
      *                   the application callback for data transmission
      * @param config Log Replication Configuration
      */
-    public SourceManager(CorfuRuntime runtime,
-                         DataSender dataSender,
-                         LogReplicationConfig config) {
+    public LogReplicationSourceManager(CorfuRuntime runtime,
+                                       DataSender dataSender,
+                                       LogReplicationConfig config) {
 
         this(runtime, dataSender, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
     }
 
-    public SourceManager(String localEndpoint, LogReplicationClient client, LogReplicationConfig config) {
+    public LogReplicationSourceManager(String localEndpoint, LogReplicationClient client, LogReplicationConfig config) {
         this(CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder().build()).parseConfigurationString(localEndpoint).connect(),
                 client, config);
     }
 
     /**
-     * Constructor SourceManager
+     * Constructor LogReplicationSourceManager
      *
      * @param runtime Corfu Runtime
      * @param config Log Replication Configuration
      */
-    public SourceManager(CorfuRuntime runtime, LogReplicationClient client, LogReplicationConfig config) {
+    public LogReplicationSourceManager(CorfuRuntime runtime, LogReplicationClient client, LogReplicationConfig config) {
         this(runtime, new CorfuDataSender(client), config);
     }
 
@@ -97,10 +97,10 @@ public class SourceManager implements DataReceiver {
      * @param readProcessor implementation for reads processor (data transformation)
      * @param config Log Replication Configuration
      */
-    public SourceManager(CorfuRuntime runtime,
-                         DataSender dataSender,
-                         ReadProcessor readProcessor,
-                         LogReplicationConfig config) {
+    public LogReplicationSourceManager(CorfuRuntime runtime,
+                                       DataSender dataSender,
+                                       ReadProcessor readProcessor,
+                                       LogReplicationConfig config) {
         // Default to single dedicated thread for state machine workers (perform state tasks)
         this(runtime, dataSender, readProcessor, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
@@ -117,10 +117,10 @@ public class SourceManager implements DataReceiver {
      * @param config Log Replication Configuration
      * @param logReplicationFSMWorkers worker thread pool (state tasks)
      */
-    public SourceManager(CorfuRuntime runtime,
-                         DataSender dataSender,
-                         LogReplicationConfig config,
-                         ExecutorService logReplicationFSMWorkers) {
+    public LogReplicationSourceManager(CorfuRuntime runtime,
+                                       DataSender dataSender,
+                                       LogReplicationConfig config,
+                                       ExecutorService logReplicationFSMWorkers) {
         this(runtime, dataSender, new DefaultReadProcessor(runtime), config, logReplicationFSMWorkers);
     }
 
@@ -136,11 +136,11 @@ public class SourceManager implements DataReceiver {
      * @param config Log Replication Configuration
      * @param logReplicationFSMWorkers worker thread pool (state tasks)
      */
-    public SourceManager(CorfuRuntime runtime,
-                         DataSender dataSender,
-                         ReadProcessor readProcessor,
-                         LogReplicationConfig config,
-                         ExecutorService logReplicationFSMWorkers) {
+    public LogReplicationSourceManager(CorfuRuntime runtime,
+                                       DataSender dataSender,
+                                       ReadProcessor readProcessor,
+                                       LogReplicationConfig config,
+                                       ExecutorService logReplicationFSMWorkers) {
         if (config.getStreamsToReplicate() == null || config.getStreamsToReplicate().isEmpty()) {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");

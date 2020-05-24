@@ -6,13 +6,13 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.CustomClientRouter;
-import org.corfudb.infrastructure.CustomServerRouter;
+import org.corfudb.infrastructure.LogReplicationServerRouter;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.LogReplicationTransportType;
+import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.logreplication.SourceManager;
+import org.corfudb.logreplication.LogReplicationSourceManager;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.NodeRouterPool;
@@ -34,9 +34,9 @@ import java.util.function.Function;
 
 
 @Slf4j
-public class LogReplicationRuntime {
+public class CorfuLogReplicationRuntime {
     /**
-     * The parameters used to configure this {@link LogReplicationRuntime}.
+     * The parameters used to configure this {@link CorfuLogReplicationRuntime}.
      */
     @Getter
     private final LogReplicationRuntimeParameters parameters;
@@ -57,7 +57,7 @@ public class LogReplicationRuntime {
      * Log Replication Source Manager - to local Corfu Log Unit
      */
     @Getter
-    private SourceManager sourceManager;
+    private LogReplicationSourceManager sourceManager;
 
     /**
      * The {@link EventLoopGroup} provided to netty routers.
@@ -65,7 +65,7 @@ public class LogReplicationRuntime {
     @Getter
     private final EventLoopGroup nettyEventLoop;
 
-    public LogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters) {
+    public CorfuLogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters) {
         this.parameters = parameters;
 
         this.transport = parameters.getTransport();
@@ -108,13 +108,13 @@ public class LogReplicationRuntime {
 
                 if (transport.equals(LogReplicationTransportType.CUSTOM)) {
 
-                    LogReplicationPluginConfig config = new LogReplicationPluginConfig(CustomServerRouter.TRANSPORT_CONFIG_FILE_PATH);
+                    LogReplicationPluginConfig config = new LogReplicationPluginConfig(LogReplicationServerRouter.TRANSPORT_CONFIG_FILE_PATH);
 
                     File jar = new File(config.getTransportAdapterJARPath());
 
                     try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
                         Class adapter = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
-                        newRouter = new CustomClientRouter(node, getParameters(), adapter);
+                        newRouter = new LogReplicationClientRouter(node, getParameters(), adapter);
                     } catch (Exception e) {
                         log.error("Fatal error: Failed to create channel", e);
                         throw new UnrecoverableCorfuError(e);
@@ -162,7 +162,7 @@ public class LogReplicationRuntime {
         Set<String> tablesToReplicate = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, UUID.randomUUID(), UUID.randomUUID());
         log.info("Set Source Manager to connect to local Corfu on {}", parameters.getLocalCorfuEndpoint());
-        sourceManager = new SourceManager(parameters.getLocalCorfuEndpoint(),
+        sourceManager = new LogReplicationSourceManager(parameters.getLocalCorfuEndpoint(),
                 client, config);
     }
 

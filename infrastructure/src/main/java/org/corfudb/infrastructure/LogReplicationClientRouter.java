@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * If default communication channel is used (Netty) instead a NettyClientRouter will be instantiated.
  */
 @Slf4j
-public class CustomClientRouter implements IClientRouter {
+public class LogReplicationClientRouter implements IClientRouter {
 
     private NodeLocator node;
 
@@ -82,7 +82,7 @@ public class CustomClientRouter implements IClientRouter {
 
     private IClientChannelAdapter channelAdapter;
 
-    public CustomClientRouter(NodeLocator node, LogReplicationRuntimeParameters parameters, Class adapterType) {
+    public LogReplicationClientRouter(NodeLocator node, LogReplicationRuntimeParameters parameters, Class adapterType) {
         this.node = node;
         this.parameters = parameters;
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
@@ -264,7 +264,7 @@ public class CustomClientRouter implements IClientRouter {
 
     public void initialize(Class adapterType) {
         try {
-            channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(Integer.class, String.class, CustomClientRouter.class)
+            channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(Integer.class, String.class, LogReplicationClientRouter.class)
                     .newInstance(node.getPort(), node.getHost(), this);
             channelAdapter.start();
         } catch (Exception e) {
