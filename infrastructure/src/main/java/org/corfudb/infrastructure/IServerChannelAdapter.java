@@ -19,9 +19,9 @@ public abstract class IServerChannelAdapter {
     private final int port;
 
     @Getter
-    private final CustomServerRouter router;
+    private final LogReplicationServerRouter router;
 
-    public IServerChannelAdapter(int port, CustomServerRouter adapter) {
+    public IServerChannelAdapter(int port, LogReplicationServerRouter adapter) {
         this.port = port;
         this.router = adapter;
     }

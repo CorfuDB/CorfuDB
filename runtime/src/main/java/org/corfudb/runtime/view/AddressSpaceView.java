@@ -295,7 +295,7 @@ public class AddressSpaceView extends AbstractView {
         // 1. Thread A starts replicating write1
         // 2. Thread B discovers the write (via stream tail query) and
         //    tries to read write1
-        // 3. Thread B's read results in a cache miss and the reader thread
+        // 3. Thread B's read results in a cache miss and the logreader thread
         //    starts loading the value into the cache
         // 4. Thread A completes its write and caches it with undo records
         // 5. Thread B finishes loading and caches the loaded value replacing
@@ -368,7 +368,7 @@ public class AddressSpaceView extends AbstractView {
      * <p>
      * - If the waitForWrite flag is set to true, when an empty address is encountered,
      * it waits for one hole to be filled. All the rest empty addresses within the list
-     * are hole filled directly and the reader does not wait.
+     * are hole filled directly and the logreader does not wait.
      * - In case the flag is set to false, none of the reads wait for write completion and
      * the empty addresses are hole filled right away.
      *
