@@ -2,7 +2,7 @@ package org.corfudb.integration;
 
 import lombok.Data;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.logreplication.SourceManager;
+import org.corfudb.logreplication.LogReplicationSourceManager;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
 
@@ -20,7 +20,7 @@ public class AckDataSender implements DataSender {
 
     private UUID snapshotSyncRequestId;
     private long baseSnapshotTimestamp;
-    private SourceManager sourceManager;
+    private LogReplicationSourceManager sourceManager;
     private ExecutorService channel;
 
     public AckDataSender() {

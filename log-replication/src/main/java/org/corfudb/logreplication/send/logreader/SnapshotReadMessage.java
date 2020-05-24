@@ -1,4 +1,4 @@
-package org.corfudb.logreplication.send;
+package org.corfudb.logreplication.send.logreader;
 
 import lombok.Data;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;

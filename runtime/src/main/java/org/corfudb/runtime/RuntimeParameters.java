@@ -84,7 +84,7 @@ public class RuntimeParameters {
         //region Connection parameters
         /**
          * {@link Duration} before requests timeout.
-         * This is the duration after which the reader hole fills the address.
+         * This is the duration after which the logreader hole fills the address.
          */
         @Default
         Duration requestTimeout = Duration.ofSeconds(5);

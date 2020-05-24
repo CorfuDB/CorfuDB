@@ -9,13 +9,13 @@ import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.logreplication.infrastructure.CrossSiteConfiguration;
-import org.corfudb.logreplication.send.LogEntryReader;
+import org.corfudb.logreplication.send.logreader.LogEntryReader;
 import org.corfudb.logreplication.send.LogEntrySender;
-import org.corfudb.logreplication.send.ReadProcessor;
-import org.corfudb.logreplication.send.SnapshotReader;
+import org.corfudb.logreplication.send.logreader.ReadProcessor;
+import org.corfudb.logreplication.send.logreader.SnapshotReader;
 import org.corfudb.logreplication.send.SnapshotSender;
-import org.corfudb.logreplication.send.StreamsLogEntryReader;
-import org.corfudb.logreplication.send.StreamsSnapshotReader;
+import org.corfudb.logreplication.send.logreader.StreamsLogEntryReader;
+import org.corfudb.logreplication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 
@@ -32,8 +32,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  * to a remote site. This feature is particularly useful in the event of failure or data corruption, so the system
  * can failover to the standby/secondary data-store.
  *
- * This functionality is initiated by the application through the SourceManager on the primary site and handled
- * through the SinkManager on the destination site. This implementation assumes that the application provides its own
+ * This functionality is initiated by the application through the LogReplicationSourceManager on the primary site and handled
+ * through the LogReplicationSinkManager on the destination site. This implementation assumes that the application provides its own
  * communication channels.
  *
  * Log Replication on the source site is defined by an event-driven finite state machine, with 5 states
@@ -182,9 +182,9 @@ public class LogReplicationFSM {
      * readers, this is used for FSM testing purposes only).
      *
      * @param runtime Corfu Runtime
-     * @param snapshotReader snapshot reader implementation
+     * @param snapshotReader snapshot logreader implementation
      * @param dataSender application callback for snapshot and log entry sync messages
-     * @param logEntryReader log entry reader implementation
+     * @param logEntryReader log entry logreader implementation
      * @param readProcessor read processor (for data transformation)
      * @param workers FSM executor service for state tasks
      */
