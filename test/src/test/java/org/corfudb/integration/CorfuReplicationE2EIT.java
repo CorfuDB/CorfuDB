@@ -1,6 +1,7 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
+import org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
@@ -18,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class CorfuReplicationE2EIT extends AbstractIT {
 
     private boolean useNetty;
+    private boolean runProcess = true;
 
     public CorfuReplicationE2EIT(boolean netty) {
         this.useNetty = netty;
@@ -96,20 +98,24 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             // Confirm data does not exist on Standby Site
             assertThat(mapAStandby.size()).isEqualTo(0);
 
-            // Start Log Replication Server on Active Site
-            activeReplicationServer = runReplicationServer(activeReplicationServerPort, useNetty);
-//            executorService.submit(() -> {
-//                CorfuInterClusterReplicationServer.main(new String[]{"--custom-transport", String.valueOf(activeReplicationServerPort)});
-//            });
+            if (runProcess) {
+                // Start Log Replication Server on Active Site
+                activeReplicationServer = runReplicationServer(activeReplicationServerPort, useNetty);
 
-            // Start Log Replication Server on Standby Site
-            standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, useNetty);
-//            executorService.submit(() -> {
-//                CorfuInterClusterReplicationServer.main(new String[]{"--custom-transport", String.valueOf(standbyReplicationServerPort)});
-//            });
+                // Start Log Replication Server on Standby Site
+                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, useNetty);
+            } else {
+                executorService.submit(() -> {
+                    CorfuInterClusterReplicationServer.main(new String[]{"--custom-transport", String.valueOf(activeReplicationServerPort)});
+                });
+
+                executorService.submit(() -> {
+                    CorfuInterClusterReplicationServer.main(new String[]{"--custom-transport", String.valueOf(standbyReplicationServerPort)});
+                });
+            }
 
             // Wait until data is fully replicated
-            System.out.println("Wait ... Snapshot log replication in progress ...");
+            System.out.println("\nWait ... Snapshot log replication in progress ...");
             while (mapAStandby.size() != numWrites) {
                 //
             }
@@ -125,9 +131,8 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             }
 
             // Verify data is present in Standby Site
-            System.out.println("Wait ... Delta log replication in progress ...");
+            System.out.println("\nWait ... Delta log replication in progress ...");
             while (mapAStandby.size() != (numWrites + numWrites/2)) {
-                //
             }
 
             // Verify data is present in Standby Site (delta)
@@ -136,8 +141,10 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             for (int i = 0; i < (numWrites + numWrites/2) ; i++) {
                 assertThat(mapAStandby.containsKey(String.valueOf(i)));
             }
+            System.out.print("\nTest succeeds");
 
         } finally {
+
             executorService.shutdownNow();
 
             if (activeCorfu != null) {

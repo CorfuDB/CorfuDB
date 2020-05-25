@@ -5,14 +5,12 @@ option java_package = "org.corfudb.logreplication.proto";
 
 // Site configuration metadata
 message SiteConfigurationMsg {
-  uint64 epoch = 1;
+  uint64 siteConfigID = 1;
   uint64 version = 2;
   repeated SiteMsg site = 3;
-  string federation_id = 4;
-  string certs = 5;
 }
 
-enum GlobalManagerStatus {
+enum SiteStatus {
   INVALID = 0;
   ACTIVE = 1;
   STANDBY = 2;
@@ -22,26 +20,18 @@ enum GlobalManagerStatus {
 // Site configuration metadata
 message SiteMsg {
   string name = 1;
-  GlobalManagerStatus gm_status = 2;
-  repeated AphInfoMsg aph = 3;
-  bool is_local = 4;
-  string id = 5;
-  int32 system_id = 6;
-  bool is_federated = 7;
-  string site_version = 8;
-  string vip_ip = 9;
-  string node_type = 10;
-  uint64 version = 11;
+  SiteStatus status = 2;
+  string id = 3;
+  repeated NodeInfoMsg node_info = 4;
 }
 
 // Site configuration metadata
-message AphInfoMsg {
+message NodeInfoMsg {
   string uuid = 1;
   string address = 2;
   int32 port = 3;
-  string certificate = 4;
-  string node_id = 5;
-  int32 corfu_port = 6;
+  string node_id = 4;
+  int32 corfu_port = 5;
 }
 
 service LogReplicationSiteManagerService {
