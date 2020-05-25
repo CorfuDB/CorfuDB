@@ -4,9 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
-import java.io.IOException;
-
-import static org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService.DiscoveryServiceEventType.DiscoverySite;
+import static org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.DiscoverySite;
 
 public abstract class CorfuReplicationSiteManagerAdapter {
     @Getter
@@ -19,7 +17,7 @@ public abstract class CorfuReplicationSiteManagerAdapter {
     @Getter
     CrossSiteConfiguration siteConfig;
 
-    public synchronized CrossSiteConfiguration fetchSiteConfig() throws IOException {
+    public synchronized CrossSiteConfiguration fetchSiteConfig() {
         siteConfigMsg = querySiteConfig();
         siteConfig = new CrossSiteConfiguration(siteConfigMsg);
         return siteConfig;
@@ -35,7 +33,7 @@ public abstract class CorfuReplicationSiteManagerAdapter {
                 siteConfigMsg = newSiteConfigMsg;
                 siteConfig = new CrossSiteConfiguration(siteConfigMsg);
                 corfuReplicationDiscoveryService.putEvent(
-                        new CorfuReplicationDiscoveryService.DiscoveryServiceEvent(DiscoverySite, newSiteConfigMsg));
+                        new DiscoveryServiceEvent(DiscoverySite, newSiteConfigMsg));
             }
     }
 
