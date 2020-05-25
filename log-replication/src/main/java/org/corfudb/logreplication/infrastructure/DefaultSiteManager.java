@@ -76,7 +76,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                 }
                 String ipAddress = props.getProperty(nodeName);
                 log.info("primary site ipaddress {} for node {}", ipAddress, nodeName);
-                CrossSiteConfiguration.NodeInfo nodeInfo = new CrossSiteConfiguration.NodeInfo(ipAddress, portNum, GlobalManagerStatus.ACTIVE, corfuPortNum);
+                LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(ipAddress, portNum, GlobalManagerStatus.ACTIVE, corfuPortNum);
                 primarySite.nodesInfo.add(nodeInfo);
             }
 
@@ -93,7 +93,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                 }
                 String ipAddress = props.getProperty(STANDBY_SITE_NODE + i);
                 log.info("standby site ipaddress {} for node {}", ipAddress, i);
-                CrossSiteConfiguration.NodeInfo nodeInfo = new CrossSiteConfiguration.NodeInfo(ipAddress, portNum, GlobalManagerStatus.STANDBY, corfuPortNum);
+                LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(ipAddress, portNum, GlobalManagerStatus.STANDBY, corfuPortNum);
                 standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);
             }
 
