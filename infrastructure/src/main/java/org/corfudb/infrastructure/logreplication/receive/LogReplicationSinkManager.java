@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.receive;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.util.ObservableValue;
@@ -46,6 +47,10 @@ public class LogReplicationSinkManager implements DataReceiver {
     @Getter
     private PersistedWriterMetadata persistedWriterMetadata;
     private RxState rxState;
+
+    @Getter
+    @Setter
+    boolean leader;
 
     private LogReplicationConfig config;
     private UUID snapshotRequestId = new UUID(0L, 0L);
