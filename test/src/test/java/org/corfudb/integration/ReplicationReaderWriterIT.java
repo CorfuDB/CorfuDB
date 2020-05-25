@@ -363,10 +363,10 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             System.out.println("msgQ is empty");
         }
 
-        long siteEpoch = msgQ.get(0).getMetadata().getSiteEpoch();
+        long siteConfigID = msgQ.get(0).getMetadata().getSiteConfigID();
         long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
-        persistedWriterMetadata.setSrcBaseSnapshotStart(siteEpoch, snapshot);
-        writer.reset(siteEpoch, snapshot);
+        persistedWriterMetadata.setSrcBaseSnapshotStart(siteConfigID, snapshot);
+        writer.reset(siteConfigID, snapshot);
 
         for (org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry msg : msgQ) {
             writer.apply(msg);

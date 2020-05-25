@@ -93,27 +93,27 @@ public class LogEntryWriter {
 
 
         CorfuStoreMetadata.Timestamp timestamp = persistedWriterMetadata.getTimestamp();
-        long persistEpoch = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch);
+        long persistSiteConfigID = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteConfigID);
         long persistSnapStart = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart);
         long persistSnapDone= persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapApplyDone);
         long persistLogTS = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed);
 
-        long epoch = txMessage.getMetadata().getSiteEpoch();
+        long siteConfigID = txMessage.getMetadata().getSiteConfigID();
         long ts = txMessage.getMetadata().getSnapshotTimestamp();
         long entryTS= txMessage.getMetadata().getTimestamp();
 
         lastMsgTs = Math.max(persistLogTS, lastMsgTs);
 
-        if (epoch != persistEpoch || ts != persistSnapStart || ts != persistSnapDone ||
+        if (siteConfigID != persistSiteConfigID || ts != persistSnapStart || ts != persistSnapDone ||
                 txMessage.getMetadata().getPreviousTimestamp() != persistLogTS) {
             log.warn("Skip write this msg {} as its timestamp is later than the persisted one " +
-                    txMessage.getMetadata() +  " persisteEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart +
+                    txMessage.getMetadata() +  " persisteSiteConfig " + persistSiteConfigID + " persistSnapStart " + persistSnapStart +
                     " persistSnapDone " + persistSnapDone + " persistLogTs " + persistLogTS);
             return;
         }
 
         TxBuilder txBuilder = persistedWriterMetadata.getTxBuilder();
-        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch, epoch);
+        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteConfigID, siteConfigID);
         persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed, entryTS);
 
         for (UUID uuid : opaqueEntry.getEntries().keySet()) {
