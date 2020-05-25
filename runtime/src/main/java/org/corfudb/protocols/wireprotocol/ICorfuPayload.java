@@ -103,7 +103,7 @@ public interface ICorfuPayload<T> {
                     })
                     .put(LogReplicationEntryMetadata.class, buffer -> {
                         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata();
-                        metadata.setSiteEpoch(buffer.readLong());
+                        metadata.setSiteConfigID(buffer.readLong());
                         metadata.setMessageMetadataType(MessageType.fromValue(buffer.readInt()));
                         metadata.setTimestamp(buffer.readLong());
                         metadata.setPreviousTimestamp(buffer.readLong());
@@ -408,7 +408,7 @@ public interface ICorfuPayload<T> {
             }
         } else if (payload instanceof LogReplicationEntryMetadata) {
             LogReplicationEntryMetadata metadata = (LogReplicationEntryMetadata) payload;
-            buffer.writeLong(metadata.getSiteEpoch());
+            buffer.writeLong(metadata.getSiteConfigID());
             buffer.writeInt(metadata.getMessageMetadataType().getVal());
             buffer.writeLong(metadata.getTimestamp());
             buffer.writeLong(metadata.getPreviousTimestamp());

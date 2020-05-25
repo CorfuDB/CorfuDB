@@ -4,9 +4,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
-import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.NodeLocator;
@@ -36,6 +34,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
      */
     private final CorfuInterClusterReplicationServerNode replicationServerNode;
 
+
     /**
      * Lock-related configuration parameters
      */
@@ -47,13 +46,30 @@ public class CorfuReplicationDiscoveryService implements Runnable {
      */
     @Getter
     private final CorfuReplicationManager replicationManager;
-    private CorfuReplicationSiteManagerAdapter siteManager;
-    private String localEndpoint;
-    boolean shouldRun = true;
-    CrossSiteConfiguration crossSiteConfig;
-    CrossSiteConfiguration.NodeInfo nodeInfo = null;
 
-    private final LogReplicationTransportType transport;
+    /**
+     * for site discovery service
+     */
+    @Getter
+    private CorfuReplicationSiteManagerAdapter siteManager;
+
+
+    /**
+     * the current node's endpoint
+     */
+    private String localEndpoint;
+
+
+    /**
+     * the node's information
+     */
+    LogReplicationNodeInfo nodeInfo;
+
+    boolean shouldRun = true;
+
+    /**
+     * Anny: Should be it unique?
+     */
     private final UUID nodeId;
 
     /**
@@ -64,43 +80,27 @@ public class CorfuReplicationDiscoveryService implements Runnable {
     public CorfuReplicationDiscoveryService(ServerContext serverContext, CorfuInterClusterReplicationServerNode serverNode,
                                             CorfuReplicationSiteManagerAdapter siteManager) {
         this.replicationServerNode = serverNode;
-        this.replicationManager = new CorfuReplicationManager();
-        this.localEndpoint = serverContext.getLocalEndpoint();
-        this.siteManager = siteManager;
+         this.siteManager = siteManager;
         this.siteManager.setCorfuReplicationDiscoveryService(this);
-        this.transport = serverContext.getTransportType();
+
+        //Anny: Does the getNodeID() give an unique id?
         this.nodeId = serverContext.getNodeId();
+
+        CrossSiteConfiguration crossSiteConfig = siteManager.fetchSiteConfig();
+        this.replicationManager = new CorfuReplicationManager(serverContext.getTransportType(), siteManager.fetchSiteConfig());
+        this.localEndpoint = serverContext.getLocalEndpoint();
+        this.nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
+
+        siteManager.start();
+        registerToLogReplicationLock();
     }
 
     public void run() {
-
-        registerToLogReplicationLock();
-
-        //TODO: @maxi from this point on, probably all this code should be somehow moved to
-        // the callbacks on LogReplicationLockListener class.
-
-        siteManager.start();
-
         while (shouldRun) {
             try {
-
-                // Discover the current site configuration.
-                runService();
-
-                // blocking on the event queue.
-                // will unblock until there is a new epoch for site information.
-                synchronized (eventQueue) {
-                    while (true) {
-                        // TODO(maxi): more events (Johnny's side) - No DIFF of the configuration
-                        DiscoveryServiceEvent event = eventQueue.take();
-                        if (event.siteConfigMsg.getEpoch() > crossSiteConfig.getEpoch()) {
-                            break;
-                        }
-                    }
-                    // TODO(Xiaoqin Ma) revisit this, depending on the configuration change
-                    // it could be a new standby is added, comes back... or maybe switch
-                    // processSiteChange(event.siteConfigMsg); No diff available, we need to find the changes...
-                    replicationManager.stopLogReplication(crossSiteConfig);
+                while (true) {
+                    DiscoveryServiceEvent event = eventQueue.take();
+                    processEvent(event);
                 }
             } catch (Exception e) {
                 log.error("caught an exception ", e);
@@ -130,7 +130,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
                             .connect();
                     LockClient lock = new LockClient(nodeId, runtime);
                     // Callback on lock acquisition or revoke
-                    LockListener logReplicationLockListener = new LogReplicationLockListener();
+                    LockListener logReplicationLockListener = new LogReplicationLockListener(this);
                     // Register Interest on the shared Log Replication Lock
                     lock.registerInterest(LOCK_GROUP, LOCK_NAME, logReplicationLockListener);
                 } catch (Exception e) {
@@ -145,94 +145,137 @@ public class CorfuReplicationDiscoveryService implements Runnable {
         }
     }
 
-    public void runService() {
-        try {
-            log.info("Running Corfu Replication Discovery Service");
-
-            // TODO: move logic once acquired lock to the lock listener...
-            // Fetch Site Information (from Site Manager) = CrossSiteConfiguration
-            crossSiteConfig = siteManager.fetchSiteConfig();
-
-            // Get the current node information.
-            nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
-
-            // Acquire lock and set it in the node information
-            // TODO: remove this
-            nodeInfo.setLeader(acquireLock());
-
-            if (nodeInfo.isLeader()) {
-                if (nodeInfo.getRoleType() == GlobalManagerStatus.ACTIVE) {
-
-                    crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
-                    log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
-                    // TODO(Anny): parallel? or not really, cause each site should have it's own state machine?
-                    for (CrossSiteConfiguration.SiteInfo remoteSite : crossSiteConfig.getStandbySites().values()) {
-                        try {
-                            replicationManager.connect(nodeInfo, remoteSite, transport);
-                            replicationManager.startLogReplication(remoteSite.siteId, crossSiteConfig);
-                        } catch (Exception e) {
-                            log.error("Failed to start log replication to remote site {}", remoteSite.getSiteId());
-                            // TODO (if failed): put logic..
-                            // If failed against a standby, retry..
-                        }
-                    }
-                } else if (nodeInfo.getRoleType() == GlobalManagerStatus.STANDBY) {
-                    // Standby Site
-                    // The LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
-                    // Update the siteEpoch metadata.
-                    replicationServerNode.getLogReplicationServer().getSinkManager().getPersistedWriterMetadata().
-                            setupEpoch(crossSiteConfig.getEpoch());
-                    log.info("Start as Sink (receiver) on node {} ", nodeInfo);
-                }
-            }
-            // Todo: Re-schedule periodically, attempt to acquire lock
-
-        } catch (Exception e) {
-                log.error("Caught Exception while discovering remote sites, retry. ", e);
-        } finally {
-            if (nodeInfo != null && nodeInfo.isLeader()) {
-                releaseLock();
-            }
+    /**
+     * it is only called on the leader node and it triggers the log replication start
+     */
+    public void startLogReplication() {
+        if (nodeInfo.isLeader() == false) {
+            return;
         }
+
+        if (nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
+            //crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
+            log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
+            replicationManager.startLogReplication(nodeInfo);
+        } else if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
+            // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
+
+            // Update the siteEpoch metadata.
+            replicationServerNode.getLogReplicationServer().getSinkManager().getPersistedWriterMetadata().
+                    setupSiteConfigID(replicationManager.getCrossSiteConfig().getSiteConfigID());
+            log.info("Start as Sink (receiver) on node {} ", nodeInfo);
+        }
+    }
+
+    public void stopLogReplication() {
+        if (nodeInfo.isLeader() && nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
+            replicationManager.stopLogReplication();
+        }
+    }
+
+
+    public void processLockAcquire() {
+        log.debug("process lock acquire");
+        replicationServerNode.getLogReplicationServer().getSinkManager().setLeader(true);
+
+        // leader transition from true to true, do nothing;
+        if (nodeInfo.isLeader()) {
+            return;
+        } else {
+            // leader transition from false to true, start log replication.
+            nodeInfo.setLeader(true);
+            startLogReplication();
+        }
+    }
+
+    /**
+     * transition from false to false, do nothing
+     * transition from true to false, stop replication.
+     */
+    public void processLockRelease() {
+        replicationServerNode.getLogReplicationServer().getSinkManager().setLeader(false);
+
+        if (nodeInfo.isLeader()) {
+            stopLogReplication();
+            nodeInfo.setLeader(false);
+        }
+    }
+
+
+    public void processSiteFlip(CrossSiteConfiguration newConfig) {
+        stopLogReplication();
+        replicationManager.setCrossSiteConfig(newConfig);
+        startLogReplication();
+    }
+
+
+    public void processSiteChangeNotification(DiscoveryServiceEvent event) {
+        //stale notification, skip
+        if (event.getSiteConfigMsg().getSiteConfigID() < getReplicationManager().getCrossSiteConfig().getSiteConfigID()) {
+            return;
+        }
+
+        CrossSiteConfiguration newConfig = siteManager.fetchSiteConfig();
+        if (newConfig.getSiteConfigID() == getReplicationManager().getCrossSiteConfig().getSiteConfigID()) {
+            if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
+                return;
+            }
+
+            //If the current node it active, compare with the current siteConfig, see if there are addition/removal standbys
+            getReplicationManager().processStandbyChange(nodeInfo, newConfig);
+        } else {
+            processSiteFlip(newConfig);
+        }
+    }
+
+    /***
+     * The standby site's leader change can lead to connection loss.
+     * If the current node is not the active site's leader, discard the notification.
+     * If the current node is the the active site's leader that is is responsible for the current
+     * replication job, will restart the replication with the remote site.
+     * @param event
+     */
+    private void processConnectionLossWithLeader(DiscoveryServiceEvent event) {
+        if (!nodeInfo.isLeader())
+            return;
+
+        if (nodeInfo.getRoleType() != SiteStatus.ACTIVE) {
+            return;
+        }
+
+        getReplicationManager().restartLogReplication(nodeInfo, event.getSiteID());
+    }
+
+    /**
+     * process event
+     * @param event
+     */
+    public void processEvent(DiscoveryServiceEvent event) {
+        switch (event.type) {
+            case AcquireLock:
+                processLockAcquire();
+                break;
+
+            case ReleaseLock:
+                processLockRelease();
+                break;
+
+            case DiscoverySite:
+                processSiteChangeNotification(event);
+                break;
+
+            case ConnectionLossWithLeader:
+                processConnectionLossWithLeader(event);
+                break;
+
+            default:
+                log.error("wrong event type {}", event);
+        }
+
     }
 
     public synchronized void putEvent(DiscoveryServiceEvent event) {
         eventQueue.add(event);
         notifyAll();
-    }
-
-    /**
-     * Attempt to acquire lock, to become the lead replication node of this cluster.
-     *
-     * @return True if lock has been acquired by this node. False, otherwise.
-     */
-    private boolean acquireLock() {
-        // TODO(Anny): Add Distributed Lock logic here
-        return true;
-    }
-
-    private void releaseLock() {
-
-    }
-
-    public enum DiscoveryServiceEventType {
-        DiscoverySite("SiteChange");
-
-        @Getter
-        String val;
-        DiscoveryServiceEventType(String newVal) {
-            val = newVal;
-        }
-    }
-
-    static class DiscoveryServiceEvent {
-        DiscoveryServiceEventType type;
-        @Getter
-        SiteConfigurationMsg siteConfigMsg;
-
-        DiscoveryServiceEvent(DiscoveryServiceEventType type, SiteConfigurationMsg siteConfigMsg) {
-            this.type = type;
-            this.siteConfigMsg = siteConfigMsg;
-        }
     }
 }
