@@ -1,12 +1,12 @@
 package org.corfudb.logreplication.infrastructure;
 
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo.AphInfoMsg;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.NodeInfoMsg;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteStatus;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteMsg;
 
@@ -29,7 +29,7 @@ public class CrossSiteConfiguration {
     static String CorfuPortnum = DEFAULT_CORFU_PORT_NUM;
 
     @Getter
-    private long epoch;
+    private long siteConfigID;
 
     @Getter
     private SiteInfo primarySite;
@@ -38,20 +38,20 @@ public class CrossSiteConfiguration {
     Map<String, SiteInfo> standbySites;
 
     public CrossSiteConfiguration(SiteConfigurationMsg siteConfigMsg) {
-        this.epoch = siteConfigMsg.getEpoch();
+        this.siteConfigID = siteConfigMsg.getSiteConfigID();
         standbySites = new HashMap<>();
         for (SiteMsg siteMsg : siteConfigMsg.getSiteList()) {
             SiteInfo siteInfo = new SiteInfo(siteMsg);
-            if (siteMsg.getGmStatus() == GlobalManagerStatus.ACTIVE) {
+            if (siteMsg.getStatus() == LogReplicationSiteInfo.SiteStatus.ACTIVE) {
                 primarySite = siteInfo;
-            } else if (siteMsg.getGmStatus() == GlobalManagerStatus.STANDBY) {
+            } else if (siteMsg.getStatus() == LogReplicationSiteInfo.SiteStatus.STANDBY) {
                 addStandbySite(siteInfo);
             }
         }
     }
 
-    public CrossSiteConfiguration(long epoch, SiteInfo primarySite, Map<String, SiteInfo> standbySites) {
-        this.epoch = epoch;
+    public CrossSiteConfiguration(long siteConfigID, SiteInfo primarySite, Map<String, SiteInfo> standbySites) {
+        this.siteConfigID = siteConfigID;
         this.primarySite = primarySite;
         this.standbySites = standbySites;
     }
@@ -64,7 +64,7 @@ public class CrossSiteConfiguration {
             siteMsgs.add(siteInfo.convert2msg());
         }
 
-        SiteConfigurationMsg configMsg = SiteConfigurationMsg.newBuilder().setEpoch(epoch).addAllSite(siteMsgs).build();
+        SiteConfigurationMsg configMsg = SiteConfigurationMsg.newBuilder().setSiteConfigID(siteConfigID).addAllSite(siteMsgs).build();
 
         return configMsg;
     }
@@ -109,7 +109,7 @@ public class CrossSiteConfiguration {
         String siteId;
 
         @Getter
-        GlobalManagerStatus roleType; //standby or active
+        LogReplicationSiteInfo.SiteStatus roleType; //standby or active
 
         @Getter
         @Setter
@@ -120,17 +120,17 @@ public class CrossSiteConfiguration {
 
         public SiteInfo(SiteMsg siteMsg) {
             this.siteId = siteMsg.getId();
-            this.roleType = siteMsg.getGmStatus();
+            this.roleType = siteMsg.getStatus();
             this.leader = null;
             this.nodesInfo = new ArrayList<>();
-            for (AphInfoMsg aphInfoMsg : siteMsg.getAphList()) {
-                LogReplicationNodeInfo newNode = new LogReplicationNodeInfo(aphInfoMsg.getAddress(),
-                        Integer.toString(aphInfoMsg.getPort()), siteMsg.getGmStatus(), Integer.toString(aphInfoMsg.getCorfuPort()));
+            for (NodeInfoMsg nodeInfoMsg : siteMsg.getNodeInfoList()) {
+                LogReplicationNodeInfo newNode = new LogReplicationNodeInfo(nodeInfoMsg.getAddress(),
+                        Integer.toString(nodeInfoMsg.getPort()), siteMsg.getStatus(), Integer.toString(nodeInfoMsg.getCorfuPort()));
                 this.nodesInfo.add(newNode);
             }
         }
 
-        public SiteInfo(SiteInfo info, GlobalManagerStatus roleType) {
+        public SiteInfo(SiteInfo info, SiteStatus roleType) {
             this.siteId = info.siteId;
             this.roleType = roleType;
             this.leader = info.leader;
@@ -141,19 +141,19 @@ public class CrossSiteConfiguration {
             }
         }
 
-        public SiteInfo(String siteId, GlobalManagerStatus roleType) {
+        public SiteInfo(String siteId, SiteStatus roleType) {
             this.siteId = siteId;
             this.roleType = roleType;
             nodesInfo = new ArrayList<>();
         }
 
         SiteMsg convert2msg() {
-            ArrayList<AphInfoMsg> aphInfoMsgs = new ArrayList<>();
+            ArrayList<NodeInfoMsg> nodeInfoMsgs = new ArrayList<>();
             for (LogReplicationNodeInfo nodeInfo : nodesInfo) {
-                aphInfoMsgs.add(nodeInfo.convert2msg());
+                nodeInfoMsgs.add(nodeInfo.convert2msg());
             }
 
-            SiteMsg siteMsg = SiteMsg.newBuilder().setId(siteId).setGmStatus(roleType).addAllAph(aphInfoMsgs).build();
+            SiteMsg siteMsg = SiteMsg.newBuilder().setId(siteId).setStatus(roleType).addAllNodeInfo(nodeInfoMsgs).build();
             return siteMsg;
         }
 
@@ -182,13 +182,13 @@ public class CrossSiteConfiguration {
         public LogReplicationNodeInfo getRemoteLeader() throws Exception {
             LogReplicationNodeInfo leaderNode = null;
             try {
-                long epoch = -1;
+                long lockEpoch = -1;
                 LogReplicationQueryLeaderShipResponse resp;
                 for (LogReplicationNodeInfo nodeInfo : nodesInfo) {
                     resp = nodeInfo.runtime.queryLeadership();
-                    if (resp.getEpoch() >= epoch && resp.isLeader()) {
+                    if (resp.getEpoch() >= lockEpoch && resp.isLeader()) {
                         leaderNode = nodeInfo;
-                        epoch = resp.getEpoch();
+                        lockEpoch = resp.getEpoch();
                     }
                 }
             } catch (Exception e) {
@@ -208,5 +208,4 @@ public class CrossSiteConfiguration {
             return String.format("Cluster[%s] --- Nodes[%s]:  %s", getSiteId(), nodesInfo.size(), nodesInfo);
         }
     }
-
 }

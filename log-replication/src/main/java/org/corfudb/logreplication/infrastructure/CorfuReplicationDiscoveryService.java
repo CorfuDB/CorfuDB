@@ -4,8 +4,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.NodeLocator;
@@ -154,22 +153,22 @@ public class CorfuReplicationDiscoveryService implements Runnable {
             return;
         }
 
-        if (nodeInfo.getRoleType() == GlobalManagerStatus.ACTIVE) {
+        if (nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
             //crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
             log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
             replicationManager.startLogReplication(nodeInfo);
-        } else if (nodeInfo.getRoleType() == GlobalManagerStatus.STANDBY) {
+        } else if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
             // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
 
             // Update the siteEpoch metadata.
             replicationServerNode.getLogReplicationServer().getSinkManager().getPersistedWriterMetadata().
-                    setupEpoch(replicationManager.getCrossSiteConfig().getEpoch());
+                    setupSiteConfigID(replicationManager.getCrossSiteConfig().getSiteConfigID());
             log.info("Start as Sink (receiver) on node {} ", nodeInfo);
         }
     }
 
     public void stopLogReplication() {
-        if (nodeInfo.isLeader() && nodeInfo.getRoleType() == GlobalManagerStatus.ACTIVE) {
+        if (nodeInfo.isLeader() && nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
             replicationManager.stopLogReplication();
         }
     }
@@ -213,13 +212,13 @@ public class CorfuReplicationDiscoveryService implements Runnable {
 
     public void processSiteChangeNotification(DiscoveryServiceEvent event) {
         //stale notification, skip
-        if (event.getSiteConfigMsg().getEpoch() < getReplicationManager().getCrossSiteConfig().getEpoch()) {
+        if (event.getSiteConfigMsg().getSiteConfigID() < getReplicationManager().getCrossSiteConfig().getSiteConfigID()) {
             return;
         }
 
         CrossSiteConfiguration newConfig = siteManager.fetchSiteConfig();
-        if (newConfig.getEpoch() == getReplicationManager().getCrossSiteConfig().getEpoch()) {
-            if (nodeInfo.getRoleType() == LogReplicationSiteInfo.GlobalManagerStatus.STANDBY) {
+        if (newConfig.getSiteConfigID() == getReplicationManager().getCrossSiteConfig().getSiteConfigID()) {
+            if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
                 return;
             }
 
@@ -241,7 +240,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
         if (!nodeInfo.isLeader())
             return;
 
-        if (nodeInfo.getRoleType() != GlobalManagerStatus.ACTIVE) {
+        if (nodeInfo.getRoleType() != SiteStatus.ACTIVE) {
             return;
         }
 
