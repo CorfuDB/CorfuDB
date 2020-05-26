@@ -31,7 +31,7 @@ public class PersistedWriterMetadata {
 
     CorfuRuntime runtime;
 
-    public PersistedWriterMetadata(CorfuRuntime rt, long siteEpoch, UUID primary, UUID dst) {
+    public PersistedWriterMetadata(CorfuRuntime rt, long siteConfigID, UUID primary, UUID dst) {
         this.runtime = rt;
         this.corfuStore = new CorfuStore(runtime);
         metadataTableName = getPersistedWriterMetadataTableName(primary, dst);
@@ -46,7 +46,7 @@ public class PersistedWriterMetadata {
             log.error("Caught an exception while open the table");
             throw new ReplicationWriterException(e);
         }
-        setupEpoch(siteEpoch);
+        setupSiteConfigID(siteConfigID);
     }
 
     CorfuStoreMetadata.Timestamp getTimestamp() {
@@ -81,8 +81,8 @@ public class PersistedWriterMetadata {
         return val;
     }
 
-    public long getSiteEpoch() {
-        return query(null, PersistedWriterMetadataType.SiteEpoch);
+    public long getSiteConfigID() {
+        return query(null, PersistedWriterMetadataType.SiteConfigID);
     }
 
     public long getLastSnapStartTimestamp() {
@@ -112,16 +112,13 @@ public class PersistedWriterMetadata {
         txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
-    /**
-     *
-     * @param epoch
-     */
-    public void setupEpoch(long epoch) {
-        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
 
-        if (epoch <= persistEpoch) {
-            log.warn("Skip setupEpoch. the current epoch " + epoch + " is not larger than the persistEpoch " + persistEpoch);
+    public void setupSiteConfigID(long siteConfigID) {
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+        long persistSiteConfigID = query(timestamp, PersistedWriterMetadataType.SiteConfigID);
+
+        if (siteConfigID <= persistSiteConfigID) {
+            log.warn("Skip setupSiteConfigID. the current siteConfigID " + siteConfigID + " is not larger than the persistSiteConfigID " + persistSiteConfigID);
             return;
         }
 
@@ -129,8 +126,8 @@ public class PersistedWriterMetadata {
 
         for (PersistedWriterMetadataType key : PersistedWriterMetadataType.values()) {
             long val = Address.NON_ADDRESS;
-            if (key == PersistedWriterMetadataType.SiteEpoch) {
-                val = epoch;
+            if (key == PersistedWriterMetadataType.SiteConfigID) {
+                val = siteConfigID;
             }
             appendUpdate(txBuilder, key, val);
          }
@@ -139,35 +136,35 @@ public class PersistedWriterMetadata {
     }
 
     /**
-     * If the current epoch is not the same as the persisted epoch, ignore the operation.
+     * If the current siteConfigID is not the same as the persisted siteConfigID, ignore the operation.
      * If the current ts is smaller than the persisted snapStart, it is an old operation,
      * ignore it it.
-     * Otherwise, update the snapStart. The update of epoch just want to fence off any other metadata
-     * updates in another transaction.
+     * Otherwise, update the snapStart. The update of siteConfigID just fence off any other metadata
+     * updates in another transactions.
      *
-     * @param epoch the current operation's epoch
-     * @param ts the snapshotStart snapshot time for the epoch.
+     * @param siteConfigID the current operation's siteConfigID
+     * @param ts the snapshotStart snapshot time for the siteConfigID.
      * @return the persistent snapshotStart
      */
-    public void setSrcBaseSnapshotStart(long epoch, long ts) {
+    public void setSrcBaseSnapshotStart(long siteConfigID, long ts) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
+        long persistSiteConfigID = query(timestamp, PersistedWriterMetadataType.SiteConfigID);
         long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
 
-        log.debug("Set snapshotStart epoch " + epoch + " ts " + ts +
-                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        log.debug("Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
+                " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
 
         // It means the site config has changed, ingore the update operation.
-        if (epoch != persistEpoch || ts <= persistEpoch) {
-            log.warn("The metadata is older than the presisted one. Set snapshotStart epoch " + epoch + " ts " + ts +
-                    " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        if (siteConfigID != persistSiteConfigID || ts <= persistSiteConfigID) {
+            log.warn("The metadata is older than the presisted one. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
+                    " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
             return;
         }
 
         TxBuilder txBuilder = corfuStore.tx(namespace);
 
-        //Update the siteEpoch to fence all other transactions that update the metadata at the same time
-        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteEpoch, epoch);
+        //Update the siteConfigID to fence all other transactions that update the metadata at the same time
+        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteConfigID, siteConfigID);
 
         //Setup the LastSnapStart
         appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapStart, ts);
@@ -176,8 +173,8 @@ public class PersistedWriterMetadata {
         appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapSeqNum, Address.NON_ADDRESS);
         txBuilder.commit(timestamp);
 
-        log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
-                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        log.debug("Commit. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
+                " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
 
         return;
     }
@@ -187,52 +184,52 @@ public class PersistedWriterMetadata {
      * This call should be done in a transaction after a transfer done and before apply the snapshot.
      * @param ts
      */
-    public void setLastSnapTransferDoneTimestamp(long epoch, long ts) {
+    public void setLastSnapTransferDoneTimestamp(long siteConfigID, long ts) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
+        long persisteSiteConfigID = query(timestamp, PersistedWriterMetadataType.SiteConfigID);
         long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
 
-        log.debug("setLastSnapTransferDone snapshotStart epoch " + epoch + " ts " + ts +
-                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        log.debug("setLastSnapTransferDone snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
+                " persisteSiteConfigID " + persisteSiteConfigID + " persistSnapStart " + persistSnapStart);
 
         // It means the site config has changed, ingore the update operation.
-        if (epoch != persistEpoch || ts <= persistEpoch) {
-            log.warn("The metadata is older than the presisted one. Set snapshotStart epoch " + epoch + " ts " + ts +
-                    " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        if (siteConfigID != persisteSiteConfigID || ts <= persisteSiteConfigID) {
+            log.warn("The metadata is older than the presisted one. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
+                    " persisteSiteConfigID " + persisteSiteConfigID + " persistSnapStart " + persistSnapStart);
             return;
         }
 
         TxBuilder txBuilder = corfuStore.tx(namespace);
 
-        //Update the siteEpoch to fence all other transactions that update the metadata at the same time
-        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteEpoch, epoch);
+        //Update the siteConfigID to fence all other transactions that update the metadata at the same time
+        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteConfigID, siteConfigID);
 
         //Setup the LastSnapStart
         appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapTransferDone, ts);
 
         txBuilder.commit(timestamp);
 
-        log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
-                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        log.debug("Commit. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
+                " persisteSiteConfigID " + persisteSiteConfigID + " persistSnapStart " + persistSnapStart);
         return;
     }
 
     public void setSrcBaseSnapshotDone(LogReplicationEntry entry) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        long persistEpoch = query(timestamp, PersistedWriterMetadataType.SiteEpoch);
+        long persistSiteConfigID = query(timestamp, PersistedWriterMetadataType.SiteConfigID);
         long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
         long persistSnapTranferDone = query(timestamp, PersistedWriterMetadataType.LastSnapTransferDone);
-        long epoch = entry.getMetadata().getSiteEpoch();
+        long siteConfigID = entry.getMetadata().getSiteConfigID();
         long ts = entry.getMetadata().getSnapshotTimestamp();
 
-        if (epoch != persistEpoch || ts != persistSnapStart || ts != persistSnapTranferDone) {
+        if (siteConfigID != persistSiteConfigID || ts != persistSnapStart || ts != persistSnapTranferDone) {
             return;
         }
 
         TxBuilder txBuilder = corfuStore.tx(namespace);
 
-        //Update the siteEpoch to fence all other transactions that update the metadata at the same time
-        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteEpoch, epoch);
+        //Update the siteConfigID to fence all other transactions that update the metadata at the same time
+        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteConfigID, siteConfigID);
 
         appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapApplyDone, ts);
         appendUpdate(txBuilder, PersistedWriterMetadataType.LastLogProcessed, ts);
@@ -242,8 +239,8 @@ public class PersistedWriterMetadata {
 
         txBuilder.commit(timestamp);
 
-        log.debug("Commit. Set snapshotStart epoch " + epoch + " ts " + ts +
-                " persistEpoch " + persistEpoch + " persistSnapStart " + persistSnapStart);
+        log.debug("Commit. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
+                " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
 
         return;
     }
@@ -253,7 +250,7 @@ public class PersistedWriterMetadata {
     }
 
     public enum PersistedWriterMetadataType {
-        SiteEpoch("SiteEpic"),
+        SiteConfigID("SiteConfigID"),
         LastSnapStart("lastSnapStart"),
         LastSnapTransferDone("lastSnapTransferDone"),
         LastSnapApplyDone("lastSnapApplied"),
