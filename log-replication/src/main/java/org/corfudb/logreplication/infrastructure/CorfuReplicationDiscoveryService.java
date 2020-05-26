@@ -176,7 +176,6 @@ public class CorfuReplicationDiscoveryService implements Runnable {
 
     public void processLockAcquire() {
         log.debug("process lock acquire");
-        System.out.print("\nprocess lock acquire ");
         replicationServerNode.getLogReplicationServer().getSinkManager().setLeader(true);
 
         // leader transition from true to true, do nothing;
