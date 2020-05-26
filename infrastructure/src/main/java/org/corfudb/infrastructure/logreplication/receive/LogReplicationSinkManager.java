@@ -56,7 +56,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     private UUID snapshotRequestId = new UUID(0L, 0L);
 
     private int rxMessageCounter = 0;
-    private long siteEpoch = 0;
+    private long siteConfigID = 0;
 
     // Count number of received messages, used for testing purposes
     @VisibleForTesting
@@ -112,7 +112,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     @Override
     public LogReplicationEntry receive(LogReplicationEntry message) {
         log.info("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
-        siteEpoch = Math.max(siteEpoch, message.getMetadata().getSiteEpoch());
+        siteConfigID = Math.max(siteConfigID, message.getMetadata().getSiteConfigID());
 
         if (!receivedValidMessage(message)) {
             // If we received a start marker for snapshot sync while in LOG_ENTRY_SYNC, switch rxState
@@ -159,7 +159,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Prepare and Send Snapshot Sync ACK
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END,
-                siteEpoch,
+                siteConfigID,
                 snapshotRequestId,
                 persistedWriterMetadata.getLastProcessedLogTimestamp(),
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
@@ -223,17 +223,17 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     private void initializeSnapshotSync(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry) {
-        long siteEpoch = entry.getMetadata().getSiteEpoch();
+        long siteConfigID = entry.getMetadata().getSiteConfigID();
         long timestamp = entry.getMetadata().getSnapshotTimestamp();
 
         log.debug("Received snapshot sync start marker for {} on base snapshot timestamp {}",
                 entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
 
         // If we are just starting snapshot sync, initialize base snapshot start
-        persistedWriterMetadata.setSrcBaseSnapshotStart(siteEpoch, timestamp);
+        persistedWriterMetadata.setSrcBaseSnapshotStart(siteConfigID, timestamp);
 
         // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
-        snapshotWriter.reset(siteEpoch, timestamp);
+        snapshotWriter.reset(siteConfigID, timestamp);
 
         // Retrieve snapshot request ID to be used for ACK of snapshot sync complete
         snapshotRequestId = entry.getMetadata().getSyncRequestId();

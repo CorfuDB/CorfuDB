@@ -3,7 +3,7 @@ package org.corfudb.logreplication.infrastructure;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo.GlobalManagerStatus;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteStatus;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
 import java.io.File;
@@ -63,7 +63,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             Set<String> names = props.stringPropertyNames();
 
             // Setup primary site information
-            primarySite = new CrossSiteConfiguration.SiteInfo(props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME), GlobalManagerStatus.ACTIVE);
+            primarySite = new CrossSiteConfiguration.SiteInfo(props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME), SiteStatus.ACTIVE);
             String corfuPortNum = props.getProperty(PRIMARY_SITE_CORFU_PORTNUM);
             String portNum = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
 
@@ -76,13 +76,13 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                 }
                 String ipAddress = props.getProperty(nodeName);
                 log.info("primary site ipaddress {} for node {}", ipAddress, nodeName);
-                LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(ipAddress, portNum, GlobalManagerStatus.ACTIVE, corfuPortNum);
+                LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(ipAddress, portNum, SiteStatus.ACTIVE, corfuPortNum);
                 primarySite.nodesInfo.add(nodeInfo);
             }
 
             // Setup backup site information
             standbySites = new HashMap<>();
-            standbySites.put(STANDBY_SITE_NAME, new CrossSiteConfiguration.SiteInfo(props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME), GlobalManagerStatus.STANDBY));
+            standbySites.put(STANDBY_SITE_NAME, new CrossSiteConfiguration.SiteInfo(props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME), SiteStatus.STANDBY));
             corfuPortNum = props.getProperty(STANDBY_SITE_CORFU_PORTNUM);
             portNum = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
@@ -93,7 +93,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                 }
                 String ipAddress = props.getProperty(STANDBY_SITE_NODE + i);
                 log.info("standby site ipaddress {} for node {}", ipAddress, i);
-                LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(ipAddress, portNum, GlobalManagerStatus.STANDBY, corfuPortNum);
+                LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(ipAddress, portNum, SiteStatus.STANDBY, corfuPortNum);
                 standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);
             }
 
@@ -137,7 +137,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
      */
     public static CrossSiteConfiguration changePrimary(CrossSiteConfiguration siteConfig) {
         CrossSiteConfiguration.SiteInfo oldPrimary = new CrossSiteConfiguration.SiteInfo(siteConfig.getPrimarySite(),
-                GlobalManagerStatus.STANDBY);
+                SiteStatus.STANDBY);
         Map<String, CrossSiteConfiguration.SiteInfo> standbys = new HashMap<>();
         CrossSiteConfiguration.SiteInfo newPrimary = null;
         CrossSiteConfiguration.SiteInfo standby;
@@ -146,9 +146,9 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         for (String endpoint : siteConfig.getStandbySites().keySet()) {
             CrossSiteConfiguration.SiteInfo info = siteConfig.getStandbySites().get(endpoint);
             if (newPrimary == null) {
-                newPrimary = new CrossSiteConfiguration.SiteInfo(info, GlobalManagerStatus.ACTIVE);
+                newPrimary = new CrossSiteConfiguration.SiteInfo(info, SiteStatus.ACTIVE);
             } else {
-                standby = new CrossSiteConfiguration.SiteInfo(info, GlobalManagerStatus.STANDBY);
+                standby = new CrossSiteConfiguration.SiteInfo(info, SiteStatus.STANDBY);
                 standbys.put(standby.getSiteId(), standby);
             }
         }

@@ -126,7 +126,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, 0, uuid, uuid);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
 
-        writer.reset(msgQ.get(0).getMetadata().getSiteEpoch(), msgQ.get(0).getMetadata().getSnapshotTimestamp());
+        writer.reset(msgQ.get(0).getMetadata().getSiteConfigID(), msgQ.get(0).getMetadata().getSnapshotTimestamp());
 
         for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);

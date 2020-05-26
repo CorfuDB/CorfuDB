@@ -12,7 +12,7 @@ class LogReplicationNodeInfo {
 
     @Setter
     @Getter
-    LogReplicationSiteInfo.GlobalManagerStatus roleType;
+    LogReplicationSiteInfo.SiteStatus roleType;
 
     @Getter
     String ipAddress;
@@ -32,7 +32,7 @@ class LogReplicationNodeInfo {
     @Setter
     CorfuLogReplicationRuntime runtime;
 
-    LogReplicationNodeInfo(String ipAddress, String portNum, LogReplicationSiteInfo.GlobalManagerStatus roleType, String corfuPortNum) {
+    LogReplicationNodeInfo(String ipAddress, String portNum, LogReplicationSiteInfo.SiteStatus roleType, String corfuPortNum) {
         this.leader = false;
         this.ipAddress = ipAddress;
         this.roleType = roleType;
@@ -40,8 +40,8 @@ class LogReplicationNodeInfo {
         this.corfuPortNum = corfuPortNum;
     }
 
-    public LogReplicationSiteInfo.AphInfoMsg convert2msg() {
-        LogReplicationSiteInfo.AphInfoMsg aphInfoMsg = LogReplicationSiteInfo.AphInfoMsg.newBuilder().setAddress(ipAddress).setPort(Integer.parseInt(portNum)).setCorfuPort(Integer.parseInt(corfuPortNum)).build();
+    public LogReplicationSiteInfo.NodeInfoMsg convert2msg() {
+        LogReplicationSiteInfo.NodeInfoMsg aphInfoMsg = LogReplicationSiteInfo.NodeInfoMsg.newBuilder().setAddress(ipAddress).setPort(Integer.parseInt(portNum)).setCorfuPort(Integer.parseInt(corfuPortNum)).build();
         return aphInfoMsg;
     }
 

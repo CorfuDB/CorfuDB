@@ -29,7 +29,7 @@ public abstract class CorfuReplicationSiteManagerAdapter {
      * @return
      */
     synchronized void updateSiteConfig(SiteConfigurationMsg newSiteConfigMsg) {
-            if (newSiteConfigMsg.getEpoch() > siteConfigMsg.getEpoch()) {
+            if (newSiteConfigMsg.getSiteConfigID() > siteConfigMsg.getSiteConfigID()) {
                 siteConfigMsg = newSiteConfigMsg;
                 siteConfig = new CrossSiteConfiguration(siteConfigMsg);
                 corfuReplicationDiscoveryService.putEvent(

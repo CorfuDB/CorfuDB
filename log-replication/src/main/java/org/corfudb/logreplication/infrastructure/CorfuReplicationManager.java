@@ -95,7 +95,7 @@ public class CorfuReplicationManager {
 
             LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
             log.info("Log Replication Negotiation with {} result {}", siteId, negotiationResult);
-            replicate(runtime, negotiationResult, crossSiteConfig.getEpoch());
+            replicate(runtime, negotiationResult, crossSiteConfig.getSiteConfigID());
 
         } catch (Exception e) {
             log.error("Will stop this remote site replicaiton as caught an exception", e);
@@ -134,7 +134,7 @@ public class CorfuReplicationManager {
      * @param newConfig has the same siteConfigId as the current config
      */
     public void processStandbyChange(LogReplicationNodeInfo nodeInfo, CrossSiteConfiguration newConfig) {
-        if (newConfig.getEpoch() != crossSiteConfig.getEpoch()) {
+        if (newConfig.getSiteConfigID() != crossSiteConfig.getSiteConfigID()) {
             log.error("the new config {} doesn't have the same siteConfigId as the current one {}", newConfig, crossSiteConfig);
             return;
         }
