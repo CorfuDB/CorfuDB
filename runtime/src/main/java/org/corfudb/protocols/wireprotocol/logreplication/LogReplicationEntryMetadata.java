@@ -13,7 +13,7 @@ public class LogReplicationEntryMetadata {
     /*
      * Used to keep track of the site config history.
      */
-    private long siteEpoch;
+    private long siteConfigID;
 
     /*
      * Used to determine the type of the metadata:
@@ -56,9 +56,9 @@ public class LogReplicationEntryMetadata {
     public LogReplicationEntryMetadata() { }
 
     // Constructor for log entry ACK
-    public LogReplicationEntryMetadata(MessageType type, long epoch, UUID syncRequestId, long entryTimeStamp, long snapshotTimestamp) {
+    public LogReplicationEntryMetadata(MessageType type, long siteConfigID, UUID syncRequestId, long entryTimeStamp, long snapshotTimestamp) {
         this.messageMetadataType = type;
-        this.siteEpoch = epoch;
+        this.siteConfigID = siteConfigID;
         this.syncRequestId = syncRequestId;
         this.timestamp = entryTimeStamp;
         this.snapshotTimestamp = snapshotTimestamp;

@@ -37,7 +37,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     HashMap<UUID, String> shadowMap;
     CorfuRuntime rt;
 
-    long siteEpoch;
+    long siteConfigID;
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private long recvSeq;
     private long shadowStreamStartAddress;
@@ -75,22 +75,22 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      */
     void clearTables() {
         CorfuStoreMetadata.Timestamp timestamp = persistedWriterMetadata.getTimestamp();
-        long persistEpoch = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch);
+        long persistSiteConfigID = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteConfigID);
         long persistSnapStart = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart);
         long persitSeqNum = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
 
         //for transfer phase start
-        if (siteEpoch != persistEpoch || srcGlobalSnapshot != persistSnapStart ||
+        if (siteConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart ||
                 (persitSeqNum + 1)!= recvSeq) {
-            log.warn("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + recvSeq +
-                    " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
+            log.warn("Skip current siteConfigID " + siteConfigID + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + recvSeq +
+                    " persistedMetadata " + persistedWriterMetadata.getSiteConfigID() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
                     " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
             return;
         }
 
 
         TxBuilder txBuilder = persistedWriterMetadata.getTxBuilder();
-        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch, siteEpoch);
+        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteConfigID, siteConfigID);
 
 
         for (UUID streamID : streamViewMap.keySet()) {
@@ -124,8 +124,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * Reset snapshot writer state.
      * @param snapshot
      */
-    public void reset(long siteEpoch, long snapshot) {
-        this.siteEpoch = siteEpoch;
+    public void reset(long siteConfigID, long snapshot) {
+        this.siteConfigID = siteConfigID;
         srcGlobalSnapshot = snapshot;
         recvSeq = 0;
 
@@ -143,19 +143,19 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      */
     void processOpaqueEntry(List<SMREntry> smrEntries, Long currentSeqNum, UUID dstUUID) {
         CorfuStoreMetadata.Timestamp timestamp = persistedWriterMetadata.getTimestamp();
-        long persistEpoch = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch);
+        long persistConfigID = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteConfigID);
         long persistSnapStart = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart);
         long persitSeqNum = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
 
-        if (siteEpoch != persistEpoch || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
-            log.warn("Skip current site epoch " + siteEpoch + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
-                    " persistedMetadata " + persistedWriterMetadata.getSiteEpoch() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
+        if (siteConfigID != persistConfigID || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
+            log.warn("Skip current siteConfigID " + siteConfigID + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
+                    " persistedMetadata " + persistedWriterMetadata.getSiteConfigID() + " startSnapshot " + persistedWriterMetadata.getLastSnapStartTimestamp() +
                     " lastSnapSeqNum " + persistedWriterMetadata.getLastSnapSeqNum());
             return;
         }
 
         TxBuilder txBuilder = persistedWriterMetadata.getTxBuilder();
-        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteEpoch, siteEpoch);
+        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteConfigID, siteConfigID);
         persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart, srcGlobalSnapshot);
         persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum, currentSeqNum);
         for (SMREntry smrEntry : smrEntries) {
@@ -251,10 +251,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         //verify that the snapshot Apply hasn't started yet and set it as started and set the seqNumber
         long ts = entry.getMetadata().getSnapshotTimestamp();
         long seqNum = 0;
-        siteEpoch = entry.getMetadata().getSiteEpoch();
+        siteConfigID = entry.getMetadata().getSiteConfigID();
 
         //update the metadata
-        persistedWriterMetadata.setLastSnapTransferDoneTimestamp(siteEpoch, ts);
+        persistedWriterMetadata.setLastSnapTransferDoneTimestamp(siteConfigID, ts);
 
         //get the number of entries to apply
         seqNum = 1 + persistedWriterMetadata.query(null, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
