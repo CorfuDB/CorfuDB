@@ -37,6 +37,7 @@ import io.prometheus.client.Collector.MetricFamilySamples.Sample;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.dropwizard.DropwizardExports;
 import io.prometheus.client.exporter.common.TextFormat;
+import io.prometheus.client.hotspot.DefaultExports;
 import org.corfudb.common.metrics.MetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer.Config;
@@ -174,6 +175,26 @@ public class MetricsUtils {
     public static void main(String[] args) throws InterruptedException, IOException {
         log.error("START!!!!!");
 
+        //final MetricRegistry metricRegistry = dropwizardMetrics();
+
+        //CollectorRegistry.defaultRegistry.register(new DropwizardExports(metricRegistry));
+        DefaultExports.initialize();
+
+        printMetrics();
+    }
+
+    private static void printMetrics() throws IOException {
+        Enumeration<MetricFamilySamples> samples = CollectorRegistry.defaultRegistry.metricFamilySamples();
+
+        try (Writer writer = new StringWriter()) {
+            write004(writer, samples);
+            writer.flush();
+
+            System.out.println("!!!!! " +  writer.toString());
+        }
+    }
+
+    private static MetricRegistry dropwizardMetrics() {
         System.setProperty(PROPERTY_LOCAL_METRICS_COLLECTION, "true");
         System.setProperty(PROPERTY_CSV_INTERVAL, "0");
         System.setProperty(PROPERTY_JVM_METRICS_COLLECTION, "true");
@@ -182,20 +203,7 @@ public class MetricsUtils {
 
         final MetricRegistry metricRegistry = new MetricRegistry();
         metricsReportingSetup(metricRegistry);
-
-        CollectorRegistry.defaultRegistry.register(new DropwizardExports(metricRegistry));
-
-        Enumeration<MetricFamilySamples> samples = CollectorRegistry.defaultRegistry
-                .filteredMetricFamilySamples(new HashSet<>());
-
-        try (Writer writer = new StringWriter()) {
-            write004(writer, samples);
-            writer.flush();
-
-            System.out.println("!!!!! " +  writer.toString());
-        }
-
-        Thread.sleep(10000);
+        return metricRegistry;
     }
 
     public static void write004(Writer writer, Enumeration<MetricFamilySamples> mfs) throws IOException {
@@ -221,6 +229,8 @@ public class MetricsUtils {
                 if (sample.timestampMs != null){
                     writer.write(' ');
                     writer.write(sample.timestampMs.toString());
+                } else {
+                    writer.write(" " + System.currentTimeMillis());
                 }
                 writer.write('\n');
             }
