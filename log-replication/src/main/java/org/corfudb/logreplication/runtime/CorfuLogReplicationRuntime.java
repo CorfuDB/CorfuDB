@@ -105,7 +105,12 @@ public class CorfuLogReplicationRuntime {
         initStreamNameFetcherPlugin();
 
         // Initialize the streamsToReplicate
-        if (!streamsToReplicateTableExists()) {
+        if (streamsToReplicateTableExists()) {
+            // The table exists but it may have been created by another runtime in which case, it has to be opened with
+            // key/value/metadata type info
+            openExistingStreamInfoTable();
+        } else {
+            // Create the table
             initializeReplicationStreamsTable(logReplicationStreamNameFetcher.fetchStreamsToReplicate());
         }
         // TODO - pankti - check the version.  If the table version is <(current version), delete the table and wait
@@ -223,10 +228,20 @@ public class CorfuLogReplicationRuntime {
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         try {
             corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, "LogReplicationStreams");
-            return true;
         } catch (NoSuchElementException e) {
             // Table does not exist
             return false;
+        } catch (IllegalArgumentException e) { }
+        return true;
+    }
+
+    private void openExistingStreamInfoTable() {
+        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+        try {
+            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, "LogReplicationStreams", TableInfo.class,
+                    Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+            log.warn("Exception when opening existing table {}", e);
         }
     }
 
@@ -235,21 +250,14 @@ public class CorfuLogReplicationRuntime {
         try {
             corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, "LogReplicationStreams", TableInfo.class,
                     Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
+            TxBuilder tx = corfuStore.tx(CORFU_SYSTEM_NAMESPACE);
             for (Map.Entry<String, String> entry : streams.entrySet()) {
                 TableInfo tableInfo = TableInfo.newBuilder().setName(entry.getKey()).build();
                 Namespace namespace = Namespace.newBuilder().setName(entry.getValue()).build();
-                corfuStore.tx(CORFU_SYSTEM_NAMESPACE).create("LogReplicationStreams", tableInfo, namespace,
-                        null);
+                CommonTypes.Uuid uuid = CommonTypes.Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
+                tx.create("LogReplicationStreams", tableInfo, namespace, uuid);
             }
-            /*//TODO: Pankti temp fix to store the default set of tables
-            Set<String> tablesNames = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
-            tablesNames.forEach(name -> {
-                TableInfo tableInfo = TableInfo.newBuilder().setName(name).build();
-                Namespace namespace = Namespace.newBuilder().setName("test").build();
-                corfuStore.tx(CORFU_SYSTEM_NAMESPACE).create("LogReplicationStreams", tableInfo, namespace,
-                        null);
-            });*/
-            corfuStore.tx(CORFU_SYSTEM_NAMESPACE).commit();
+            tx.commit();
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             log.warn("Exception when opening the table {}", e);
         }
@@ -261,10 +269,10 @@ public class CorfuLogReplicationRuntime {
         Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
         Set<TableInfo> tables = q.keySet("LogReplicationStreams", null);
         Set<String> tableNames = new HashSet<>();
-        tables.forEach(table -> tableNames.add(table.getName()));
-
-        // TODO pankti: Temp fix to populate with default streams names until plugin is added.  Tests depend on this.
-        tableNames.addAll(Arrays.asList("Table001", "Table002", "Table003"));
+        tables.forEach(table -> {
+            log.info("Retrieved {}", table.getName());
+            tableNames.add(table.getName());
+        });
         return tableNames;
     }
 
