@@ -1,10 +1,13 @@
 package org.corfudb.runtime.view.replication;
 
+import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.RecoveryException;
 import org.corfudb.runtime.view.Layout;
@@ -14,6 +17,7 @@ import org.corfudb.util.CFUtils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -78,7 +82,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
 
     /**
      * Reads a list of global addresses from the chain of log unit servers.
-     *
+     * <p>
      * - This method optimizes for the time to wait to hole fill in case empty addresses
      * are encountered.
      * - If the waitForWrite flag is set to true, when an empty address is encountered,
@@ -88,7 +92,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      * the empty addresses are hole filled right away.
      *
      * @param runtimeLayout runtime layout.
-     * @param addresses     list of addresses to read.
+     * @param addresses     a collection of addresses to read.
      * @param waitForWrite  flag whether wait for write is required or hole fill directly.
      * @param cacheOnServer flag whether the fetch results should be cached on log unit server.
      * @return Map of read addresses.
@@ -96,27 +100,22 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
     @Override
     @Nonnull
     public Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout,
-                                       List<Long> addresses,
+                                       Collection<Long> addresses,
                                        boolean waitForWrite,
                                        boolean cacheOnServer) {
 
-        // A map of log unit server endpoint to addresses it's responsible for
-        Map<String, List<Long>> serverAddressMap = new HashMap<>();
-        
-        for (Long address : addresses) {
-            List<String> logServers = runtimeLayout.getLayout().getStripe(address).getLogServers();
-            String logServer = logServers.get(logServers.size() - 1);
-            List<Long> addressList = serverAddressMap.computeIfAbsent(logServer, s -> new ArrayList<>());
-            addressList.add(address);
-        }
+        // Group addresses by log unit client.
+        Map<LogUnitClient, List<Long>> serverAddressMap =
+                groupAddressByLogUnit(runtimeLayout, addresses);
 
-        // Send read requests to log unit servers in parallel
-        List<CompletableFuture<ReadResponse>> futures = serverAddressMap.entrySet().stream()
-                .map(entry -> runtimeLayout.getLogUnitClient(entry.getKey())
-                        .readAll(entry.getValue(), cacheOnServer))
+        // Send read requests to log unit servers in parallel.
+        List<CompletableFuture<ReadResponse>> futures = serverAddressMap
+                .entrySet()
+                .stream()
+                .map(entry -> entry.getKey().readAll(entry.getValue(), cacheOnServer))
                 .collect(Collectors.toList());
 
-        // Merge the read responses from different log unit servers
+        // Merge the read responses from different log unit servers.
         Map<Long, LogData> readResult = futures.stream()
                 .map(future -> CFUtils.getUninterruptibly(future).getAddresses())
                 .reduce(new HashMap<>(), (map1, map2) -> {
@@ -125,6 +124,49 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                 });
 
         return waitOrHoleFill(runtimeLayout, readResult, waitForWrite);
+    }
+
+    /**
+     * Commit the addresses by first reading and then hole filling if data not existed.
+     *
+     * @param runtimeLayout the RuntimeLayout stamped with layout to use for commit
+     * @param addresses     a collection of addresses to commit
+     */
+    @Override
+    public void commitAll(RuntimeLayout runtimeLayout, Collection<Long> addresses) {
+        // Group addresses by log unit client.
+        Map<LogUnitClient, List<Long>> serverAddressMap =
+                groupAddressByLogUnit(runtimeLayout, addresses);
+
+        // Send inspect addresses requests to log unit servers in parallel.
+        List<CompletableFuture<InspectAddressesResponse>> futures = serverAddressMap
+                .entrySet()
+                .stream()
+                .map(entry -> entry.getKey().inspectAddresses(entry.getValue()))
+                .collect(Collectors.toList());
+
+        // Merge the inspect responses from different log unit servers.
+        List<Long> holes = futures.stream()
+                .flatMap(future -> CFUtils.getUninterruptibly(future).getEmptyAddresses().stream())
+                .collect(Collectors.toList());
+
+        // Fill all the holes in batches.
+        batchHoleFill(runtimeLayout, holes);
+    }
+
+    private Map<LogUnitClient, List<Long>> groupAddressByLogUnit(RuntimeLayout runtimeLayout,
+                                                                 Collection<Long> addresses) {
+        // A map of log unit client to addresses it's responsible for.
+        Map<LogUnitClient, List<Long>> serverAddressMap = new HashMap<>();
+
+        for (long address : addresses) {
+            int numUnits = runtimeLayout.getLayout().getSegmentLength(address);
+            LogUnitClient client = runtimeLayout.getLogUnitClient(address, numUnits - 1);
+            List<Long> addressList = serverAddressMap.computeIfAbsent(client, s -> new ArrayList<>());
+            addressList.add(address);
+        }
+
+        return serverAddressMap;
     }
 
     private Map<Long, ILogData> waitOrHoleFill(RuntimeLayout runtimeLayout,
@@ -157,9 +199,10 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                     // fulfilled the read through the hole fill policy (back-off / wait for write)
                     wait = false;
                 } else {
-                    // try to read the value
+                    // Try to read the value again because after the initial waiting,
+                    // the rest of unfilled addresses might be written.
                     value = peek(runtimeLayout, address);
-                    // if value is empty, fill the hole and get the value.
+                    // If value is still empty, fill the hole and get the value.
                     if (value == null) {
                         holeFill(runtimeLayout, address);
                         value = peek(runtimeLayout, address);
@@ -170,6 +213,19 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         }
 
         return returnResult;
+    }
+
+    private void batchHoleFill(RuntimeLayout runtimeLayout, Iterable<Long> holes) {
+        final int holeFillBatchSize = 8;
+        Iterable<List<Long>> batches = Iterables.partition(holes, holeFillBatchSize);
+
+        for (List<Long> batch : batches) {
+            List<CompletableFuture<Void>> futures = batch
+                    .stream()
+                    .map(hole -> CompletableFuture.runAsync(() -> holeFill(runtimeLayout, hole)))
+                    .collect(Collectors.toList());
+            futures.forEach(CFUtils::getUninterruptibly);
+        }
     }
 
     /**

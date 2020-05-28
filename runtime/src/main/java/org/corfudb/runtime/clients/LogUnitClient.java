@@ -17,6 +17,8 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.InspectAddressesRequest;
+import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
@@ -188,6 +190,18 @@ public class LogUnitClient extends AbstractClient {
     }
 
     /**
+     * Check if addresses are committed on log unit server, which returns a future
+     * with uncommitted addresses (holes) on the server.
+     *
+     * @param addresses list of global addresses to inspect
+     * @return a completableFuture which returns an InspectAddressesResponse
+     */
+    public CompletableFuture<InspectAddressesResponse> inspectAddresses(List<Long> addresses) {
+        return sendMessageWithFuture(CorfuMsgType.INSPECT_ADDRESSES_REQUEST
+                .payloadMsg(new InspectAddressesRequest(addresses)));
+    }
+
+    /**
      * Get the global tail maximum address the log unit has written.
      *
      * @return a CompletableFuture which will complete with the globalTail once
@@ -205,6 +219,25 @@ public class LogUnitClient extends AbstractClient {
      */
     public CompletableFuture<TailsResponse> getAllTails() {
         return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.payloadMsg(TailsRequest.ALL_STREAMS_TAIL));
+    }
+
+    /**
+     * Get the committed tail of the log unit.
+     *
+     * @return a CompletableFuture which will complete with the committed tail once received.
+     */
+    public CompletableFuture<Long> getCommittedTail() {
+        return sendMessageWithFuture(CorfuMsgType.COMMITTED_TAIL_REQUEST.msg());
+    }
+
+    /**
+     * Update the committed tail of the log unit.
+     *
+     * @param committedTail new committed tail to update
+     * @return an empty completableFuture
+     */
+    public CompletableFuture<Void> updateCommittedTail(long committedTail) {
+        return sendMessageWithFuture(CorfuMsgType.UPDATE_COMMITTED_TAIL.payloadMsg(committedTail));
     }
 
     /**
