@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.management;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
@@ -9,13 +9,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
-import org.corfudb.infrastructure.management.ClusterAdvisor;
-import org.corfudb.infrastructure.management.ClusterAdvisorFactory;
-import org.corfudb.infrastructure.management.ClusterStateContext;
-import org.corfudb.infrastructure.management.ClusterType;
-import org.corfudb.infrastructure.management.FailureDetector;
-import org.corfudb.infrastructure.management.PollReport;
-import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.ClusterState;
@@ -770,7 +764,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 //Add all layouts to the set
                 .forEach(optionalLayout -> optionalLayout.ifPresent(layouts::add));
 
-        return Optional.ofNullable(layouts.isEmpty() ? null : layouts.first());
+        return Optional.ofNullable(layouts.pollFirst());
     }
 
     /**

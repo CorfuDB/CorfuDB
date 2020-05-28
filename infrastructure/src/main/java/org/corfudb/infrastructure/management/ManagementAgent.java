@@ -1,11 +1,10 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.management;
 
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.management.ClusterStateContext;
-import org.corfudb.infrastructure.management.FailureDetector;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
@@ -14,7 +13,7 @@ import org.corfudb.util.concurrent.SingletonResource;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
-import static org.corfudb.infrastructure.RecoveryHandler.runRecoveryReconfiguration;
+import static org.corfudb.infrastructure.management.RecoveryHandler.runRecoveryReconfiguration;
 
 /**
  * Instantiates and performs failure detection and handling asynchronously.

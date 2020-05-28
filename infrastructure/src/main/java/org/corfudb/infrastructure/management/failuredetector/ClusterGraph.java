@@ -57,6 +57,7 @@ public class ClusterGraph {
 
     @NonNull
     private final ImmutableList<String> unresponsiveNodes;
+
     /**
      * Transform a cluster state to the cluster graph.
      * ClusterState contains some extra information, cluster graph is a pure representation of a graph of nodes.
@@ -183,20 +184,16 @@ public class ClusterGraph {
 
         NavigableSet<NodeRank> nodes = getNodeRanks();
 
-        if (nodes.isEmpty()) {
-            log.error("Empty graph. Can't provide decision maker");
-            return Optional.empty();
-        }
+        Optional<NodeRank> decisionMaker = Optional
+                .ofNullable(nodes.pollFirst())
+                .filter(nodeRank -> nodeRank.getNumConnections() > 0);
 
-        NodeRank decisionMaker = nodes.first();
-
-        if (decisionMaker.getNumConnections() < 1) {
-            log.trace("The node is fully disconnected from the graph. Decision maker doesn't exists");
-            return Optional.empty();
+        if (!decisionMaker.isPresent()) {
+            log.error("Empty graph. Can't provide decision maker. Nodes: {}", nodes);
         }
 
         log.trace("Decision maker has found: {}, all node ranks: {}", decisionMaker, nodes);
-        return Optional.of(decisionMaker);
+        return decisionMaker;
     }
 
     /**
@@ -209,39 +206,30 @@ public class ClusterGraph {
     public Optional<NodeRank> findFailedNode() {
         log.trace("Looking for failed node");
 
-        NavigableSet<NodeRank> nodes = getNodeRanks();
-        if (nodes.isEmpty()) {
-            log.error("Empty graph. Can't provide failed node");
-            return Optional.empty();
-        }
+        NavigableSet<NodeRank> ranks = getNodeRanks();
+        Optional<NodeRank> last = Optional
+                .ofNullable(ranks.pollLast())
+                // exclude a node if it is a healthy node
+                .filter(nodeRank -> nodeRank.getNumConnections() != graph.size());
 
-        NodeRank last = nodes.last();
-        if (last.getNumConnections() == graph.size()) {
-            return Optional.empty();
+        if (!last.isPresent()) {
+            log.error(
+                    "Can't find failed node. Node ranks: {}, cluster size: {}",
+                    ranks, graph.size()
+            );
         }
 
         //If the node is connected to all alive nodes (nodes not in unresponsive list)
         // in the cluster, that node can't be a failed node.
-        // We can't rely on information from nodes in unresponsive list.
-        Optional<NodeRank> fullyConnected = findFullyConnectedNode(last.getEndpoint());
-
-        //check if failed node is fully connected
-        boolean isFailedNodeFullyConnected = fullyConnected
-                .map(fcNode -> fcNode.equals(last))
-                .orElse(false);
-
-        if (isFailedNodeFullyConnected) {
-            log.trace("Fully connected node can't be a failed node");
-            return Optional.empty();
-        }
-
-        return Optional.of(last);
+        // We can't rely on information from nodes in the unresponsive list.
+        return last
+                .filter(nodeRank -> !findFullyConnectedNode(nodeRank.getEndpoint()).isPresent());
     }
 
     /**
      * See if the node is fully connected.
      *
-     * @param endpoint          local node name
+     * @param endpoint local node name
      * @return local node rank
      */
     public Optional<NodeRank> findFullyConnectedNode(String endpoint) {

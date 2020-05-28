@@ -9,7 +9,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.RemoteMonitoringService;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
@@ -42,11 +41,9 @@ import java.util.stream.Collectors;
  * - Poll result aggregation.
  * - If we complete an iteration without detecting failures, we end the round successfully.
  * The management Server ensures only one instance of this class and hence this is NOT thread safe.
- * Created by zlokhandwala on 11/29/17.
  */
 @Slf4j
-public class FailureDetector implements IDetector {
-
+public class FailureDetector {
 
     /**
      * Number of iterations to execute to detect a failure in a round.

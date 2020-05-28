@@ -1,10 +1,11 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.management;
 
 import static org.corfudb.util.LambdaUtils.runSansThrow;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;

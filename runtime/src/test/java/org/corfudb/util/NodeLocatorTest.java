@@ -1,14 +1,12 @@
-package org.corfudb.runtime.utils;
+package org.corfudb.util;
+
+import org.corfudb.util.NodeLocator.Protocol;
+import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.util.NodeLocator;
-import org.corfudb.util.NodeLocator.Protocol;
-import org.junit.Test;
-
-public class NodeLocatorTest extends AbstractViewTest {
+public class NodeLocatorTest {
 
     @Test
     public void invalidNodeThrowsException() {
@@ -19,20 +17,14 @@ public class NodeLocatorTest extends AbstractViewTest {
     /** Tests that a legacy (without protocol) node parses correctly. **/
     @Test
     public void legacyNodeParses() {
-        final int PORT_NUM = 3000;
-        NodeLocator locator = NodeLocator.parseString("10.0.0.1:3000");
+        final int portNum = 3000;
+        final String ipAddr = "10.0.0.1";
+        NodeLocator locator = NodeLocator.parseString(ipAddr + ":" + portNum);
 
-        assertThat(locator.getHost())
-            .isEqualTo("10.0.0.1");
-
-        assertThat(locator.getPort())
-            .isEqualTo(PORT_NUM);
-
-        assertThat(locator.getNodeId())
-            .isNull();
-
-        assertThat(locator.getProtocol())
-            .isEqualTo(Protocol.TCP);
+        assertThat(locator.getHost()).isEqualTo(ipAddr);
+        assertThat(locator.getPort()).isEqualTo(portNum);
+        assertThat(locator.getNodeId()).isNull();
+        assertThat(locator.getProtocol()).isEqualTo(Protocol.TCP);
     }
 
     @Test
@@ -62,5 +54,4 @@ public class NodeLocatorTest extends AbstractViewTest {
         assertThat(locator).isEqualToComparingFieldByField(parsed);
         assertThat(locator).isEqualTo(parsed);
     }
-
 }

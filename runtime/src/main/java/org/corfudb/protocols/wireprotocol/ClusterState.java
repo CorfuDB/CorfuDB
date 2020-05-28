@@ -19,10 +19,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Records the cluster state of the system.
- * This includes a map of {@link NodeState}.
- *
- * <p>Created by zlokhandwala on 11/1/18.
+ * Records the cluster state of the system. This includes a map of {@link NodeState}.
  */
 @Builder
 @AllArgsConstructor
@@ -56,8 +53,9 @@ public class ClusterState {
     }
 
     /**
-     * See if cluster is ready. If cluster contains at least one node with state NOT_READY the cluster is not ready and
-     * cluster state can't be used to find failures.
+     * See if cluster is ready.
+     * If cluster contains at least one node with state NOT_READY the cluster is not ready
+     * and cluster state can't be used to find failures.
      *
      * @return cluster status
      */
