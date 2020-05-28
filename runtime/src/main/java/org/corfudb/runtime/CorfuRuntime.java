@@ -851,7 +851,11 @@ public class CorfuRuntime {
      * @return The router.
      */
     public IClientRouter getRouter(String address) {
-        return nodeRouterPool.getRouter(NodeLocator.parseString(address));
+        return getRouter(NodeLocator.parseString(address));
+    }
+
+    public IClientRouter getRouter(NodeLocator address) {
+        return nodeRouterPool.getRouter(address);
     }
 
     /**
