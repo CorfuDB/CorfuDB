@@ -109,12 +109,14 @@ public class CorfuLogReplicationRuntime {
             // The table exists but it may have been created by another runtime in which case, it has to be opened with
             // key/value/metadata type info
             openExistingStreamInfoTable();
+            if (!tableVersionMatchesPlugin()) {
+                // delete the table and create a new one
+                deleteExistingReplicationStreamsTable();
+                createReplicationStreamsTable(logReplicationStreamNameFetcher.fetchStreamsToReplicate());
+            }
         } else {
-            // Create the table
-            initializeReplicationStreamsTable(logReplicationStreamNameFetcher.fetchStreamsToReplicate());
+            createReplicationStreamsTable(logReplicationStreamNameFetcher.fetchStreamsToReplicate());
         }
-        // TODO - pankti - check the version.  If the table version is <(current version), delete the table and wait
-        // for it to get created
         streamsToReplicate = getStreamsToReplicateFromTable();
     }
 
@@ -129,7 +131,7 @@ public class CorfuLogReplicationRuntime {
         File jar = new File(config.getStreamFetcherPluginJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
-            logReplicationStreamNameFetcher= (LogReplicationStreamNameFetcher) plugin.getDeclaredConstructor()
+            logReplicationStreamNameFetcher = (LogReplicationStreamNameFetcher) plugin.getDeclaredConstructor()
                 .newInstance();
         } catch (Exception e) {
             log.error("Fatal error: Failed to get Stream Fetcher Plugin", e);
@@ -245,16 +247,35 @@ public class CorfuLogReplicationRuntime {
         }
     }
 
-    private void initializeReplicationStreamsTable(Map<String, String> streams) {
+    private boolean tableVersionMatchesPlugin() {
+        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+        corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, "LogReplicationStreams");
+        TableInfo lookupKey = TableInfo.newBuilder().setName("Version").build();
+        Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
+        Namespace version = (Namespace) q.getRecord("LogReplicationStreams", lookupKey).getPayload();
+        return (Objects.equals(version.getName(), logReplicationStreamNameFetcher.getVersion()));
+    }
+
+    private void deleteExistingReplicationStreamsTable() {
+        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+        corfuStore.deleteTable(CORFU_SYSTEM_NAMESPACE, "LogReplicationStreams");
+    }
+
+    private void createReplicationStreamsTable(Map<String, String> streams) {
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         try {
             corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, "LogReplicationStreams", TableInfo.class,
                     Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
             TxBuilder tx = corfuStore.tx(CORFU_SYSTEM_NAMESPACE);
+            // First entry should be the version of the plugin
+            TableInfo tableInfo = TableInfo.newBuilder().setName("Version").build();
+            Namespace version = Namespace.newBuilder().setName(logReplicationStreamNameFetcher.getVersion()).build();
+            CommonTypes.Uuid uuid = CommonTypes.Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
+            tx.create("LogReplicationStreams", tableInfo, version, uuid);
             for (Map.Entry<String, String> entry : streams.entrySet()) {
-                TableInfo tableInfo = TableInfo.newBuilder().setName(entry.getKey()).build();
+                tableInfo = TableInfo.newBuilder().setName(entry.getKey()).build();
                 Namespace namespace = Namespace.newBuilder().setName(entry.getValue()).build();
-                CommonTypes.Uuid uuid = CommonTypes.Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
+                uuid = CommonTypes.Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
                 tx.create("LogReplicationStreams", tableInfo, namespace, uuid);
             }
             tx.commit();

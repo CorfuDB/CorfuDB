@@ -18,4 +18,9 @@ public class DefaultStreamFetcherPlugin implements LogReplicationStreamNameFetch
     public Map<String, String> fetchStreamsToReplicate() {
         return streamsNamespaceMap;
     }
+
+    @Override
+    public String getVersion() {
+        return "version_latest";
+    }
 }
