@@ -40,9 +40,9 @@ public class LayoutViewTest extends AbstractViewTest {
     public void setAggressiveTimeouts(Layout layout, CorfuRuntime... corfuRuntimes) {
         layout.getAllServers().forEach(routerEndpoint -> {
             for (CorfuRuntime runtime : corfuRuntimes) {
-                runtime.getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-                runtime.getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-                runtime.getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                runtime.getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT);
+                runtime.getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT);
+                runtime.getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT);
             }
         });
     }

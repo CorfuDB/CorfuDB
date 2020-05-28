@@ -164,7 +164,7 @@ public class CorfuRuntimeTest extends AbstractViewTest {
 
         // Server 2 is back alive and its timeout back to normal
         clearClientRules(rt);
-        rt.getRouter(SERVERS.ENDPOINT_2).setTimeoutResponse(PARAMETERS.TIMEOUT_NORMAL.toMillis());
+        rt.getRouter(SERVERS.ENDPOINT_2).setTimeoutResponse(PARAMETERS.TIMEOUT_NORMAL);
 
         // Server 0 and Server 1 are not able to respond to layout request
         // Reduce their timeout to speed up the test.

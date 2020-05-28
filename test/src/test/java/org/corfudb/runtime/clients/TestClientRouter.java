@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -66,7 +65,7 @@ public class TestClientRouter implements IClientRouter {
     public UUID clientID;
 
     private volatile boolean connected = true;
-    private Map<CorfuMsgType, String> timerNameCache = new HashMap<>();
+    private final Map<CorfuMsgType, String> timerNameCache = new HashMap<>();
 
     public void simulateDisconnectedEndpoint() {
         connected = false;
@@ -77,19 +76,19 @@ public class TestClientRouter implements IClientRouter {
      */
     @Getter
     @Setter
-    public long timeoutConnect = PARAMETERS.TIMEOUT_NORMAL.toMillis();
+    public Duration timeoutConnect = PARAMETERS.TIMEOUT_NORMAL;
     /**
      * Sync call response timeout (milliseconds)
      */
     @Getter
     @Setter
-    public long timeoutResponse = PARAMETERS.TIMEOUT_NORMAL.toMillis();
+    public Duration timeoutResponse = PARAMETERS.TIMEOUT_NORMAL;
     /**
      * Retry interval after timeout (milliseconds)
      */
     @Getter
     @Setter
-    public long timeoutRetry = PARAMETERS.TIMEOUT_SHORT.toMillis();
+    public Duration timeoutRetry = PARAMETERS.TIMEOUT_SHORT;
 
     public List<TestRule> rules;
 
@@ -109,7 +108,7 @@ public class TestClientRouter implements IClientRouter {
      * The test port that this router is routing requests for.
      */
     @Getter
-    Integer port;
+    int port;
 
     public TestClientRouter(TestServerRouter serverRouter) {
         clientList = new ArrayList<>();
@@ -154,7 +153,7 @@ public class TestClientRouter implements IClientRouter {
         client.setRouter(this);
 
         // Iterate through all types of CorfuMsgType, registering the handler
-        client.getHandledTypes().stream()
+        client.getHandledTypes()
                 .forEach(x -> {
                     handlerMap.put(x, client);
                     log.trace("Registered {} to handle messages of type {}", client, x);
@@ -211,7 +210,7 @@ public class TestClientRouter implements IClientRouter {
         });
 
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cfBenchmarked, timeoutResponse);
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);
@@ -244,11 +243,9 @@ public class TestClientRouter implements IClientRouter {
         message.setClientID(clientID);
         message.setRequestID(thisRequest);
         // Evaluate rules.
-        if (rules.stream()
-                .map(x -> x.evaluate(message, this))
-                .allMatch(x -> x)) {
+        if (rules.stream().allMatch(x -> x.evaluate(message, this))) {
             // Write the message out to the channel.
-                routeMessage(message);
+            routeMessage(message);
         }
     }
 
@@ -262,12 +259,10 @@ public class TestClientRouter implements IClientRouter {
     @Override
     public void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
         outMsg.copyBaseFields(inMsg);
-        if (rules.stream()
-                .map(x -> x.evaluate(outMsg, this))
-                .allMatch(x -> x)) {
+        if (rules.stream().allMatch(x -> x.evaluate(outMsg, this))) {
             // Write the message out to the channel.
-                ctx.writeAndFlush(outMsg);
-                log.trace("Sent response: {}", outMsg);
+            ctx.writeAndFlush(outMsg);
+            log.trace("Sent response: {}", outMsg);
         }
     }
 
@@ -312,7 +307,7 @@ public class TestClientRouter implements IClientRouter {
      * @param cause     The cause to give for the exceptional completion.
      */
     public void completeExceptionally(long requestID, Throwable cause) {
-        CompletableFuture cf;
+        CompletableFuture<?> cf;
         if ((cf = outstandingRequests.get(requestID)) != null) {
             cf.completeExceptionally(cause);
             outstandingRequests.remove(requestID);

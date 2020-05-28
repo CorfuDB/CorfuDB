@@ -78,21 +78,21 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
      */
     @Getter
     @Setter
-    public long timeoutConnect;
+    public Duration timeoutConnect;
 
     /**
      * Sync call response timeout (milliseconds).
      */
     @Getter
     @Setter
-    public long timeoutResponse;
+    public Duration timeoutResponse;
 
     /**
      * Retry interval after timeout (milliseconds).
      */
     @Getter
     @Setter
-    public long timeoutRetry;
+    public Duration timeoutRetry;
 
     /**
      * The current request ID.
@@ -190,9 +190,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         timerNameCache = mapBuilder.build();
 
-        timeoutConnect = parameters.getConnectionTimeout().toMillis();
-        timeoutResponse = parameters.getRequestTimeout().toMillis();
-        timeoutRetry = parameters.getConnectionRetryRate().toMillis();
+        timeoutConnect = parameters.getConnectionTimeout();
+        timeoutResponse = parameters.getRequestTimeout();
+        timeoutRetry = parameters.getConnectionRetryRate();
 
         connectionFuture = new CompletableFuture<>();
 
@@ -224,7 +224,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         b.channel(parameters.getSocketType().getChannelClass());
         parameters.getNettyChannelOptions().forEach(b::option);
         b.handler(getChannelInitializer());
-        b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) timeoutConnect);
+        b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) timeoutConnect.toMillis());
 
         // Asynchronously connect, retrying until shut down.
         // Once connected, connectionFuture will be completed.
@@ -460,7 +460,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         // Generate a timeout future, which will complete exceptionally
         // if the main future is not completed.
         final CompletableFuture<T> cfTimeout =
-            CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
+            CFUtils.within(cfBenchmarked, timeoutResponse);
         cfTimeout.exceptionally(e -> {
             // CFUtils.within() can wrap different kinds of exceptions in
             // CompletionException, just dealing with TimeoutException here since
@@ -688,7 +688,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
     @Deprecated
     @Override
-    public Integer getPort() {
+    public int getPort() {
         return node.getPort();
     }
 

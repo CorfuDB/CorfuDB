@@ -1,11 +1,10 @@
 package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
-
-import java.util.NoSuchElementException;
-import java.util.concurrent.CompletableFuture;
-
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * This is an interface in which all client routers must implement.
@@ -115,26 +114,59 @@ public interface IClientRouter {
     /**
      * The port that this router is routing requests for.
      */
-    Integer getPort();
+    int getPort();
 
     /**
      * Set the Connect timeout
      *
      * @param timeoutConnect timeout for connection in milliseconds.
+     * @deprecated please use setTimeoutConnect with Duration parameter
      */
-    void setTimeoutConnect(long timeoutConnect);
+    @Deprecated
+    default void setTimeoutConnect(long timeoutConnect){
+        setTimeoutConnect(Duration.ofMillis(timeoutConnect));
+    }
+
+    /**
+     * Set the Connect timeout
+     *
+     * @param timeoutConnect timeout for connection.
+     */
+    void setTimeoutConnect(Duration timeoutConnect);
 
     /**
      * Set the retry timeout
      *
      * @param timeoutRetry timeout to make a retry in milliseconds.
+     * @deprecated please use setTimeoutRetry with Duration parameter
      */
-    void setTimeoutRetry(long timeoutRetry);
+    @Deprecated
+    default void setTimeoutRetry(long timeoutRetry) {
+        setTimeoutRetry(Duration.ofMillis(timeoutRetry));
+    }
+
+    /**
+     * Set the retry timeout
+     *
+     * @param timeoutRetry timeout to make a retry.
+     */
+    void setTimeoutRetry(Duration timeoutRetry);
 
     /**
      * Set the Response timeout
      *
      * @param timeoutResponse Response timeout in milliseconds.
+     * @deprecated please use setTimeoutResponse with Duration parameter
      */
-    void setTimeoutResponse(long timeoutResponse);
+    @Deprecated
+    default void setTimeoutResponse(long timeoutResponse) {
+        setTimeoutResponse(Duration.ofMillis(timeoutResponse));
+    }
+
+    /**
+     * Set the Response timeout
+     *
+     * @param timeoutResponse Response timeout.
+     */
+    void setTimeoutResponse(Duration timeoutResponse);
 }

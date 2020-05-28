@@ -26,6 +26,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -85,7 +86,7 @@ public class FailureDetector {
         routerMap = new HashMap<>();
         allServers.forEach(s -> {
             IClientRouter router = corfuRuntime.getRouter(s);
-            router.setTimeoutResponse(networkStretcher.getCurrentPeriod().toMillis());
+            router.setTimeoutResponse(networkStretcher.getCurrentPeriod());
             routerMap.put(s, router);
         });
 
@@ -306,11 +307,10 @@ public class FailureDetector {
             Map<String, IClientRouter> clientRouters, Set<String> endpoints, Duration timeout) {
 
         log.trace("Tuning router timeout responses for endpoints:{} to {}ms", endpoints, timeout);
-        endpoints.forEach(server -> {
-            if (clientRouters.get(server) != null) {
-                clientRouters.get(server).setTimeoutResponse(timeout.toMillis());
-            }
-        });
-    }
 
+        endpoints.stream()
+                .map(clientRouters::get)
+                .filter(Objects::nonNull)
+                .forEach(router -> router.setTimeoutResponse(timeout));
+    }
 }

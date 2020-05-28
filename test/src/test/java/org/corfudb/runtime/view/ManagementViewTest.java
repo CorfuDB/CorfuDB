@@ -1259,7 +1259,7 @@ public class ManagementViewTest extends AbstractViewTest {
         get3NodeLayout();
         getCorfuRuntime().getLayoutView().getLayout().getAllServers().forEach(endpoint ->
                 getCorfuRuntime().getRouter(endpoint)
-                        .setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis()));
+                        .setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT));
 
         // STEP 1.
         ClusterStatusReport clusterStatus = getCorfuRuntime().getManagementView().getClusterStatus();

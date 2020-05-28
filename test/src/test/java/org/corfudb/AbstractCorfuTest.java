@@ -424,8 +424,7 @@ public class AbstractCorfuTest {
      */
     public void executeScheduled(int maxConcurrency, Duration duration)
         throws Exception {
-        executeScheduled(maxConcurrency, duration.toMillis(),
-                TimeUnit.MILLISECONDS);
+        executeScheduled(maxConcurrency, duration.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     /**

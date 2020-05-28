@@ -10,6 +10,7 @@ import java.util.Map;
 
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.junit.Test;
@@ -87,9 +88,10 @@ public class LayoutSealTest extends AbstractViewTest {
         routerEndpoints.add(SERVERS.ENDPOINT_4);
         serverPorts.forEach(serverPort -> {
             routerEndpoints.forEach(routerEndpoint -> {
-                runtimeLayout.getRuntime().getRouter(routerEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-                runtimeLayout.getRuntime().getRouter(routerEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-                runtimeLayout.getRuntime().getRouter(routerEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+                IClientRouter router = runtimeLayout.getRuntime().getRouter(routerEndpoint);
+                router.setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT);
+                router.setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT);
+                router.setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT);
             });
         });
     }
