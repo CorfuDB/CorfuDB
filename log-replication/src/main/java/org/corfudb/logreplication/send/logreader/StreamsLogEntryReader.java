@@ -44,10 +44,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
     // the sequence number of the message based on the globalBaseSnapshot
     private long sequence;
 
-    private long siteEpoch;
+    private long siteConfigID;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
-        this.rt = runtime;
+        this.rt = CorfuRuntime.fromParameters(runtime.getParameters());
+        this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         Set<String> streams = config.getStreamsToReplicate();
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
@@ -56,14 +57,14 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
         //create an opaque stream for transaction stream
         txStream = new TxOpaqueStream(rt);
+        System.out.print("\n****newLogEntryReader");
     }
 
     LogReplicationEntry generateMessage(OpaqueEntry entry, UUID logEntryRequestId) {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, entry);
-
         currentMsgTs = entry.getVersion();
-        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, siteEpoch,logEntryRequestId,
+        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, siteConfigID,logEntryRequestId,
                 currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
@@ -95,6 +96,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
         preMsgTs = Math.max(snapshot, ackTimestamp);
         log.info("snapshot {} ackTimestamp {} preMsgTs {}", snapshot, ackTimestamp, preMsgTs);
         txStream.seek(preMsgTs + 1);
+        log.info("snapshot ackTimestamp preMsgTs tail  " + snapshot + " " + ackTimestamp + " " + preMsgTs + " "
+                + rt.getAddressSpaceView().getLogTail());
         sequence = 0;
     }
 
@@ -107,17 +110,14 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     continue;
                 }
                 LogReplicationEntry txMessage = generateMessage(opaqueEntry, logEntryRequestId);
-                //System.out.print("\nread a message " + txMessage.getMetadata());
                 return txMessage;
             }
         } catch (Exception e) {
             log.warn("Caught an exception {}", e);
-            //System.out.print("\ncaught an exception " + e);
             throw e;
         }
 
         //TODO: this I added so it compiles (fix)
-        //System.out.print("\nread a message " + "no new data");
         return null;
     }
 
@@ -192,7 +192,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     }
 
     @Override
-    public void setSiteEpoch(long siteEpoch) {
-        this.siteEpoch = siteEpoch;
+    public void setSiteConfigID(long siteConfigID) {
+        this.siteConfigID = siteConfigID;
     }
 }

@@ -257,6 +257,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 activeServer.startAndListen();
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
+                System.out.print("\nCorfuServer: Server exiting due to unrecoverable error: " + th);
                 System.exit(EXIT_ERROR_CODE);
             }
 

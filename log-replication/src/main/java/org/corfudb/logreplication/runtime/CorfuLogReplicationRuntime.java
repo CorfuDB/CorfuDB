@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.LogReplicationSourceManager;
+import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.NodeRouterPool;
@@ -29,6 +30,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Function;
 
@@ -153,10 +155,10 @@ public class CorfuLogReplicationRuntime {
         }
     }
 
-    public void connect () {
+    public void connect(CorfuReplicationDiscoveryService discoveryService, String siteID) {
         log.info("Connected");
         IClientRouter router = getRouter(parameters.getRemoteLogReplicationServerEndpoint());
-        client = new LogReplicationClient(router);
+        client = new LogReplicationClient(router, discoveryService, siteID);
 
         // TODO (Anny) TEMP fix the tables to replicate
         Set<String> tablesToReplicate = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
@@ -166,7 +168,7 @@ public class CorfuLogReplicationRuntime {
                 client, config);
     }
 
-    public LogReplicationQueryLeaderShipResponse queryLeadership() throws Exception {
+    public LogReplicationQueryLeaderShipResponse queryLeadership() throws ExecutionException, InterruptedException {
         log.info("***** Send QueryLeadership Request on a client to: {}", client.getRouter().getPort());
         return client.sendQueryLeadership().get();
     }

@@ -52,7 +52,7 @@ public class SinkBufferManager {
     }
 
     long getKey(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry) {
-        switch (entry.getMetadata().getMessageMetadataType()) {
+        switch (type) {
             case SNAPSHOT_MESSAGE:
                 return entry.getMetadata().getSnapshotSyncSeqNum();
             case LOG_ENTRY_MESSAGE:
@@ -97,10 +97,10 @@ public class SinkBufferManager {
         return false;
     }
 
-    LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
+    public LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
         long ackTimestamp;
         MessageType messageType;
-        switch (type) {
+        switch (entry.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
                 ackTimestamp = nextKey - 1;
                 messageType = MessageType.SNAPSHOT_REPLICATED;

@@ -1,10 +1,10 @@
 package org.corfudb.logreplication.infrastructure;
 
-import com.sun.org.apache.xalan.internal.lib.NodeInfo;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
@@ -48,14 +48,14 @@ public class CorfuReplicationManager {
      *
      * * @throws InterruptedException
      */
-    public void connect(LogReplicationNodeInfo localNode, CrossSiteConfiguration.SiteInfo remoteSite) throws InterruptedException {
+    public void connect(LogReplicationNodeInfo localNode, CrossSiteConfiguration.SiteInfo remoteSite, CorfuReplicationDiscoveryService discoveryService) throws InterruptedException {
 
         log.trace("Setup runtime's from local node to remote site {}", remoteSite.getSiteId());
 
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    remoteSite.connect(localNode, transport);
+                    remoteSite.connect(localNode, transport, discoveryService);
                     LogReplicationNodeInfo leader = remoteSite.getRemoteLeader();
                     log.info("connect to site {} lead node {}:{}", remoteSite.getSiteId(), leader.getIpAddress(), leader.getPortNum());
                     remoteSiteRuntimeMap.put(remoteSite.getSiteId(), leader.getRuntime());
@@ -75,7 +75,7 @@ public class CorfuReplicationManager {
     /**
      * Once determined this is a Lead Sender (on primary site), connect log replication.
      */
-    public void startLogReplication(LogReplicationNodeInfo localNode, String siteId) {
+    public void startLogReplication(LogReplicationNodeInfo localNode, String siteId, CorfuReplicationDiscoveryService discoveryService) {
         CrossSiteConfiguration.SiteInfo remoteSite = crossSiteConfig.getStandbySites().get(siteId);
         log.info("Start Log Replication to Standby Site {}", siteId);
 
@@ -86,16 +86,16 @@ public class CorfuReplicationManager {
                 return;
             }
 
-            connect(localNode, remoteSite);
+            connect(localNode, remoteSite, discoveryService);
 
             CorfuLogReplicationRuntime runtime = remoteSiteRuntimeMap.get(siteId);
 
             //If we start from a stop state due to site switch over, we need to restart the consumer.
-            runtime.getSourceManager().getLogReplicationFSM().startConsumer(crossSiteConfig);
+            runtime.getSourceManager().getLogReplicationFSM().startFSM(crossSiteConfig);
 
             LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
             log.info("Log Replication Negotiation with {} result {}", siteId, negotiationResult);
-            replicate(runtime, negotiationResult, crossSiteConfig.getSiteConfigID());
+            replicate(runtime, negotiationResult);
 
         } catch (Exception e) {
             log.error("Will stop this remote site replicaiton as caught an exception", e);
@@ -110,21 +110,21 @@ public class CorfuReplicationManager {
      * @param localNode
      * @param siteId
      */
-    public void restartLogReplication(LogReplicationNodeInfo localNode, String siteId) {
-        CrossSiteConfiguration.SiteInfo remoteSite = crossSiteConfig.getStandbySites().get(siteId);
+    public void restartLogReplication(LogReplicationNodeInfo localNode, String siteId, CorfuReplicationDiscoveryService discoveryService) {
         stopLogReplication(siteId);
-        startLogReplication(localNode, siteId);
+        startLogReplication(localNode, siteId, discoveryService);
     }
 
-    public void startLogReplication(LogReplicationNodeInfo nodeInfo) {
+    public void startLogReplication(LogReplicationNodeInfo nodeInfo, CorfuReplicationDiscoveryService discoveryService) {
         for (CrossSiteConfiguration.SiteInfo remoteSite : crossSiteConfig.getStandbySites().values()) {
             try {
-                startLogReplication(nodeInfo, remoteSite.getSiteId());
+                startLogReplication(nodeInfo, remoteSite.getSiteId(), discoveryService);
             } catch (Exception e) {
                 log.error("Failed to start log replication to remote site {}", remoteSite.getSiteId());
                 // TODO (if failed): put logic..
                 // If failed against a standby, retry..
                 //remove from the standby list as the discovery site will get notification of the change
+                crossSiteConfig.getStandbySites().remove(remoteSite.getSiteId());
             }
         }
     }
@@ -133,7 +133,7 @@ public class CorfuReplicationManager {
      * The notification of change of adding/removing standbys without epoch change.
      * @param newConfig has the same siteConfigId as the current config
      */
-    public void processStandbyChange(LogReplicationNodeInfo nodeInfo, CrossSiteConfiguration newConfig) {
+    public void processStandbyChange(LogReplicationNodeInfo nodeInfo, CrossSiteConfiguration newConfig, CorfuReplicationDiscoveryService discoveryService) {
         if (newConfig.getSiteConfigID() != crossSiteConfig.getSiteConfigID()) {
             log.error("the new config {} doesn't have the same siteConfigId as the current one {}", newConfig, crossSiteConfig);
             return;
@@ -156,14 +156,12 @@ public class CorfuReplicationManager {
             if (remoteSiteRuntimeMap.get(siteID) == null) {
                 CrossSiteConfiguration.SiteInfo siteInfo = newConfig.getStandbySites().get(siteID);
                 crossSiteConfig.addStandbySite(siteInfo);
-                startLogReplication(nodeInfo, siteInfo.getSiteId());
+                startLogReplication(nodeInfo, siteInfo.getSiteId(), discoveryService);
             }
         }
     }
 
-    private void replicate(CorfuLogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult, long siteEpoch) {
-            runtime.getSourceManager().getLogReplicationFSM().setSiteEpoch(siteEpoch);
-
+    private void replicate(CorfuLogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult) {
             switch (negotiationResult) {
             case SNAPSHOT_SYNC:
                 log.info("Start Snapshot Sync Replication");
@@ -184,7 +182,7 @@ public class CorfuReplicationManager {
         for (LogReplicationNodeInfo nodeInfo : siteInfo.getNodesInfo()) {
             CorfuLogReplicationRuntime runtime = nodeInfo.getRuntime();
             if (runtime != null) {
-                runtime.stop();
+                nodeInfo.stopRuntime();
             }
         }
         remoteSiteRuntimeMap.remove(remoteSiteId);

@@ -25,6 +25,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import static java.lang.Thread.sleep;
+
 /**
  * This class implements the Log Replication Finite State Machine.
  *
@@ -97,10 +99,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 @Slf4j
 public class LogReplicationFSM {
 
-    private CrossSiteConfiguration siteConfig;
-
     @Getter
-    private long siteEpoch;
+    private long siteConfigID;
 
     /**
      * Current state of the FSM.
@@ -286,6 +286,7 @@ public class LogReplicationFSM {
                             state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
                         log.debug("Snapshot Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
                         baseSnapshot = event.getMetadata().getSyncTimestamp();
+                        ackedTimestamp = baseSnapshot;
                     }
                 }
 
@@ -300,6 +301,7 @@ public class LogReplicationFSM {
                 }
             }
 
+            //For testing purpose to notify the event generator the stop of the event.
             if (event.getType() == LogReplicationEventType.REPLICATION_STOP) {
                 synchronized (event) {
                     event.notifyAll();
@@ -327,23 +329,25 @@ public class LogReplicationFSM {
         to.onEntry(from);
     }
 
+    public void setSiteConfigID(long siteConfigID) {
+        this.siteConfigID = siteConfigID;
+        snapshotReader.setSiteEpoch(siteConfigID);
+        logEntryReader.setSiteConfigID(siteConfigID);
+    }
+
     /**
      * Start consumer again due to site switch.
      * It will clean the queue first and prepare the new transfer
      * @param siteConfig
      */
-    public void startConsumer(CrossSiteConfiguration siteConfig) {
-        this.siteConfig = siteConfig;
-        if (state.getType() == LogReplicationStateType.STOPPED) {
-            eventQueue.clear();
-            this.state = states.get(LogReplicationStateType.INITIALIZED);
-            logReplicationFSMConsumer.submit(this::consume);
+    public void startFSM(CrossSiteConfiguration siteConfig) {
+        if (state.getType() != LogReplicationStateType.INITIALIZED) {
+            log.error("The FSM is not in the correct state {}, expecting state {}",
+                    state, LogReplicationStateType.INITIALIZED);
         }
-    }
 
-    public void setSiteEpoch(long siteEpoch) {
-        this.siteEpoch = siteEpoch;
-        snapshotReader.setSiteEpoch(siteEpoch);
-        logEntryReader.setSiteEpoch(siteEpoch);
+        log.info("start the log replication with siteConfigID {}", siteConfig.getSiteConfigID());
+        eventQueue.clear();
+        setSiteConfigID(siteConfig.getSiteConfigID());
     }
 }
