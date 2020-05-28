@@ -129,14 +129,16 @@ public class FailureDetector {
             reports.add(currReport);
 
             Duration restInterval = networkStretcher.getRestInterval(currReport.getElapsedTime());
-            if (!currReport.getFailedNodes().isEmpty()) {
-                networkStretcher.modifyIterationTimeouts();
-
-                Set<String> allReachableNodes = currReport.getAllReachableNodes();
-                tuneRoutersResponseTimeout(
-                        router, allReachableNodes, networkStretcher.getCurrentPeriod()
-                );
+            if (currReport.getFailedNodes().isEmpty()) {
+                break;
             }
+
+            networkStretcher.modifyIterationTimeouts();
+
+            Set<String> allReachableNodes = currReport.getAllReachableNodes();
+            tuneRoutersResponseTimeout(
+                    router, allReachableNodes, networkStretcher.getCurrentPeriod()
+            );
 
             // Sleep for the provided poll interval before starting the next iteration
             Sleep.sleepUninterruptibly(restInterval);
