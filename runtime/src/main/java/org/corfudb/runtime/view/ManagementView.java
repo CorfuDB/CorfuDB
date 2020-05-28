@@ -578,7 +578,7 @@ public class ManagementView extends AbstractView {
      * Bootstraps the management server if not already bootstrapped.
      * If already bootstrapped, it completes silently.
      *
-     * @param endpoint Endpoint ot bootstrap.
+     * @param endpoint Endpoint to bootstrap.
      * @param layout   Layout to bootstrap with.
      * @return Completable Future which completes with True when the management server is bootstrapped.
      */

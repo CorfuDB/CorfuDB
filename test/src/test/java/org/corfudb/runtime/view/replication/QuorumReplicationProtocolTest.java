@@ -1,7 +1,5 @@
 package org.corfudb.runtime.view.replication;
 
-import java.util.UUID;
-
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Ignore;
@@ -44,16 +42,10 @@ public class QuorumReplicationProtocolTest extends AbstractReplicationProtocolTe
         getManagementServer(SERVERS.PORT_2).shutdown();
     }
 
-
-
-
     @Override
-    public void overwriteThrowsException()
-            throws Exception {
+    public void overwriteThrowsException() throws Exception {
         // currently we don't give full warranties if two clients race for the same position during the 1-phase quorum write.
         // this is just assertion for wrong code, but in general this operation could do harm
         super.overwriteThrowsException();
     }
-
-
 }

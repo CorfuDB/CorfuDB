@@ -361,6 +361,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
         private boolean single = true;
         private boolean tlsEnabled = false;
+        private boolean noAutoCommit = true;
         private String keyStore = null;
         private String keyStorePassword = null;
         private String logLevel = "INFO";
@@ -370,7 +371,6 @@ public class AbstractIT extends AbstractCorfuTest {
         private String trustStorePassword = null;
         private String compressionCodec = null;
 
-
         /**
          * Create a command line string according to the properties set for a Corfu Server
          * Instance
@@ -379,13 +379,19 @@ public class AbstractIT extends AbstractCorfuTest {
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
             command.append("-a ").append(host);
+
             if (logPath != null) {
                 command.append(" -l ").append(logPath);
             } else {
                 command.append(" -m");
             }
+
             if (single) {
                 command.append(" -s");
+            }
+
+            if (noAutoCommit) {
+                command.append(" -A");
             }
 
             if (logSizeLimitPercentage != null) {

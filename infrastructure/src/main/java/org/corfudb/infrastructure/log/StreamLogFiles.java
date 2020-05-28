@@ -28,6 +28,7 @@ import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 import javax.annotation.Nullable;
@@ -118,7 +119,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
         this.verify = !noVerify;
-        this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
+        this.dataStore = new StreamLogDataStore(serverContext.getDataStore());
 
         String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
         final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
@@ -300,6 +301,16 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public TailsResponse getAllTails() {
         Map<UUID, Long> tails = new HashMap<>(logMetadata.getStreamTails());
         return new TailsResponse(logMetadata.getGlobalTail(), tails);
+    }
+
+    @Override
+    public long getCommittedTail() {
+        return dataStore.getCommittedTail();
+    }
+
+    @Override
+    public void updateCommittedTail(long committedTail) {
+        dataStore.updateCommittedTail(committedTail);
     }
 
     private void syncTailSegment(long address) {
@@ -1187,6 +1198,22 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
+    public boolean contains(long address) throws TrimmedException {
+        // auto commit client is expected to get TrimmedException and
+        // retry as this indicates commit counter is falling behind.
+        if (isTrimmed(address)) {
+            throw new TrimmedException();
+        }
+
+        if (address <= getCommittedTail()) {
+            return true;
+        }
+
+        SegmentHandle segment = getSegmentHandleForAddress(address);
+        return segment.getKnownAddresses().containsKey(address);
+    }
+
+    @Override
     public void close() {
         for (SegmentHandle fh : writeChannels.values()) {
             fh.close();
@@ -1274,6 +1301,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         dataStore.resetStartingAddress();
         dataStore.resetTailSegment();
+        dataStore.resetCommittedTail();
         logMetadata = new LogMetadata();
         writeChannels.clear();
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);

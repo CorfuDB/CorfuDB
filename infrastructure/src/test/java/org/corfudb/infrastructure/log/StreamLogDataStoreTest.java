@@ -13,7 +13,8 @@ import static org.junit.Assert.assertEquals;
 
 @Slf4j
 public class StreamLogDataStoreTest {
-    private static final long INITIAL_ADDRESS = 0L;
+    private static final long ZERO_ADDRESS = 0L;
+    private static final long NON_ADDRESS = -1;
 
     @Rule
     public TemporaryFolder tempDir = new TemporaryFolder();
@@ -21,24 +22,48 @@ public class StreamLogDataStoreTest {
     @Test
     public void testGetAndSave() {
         StreamLogDataStore streamLogDs = getStreamLogDataStore();
+        final long tailSegment = 333;
+        final long startingAddress = 444;
+        final long committedTail = 555;
 
-        final int tailSegment = 333;
         streamLogDs.updateTailSegment(tailSegment);
-        assertEquals(tailSegment, streamLogDs.getTailSegment());
-
-        final int startingAddress = 555;
         streamLogDs.updateStartingAddress(startingAddress);
+        streamLogDs.updateCommittedTail(committedTail);
+
+        assertEquals(tailSegment, streamLogDs.getTailSegment());
         assertEquals(startingAddress, streamLogDs.getStartingAddress());
+        assertEquals(committedTail, streamLogDs.getCommittedTail());
+
+        // TailSegment should be monotonic.
+        streamLogDs.updateTailSegment(tailSegment - 1);
+        assertEquals(tailSegment, streamLogDs.getTailSegment());
+        streamLogDs.updateTailSegment(tailSegment + 1);
+        assertEquals(tailSegment + 1, streamLogDs.getTailSegment());
+
+        // StartingAddress should be monotonic.
+        streamLogDs.updateStartingAddress(startingAddress - 1);
+        assertEquals(startingAddress, streamLogDs.getStartingAddress());
+        streamLogDs.updateStartingAddress(startingAddress + 1);
+        assertEquals(startingAddress + 1, streamLogDs.getStartingAddress());
+
+        // CommittedTail should be monotonic.
+        streamLogDs.updateCommittedTail(committedTail - 1);
+        assertEquals(committedTail, streamLogDs.getCommittedTail());
+        streamLogDs.updateCommittedTail(committedTail + 1);
+        assertEquals(committedTail + 1, streamLogDs.getCommittedTail());
     }
 
     @Test
     public void testReset() {
         StreamLogDataStore streamLogDs = getStreamLogDataStore();
         streamLogDs.resetStartingAddress();
-        assertEquals(INITIAL_ADDRESS, streamLogDs.getStartingAddress());
+        assertEquals(ZERO_ADDRESS, streamLogDs.getStartingAddress());
 
         streamLogDs.resetTailSegment();
-        assertEquals(INITIAL_ADDRESS, streamLogDs.getTailSegment());
+        assertEquals(ZERO_ADDRESS, streamLogDs.getTailSegment());
+
+        streamLogDs.resetCommittedTail();
+        assertEquals(NON_ADDRESS, streamLogDs.getCommittedTail());
     }
 
     private StreamLogDataStore getStreamLogDataStore() {
@@ -47,8 +72,6 @@ public class StreamLogDataStoreTest {
 
         DataStore ds = new DataStore(opts, val -> log.info("clean up"));
 
-        return StreamLogDataStore.builder()
-                .dataStore(ds)
-                .build();
+        return new StreamLogDataStore(ds);
     }
 }
