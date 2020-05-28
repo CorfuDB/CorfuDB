@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,6 +16,8 @@ import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.Address;
 
 /**
  * This class implements the StreamLog interface using a Java hash map.
@@ -29,6 +32,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     private final Set<Long> trimmed;
     private volatile long startingAddress;
     private volatile LogMetadata logMetadata;
+    private AtomicLong committedTail;
 
     /**
      * Returns an object that stores a stream log in memory.
@@ -38,6 +42,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         trimmed = ConcurrentHashMap.newKeySet();
         startingAddress = 0;
         logMetadata = new LogMetadata();
+        committedTail = new AtomicLong(Address.NON_ADDRESS);
     }
 
     @Override
@@ -110,6 +115,21 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
+    public long getCommittedTail() {
+        return committedTail.get();
+    }
+
+    @Override
+    public void updateCommittedTail(long newCommittedTail) {
+        committedTail.updateAndGet(curr -> {
+            if (newCommittedTail <= curr) {
+                return curr;
+            }
+            return newCommittedTail;
+        });
+    }
+
+    @Override
     public long getTrimMark() {
         return startingAddress;
     }
@@ -152,6 +172,19 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         }
 
         return logCache.get(address);
+    }
+
+    @Override
+    public boolean contains(long address) throws TrimmedException {
+        if (isTrimmed((address))) {
+            throw new TrimmedException();
+        }
+
+        if (address <= getCommittedTail()) {
+            return true;
+        }
+
+        return logCache.containsKey(address);
     }
 
     @Override
