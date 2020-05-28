@@ -1,9 +1,9 @@
 package org.corfudb.infrastructure.management;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -19,7 +19,6 @@ import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.FailureDetectorAction;
 import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -30,7 +29,6 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -332,6 +330,12 @@ public class RemoteMonitoringService implements MonitoringService {
                     .build()
                     .correctWrongEpochs(pollReport, ourLayout);
 
+            FailureHandler fdHandler = FailureHandler.builder()
+                    .serverContext(serverContext)
+                    .runtimeSingletonResource(runtimeSingletonResource)
+                    .advisor(advisor)
+                    .build();
+
             Result<DetectorTask, RuntimeException> failure = Result.of(() -> {
 
                 // This is just an optimization in case we receive a WrongEpochException
@@ -348,7 +352,7 @@ public class RemoteMonitoringService implements MonitoringService {
                 if (unfilledSlot.isPresent()) {
                     log.info("Trying to fill an unfilled slot {}. PollReport: {}",
                             unfilledSlot.get(), pollReport);
-                    detectFailure(latestLayout, Collections.emptySet(), pollReport).join();
+                    fdHandler.detectFailure(latestLayout, Collections.emptySet(), pollReport).join();
                     return DetectorTask.COMPLETED;
                 }
 
@@ -377,7 +381,12 @@ public class RemoteMonitoringService implements MonitoringService {
                 return DetectorTask.COMPLETED;
             }
 
-            DetectorTask healing = detectHealing(pollReport, ourLayout);
+            DetectorTask healing = HealingHandler.builder()
+                    .serverContext(serverContext)
+                    .runtimeSingletonResource(runtimeSingletonResource)
+                    .advisor(advisor)
+                    .build()
+                    .detectHealing(pollReport, ourLayout);
 
             //If local node healed it causes change in the cluster state which means the layout is changed also.
             //If the cluster status is changed let failure detector detect the change on next iteration and
@@ -387,7 +396,7 @@ public class RemoteMonitoringService implements MonitoringService {
             }
 
             // Analyze the poll report and trigger failure handler if needed.
-            DetectorTask handleFailure = detectFailure(pollReport, ourLayout);
+            DetectorTask handleFailure = fdHandler.detectFailure(pollReport, ourLayout);
 
             //If a failure is detected (which means we have updated a layout)
             // then don't try to heal anything, wait for next iteration.
@@ -454,123 +463,6 @@ public class RemoteMonitoringService implements MonitoringService {
     }
 
     /**
-     * Handle healed node.
-     * Cluster advisor provides healed node based on current cluster state if healed node found then
-     * save healed node in the history and send a message with the detected healed node
-     * to the relevant management server.
-     *
-     * @param pollReport poll report
-     * @param layout     current layout
-     */
-    private DetectorTask detectHealing(PollReport pollReport, Layout layout) {
-        log.trace("Handle healing, layout: {}", layout);
-
-        Optional<NodeRank> healed = advisor.healedServer(pollReport.getClusterState());
-
-        //Transform Optional value to a Set
-        Set<String> healedNodes = healed
-                .map(NodeRank::getEndpoint)
-                .map(ImmutableSet::of)
-                .orElse(ImmutableSet.of());
-
-        if (healedNodes.isEmpty()) {
-            log.trace("Nothing to heal");
-            return DetectorTask.SKIPPED;
-        }
-
-        //save history
-        FailureDetectorMetrics history = FailureDetectorMetrics.builder()
-                .localNode(serverContext.getLocalEndpoint())
-                .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())
-                .healed(healed.get())
-                .action(FailureDetectorAction.HEAL)
-                .unresponsiveNodes(layout.getUnresponsiveServers())
-                .layout(layout.getLayoutServers())
-                .epoch(layout.getEpoch())
-                .build();
-
-        log.info("Handle healing. Failure detector state: {}", history.toJson());
-
-        try {
-            CorfuRuntime corfuRuntime = getCorfuRuntime();
-
-            corfuRuntime.getLayoutView()
-                    .getRuntimeLayout(layout)
-                    .getManagementClient(serverContext.getLocalEndpoint())
-                    //handle healing asynchronously
-                    .handleHealing(pollReport.getPollEpoch(), healedNodes)
-                    //completable future: wait this future to complete and get result
-                    .get();
-
-            serverContext.saveFailureDetectorMetrics(history);
-
-            log.info("Healing local node successful: {}", history.toJson());
-
-            return DetectorTask.COMPLETED;
-        } catch (ExecutionException ee) {
-            log.error("Healing local node failed: ", ee);
-        } catch (InterruptedException ie) {
-            log.error("Healing local node interrupted: ", ie);
-            throw new UnrecoverableCorfuInterruptedError(ie);
-        }
-
-        return DetectorTask.NOT_COMPLETED;
-    }
-
-    /**
-     * Analyzes the poll report and triggers the failure handler if node failure detected.
-     * ClusterAdvisor provides a failed node in the cluster.
-     * If a failed node have found:
-     * - save detected failure in the history
-     * - handle failure
-     *
-     * @param pollReport Poll report obtained from failure detection policy.
-     * @return boolean result if failure was handled. False if there is no failure
-     */
-    private DetectorTask detectFailure(PollReport pollReport, Layout layout) {
-        log.trace("Handle failures for the report: {}", pollReport);
-
-        try {
-            ClusterState clusterState = pollReport.getClusterState();
-
-            if (clusterState.size() != layout.getAllServers().size()) {
-                String err = String.format(
-                        "Cluster representation is different than layout. Cluster: %s, layout: %s",
-                        clusterState, layout
-                );
-                throw new IllegalStateException(err);
-            }
-
-            Optional<NodeRank> maybeFailedNode = advisor.failedServer(clusterState);
-
-            if (maybeFailedNode.isPresent()) {
-                NodeRank failedNode = maybeFailedNode.get();
-
-                //Collect failures history
-                FailureDetectorMetrics history = FailureDetectorMetrics.builder()
-                        .localNode(serverContext.getLocalEndpoint())
-                        .graph(advisor.getGraph(pollReport.getClusterState()).connectivityGraph())
-                        .healed(failedNode)
-                        .action(FailureDetectorAction.FAIL)
-                        .unresponsiveNodes(layout.getUnresponsiveServers())
-                        .layout(layout.getLayoutServers())
-                        .epoch(layout.getEpoch())
-                        .build();
-
-                serverContext.saveFailureDetectorMetrics(history);
-
-                Set<String> failedNodes = new HashSet<>();
-                failedNodes.add(failedNode.getEndpoint());
-                return detectFailure(layout, failedNodes, pollReport).get();
-            }
-        } catch (Exception e) {
-            log.error("Exception invoking failure handler", e);
-        }
-
-        return DetectorTask.NOT_COMPLETED;
-    }
-
-    /**
      * Checks sequencer state, triggers a new task to bootstrap the sequencer for the specified layout (if needed).
      *
      * @param layout current layout
@@ -609,29 +501,6 @@ public class RemoteMonitoringService implements MonitoringService {
         return getCorfuRuntime()
                 .getLayoutManagementView()
                 .asyncSequencerBootstrap(layout, failureDetectorWorker)
-                .thenApply(DetectorTask::fromBool);
-    }
-
-    /**
-     * Handle failures, sending message with detected failure to relevant management server.
-     *
-     * @param failedNodes list of failed nodes
-     * @param pollReport  poll report
-     */
-    private CompletableFuture<DetectorTask> detectFailure(
-            Layout layout, Set<String> failedNodes, PollReport pollReport) {
-
-        ClusterGraph graph = advisor.getGraph(pollReport.getClusterState());
-
-        log.info("Detected failed nodes in node responsiveness: Failed:{}, is slot unfilled: {}, clusterState:{}",
-                failedNodes, pollReport.getLayoutSlotUnFilled(layout), graph.toJson()
-        );
-
-        return getCorfuRuntime()
-                .getLayoutView()
-                .getRuntimeLayout(layout)
-                .getManagementClient(serverContext.getLocalEndpoint())
-                .handleFailure(layout.getEpoch(), failedNodes)
                 .thenApply(DetectorTask::fromBool);
     }
 
