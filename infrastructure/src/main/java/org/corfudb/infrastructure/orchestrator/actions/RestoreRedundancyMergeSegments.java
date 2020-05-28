@@ -16,6 +16,7 @@ import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
@@ -23,6 +24,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.LayoutBuilder;
 import org.corfudb.runtime.view.LayoutManagementView;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.RetryNeededException;
@@ -31,6 +33,7 @@ import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -110,6 +113,14 @@ public class RestoreRedundancyMergeSegments extends Action {
                 // Trim a current stream log and retrieve a global trim mark.
                 long trimMark = trimLog(runtime);
                 List<TransferSegment> transferredSegments = getTransferSegments(transferManager, currentLayout, trimMark);
+
+                // Transfer a new committed tail after all segments are transferred.
+                // The new committed tail is the last transferred address.
+                transferredSegments
+                        .stream()
+                        .map(TransferSegment::getEndAddress)
+                        .max(Long::compare)
+                        .ifPresent(addr -> transferCommittedTail(runtime, currentLayout, addr));
 
                 LayoutManagementView layoutManagementView = runtime.getLayoutManagementView();
 
@@ -193,6 +204,28 @@ public class RestoreRedundancyMergeSegments extends Action {
         return transferList.stream()
                 .filter(segment -> segment.getStatus().getSegmentState() == TRANSFERRED)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Send the last transferred address as the committed tail to the target log unit.
+     * This is required to prevent loss of committed tail after state transfer finishes
+     * and then all other log units failed and auto commit service is paused.
+     */
+    private void transferCommittedTail(CorfuRuntime runtime, Layout layout, long committedTail) {
+        final int maxRetry = 3;
+        LogUnitClient logUnitClient = runtime.getLayoutView()
+                .getRuntimeLayout(layout)
+                .getLogUnitClient(currentNode);
+
+        for (int i = 0; i < maxRetry; i++) {
+            try {
+                CFUtils.getUninterruptibly(logUnitClient.updateCommittedTail(committedTail),
+                        TimeoutException.class, NetworkException.class);
+                return;
+            } catch (TimeoutException | NetworkException e) {
+                log.error("Encountered network issue when transferring new committed tail.");
+            }
+        }
     }
 
     /**

@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.TrimmedException;
 
 /**
  * An interface definition that specifies an api to interact with a StreamLog.
@@ -42,6 +43,15 @@ public interface StreamLog {
     LogData read(long address);
 
     /**
+     * Inspect if the stream log contains the entry at given address.
+     *
+     * @param address the address to inspect
+     * @return true if stream log contains the entry at the address, false otherwise
+     * @throws TrimmedException if address less than starting address
+     */
+    boolean contains(long address) throws TrimmedException;
+
+    /**
      * Prefix trim the global log.
      * @param address address to trim the log up to
      */
@@ -71,6 +81,16 @@ public interface StreamLog {
      * Get the address space for every stream.
      */
     StreamsAddressResponse getStreamsAddressSpace();
+
+    /**
+     * Get the committed log tail.
+     */
+    long getCommittedTail();
+
+    /**
+     * Update the committed log tail.
+     */
+    void updateCommittedTail(long committedTail);
 
     /**
      * Get the first untrimmed address in the address space.
