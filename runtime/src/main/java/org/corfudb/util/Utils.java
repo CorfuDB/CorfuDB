@@ -5,19 +5,26 @@ import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
 import java.text.DecimalFormat;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+
 /**
  * Created by crossbach on 5/22/15.
  */
@@ -102,7 +109,9 @@ public class Utils {
         return result;
     }
 
-    /** Generates a human readable UUID string (4 hex chars) using time_mid.
+    /**
+     * Generates a human readable UUID string (4 hex chars) using time_mid.
+     *
      * @param id    The UUID to parse
      * @return      A human readable UUID string
      */
@@ -111,24 +120,106 @@ public class Utils {
     }
 
     /**
+     * Get maximum trim mark from all log units.
+     *
+     * @param runtimeLayout current RuntimeLayout
+     * @return a token representing the trim mark
+     */
+    public static Token getTrimMark(RuntimeLayout runtimeLayout) {
+        Layout layout = runtimeLayout.getLayout();
+
+        List<CompletableFuture<Long>> futures = layout
+                .getAllLogServers()
+                .stream()
+                .map(runtimeLayout::getLogUnitClient)
+                .map(LogUnitClient::getTrimMark)
+                .collect(Collectors.toList());
+
+        long trimMark = futures.stream()
+                .map(CFUtils::getUninterruptibly)
+                .max(Comparator.naturalOrder())
+                .get();
+
+        return new Token(layout.getEpoch(), trimMark);
+    }
+
+    /**
+     * Perform prefix trim on all log unit servers.
+     *
+     * @param runtimeLayout current RuntimeLayout
+     * @param address a token with address to trim
+     */
+    public static void prefixTrim(RuntimeLayout runtimeLayout, Token address) {
+        List<CompletableFuture<Void>> futures = runtimeLayout
+                .getLayout()
+                .getAllLogServers()
+                .stream()
+                .map(runtimeLayout::getLogUnitClient)
+                .map(lu -> lu.prefixTrim(address))
+                .collect(Collectors.toList());
+
+        futures.forEach(CFUtils::getUninterruptibly);
+    }
+
+    /**
+     * Get the maximum committed log tail from all log units.
+     *
+     * @param runtimeLayout current RuntimeLayout
+     * @return the maximum committed tail among all log units
+     */
+    public static long getCommittedTail(RuntimeLayout runtimeLayout) {
+        List<CompletableFuture<Long>> futures = runtimeLayout
+                .getLayout()
+                .getAllLogServers()
+                .stream()
+                .map(runtimeLayout::getLogUnitClient)
+                .map(LogUnitClient::getCommittedTail)
+                .collect(Collectors.toList());
+
+        // Aggregate and get the maximum of committed tail.
+        return futures.stream()
+                .map(CFUtils::getUninterruptibly)
+                .max(Comparator.naturalOrder())
+                .get();
+    }
+
+    /**
+     * Update the committed log tail to log units that have complete state.
+     *
+     * @param runtimeLayout    current RuntimeLayout
+     * @param newCommittedTail new committed tail to update
+     */
+    public static void updateCommittedTail(RuntimeLayout runtimeLayout,
+                                           long newCommittedTail) {
+        // Send the new committed tail to the log units that are present
+        // in all address segments since they have the complete state.
+        Set<String> logServers = runtimeLayout.getLayout().getFullyRedundantLogServers();
+        List<CompletableFuture<Void>> futures = logServers.stream()
+                .map(runtimeLayout::getLogUnitClient)
+                .map(lu -> lu.updateCommittedTail(newCommittedTail))
+                .collect(Collectors.toList());
+
+        // Wait until all futures completed, exceptions will be wrapped
+        // in RuntimeException and handled in upper layer.
+        futures.forEach(CFUtils::getUninterruptibly);
+    }
+
+    /**
      * Get global log tail.
      *
-     * @param layout Latest layout to query log tail from Log Unit
-     * @param runtime Runtime
-     *
+     * @param runtimeLayout current RuntimeLayout
      * @return Log global tail
      */
-    public static long getLogTail(Layout layout, CorfuRuntime runtime) {
+    public static long getLogTail(RuntimeLayout runtimeLayout) {
         long globalLogTail = Address.NON_EXIST;
 
-        Layout.LayoutSegment segment = layout.getLatestSegment();
+        Layout.LayoutSegment segment = runtimeLayout.getLayout().getLatestSegment();
 
         // Query the head log unit in every stripe.
         if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
 
-                TailsResponse response = CFUtils.getUninterruptibly(
-                        runtime.getLayoutView().getRuntimeLayout(layout)
+                TailsResponse response = CFUtils.getUninterruptibly(runtimeLayout
                                 .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))
                                 .getLogTail());
                 globalLogTail = Long.max(globalLogTail, response.getLogTail());
@@ -146,20 +237,19 @@ public class Utils {
      * CHAIN: Block on fetch of global log tail from the head log unit in every stripe.
      * QUORUM: Block on fetch of global log tail from a majority in every stripe.
      *
-     * @param layout  Latest layout to get clients to fetch tails.
+     * @param runtimeLayout current RuntimeLayout
      * @return The max global log tail obtained from the log unit servers.
      */
-    public static TailsResponse getAllTails(Layout layout, CorfuRuntime runtime) {
+    public static TailsResponse getAllTails(RuntimeLayout runtimeLayout) {
         Set<TailsResponse> luResponses = new HashSet<>();
 
-        Layout.LayoutSegment segment = layout.getLatestSegment();
+        Layout.LayoutSegment segment = runtimeLayout.getLayout().getLatestSegment();
 
         // Query the tail of the head log unit in every stripe.
         if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
 
-                TailsResponse res = CFUtils.getUninterruptibly(
-                        runtime.getLayoutView().getRuntimeLayout(layout)
+                TailsResponse res = CFUtils.getUninterruptibly(runtimeLayout
                                 .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))
                                 .getAllTails());
                 luResponses.add(res);
@@ -213,21 +303,19 @@ public class Utils {
      * Retrieve the space of addresses of the log, i.e., for all streams in the log.
      * This is typically used for sequencer recovery.
      *
-     * @param layout latest layout.
-     * @param runtime current runtime.
+     * @param runtimeLayout current RuntimeLayout
      * @return response with all streams addresses and global log tail.
      */
-    public static StreamsAddressResponse getLogAddressSpace(Layout layout, CorfuRuntime runtime) {
+    public static StreamsAddressResponse getLogAddressSpace(RuntimeLayout runtimeLayout) {
         Set<StreamsAddressResponse> luResponses = new HashSet<>();
 
-        Layout.LayoutSegment segment = layout.getLatestSegment();
+        Layout.LayoutSegment segment = runtimeLayout.getLayout().getLatestSegment();
 
         // Query the head log unit in every stripe.
         if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
             for (Layout.LayoutStripe stripe : segment.getStripes()) {
 
-                StreamsAddressResponse res = CFUtils.getUninterruptibly(
-                        runtime.getLayoutView().getRuntimeLayout(layout)
+                StreamsAddressResponse res = CFUtils.getUninterruptibly(runtimeLayout
                                 .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))
                                 .getLogAddressSpace());
                 luResponses.add(res);

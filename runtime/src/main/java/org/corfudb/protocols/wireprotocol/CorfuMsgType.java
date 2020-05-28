@@ -13,7 +13,6 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
-import java.util.UUID;
 
 /**
  * Created by mwei on 8/8/16.
@@ -61,6 +60,8 @@ public enum CorfuMsgType {
     READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}),
     READ_RESPONSE(32, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
     MULTIPLE_READ_REQUEST(35, new TypeToken<CorfuPayloadMsg<MultipleReadRequest>>() {}),
+    INSPECT_ADDRESSES_REQUEST(36, new TypeToken<CorfuPayloadMsg<InspectAddressesRequest>>() {}),
+    INSPECT_ADDRESSES_RESPONSE(37, new TypeToken<CorfuPayloadMsg<InspectAddressesResponse>>() {}),
     PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
     TAIL_REQUEST(41, new TypeToken<CorfuPayloadMsg<TailsRequest>>(){}),
     TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<TailsResponse>>(){}),
@@ -88,6 +89,9 @@ public enum CorfuMsgType {
     LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, true, false),
     RESTART(62, TypeToken.of(CorfuMsg.class), true, true),
     KEEP_ALIVE(63, TypeToken.of(CorfuMsg.class), true, true),
+    COMMITTED_TAIL_REQUEST(64, TypeToken.of(CorfuMsg.class)),
+    COMMITTED_TAIL_RESPONSE(65, new TypeToken<CorfuPayloadMsg<Long>>(){}),
+    UPDATE_COMMITTED_TAIL(66, new TypeToken<CorfuPayloadMsg<Long>>(){}),
 
     // Management Messages
     MANAGEMENT_BOOTSTRAP_REQUEST(70, new TypeToken<CorfuPayloadMsg<Layout>>(){}, true, true),

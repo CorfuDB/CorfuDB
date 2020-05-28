@@ -1,15 +1,39 @@
 package org.corfudb.runtime.clients;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.assertj.core.api.Assertions;
+import org.assertj.core.api.Condition;
+import org.corfudb.format.Types;
+import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.LogUnitServer;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.PriorityLevel;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.DataOutrankedException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.ValueAdoptedException;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.serializer.Serializers;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.RandomAccessFile;
@@ -26,36 +50,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
-import org.assertj.core.api.Assertions;
-import org.assertj.core.api.Condition;
-import org.corfudb.format.Types;
-import org.corfudb.infrastructure.AbstractServer;
-import org.corfudb.infrastructure.LogUnitServer;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.protocols.wireprotocol.DataType;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.PriorityLevel;
-import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.runtime.exceptions.QuotaExceededException;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.DataOutrankedException;
-import org.corfudb.runtime.exceptions.OverwriteCause;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.ValueAdoptedException;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.util.serializer.Serializers;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 /**
  * Created by mwei on 12/14/15.
@@ -617,5 +619,47 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries);
         assertThat(addressSpace.getAddressMap().contains(addressOne));
         assertThat(response.getLogTail()).isEqualTo(addressTwo);
+    }
+
+    /**
+     * Ensure log unit can return correct inspect address result in different scenarios.
+     */
+    @Test
+    public void testInspectAddress() throws Exception {
+        byte[] testString = "hello world".getBytes();
+        final long startAddr = 0L;
+        final long endAddr = 100L;
+        final long holeAddr = 60L;
+        final long trimAddr = 40L;
+
+        for (long addr = startAddr; addr < endAddr; addr++) {
+            if (addr != holeAddr) {
+                client.write(addr, null, testString, Collections.emptyMap()).join();
+            }
+        }
+
+        // InspectAddress should return an empty address at holeAddr.
+        assertThat(client.inspectAddresses(LongStream.range(startAddr, endAddr)
+                .boxed().collect(Collectors.toList())).join().getEmptyAddresses()
+        ).isEqualTo(Collections.singletonList(holeAddr));
+
+        // Perform a prefix trim.
+        client.prefixTrim(Token.of(client.getEpoch(), trimAddr)).join();
+
+        // If client attempt to inspect any address before the trim mark, a
+        // TrimmedException should be thrown to inform the client to retry
+        // auto commit from a larger address.
+        assertThatThrownBy(() ->
+                client.inspectAddresses(LongStream.range(startAddr, endAddr)
+                .boxed().collect(Collectors.toList())).join()
+        ).hasCauseExactlyInstanceOf(TrimmedException.class);
+
+        // Fill the hole, even a LogData of HOLE type should work.
+        client.write(LogData.getHole(holeAddr)).join();
+
+        // Now every address should be consolidated.
+        assertThat(client.inspectAddresses(LongStream.range(trimAddr + 1, endAddr)
+                .boxed().collect(Collectors.toList())).join().getEmptyAddresses()
+        ).isEqualTo(Collections.emptyList());
     }
 }
