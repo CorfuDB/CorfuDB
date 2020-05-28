@@ -1,5 +1,6 @@
 package org.corfudb.util;
 
+import org.corfudb.util.NodeLocator.NodeLocatorBuilder;
 import org.corfudb.util.NodeLocator.Protocol;
 import org.junit.Test;
 
@@ -7,6 +8,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class NodeLocatorTest {
+
+    @Test
+    public void equalsTest(){
+        NodeLocatorBuilder builder = NodeLocator.builder()
+                .host("a")
+                .port(123);
+
+        NodeLocator n1 = builder.option("opt1", "val1").build();
+        NodeLocator n2 = builder.option("opt2", "val2").build();
+
+        assertThat(n1).isEqualTo(n2);
+    }
 
     @Test
     public void invalidNodeThrowsException() {

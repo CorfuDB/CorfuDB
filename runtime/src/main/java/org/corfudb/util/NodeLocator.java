@@ -69,6 +69,7 @@ public class NodeLocator implements Serializable {
      * A map of options.
      */
     @Singular
+    @EqualsAndHashCode.Exclude
     private final ImmutableMap<String, String> options;
 
     /**
