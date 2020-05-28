@@ -7,6 +7,8 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.test.SampleSchema;
+import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.util.MetricsUtils;
 import org.junit.Before;
 import org.junit.Test;
@@ -97,6 +99,73 @@ public class MemoryFootprintIT extends AbstractIT {
                 initialSize,
                 sizeAfterPuts);
 
+        // Assert that table has correct size (i.e. count) and and server is shutdown
+        assertThat(testTable.size()).isEqualTo(count);
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * This test utilizes the {@link MetricsUtils}'s memory measurement tools to test the memory
+     * footprint assessment of the provided tool. This is done by putting key and value pairs
+     * to a corfu table and then evaluating that this has the expected effects on the memory
+     * consumption of the object being measured (i.e. the underlying corfu table)
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testProtobufPutMemoryFootprint() throws Exception {
+        // Run a corfu server
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        // Create CorfuTable
+        CorfuTable testTable = runtime
+                .getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<CorfuTable<String, Object>>() {})
+                .setStreamName("volbeat")
+                .open();
+
+        // Force GC first to prevent it from interfering with the size estimates after.
+        System.gc();
+
+        // Register memory footprint tracking
+        final Gauge<Long> corfuTableSizeGauge = MetricsUtils.addMemoryMeasurerFor(
+                CorfuRuntime.getDefaultMetrics(),
+                testTable);
+        final Long initialSize = corfuTableSizeGauge.getValue();
+
+        // Put key values in CorfuTable
+        final int count = 10000;
+        for (int i = 0; i < count; i++) {
+            SampleSchema.NestedTypeB  typeB = SampleSchema.NestedTypeB.newBuilder()
+                    .setSomething("RANDOM STRING A")
+                    .setSomething2("RANDOME STRING B").build();
+            SampleSchema.NestedTypeA typeA = SampleSchema.NestedTypeA.newBuilder()
+                    .addTag(typeB).build();
+
+            ManagedResources val = ManagedResources.newBuilder()
+                    .setCreateTimestamp(i)
+                    .setNestedType(typeA).build();
+            byte[] serializedVal = val.toByteArray();
+            ManagedResources val2 = ManagedResources.parseFrom(serializedVal);
+
+            SampleSchema.Uuid uuid = SampleSchema.Uuid.newBuilder().setMsb(1).build();
+            serializedVal = uuid.toByteArray();
+            testTable.put(String.valueOf(i), serializedVal);
+        }
+
+        // Assert that memory measurer detects the effect of puts on table size
+        final Long sizeAfterPuts = corfuTableSizeGauge.getValue();
+        log.info("initialSize:{}, sizeAfterPuts:{}",
+                initialSize,
+                sizeAfterPuts);
+
+        System.out.printf("initialSize:%d, sizeAfterPuts:%d, diff=%d",
+                initialSize,
+                sizeAfterPuts, sizeAfterPuts  - initialSize);
         // Assert that table has correct size (i.e. count) and and server is shutdown
         assertThat(testTable.size()).isEqualTo(count);
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();

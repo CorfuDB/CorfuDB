@@ -4,6 +4,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.DynamicMessage;
 
+import edu.umd.cs.findbugs.ba.bcp.Load;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -14,6 +15,7 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.Query;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
@@ -39,6 +41,7 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -78,15 +81,19 @@ public class CorfuStoreIT extends AbstractIT {
 
 
     /**
-     * Basic test that inserts a single item using protobuf defined in the proto/ directory.
+     * 1. Insert a few documents
+     * 2. Create a snapshot
+     * 3. Insert a few more documents
+     * 4. Create another snapshot
+     * 5. Spawn 2 threads to simlutaneously read from above snapshots
      */
     @Test
-    public void testTx() throws Exception {
+    public void twoSnapshotReaderThreads() throws Exception {
         // Run a corfu server
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
 
         // Start a Corfu runtime
-        runtime = createRuntime(singleNodeEndpoint);
+        runtime = createRuntimeWithCache(singleNodeEndpoint);
 
         CorfuStore store = new CorfuStore(runtime);
 
@@ -96,29 +103,89 @@ public class CorfuStoreIT extends AbstractIT {
                 TableOptions.builder().build()
         );
 
-        final long keyUuid = 1L;
-        final long valueUuid = 3L;
-        final long metadataUuid = 5L;
-        Uuid uuidKey = Uuid.newBuilder()
-                .setMsb(keyUuid)
-                .setLsb(keyUuid)
-                .build();
-        Uuid uuidVal = Uuid.newBuilder()
-                .setMsb(valueUuid)
-                .setLsb(valueUuid)
-                .build();
-        Uuid metadata = Uuid.newBuilder()
-                .setMsb(metadataUuid)
-                .setLsb(metadataUuid)
-                .build();
-        TxBuilder tx = store.tx("namespace");
-        tx.create("table", uuidKey, uuidVal, metadata)
-                .update("table", uuidKey, uuidVal, metadata)
-                .commit();
-        CorfuRecord record = table.get(uuidKey);
-        assertThat(record.getPayload()).isEqualTo(uuidVal);
-        assertThat(record.getMetadata()).isEqualTo(metadata);
+        class Loader {
+            public void load(CorfuStore store, long startIdx, long stopIdx) {
+                for (long i = startIdx; i < stopIdx; i++) {
+                    final long keyUuid = i;
+                    final long valueUuid = i;
+                    final long metadataUuid = i;
+                    Uuid uuidKey = Uuid.newBuilder()
+                            .setMsb(keyUuid)
+                            .setLsb(keyUuid)
+                            .build();
+                    Uuid uuidVal = Uuid.newBuilder()
+                            .setMsb(valueUuid)
+                            .setLsb(valueUuid)
+                            .build();
+                    Uuid metadata = Uuid.newBuilder()
+                            .setMsb(metadataUuid)
+                            .setLsb(metadataUuid)
+                            .build();
+                    TxBuilder tx = store.tx("namespace");
 
+                    tx.create("table", uuidKey, uuidVal, metadata).commit();
+                }
+            }
+        }
+        class SnapScan implements Runnable {
+            CorfuStoreMetadata.Timestamp ts;
+            Query q;
+            String tableName;
+            int numIterations;
+            int numItems;
+            SnapScan(CorfuStoreMetadata.Timestamp ts,
+                     Query q, String tableName, int numIter, int numItems) {
+                this.ts = ts;
+                this.q = q;
+                this.tableName = tableName;
+                this.numIterations = numIter;
+                this.numItems = numItems;
+            }
+            public void run() {
+                for (int j = 0; j < numIterations; j++)
+                for (long i = 0; i < numItems; i++) {
+                    final long keyUuid = i;
+                    final long valueUuid = i;
+                    final long metadataUuid = i;
+                    Uuid uuidKey = Uuid.newBuilder()
+                            .setMsb(keyUuid)
+                            .setLsb(keyUuid)
+                            .build();
+                    CorfuRecord<Uuid, Uuid> rec = q.getRecord(tableName, ts, uuidKey);
+                    assertThat(rec.getPayload().getLsb()).isEqualTo(i);
+                }
+            }
+        }
+
+        // ------------ TEST BEGIN -----------------------
+        final int numItems = 1000;
+        int numReadIters = PARAMETERS.NUM_ITERATIONS_VERY_LOW;
+        Loader l = new Loader();
+        l.load(store, 0, numItems);
+
+        CorfuStoreMetadata.Timestamp ts1 = store.getTimestamp();
+        System.out.println("Load 1 complete: TS1="+ts1+" numItems in table="+table.count());
+
+        l.load(store, numItems, numItems*2);
+        CorfuStoreMetadata.Timestamp ts2 = store.getTimestamp();
+        System.out.println("Load 2 complete: TS2="+ts2+" numItems in table="+table.count());
+        long start = System.nanoTime();
+        // Now create 2 threads
+        Thread t1 = new Thread(new SnapScan(ts1,
+                store.query("namespace"),
+                "table",
+                numReadIters, numItems));
+
+        Thread t2 = new Thread(new SnapScan(ts2,
+                store.query("namespace"),
+                "table",
+                numReadIters, numItems));
+        t1.start();
+        t1.join();
+        t2.start();
+        t2.join();
+        long end = System.nanoTime();
+        System.out.println("Test took: " +TimeUnit.NANOSECONDS.toMillis(end - start)+"ms");
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
