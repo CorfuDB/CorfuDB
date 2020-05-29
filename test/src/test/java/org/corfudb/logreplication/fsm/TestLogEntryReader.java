@@ -23,7 +23,7 @@ public class TestLogEntryReader implements LogEntryReader {
     }
 
     @Override
-    public void setSiteEpoch(long siteEpoch) {
+    public void setSiteConfigID(long siteConfigID) {
 
     }
 }
