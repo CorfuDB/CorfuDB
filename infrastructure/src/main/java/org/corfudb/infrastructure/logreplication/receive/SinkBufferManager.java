@@ -97,7 +97,7 @@ public class SinkBufferManager {
         return false;
     }
 
-    LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
+    public LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
         long ackTimestamp;
         MessageType messageType;
         switch (type) {
