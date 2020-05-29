@@ -3,6 +3,7 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
+import org.corfudb.logreplication.infrastructure.CrossSiteConfiguration;
 import org.corfudb.logreplication.infrastructure.DefaultSiteManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -180,8 +181,9 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
     public void runSiteSwitch() throws Exception {
         try {
             testLogReplicationEndToEnd(true, false);
-            String primary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
-            String currentPimary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
+            CrossSiteConfiguration crossSiteConfiguration = new CrossSiteConfiguration(serverA.getSiteManagerAdapter().getSiteConfigMsg());
+            String primary = crossSiteConfiguration.getPrimarySite().getSiteId();
+            String currentPimary = primary;
 
 
             // Wait till site role change and new transfer done.
@@ -200,7 +202,9 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                 discoveryService.wait();
             }
 
-            currentPimary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
+            crossSiteConfiguration = new CrossSiteConfiguration(serverA.getSiteManagerAdapter().getSiteConfigMsg());
+            currentPimary = crossSiteConfiguration.getPrimarySite().getSiteId();
+
             assertThat(currentPimary).isNotEqualTo(primary);
             System.out.print("\nVerified Site Role Change primary " + currentPimary);
             System.out.print("\nmapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
