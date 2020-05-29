@@ -146,7 +146,7 @@ public class StateTransferTest extends AbstractViewTest {
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
 
-        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
     }
 
     @Test
@@ -231,7 +231,7 @@ public class StateTransferTest extends AbstractViewTest {
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
 
-        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
 
     }
 
@@ -357,7 +357,7 @@ public class StateTransferTest extends AbstractViewTest {
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
 
-        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
     }
 
     /**
@@ -500,7 +500,7 @@ public class StateTransferTest extends AbstractViewTest {
         // Verify Nodes' data
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
-        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
     }
 
     /**
