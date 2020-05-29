@@ -63,7 +63,7 @@ public class SnapshotSender {
 
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                           ReadProcessor readProcessor, LogReplicationFSM fsm) {
-        this.runtime = runtime;
+        this.runtime = runtime;;
         this.snapshotReader = snapshotReader;
         this.dataSender = dataSender;
         this.readProcessor = readProcessor;
@@ -132,13 +132,13 @@ public class SnapshotSender {
                     LogReplicationEntry ack = snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp) {
                         // Snapshot Sync Completed
-                        log.info("Snapshot sync completed for {} on timestamp {}, ack[{}::{}]", snapshotSyncEventId,
-                                baseSnapshotTimestamp, ack.getMetadata().getMessageMetadataType(),
-                                ack.getMetadata().getSnapshotTimestamp());
+                        log.info("Snapshot sync completed for {} on timestamp {}, ack{}", snapshotSyncEventId,
+                                baseSnapshotTimestamp, ack.getMetadata());
+
                         snapshotSyncComplete(snapshotSyncEventId);
                     } else {
                         log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
-                                ack.getMetadata().getSnapshotTimestamp());
+                                ack.getMetadata());
                         throw new Exception("Wrong base snapshot ack");
                     }
                 } catch (Exception e) {
@@ -163,6 +163,7 @@ public class SnapshotSender {
             }
         } else {
             log.info("Snapshot sync completed for {} as there is no data in the log.", snapshotSyncEventId);
+
             // Generate a special LogReplicationEntry with only metadata (used as start marker on receiver side
             // to complete snapshot sync and send the right ACK)
             List<LogReplicationEntry> snapshotSyncEntries = new ArrayList<>();
@@ -203,14 +204,14 @@ public class SnapshotSender {
      * @return snapshot sync start marker as LogReplicationEntry
      */
     private LogReplicationEntry getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START, fsm.getSiteEpoch(),
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START, fsm.getSiteConfigID(),
                 snapshotSyncEventId, Address.NON_ADDRESS, baseSnapshotTimestamp, snapshotSyncEventId);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
         return emptyEntry;
     }
 
     private LogReplicationEntry getSnapshotSyncEndMarker(UUID snapshotSyncEventId) {
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END, fsm.getSiteEpoch(),
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END, fsm.getSiteConfigID(),
                 snapshotSyncEventId, Address.NON_ADDRESS, baseSnapshotTimestamp, snapshotSyncEventId);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
         return emptyEntry;

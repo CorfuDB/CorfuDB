@@ -3,6 +3,9 @@ package org.corfudb.logreplication.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
+import org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -21,13 +24,19 @@ public class LogReplicationClient extends AbstractClient {
     @Setter
     private IClientRouter router;
 
+    private CorfuReplicationDiscoveryService discoveryService;
+
+    private String remoteSiteID;
+
     public LogReplicationClient(IClientRouter router, long epoch) {
         super(router, epoch, null);
         setRouter(router);
     }
 
-    public LogReplicationClient(IClientRouter router) {
+    public LogReplicationClient(IClientRouter router, CorfuReplicationDiscoveryService discoveryService, String remoteSiteID) {
         this(router, 0);
+        this.discoveryService = discoveryService;
+        this.remoteSiteID = remoteSiteID;
     }
 
     public CompletableFuture<LogReplicationNegotiationResponse> sendNegotiationRequest() {
@@ -41,8 +50,15 @@ public class LogReplicationClient extends AbstractClient {
     }
 
     public CompletableFuture<LogReplicationEntry> sendLogEntry(LogReplicationEntry logReplicationEntry) {
+        CompletableFuture<LogReplicationEntry> result = null;
         CorfuMsg msg = new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_ENTRY, logReplicationEntry).setEpoch(0);
-        return getRouter().sendMessageAndGetCompletable(msg);
+        try {
+            result = getRouter().sendMessageAndGetCompletable(msg);
+        } catch (Exception e) {
+            discoveryService.putEvent(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.ConnectionLoss, remoteSiteID));
+        } finally {
+            return result;
+        }
     }
 
     @Override

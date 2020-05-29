@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.LogReplicationSourceManager;
+import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -33,6 +34,10 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.*;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Function;
 
@@ -215,16 +220,17 @@ public class CorfuLogReplicationRuntime {
         }
     }
 
-    public void connect () {
+    public void connect(CorfuReplicationDiscoveryService discoveryService, String siteID) {
         log.info("Connected");
         IClientRouter router = getRouter(parameters.getRemoteLogReplicationServerEndpoint());
-        client = new LogReplicationClient(router);
+        client = new LogReplicationClient(router, discoveryService, siteID);
 
         LogReplicationConfig config = new LogReplicationConfig(streamsToReplicate, UUID.randomUUID(), UUID.randomUUID());
         log.info("Set Source Manager to connect to local Corfu on {}", parameters.getLocalCorfuEndpoint());
         sourceManager = new LogReplicationSourceManager(parameters.getLocalCorfuEndpoint(),
                 client, config);
     }
+
 
     private boolean streamsToReplicateTableExists() {
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
@@ -297,8 +303,8 @@ public class CorfuLogReplicationRuntime {
         return tableNames;
     }
 
-    public LogReplicationQueryLeaderShipResponse queryLeadership() throws Exception {
-        log.info("***** Send QueryLeadership Request on a client to: {}", client.getRouter().getPort());
+  public LogReplicationQueryLeaderShipResponse queryLeadership() throws ExecutionException, InterruptedException {
+      log.info("***** Send QueryLeadership Request on a client to: {}", client.getRouter().getPort());
         return client.sendQueryLeadership().get();
     }
 

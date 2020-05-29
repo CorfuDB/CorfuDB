@@ -73,6 +73,7 @@ public class LogReplicationEntryMetadata {
     public static LogReplicationEntryMetadata fromProto(Messages.LogReplicationEntryMetadata proto) {
         // Parse protoBuf Message
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata();
+        metadata.setSiteConfigID(proto.getSiteConfigID());
         metadata.setMessageMetadataType(getType(proto.getType()));
         metadata.setSyncRequestId(new UUID(proto.getSyncRequestId().getMsb(), proto.getSyncRequestId().getLsb()));
         metadata.setTimestamp(proto.getTimestamp());

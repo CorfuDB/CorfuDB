@@ -13,14 +13,20 @@ public class DiscoveryServiceEvent {
     @Setter
     String siteID;
 
-    DiscoveryServiceEvent(DiscoveryServiceEventType type, LogReplicationSiteInfo.SiteConfigurationMsg siteConfigMsg) {
-        this.type = type;
-        this.siteConfigMsg = siteConfigMsg;
+
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
+       this.type = type;
     }
 
-    DiscoveryServiceEvent(DiscoveryServiceEventType type, String siteID, LogReplicationSiteInfo.SiteConfigurationMsg siteConfigMsg) {
-        this.type = type;
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String siteID) {
+        new DiscoveryServiceEvent(type);
         this.siteID = siteID;
+    }
+
+
+
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, LogReplicationSiteInfo.SiteConfigurationMsg siteConfigMsg) {
+        this.type = type;
         this.siteConfigMsg = siteConfigMsg;
     }
 
@@ -28,7 +34,7 @@ public class DiscoveryServiceEvent {
         DiscoverySite("SiteChange"),
         AcquireLock("AcquireLock"),
         ReleaseLock("ReleaseLock"),
-        ConnectionLossWithLeader( "ConnectionLossWithLeader");
+        ConnectionLoss( "ConnectionLoss");
 
         @Getter
         String val;

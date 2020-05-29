@@ -58,4 +58,9 @@ class LogReplicationNodeInfo {
         return String.format("Role Type: %s, %s, %s", roleType, getEndpoint(), leader);
     }
 
+    public void stopRuntime() {
+        runtime.stop();
+        runtime = null;
+    }
+
 }

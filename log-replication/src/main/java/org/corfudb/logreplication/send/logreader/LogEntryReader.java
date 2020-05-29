@@ -22,5 +22,5 @@ public interface LogEntryReader {
 
     void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp);
 
-    void setSiteEpoch(long siteEpoch);
+    void setSiteConfigID(long siteConfigID);
 }

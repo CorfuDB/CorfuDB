@@ -45,6 +45,7 @@ public class CorfuMessageConverter {
                         // Set Log Replication Entry as payload
                         .setPayload(Any.pack(Messages.LogReplicationEntry.newBuilder()
                                 .setMetadata(LogReplicationEntryMetadata.newBuilder()
+                                        .setSiteConfigID(logReplicationEntry.getMetadata().getSiteConfigID())
                                         .setType(Messages.LogReplicationEntryType.valueOf(logReplicationEntry.getMetadata().getMessageMetadataType().name()))
                                         .setPreviousTimestamp(logReplicationEntry.getMetadata().getPreviousTimestamp())
                                         .setSnapshotSyncSeqNum(logReplicationEntry.getMetadata().getSnapshotSyncSeqNum())

@@ -63,6 +63,7 @@ public class SourceForwardingDataSender implements DataSender {
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(false, 0));
         this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0), config);
+        destinationLogReplicationManager.setLeader(true);
         this.channelExecutorWorkers = Executors.newSingleThreadExecutor();
         this.ifDropMsg = ifDropMsg;
     }

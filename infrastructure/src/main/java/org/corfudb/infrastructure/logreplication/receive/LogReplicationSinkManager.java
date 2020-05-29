@@ -55,11 +55,17 @@ public class LogReplicationSinkManager implements DataReceiver {
     @Setter
     boolean leader;
 
+    // The roleType is active or standby
+    @Getter
+    @Setter
+    private boolean active = false;
+
     private LogReplicationConfig config;
     private UUID snapshotRequestId = new UUID(0L, 0L);
 
     private int rxMessageCounter = 0;
     private long siteConfigID = 0;
+
 
     // Count number of received messages, used for testing purposes
     @VisibleForTesting
@@ -117,7 +123,16 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     @Override
     public LogReplicationEntry receive(LogReplicationEntry message) {
+
+        //If the roletype is active or it is not the leader, skip processing the message and ack the timestamp.
+        //This will  trigger the active site to redo the query leadership.
+        if (active || !leader) {
+            LogReplicationEntryMetadata metadata = sinkBufferManager.makeAckMessage(message);
+            return new LogReplicationEntry(metadata, new byte[0]);
+        }
+
         log.info("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
+
         siteConfigID = Math.max(siteConfigID, message.getMetadata().getSiteConfigID());
 
         if (!receivedValidMessage(message)) {
@@ -127,7 +142,8 @@ public class LogReplicationSinkManager implements DataReceiver {
             } else {
                 // Invalid message // Drop the message
                 log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
-                        message.getMetadata().getMessageMetadataType());
+                        message.getMetadata());
+
                 return null;
             }
         }
@@ -198,6 +214,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 }
             } catch (ReplicationWriterException e) {
                 log.error("Get an exception: ", e);
+                //System.out.print("\nGet an exception " + e);
                 // TODO: Let ack time out which will kick off Snapshot Sync or send a NACK?
                 log.info("Requested Snapshot Sync.");
             }
@@ -250,6 +267,13 @@ public class LogReplicationSinkManager implements DataReceiver {
                 || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_START || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END)
                 || rxState == RxState.LOG_ENTRY_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
+
+    public void setSiteInfo(boolean active, long siteID) {
+        this.active = active;
+        this.siteConfigID = siteID;
+        persistedWriterMetadata.setupSiteConfigID(siteConfigID);
+    }
+
 
     public void shutdown() {
         this.runtime.shutdown();

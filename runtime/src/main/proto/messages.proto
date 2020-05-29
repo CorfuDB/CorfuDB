@@ -51,12 +51,13 @@ message LogReplicationQueryLeadershipResponse {
 }
 
 message LogReplicationEntryMetadata {
-    LogReplicationEntryType type = 1;
-    int64 timestamp = 2;
-    int64 previousTimestamp = 3;
-    Uuid syncRequestId = 4;
-    int64 snapshotTimestamp = 5;
-    int64 snapshotSyncSeqNum = 6;
+    int64 siteConfigID = 1;
+    LogReplicationEntryType type = 2;
+    int64 timestamp = 3;
+    int64 previousTimestamp = 4;
+    Uuid syncRequestId = 5;
+    int64 snapshotTimestamp = 6;
+    int64 snapshotSyncSeqNum = 7;
 }
 
 message Uuid {
