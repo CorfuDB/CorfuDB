@@ -87,8 +87,6 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                 }
                 primaryNodeNames.add(nodeName);
                 primaryIpAddresses.add(props.getProperty(nodeName));
-                primaryNodeNames.add(nodeName);
-
             }
 
             standbySiteName = props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME);
@@ -101,7 +99,6 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                 }
                 standbyNodeNames.add(nodeName);
                 standbyIpAddresses.add(props.getProperty(nodeName));
-                standbyNodeNames.add(nodeName);
             }
             reader.close();
         } catch (FileNotFoundException e) {
