@@ -47,7 +47,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private long siteConfigID;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
-        this.rt = CorfuRuntime.fromParameters(runtime.getParameters());
+        this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         Set<String> streams = config.getStreamsToReplicate();
         streamUUIDs = new HashSet<>();

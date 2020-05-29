@@ -25,7 +25,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import static java.lang.Thread.sleep;
 
 /**
  * This class implements the Log Replication Finite State Machine.

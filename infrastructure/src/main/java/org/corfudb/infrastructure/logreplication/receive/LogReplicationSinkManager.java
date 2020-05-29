@@ -123,7 +123,9 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     @Override
     public LogReplicationEntry receive(LogReplicationEntry message) {
-        //If the roletype is active or it is not the leader, ack the timestamp.
+
+        //If the roletype is active or it is not the leader, skip processing the message and ack the timestamp.
+        //This will  trigger the active site to redo the query leadership.
         if (active || !leader) {
             LogReplicationEntryMetadata metadata = sinkBufferManager.makeAckMessage(message);
             return new LogReplicationEntry(metadata, new byte[0]);

@@ -77,11 +77,13 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             primaryLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
                 String nodeName = PRIMARY_SITE_NODE + i;
-                primaryNodeNames.add(nodeName);
+
                 if (!names.contains(nodeName)) {
                     continue;
                 }
                 primaryIpAddresses.add(props.getProperty(nodeName));
+                primaryNodeNames.add(nodeName);
+
             }
 
             standbySiteName = props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME);
@@ -89,11 +91,12 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             standbyLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
                 String nodeName = STANDBY_SITE_NODE + i;
-                standbyNodeNames.add(nodeName);
+
                 if (!names.contains(nodeName)) {
                     continue;
                 }
                 standbyIpAddresses.add(props.getProperty(nodeName));
+                standbyNodeNames.add(nodeName);
             }
             reader.close();
         } catch (FileNotFoundException e) {
@@ -109,7 +112,6 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             standbyLogReplicationPort = DefaultSiteConfig.getStandbyLogReplicationPort();
             standbyNodeNames.addAll(DefaultSiteConfig.getStandbyNodeNames());
             standbyIpAddresses.addAll(DefaultSiteConfig.getStandbyIpAddresses());
-
         }
         primarySite = new CrossSiteConfiguration.SiteInfo(primarySiteName, SiteStatus.ACTIVE);
 
