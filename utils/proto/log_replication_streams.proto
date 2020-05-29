@@ -10,3 +10,11 @@ message TableInfo {
 message Namespace {
     string name = 1;
 }
+
+message VersionString {
+    string name = 1;
+}
+
+message Version {
+    string version = 1;
+}

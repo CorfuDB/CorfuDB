@@ -57,7 +57,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
         //create an opaque stream for transaction stream
         txStream = new TxOpaqueStream(rt);
-        System.out.print("\n****newLogEntryReader");
     }
 
     LogReplicationEntry generateMessage(OpaqueEntry entry, UUID logEntryRequestId) {
