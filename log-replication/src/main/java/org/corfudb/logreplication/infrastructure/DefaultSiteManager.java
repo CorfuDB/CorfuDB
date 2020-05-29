@@ -41,14 +41,12 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
 
     Thread thread = new Thread(siteManagerCallback);
 
-    DefaultSiteManager() {
-    }
-
     public void start() {
         siteManagerCallback = new SiteManagerCallback(this);
         thread = new Thread(siteManagerCallback);
         thread.start();
     }
+
 
     public static CrossSiteConfiguration readConfig() throws IOException {
         CrossSiteConfiguration.SiteInfo primarySite;
@@ -135,7 +133,8 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
      * Change one of the standby as the primary and primary become the standby
      * @return
      */
-    public static CrossSiteConfiguration changePrimary(CrossSiteConfiguration siteConfig) {
+    public static CrossSiteConfiguration changePrimary(SiteConfigurationMsg siteConfigMsg) {
+        CrossSiteConfiguration siteConfig = new CrossSiteConfiguration(siteConfigMsg);
         CrossSiteConfiguration.SiteInfo oldPrimary = new CrossSiteConfiguration.SiteInfo(siteConfig.getPrimarySite(),
                 SiteStatus.STANDBY);
         Map<String, CrossSiteConfiguration.SiteInfo> standbys = new HashMap<>();
@@ -174,7 +173,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
                 try {
                     sleep(changeInveral);
                     if (siteFlip) {
-                        CrossSiteConfiguration newConfig = changePrimary(siteManager.getSiteConfig());
+                        CrossSiteConfiguration newConfig = changePrimary(siteManager.getSiteConfigMsg());
                         siteManager.updateSiteConfig(newConfig.convert2msg());
                         log.warn("change the site config");
                         siteFlip = false;
