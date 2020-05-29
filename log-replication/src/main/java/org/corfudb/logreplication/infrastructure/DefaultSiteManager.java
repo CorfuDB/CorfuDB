@@ -11,7 +11,12 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 
 import static java.lang.Thread.sleep;
 
@@ -77,10 +82,10 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             primaryLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
                 String nodeName = PRIMARY_SITE_NODE + i;
-                primaryNodeNames.add(nodeName);
                 if (!names.contains(nodeName)) {
                     continue;
                 }
+                primaryNodeNames.add(nodeName);
                 primaryIpAddresses.add(props.getProperty(nodeName));
             }
 
@@ -89,10 +94,10 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             standbyLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
                 String nodeName = STANDBY_SITE_NODE + i;
-                standbyNodeNames.add(nodeName);
                 if (!names.contains(nodeName)) {
                     continue;
                 }
+                standbyNodeNames.add(nodeName);
                 standbyIpAddresses.add(props.getProperty(nodeName));
             }
             reader.close();
