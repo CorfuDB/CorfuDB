@@ -192,8 +192,8 @@ public class LogEntrySender {
                 try {
                     LogReplicationEntry ack = (LogReplicationEntry)CompletableFuture.anyOf(pendingLogEntriesAcked
                             .values().toArray(new CompletableFuture<?>[pendingLogEntriesAcked.size()])).get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-                    log.trace("Received Log Entry ack ({}) for {}", ack.getMetadata().getMessageMetadataType(),
-                            ack.getMetadata().getTimestamp());
+                    log.trace("Received Log Entry ack {}", ack.getMetadata());
+
                     updateAckTs(ack.getMetadata().getTimestamp());
 
                     // Remove all CFs for all entries with lower timestamps than that of the ACKed LogReplicationEntry
@@ -234,9 +234,9 @@ public class LogEntrySender {
                 if (message != null) {
                     pendingEntries.append(message, getCurrentTime());
                     CompletableFuture<LogReplicationEntry> cf = dataSender.send(message);
+                    log.debug("sending data %s", message.getMetadata());
                     pendingLogEntriesAcked.put(message.getMetadata().getTimestamp(), cf);
-                    log.trace("send message " + message.getMetadata().getTimestamp());
-                    //System.out.print("\nLogEntryRead message " + message.getMetadata());
+                    log.trace("send message " + message.getMetadata());
                 } else {
                     // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
                     // take over the shared thread pool of the state machine
@@ -278,9 +278,11 @@ public class LogEntrySender {
     /**
      * Reset the log entry sender to initial state
      */
-    public void reset(long baseSnapshot, long ackTs) {
+    public void reset(long ts0, long ts1) {
         taskActive = true;
-        logEntryReader.reset(baseSnapshot, ackTs);
+        log.info("Reset baseSnapshot %s ackTs %s", ts0, ts1);
+        logEntryReader.reset(ts0, ts1);
+        ackTs = ts1;
         pendingEntries.evictAll();
     }
 

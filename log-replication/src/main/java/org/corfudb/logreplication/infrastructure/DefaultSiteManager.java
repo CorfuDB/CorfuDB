@@ -114,7 +114,6 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             standbyLogReplicationPort = DefaultSiteConfig.getStandbyLogReplicationPort();
             standbyNodeNames.addAll(DefaultSiteConfig.getStandbyNodeNames());
             standbyIpAddresses.addAll(DefaultSiteConfig.getStandbyIpAddresses());
-
         }
         primarySite = new CrossSiteConfiguration.SiteInfo(primarySiteName, SiteStatus.ACTIVE);
 
