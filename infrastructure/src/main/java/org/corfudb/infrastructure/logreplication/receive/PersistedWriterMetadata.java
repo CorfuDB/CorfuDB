@@ -223,6 +223,8 @@ public class PersistedWriterMetadata {
         long ts = entry.getMetadata().getSnapshotTimestamp();
 
         if (siteConfigID != persistSiteConfigID || ts != persistSnapStart || ts != persistSnapTranferDone) {
+            log.warn("siteConfigID " + siteConfigID + " != " + " persist " + persistSiteConfigID +  " ts " + ts +
+                    " != " + "persistSnapTranferDone " + persistSnapTranferDone);
             return;
         }
 
