@@ -153,16 +153,20 @@ public class CorfuReplicationDiscoveryService implements Runnable {
             return;
         }
 
+        // Update the siteEpoch metadata.
+        replicationServerNode.getLogReplicationServer().getSinkManager().setSiteInfo(nodeInfo.getRoleType() == SiteStatus.ACTIVE ? true : false,
+                replicationManager.getCrossSiteConfig().getSiteConfigID());
+
+        log.debug("persit new siteConfigID " + replicationManager.getCrossSiteConfig().getSiteConfigID() + " status " +
+                nodeInfo.getRoleType());
+
         if (nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
             //crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
             log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
-            replicationManager.startLogReplication(nodeInfo);
+            replicationManager.startLogReplication(nodeInfo, this);
         } else if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
             // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
 
-            // Update the siteEpoch metadata.
-            replicationServerNode.getLogReplicationServer().getSinkManager().getPersistedWriterMetadata().
-                    setupSiteConfigID(replicationManager.getCrossSiteConfig().getSiteConfigID());
             log.info("Start as Sink (receiver) on node {} ", nodeInfo);
         }
     }
@@ -205,9 +209,14 @@ public class CorfuReplicationDiscoveryService implements Runnable {
     public void processSiteFlip(CrossSiteConfiguration newConfig) {
         stopLogReplication();
         replicationManager.setCrossSiteConfig(newConfig);
+
+        boolean leader = nodeInfo.isLeader();
+        nodeInfo = newConfig.getNodeInfo(localEndpoint);
+        nodeInfo.setLeader(leader);
+
+        log.debug("new nodeinfo " + nodeInfo);
         startLogReplication();
     }
-
 
     public void processSiteChangeNotification(DiscoveryServiceEvent event) {
         //stale notification, skip
@@ -222,7 +231,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
             }
 
             //If the current node it active, compare with the current siteConfig, see if there are addition/removal standbys
-            getReplicationManager().processStandbyChange(nodeInfo, newConfig);
+            getReplicationManager().processStandbyChange(nodeInfo, newConfig, this);
         } else {
             processSiteFlip(newConfig);
         }
@@ -236,6 +245,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
      * @param event
      */
     private void processConnectionLossWithLeader(DiscoveryServiceEvent event) {
+
         if (!nodeInfo.isLeader())
             return;
 
@@ -243,7 +253,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
             return;
         }
 
-        getReplicationManager().restartLogReplication(nodeInfo, event.getSiteID());
+        replicationManager.restartLogReplication(nodeInfo, event.getSiteID(), this);
     }
 
     /**
@@ -264,14 +274,13 @@ public class CorfuReplicationDiscoveryService implements Runnable {
                 processSiteChangeNotification(event);
                 break;
 
-            case ConnectionLossWithLeader:
+            case ConnectionLoss:
                 processConnectionLossWithLeader(event);
                 break;
 
             default:
                 log.error("wrong event type {}", event);
         }
-
     }
 
     public synchronized void putEvent(DiscoveryServiceEvent event) {
