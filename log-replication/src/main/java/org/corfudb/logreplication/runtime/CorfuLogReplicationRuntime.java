@@ -22,6 +22,7 @@ import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.utils.CommonTypes;
 import org.corfudb.utils.LogReplicationStreams.Namespace;
@@ -341,4 +342,27 @@ public class CorfuLogReplicationRuntime {
         sourceManager.shutdown();
     }
 
+    public long getMaxStreamTail() {
+        long maxTail = Address.NON_ADDRESS;
+        log.debug("streamtoReplicate " + streamsToReplicate);
+        for (String s : streamsToReplicate) {
+            UUID currentUUID = CorfuRuntime.getStreamID(s);
+            Map<UUID, Long> tailMap = corfuRuntime.getAddressSpaceView().getAllTails().getStreamTails();
+            Long currentTail = tailMap.get(currentUUID);
+            if (currentTail != null) {
+                maxTail = Math.max(maxTail, currentTail);
+            }
+        }
+
+        return maxTail;
+    }
+
+    /**
+     *
+     * @return
+     */
+    public long getNumEntriesToSend(long ts) {
+       long ackTS = sourceManager.getLogReplicationFSM().getAckedTimestamp();
+       return ts - ackTS;
+    }
 }

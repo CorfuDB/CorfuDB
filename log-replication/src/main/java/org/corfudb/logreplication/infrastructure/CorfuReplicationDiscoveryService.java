@@ -303,8 +303,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Override
     public void prepareSiteRoleChange() {
-
-
+        replicationManager.prepareSiteRoleChange();
     }
 
 
@@ -314,6 +313,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Override
     public int queryReplicationStatus() {
-        return 0;
+        return replicationManager.queryReplicationStatus();
     }
 }
