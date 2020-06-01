@@ -315,4 +315,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     public int queryReplicationStatus() {
         return replicationManager.queryReplicationStatus();
     }
+
+    public void shutdown() {
+        replicationManager.shutdown();
+    }
 }

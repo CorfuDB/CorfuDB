@@ -288,4 +288,8 @@ public class CorfuReplicationManager {
 
         return percent;
     }
+
+    public void shutdown() {
+        stopLogReplication();
+    }
 }

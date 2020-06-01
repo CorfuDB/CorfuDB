@@ -39,6 +39,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
 
     private static final String PRIMARY_SITE_NODE = "primary_site_node";
     private static final String STANDBY_SITE_NODE = "standby_site_node";
+    private boolean ifShutdown = false;
 
     @Getter
     public SiteManagerCallback siteManagerCallback;
@@ -49,6 +50,11 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         siteManagerCallback = new SiteManagerCallback(this);
         thread = new Thread(siteManagerCallback);
         thread.start();
+    }
+
+    @Override
+    public void shutdown() {
+        ifShutdown = true;
     }
 
 
@@ -202,7 +208,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
 
         @Override
         public void run() {
-            while (true) {
+            while (!siteManager.ifShutdown) {
                 try {
                     sleep(changeInterval);
                     if (siteFlip) {
@@ -217,4 +223,5 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             }
         }
     }
+
 }

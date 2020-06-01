@@ -31,10 +31,6 @@ public abstract class CorfuReplicationSiteManagerAdapter {
             }
     }
 
-    public abstract SiteConfigurationMsg querySiteConfig();
-
-    public abstract void start();
-
     public void prepareSiteRoleChange() {
         corfuReplicationDiscoveryService.prepareSiteRoleChange();
     }
@@ -42,4 +38,10 @@ public abstract class CorfuReplicationSiteManagerAdapter {
     public int queryReplicationStatus() {
         return corfuReplicationDiscoveryService.queryReplicationStatus();
     }
+
+    public abstract SiteConfigurationMsg querySiteConfig();
+
+    public abstract void start();
+
+    public abstract void shutdown();
 }
