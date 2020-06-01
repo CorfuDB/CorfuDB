@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteStatus;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -18,6 +19,8 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import static org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.DiscoverySite;
+
 /**
  * This class represents the Replication Discovery Service.
  *
@@ -27,7 +30,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * - Log Replication Node role: Source (sender) or Sink (receiver)
  */
 @Slf4j
-public class CorfuReplicationDiscoveryService implements Runnable {
+public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicationDiscoveryServiceAdapter {
 
     /**
      * Used by both primary site and standby site.
@@ -86,8 +89,8 @@ public class CorfuReplicationDiscoveryService implements Runnable {
         //Anny: Does the getNodeID() give an unique id?
         this.nodeId = serverContext.getNodeId();
 
-        CrossSiteConfiguration crossSiteConfig = siteManager.fetchSiteConfig();
-        this.replicationManager = new CorfuReplicationManager(serverContext.getTransportType(), siteManager.fetchSiteConfig());
+        CrossSiteConfiguration crossSiteConfig = new CrossSiteConfiguration(siteManager.fetchSiteConfig());
+        this.replicationManager = new CorfuReplicationManager(serverContext.getTransportType(), crossSiteConfig);
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
 
@@ -224,7 +227,7 @@ public class CorfuReplicationDiscoveryService implements Runnable {
             return;
         }
 
-        CrossSiteConfiguration newConfig = siteManager.fetchSiteConfig();
+        CrossSiteConfiguration newConfig = new CrossSiteConfiguration(siteManager.fetchSiteConfig());
         if (newConfig.getSiteConfigID() == getReplicationManager().getCrossSiteConfig().getSiteConfigID()) {
             if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
                 return;
@@ -286,5 +289,34 @@ public class CorfuReplicationDiscoveryService implements Runnable {
     public synchronized void putEvent(DiscoveryServiceEvent event) {
         eventQueue.add(event);
         notifyAll();
+    }
+
+    @Override
+    public void updateSiteConfig(LogReplicationSiteInfo.SiteConfigurationMsg crossSiteConfigMsg) {
+        putEvent(new DiscoveryServiceEvent(DiscoverySite, crossSiteConfigMsg));
+    }
+
+    /**
+     * query the current all replication stream log tail and remeber the max
+     * and query each standbySite information according to the ackInformation decide all manay total
+     * msg needs to send out.
+     */
+    @Override
+    public void prepareSiteRoleChange() {
+        replicationManager.prepareSiteRoleChange();
+    }
+
+
+    /**
+     * query the current all replication stream log tail and calculate the number of messages to be sent.
+     * If the max tail has changed, give 0%. Otherwise,
+     */
+    @Override
+    public int queryReplicationStatus() {
+        return replicationManager.queryReplicationStatus();
+    }
+
+    public void shutdown() {
+        replicationManager.shutdown();
     }
 }
