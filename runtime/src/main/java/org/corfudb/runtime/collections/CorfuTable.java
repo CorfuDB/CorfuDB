@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.reflect.TypeToken;
@@ -462,18 +463,14 @@ public class CorfuTable<K, V> implements
     @Override
     @Accessor
     public @Nonnull Set<K> keySet() {
-        return mainMap.keySet()
-                .stream()
-                .collect(ImmutableSet.toImmutableSet());
+        return ImmutableSet.copyOf(mainMap.keySet());
     }
 
     /** {@inheritDoc} */
     @Override
     @Accessor
     public @Nonnull Collection<V> values() {
-        return mainMap.values()
-                .stream()
-                .collect(ImmutableSet.toImmutableSet());
+        return ImmutableList.copyOf(mainMap.values());
     }
 
     /**
