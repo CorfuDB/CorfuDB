@@ -1,5 +1,7 @@
 package org.corfudb.universe.scenario;
 
+import org.corfudb.runtime.RebootUtil;
+import org.corfudb.runtime.RebootUtil.RebootUtilWrapper;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.BaseHandler;
 import org.corfudb.runtime.clients.LayoutHandler;
@@ -19,6 +21,7 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+import org.mockito.Matchers;
 import org.mockito.Mockito;
 
 import java.time.Duration;
@@ -27,7 +30,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.spy;
 
 public class AddNodeDuringInvalidateLayoutIT extends GenericIntegrationTest {
 
@@ -76,7 +81,7 @@ public class AddNodeDuringInvalidateLayoutIT extends GenericIntegrationTest {
         // Create a base client to the node we want to reset and the spy to cause a race condition.
         BaseClient baseClient = client.getRuntime().getLayoutView()
                 .getRuntimeLayout().getBaseClient(endpoint);
-        BaseClient baseClientSpy = Mockito.spy(baseClient);
+        BaseClient baseClientSpy = spy(baseClient);
 
         // When a base client tries to perform a reset, prune the routers.
         // This will prune the router of the base client.
@@ -97,22 +102,18 @@ public class AddNodeDuringInvalidateLayoutIT extends GenericIntegrationTest {
         // Now lets create a client router that is not part of a router pool,
         // issue a reset to the node we would want to add.
         // When a reset is called, the layout will be invalidated.
-        try (NettyClientRouter clientRouter = new NettyClientRouter(NodeLocator.parseString(endpoint),
-                client.getRuntime().getParameters())) {
+        RebootUtilWrapper rebootWrapper = new RebootUtilWrapper();
+        RebootUtilWrapper spy = spy(rebootWrapper);
+        Mockito.doAnswer(invoke -> {
+            client.getRuntime().pruneRouters(layout);
+            return invoke.callRealMethod();
+        }).when(spy).reset(Matchers.anyObject(), Matchers.anyObject(), Matchers.anyInt(), Matchers.anyObject());
 
-            baseClient = new BaseClient(clientRouter, layout.getEpoch(), layout.getClusterId());
-            BaseClient spyBaseClient = Mockito.spy(baseClient);
+        int resetNodeRetryTimes = 5;
+        Duration resetNodeRetryInterval = Duration.ofSeconds(5);
 
-            Mockito.doAnswer(invoke -> {
-                client.getRuntime().pruneRouters(layout);
-                return invoke.callRealMethod();
-            }).when(spyBaseClient).reset();
-
-            // The reset should go through.
-            boolean resetHappened = spyBaseClient.reset()
-                    .get(waitForResetDurationSeconds, TimeUnit.SECONDS);
-            assertThat(resetHappened).isTrue();
-        }
+        assertThatCode(() -> spy.reset(endpoint, client.getRuntime().getParameters(),
+                resetNodeRetryTimes, resetNodeRetryInterval)).doesNotThrowAnyException();
 
         // Wait until a node fully restarts.
         Sleep.sleepUninterruptibly(Duration.ofMillis(resetWaitPeriod));
@@ -123,7 +124,7 @@ public class AddNodeDuringInvalidateLayoutIT extends GenericIntegrationTest {
         try (NettyClientRouter clientRouter = new NettyClientRouter(NodeLocator.parseString(endpoint),
                 client.getRuntime().getParameters())) {
 
-            NettyClientRouter spyRouter = Mockito.spy(clientRouter);
+            NettyClientRouter spyRouter = spy(clientRouter);
 
             spyRouter.addClient(new LayoutHandler())
                     .addClient(new ManagementHandler())

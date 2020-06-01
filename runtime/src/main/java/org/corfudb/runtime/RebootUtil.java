@@ -3,7 +3,9 @@ package org.corfudb.runtime;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
-import org.corfudb.runtime.clients.*;
+import org.corfudb.runtime.clients.BaseClient;
+import org.corfudb.runtime.clients.BaseHandler;
+import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
@@ -27,10 +29,19 @@ public class RebootUtil {
         // prevent instantiation of this class
     }
 
+    public static class RebootUtilWrapper {
+
+        public void reset(@NonNull String endpoint, @NonNull CorfuRuntimeParameters corfuRuntimeParameters, int retries,
+                          @NonNull Duration retryDuration) {
+            RebootUtil.reset(endpoint, corfuRuntimeParameters, retries, retryDuration, Optional.empty());
+        }
+    }
+
     /**
      * A default cluster Id for resets if none are provided by a user.
      */
     private static final UUID DEFAULT_CLUSTER_ID = Layout.INVALID_CLUSTER_ID;
+
     /**
      * Resets the given server.
      * Attempts to reset a server finite number of times.
