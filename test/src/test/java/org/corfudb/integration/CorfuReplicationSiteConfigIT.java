@@ -3,6 +3,8 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
+import org.corfudb.logreplication.infrastructure.CorfuReplicationManager;
+import org.corfudb.logreplication.infrastructure.CrossSiteConfiguration;
 import org.corfudb.logreplication.infrastructure.DefaultSiteManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -34,6 +36,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
     final String standbyEndpoint = DEFAULT_HOST + ":" + standbySiteCorfuPort;
 
     final int numWrites = 4;
+    final int largeNumWrites = 100;
 
     ExecutorService executorService = Executors.newFixedThreadPool(2);
     Process activeCorfu = null;
@@ -42,7 +45,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
     Process activeReplicationServer = null;
     Process standbyReplicationServer = null;
 
-    static final long sleepTime = 1000;
+    static final long sleepTime = 20;
 
     public void testLogReplicationEndToEnd(boolean useNetty, boolean runProcess) throws Exception {
 
@@ -133,7 +136,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
             // Verify data is present in Standby Site
             System.out.println("\nWait ... Delta log replication in progress ...");
-            while (mapAStandby.size() != (numWrites + numWrites / 2)) {
+            while (mapAStandby.size() != mapA.size()) {
             }
 
             // Verify data is present in Standby Site (delta)
@@ -176,13 +179,85 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
         testLogReplicationEndToEnd(false, true);
     }
 
+    public void shutdown() {
+        executorService.shutdownNow();
+        if (activeCorfu != null) {
+            activeCorfu.destroy();
+        }
+
+        if (standbyCorfu != null) {
+            standbyCorfu.destroy();
+        }
+
+        if (activeReplicationServer != null) {
+            activeReplicationServer.destroy();
+        }
+
+        if (standbyReplicationServer != null) {
+            standbyReplicationServer.destroy();
+        }
+
+        if (serverA != null) {
+            serverA.cleanShutdown();
+        }
+
+        if (serverB != null) {
+            serverB.cleanShutdown();
+        }
+    }
+
+    public void testPrepareRoleChangeAndQueryStatusAPI() throws Exception {
+        try {
+            testLogReplicationEndToEnd(true, false);
+
+            //as data have been transfered over, the replication status should be 100% done.
+            int replicationStatus = 0;
+            DefaultSiteManager siteManager = (DefaultSiteManager) serverA.getSiteManagerAdapter();
+            siteManager.prepareSiteRoleChange();
+            replicationStatus = siteManager.queryReplicationStatus();
+            assertThat(replicationStatus).isEqualTo(CorfuReplicationManager.PERCENTAGE_BASE);
+            System.out.print("\nreplication percentage done " + replicationStatus);
+
+
+            //pump some data to the active Site, and query the progress
+            // Add new updates (deltas)
+            for (int i = 0; i < largeNumWrites; i++) {
+                activeRuntime.getObjectsView().TXBegin();
+                mapA.put(String.valueOf(numWrites + i), numWrites + i);
+                activeRuntime.getObjectsView().TXEnd();
+            }
+
+            replicationStatus = 0;
+            siteManager.prepareSiteRoleChange();
+            while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
+                replicationStatus = siteManager.queryReplicationStatus();
+                System.out.print("\nreplication percentage done " + replicationStatus);
+                sleep(sleepTime);
+            }
+
+            assertThat(mapAStandby.size()).isEqualTo(mapA.size());
+            assertThat(mapAStandby.size()).isEqualTo(numWrites + largeNumWrites);
+        } finally {
+            shutdown();
+        }
+    }
+
     @Test
     public void runSiteSwitch() throws Exception {
         try {
             testLogReplicationEndToEnd(true, false);
-            String primary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
-            String currentPimary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
 
+            int replicationStatus = 0;
+            DefaultSiteManager siteManager = (DefaultSiteManager) serverA.getSiteManagerAdapter();
+            siteManager.prepareSiteRoleChange();
+            replicationStatus = siteManager.queryReplicationStatus();
+            assertThat(replicationStatus).isEqualTo(CorfuReplicationManager.PERCENTAGE_BASE);
+            System.out.print("\nreplication percentage done " + replicationStatus);
+
+
+            CrossSiteConfiguration crossSiteConfiguration = new CrossSiteConfiguration(serverA.getSiteManagerAdapter().getSiteConfigMsg());
+            String primary = crossSiteConfiguration.getPrimarySite().getSiteId();
+            String currentPimary = primary;
 
             // Wait till site role change and new transfer done.
             assertThat(currentPimary).isEqualTo(primary);
@@ -190,7 +265,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             System.out.print("\nbefore site switch mapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 
-            DefaultSiteManager siteManager = (DefaultSiteManager) serverA.getSiteManagerAdapter();
+            siteManager = (DefaultSiteManager) serverA.getSiteManagerAdapter();
             siteManager.getSiteManagerCallback().siteFlip = true;
             siteManager = (DefaultSiteManager) serverB.getSiteManagerAdapter();
             siteManager.getSiteManagerCallback().siteFlip = true;
@@ -200,7 +275,9 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                 discoveryService.wait();
             }
 
-            currentPimary = serverA.getSiteManagerAdapter().getSiteConfig().getPrimarySite().getSiteId();
+            crossSiteConfiguration = new CrossSiteConfiguration(serverA.getSiteManagerAdapter().getSiteConfigMsg());
+            currentPimary = crossSiteConfiguration.getPrimarySite().getSiteId();
+
             assertThat(currentPimary).isNotEqualTo(primary);
             System.out.print("\nVerified Site Role Change primary " + currentPimary);
             System.out.print("\nmapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
@@ -220,7 +297,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
             System.out.print("\nwriting to the new active new data");
             // Add new updates (deltas)
-            for (int i = numWrites / 2; i < numWrites; i++) {
+            for (int i = 0; i < largeNumWrites; i++) {
                 standbyRuntime.getObjectsView().TXBegin();
                 mapAStandby.put(String.valueOf(numWrites + i), numWrites + i);
                 standbyRuntime.getObjectsView().TXEnd();
@@ -231,6 +308,15 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             System.out.print("\nmapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 
+            replicationStatus = 0;
+            siteManager = (DefaultSiteManager)serverB.getSiteManagerAdapter();
+            siteManager.prepareSiteRoleChange();
+            while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
+                replicationStatus = siteManager.queryReplicationStatus();
+                System.out.print("\nreplication percentage done " + replicationStatus);
+                sleep(sleepTime);
+            }
+
             while (mapA1.keySet().size() != mapAStandby.keySet().size()) {
                 sleep(sleepTime);
                 System.out.print("\nmapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
@@ -239,7 +325,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
             System.out.print("\nmapA1 keySet " + mapA1.keySet().size() + " mapAstandby " + mapAStandby.keySet().size());
 
-            for (int i = 0; i < 2 * numWrites; i++) {
+            for (int i = 0; i < numWrites + largeNumWrites; i++) {
                 assertThat(mapA1.containsKey(String.valueOf(i))).isTrue();
             }
 
@@ -247,21 +333,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                     " mapAsize " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 
         } finally {
-            if (activeCorfu != null) {
-                activeCorfu.destroy();
-            }
-
-            if (standbyCorfu != null) {
-                standbyCorfu.destroy();
-            }
-
-            if (activeReplicationServer != null) {
-                activeReplicationServer.destroy();
-            }
-
-            if (standbyReplicationServer != null) {
-                standbyReplicationServer.destroy();
-            }
+            shutdown();
         }
     }
 }

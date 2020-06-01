@@ -4,23 +4,22 @@ import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
-import static org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.DiscoverySite;
 
 public abstract class CorfuReplicationSiteManagerAdapter {
     @Getter
-    @Setter
-    CorfuReplicationDiscoveryService corfuReplicationDiscoveryService;
+    CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
 
     @Getter
     SiteConfigurationMsg siteConfigMsg;
 
-    @Getter
-    CrossSiteConfiguration siteConfig;
+    public void setCorfuReplicationDiscoveryService(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
+        this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;
+        start();
+    }
 
-    public synchronized CrossSiteConfiguration fetchSiteConfig() {
+    public synchronized SiteConfigurationMsg fetchSiteConfig() {
         siteConfigMsg = querySiteConfig();
-        siteConfig = new CrossSiteConfiguration(siteConfigMsg);
-        return siteConfig;
+        return siteConfigMsg;
     }
 
     /**
@@ -31,13 +30,22 @@ public abstract class CorfuReplicationSiteManagerAdapter {
     synchronized void updateSiteConfig(SiteConfigurationMsg newSiteConfigMsg) {
             if (newSiteConfigMsg.getSiteConfigID() > siteConfigMsg.getSiteConfigID()) {
                 siteConfigMsg = newSiteConfigMsg;
-                siteConfig = new CrossSiteConfiguration(siteConfigMsg);
-                corfuReplicationDiscoveryService.putEvent(
-                        new DiscoveryServiceEvent(DiscoverySite, newSiteConfigMsg));
+                corfuReplicationDiscoveryService.updateSiteConfig(siteConfigMsg);
             }
     }
 
+    public void prepareSiteRoleChange() {
+        corfuReplicationDiscoveryService.prepareSiteRoleChange();
+    }
+
+    public int queryReplicationStatus() {
+        return corfuReplicationDiscoveryService.queryReplicationStatus();
+    }
+
+    //TODO: handle the case that querySiteConfig return an exception.
     public abstract SiteConfigurationMsg querySiteConfig();
 
     public abstract void start();
+
+    public abstract void shutdown();
 }

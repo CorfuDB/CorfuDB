@@ -4,14 +4,15 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
+import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -19,6 +20,7 @@ import java.util.Set;
 @Slf4j
 public class CorfuReplicationManager {
 
+    public final static int PERCENTAGE_BASE = 100;
     // Keep map of remote site endpoints and the associated log replication runtime (client)
     Map<String, CorfuLogReplicationRuntime> remoteSiteRuntimeMap = new HashMap<>();
 
@@ -37,7 +39,15 @@ public class CorfuReplicationManager {
     @Getter
     CrossSiteConfiguration crossSiteConfig;
 
+    //Setup while preparing a roletype change
+    long prepareSiteRoleChangeStreamTail;
+
+    long totalNumEntriesToSend;
+
     CorfuReplicationManager(LogReplicationTransportType transport, CrossSiteConfiguration crossSiteConfig) {
+        prepareSiteRoleChangeStreamTail = Address.NON_ADDRESS;
+        totalNumEntriesToSend = 0;
+
         this.transport = transport;
         this.crossSiteConfig = crossSiteConfig;
     }
@@ -221,5 +231,65 @@ public class CorfuReplicationManager {
 
         // TODO (Anny): for now default always to snapshot sync
         return LogReplicationNegotiationResult.SNAPSHOT_SYNC;
+    }
+
+
+    long queryStreamTail() {
+        CrossSiteConfiguration.SiteInfo siteInfo = crossSiteConfig.getStandbySites().values().iterator().next();
+        LogReplicationNodeInfo nodeInfo = siteInfo.getNodesInfo().get(0);
+        return nodeInfo.getRuntime().getMaxStreamTail();
+    }
+
+    long queryEntriesToSent(long tail) {
+        int totalNumEnries = 0;
+
+        for (CorfuLogReplicationRuntime runtime: remoteSiteRuntimeMap.values()) {
+            totalNumEnries += runtime.getNumEntriesToSend(tail);
+        }
+
+        return totalNumEnries;
+    }
+
+    /**
+     * query the current all replication stream log tail and remeber the max
+     * and query each standbySite information according to the ackInformation decide all manay total
+     * msg needs to send out.
+     */
+    public void prepareSiteRoleChange() {
+        prepareSiteRoleChangeStreamTail = queryStreamTail();
+        totalNumEntriesToSend = queryEntriesToSent(prepareSiteRoleChangeStreamTail);
+    }
+
+    /**
+     * query the current all replication stream log tail and calculate the number of messages to be sent.
+     * If the max tail has changed, give 0 percent has done.
+     * Percentage of work has been done, when it return 100, it has done the replication.
+     */
+    public int queryReplicationStatus() {
+        long maxTail = queryStreamTail();
+
+        //If the tail has been moved, reset the base calculation
+        if (maxTail > prepareSiteRoleChangeStreamTail) {
+            prepareSiteRoleChange();
+        }
+
+        long currentNumEntriesToSend = queryEntriesToSent(prepareSiteRoleChangeStreamTail);
+        log.debug("maxTail " + maxTail + " totalNumEntriesToSend " + totalNumEntriesToSend + " currentNumEntriesToSend " + currentNumEntriesToSend);
+
+        if (totalNumEntriesToSend == 0 || currentNumEntriesToSend == 0)
+            return PERCENTAGE_BASE;
+
+        //percentage of has been sent
+        //as the currentNumEntriesToSend is not zero, the percent should not be 100%
+        int percent = (int)((totalNumEntriesToSend - currentNumEntriesToSend)*PERCENTAGE_BASE/totalNumEntriesToSend);
+        if (percent == PERCENTAGE_BASE) {
+            percent = PERCENTAGE_BASE - 1;
+        }
+
+        return percent;
+    }
+
+    public void shutdown() {
+        stopLogReplication();
     }
 }

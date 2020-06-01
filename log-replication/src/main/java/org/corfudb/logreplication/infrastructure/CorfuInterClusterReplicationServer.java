@@ -5,15 +5,21 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.NodeLocator;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.Map;
 
+import static org.corfudb.infrastructure.LogReplicationServerRouter.PLUGIN_CONFIG_FILE_PATH;
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 /**
@@ -184,19 +190,12 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     String[] args;
 
     public static void main(String[] args) {
-        CorfuReplicationSiteManagerAdapter siteManagerAdapter = new DefaultSiteManager();
-        CorfuInterClusterReplicationServer corfuReplicationServer = new CorfuInterClusterReplicationServer(args, siteManagerAdapter);
+        CorfuInterClusterReplicationServer corfuReplicationServer = new CorfuInterClusterReplicationServer(args);
         corfuReplicationServer.run();
     }
 
     public CorfuInterClusterReplicationServer(String[] inputs) {
         this.args = inputs;
-        this.siteManagerAdapter = new DefaultSiteManager();
-    }
-
-    CorfuInterClusterReplicationServer(String[] inputs, CorfuReplicationSiteManagerAdapter adapter) {
-        this.args = inputs;
-        this.siteManagerAdapter = adapter;
     }
 
     @Override
@@ -219,6 +218,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         configureLogger(opts);
 
         log.info("Started with arguments: {}", opts);
+        this.siteManagerAdapter = constructSiteManagerAdapter();
 
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
@@ -250,6 +250,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 activeServer = new CorfuInterClusterReplicationServerNode(serverContext);
 
                 replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, activeServer, siteManagerAdapter);
+
                 Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService);
                 replicationDiscoveryThread.start();
 
@@ -272,74 +273,76 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         log.info("main: Server exiting due to shutdown");
     }
 
-        /**
-         * Setup logback logger
-         * - pick the correct logging level before outputting error messages
-         * - add serverEndpoint information
-         *
-         * @param opts command line parameters
-         * @throws JoranException logback exception
-         */
-        private void configureLogger(Map<String, Object> opts) {
-            final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-            final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
-            root.setLevel(level);
+    /**
+     * Setup logback logger
+     * - pick the correct logging level before outputting error messages
+     * - add serverEndpoint information
+     *
+     * @param opts command line parameters
+     * @throws JoranException logback exception
+     */
+    private void configureLogger(Map<String, Object> opts) {
+        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
+        root.setLevel(level);
+    }
+
+    /**
+     * Cleanly shuts down the server and restarts.
+     *
+     * @param resetData Resets and clears all data if True.
+     */
+    void restartServer(boolean resetData) {
+
+        if (resetData) {
+            cleanupServer = true;
         }
 
-        /**
-         * Cleanly shuts down the server and restarts.
-         *
-         * @param resetData Resets and clears all data if True.
-         */
-        void restartServer(boolean resetData) {
+        log.info("RestartServer: Shutting down Log Replication server");
+        activeServer.close();
+        log.info("RestartServer: Starting Log Replication server");
+    }
 
-            if (resetData) {
-                cleanupServer = true;
-            }
+    /**
+     * Attempt to cleanly shutdown all the servers.
+     */
+    public void cleanShutdown() {
+        log.info("CleanShutdown: Starting Cleanup.");
+        shutdownServer = true;
+        activeServer.close();
+        replicationDiscoveryService.shutdown();
+        siteManagerAdapter.shutdown();
+    }
 
-            log.info("RestartServer: Shutting down Log Replication server");
-            activeServer.close();
-            log.info("RestartServer: Starting Log Replication server");
-        }
-
-        /**
-         * Attempt to cleanly shutdown all the servers.
-         */
-        private void cleanShutdown() {
-            log.info("CleanShutdown: Starting Cleanup.");
-            shutdownServer = true;
-            activeServer.close();
-        }
-
-        /**
-         * Print the corfu logo.
-         */
-        private static void printLogo() {
-            println(" _                  ____            _ _           _   _             \n" +
+    /**
+     * Print the corfu logo.
+     */
+    private static void printLogo() {
+        println(" _                  ____            _ _           _   _             \n" +
                     " | |    ___   __ _  |  _ \\ ___ _ __ | (_) ___ __ _| |_(_) ___  _ __  \n" +
                     " | |   / _ \\ / _` | | |_) / _ \\ '_ \\| | |/ __/ _` | __| |/ _ \\| '_ \\ \n" +
                     " | |__| (_) | (_| | |  _ <  __/ |_) | | | (_| (_| | |_| | (_) | | | |\n" +
                     " |_____\\___/ \\__, | |_| \\_\\___| .__/|_|_|\\___\\__,_|\\__|_|\\___/|_| |_|\n" +
                     "             |___/            |_|                                   ");
-        }
+    }
 
-        /**
-         * Print an object to the console.
-         *
-         * @param line The object to print.
-         */
-        @SuppressWarnings("checkstyle:printLine")
-        private static void println(Object line) {
-            System.out.println(line.toString());
-            log.info(line.toString());
-        }
+    /**
+     * Print an object to the console.
+     *
+     * @param line The object to print.
+     */
+    @SuppressWarnings("checkstyle:printLine")
+    private static void println(Object line) {
+        System.out.println(line.toString());
+        log.info(line.toString());
+    }
 
-        /**
-         * Print the welcome message, logo and the arguments for Log Replication Server
-         *
-         * @param opts Arguments.
-         */
-        private static void printStartupMsg(Map<String, Object> opts) {
+    /**
+     * Print the welcome message, logo and the arguments for Log Replication Server
+     *
+     * @param opts Arguments.
+     */
+    private static void printStartupMsg(Map<String, Object> opts) {
             printLogo();
             println("");
             println("------------------------------------");
@@ -349,8 +352,21 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             println("Serving on port " + port);
             println("------------------------------------");
             println("");
-        }
+    }
 
+    private CorfuReplicationSiteManagerAdapter constructSiteManagerAdapter() {
+
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(PLUGIN_CONFIG_FILE_PATH);
+        File jar = new File(config.getSiteManagerAdatperJARPath());
+
+        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
+            Class adapter = Class.forName(config.getSiteManagerAdapterName(), true, child);
+            return (CorfuReplicationSiteManagerAdapter) adapter.getDeclaredConstructor().newInstance();
+        } catch (Exception e) {
+            log.error("Fatal error: Failed to create serverAdapter", e);
+            throw new UnrecoverableCorfuError(e);
+        }
+    }
 
     static class CleanupRunnable implements Runnable {
             CorfuInterClusterReplicationServer server;
@@ -361,6 +377,5 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             public void run() {
                 server.cleanShutdown();
             }
-        }
-
+    }
 }

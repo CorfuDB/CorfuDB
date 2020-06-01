@@ -39,20 +39,24 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
 
     private static final String PRIMARY_SITE_NODE = "primary_site_node";
     private static final String STANDBY_SITE_NODE = "standby_site_node";
+    private boolean ifShutdown = false;
 
     @Getter
     public SiteManagerCallback siteManagerCallback;
 
     Thread thread = new Thread(siteManagerCallback);
 
-    DefaultSiteManager() {
-    }
-
     public void start() {
         siteManagerCallback = new SiteManagerCallback(this);
         thread = new Thread(siteManagerCallback);
         thread.start();
     }
+
+    @Override
+    public void shutdown() {
+        ifShutdown = true;
+    }
+
 
     public static CrossSiteConfiguration readConfig() throws IOException {
         CrossSiteConfiguration.SiteInfo primarySite;
@@ -168,7 +172,8 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
      * Change one of the standby as the primary and primary become the standby
      * @return
      */
-    public static CrossSiteConfiguration changePrimary(CrossSiteConfiguration siteConfig) {
+    public static CrossSiteConfiguration changePrimary(SiteConfigurationMsg siteConfigMsg) {
+        CrossSiteConfiguration siteConfig = new CrossSiteConfiguration(siteConfigMsg);
         CrossSiteConfiguration.SiteInfo oldPrimary = new CrossSiteConfiguration.SiteInfo(siteConfig.getPrimarySite(),
                 SiteStatus.STANDBY);
         Map<String, CrossSiteConfiguration.SiteInfo> standbys = new HashMap<>();
@@ -203,11 +208,11 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
 
         @Override
         public void run() {
-            while (true) {
+            while (!siteManager.ifShutdown) {
                 try {
                     sleep(changeInterval);
                     if (siteFlip) {
-                        CrossSiteConfiguration newConfig = changePrimary(siteManager.getSiteConfig());
+                        CrossSiteConfiguration newConfig = changePrimary(siteManager.getSiteConfigMsg());
                         siteManager.updateSiteConfig(newConfig.convert2msg());
                         log.warn("change the site config");
                         siteFlip = false;
@@ -218,4 +223,5 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
             }
         }
     }
+
 }

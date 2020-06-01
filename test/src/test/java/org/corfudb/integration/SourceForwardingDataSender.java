@@ -92,27 +92,27 @@ public class SourceForwardingDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages) {
-        CompletableFuture<LogReplicationEntry> lastSentMessage = null;
+        CompletableFuture<LogReplicationEntry> lastAckMessage = null;
         CompletableFuture<LogReplicationEntry> tmp;
 
         for (LogReplicationEntry message :  messages) {
             tmp = send(message);
             if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END) ||
                     message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
-                lastSentMessage = tmp;
+                lastAckMessage = tmp;
             }
         }
 
         try {
-            if (lastSentMessage != null) {
-                LogReplicationEntry entry = lastSentMessage.get();
+            if (lastAckMessage != null) {
+                LogReplicationEntry entry = lastAckMessage.get();
                 ackMessages.setValue(entry);
             }
         } catch (Exception e) {
             System.out.print("Caught an exception " + e);
         }
 
-        return lastSentMessage;
+        return lastAckMessage;
     }
 
     @Override

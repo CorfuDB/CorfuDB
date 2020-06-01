@@ -28,12 +28,17 @@ public class LogReplicationPluginConfig {
     public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.logreplication.runtime.GRPCLogReplicationClientChannelAdapter";
     public static final String DEFAULT_STREAM_FETCHER_JAR_PATH = "/target/log-replication-0.3.0-SNAPSHOT.jar";
     public static final String DEFAULT_STREAM_FETCHER_CLASSNAME = "org.corfudb.logreplication.runtime.DefaultStreamFetcherPlugin";
+    public static final String DEFAULT_SITE_MANAGER_CLASSNAME = "org.corfudb.logreplication.infrastructure.DefaultSiteManager";
+
 
     private String transportAdapterJARPath;
     private String transportServerClassCanonicalName;
     private String transportClientClassCanonicalName;
     private String streamFetcherPluginJARPath;
     private String streamFetcherClassCanonicalName;
+
+    private String siteManagerAdatperJARPath;
+    private String siteManagerAdapterName;
 
     public LogReplicationPluginConfig(String filepath) {
         try (InputStream input = new FileInputStream(filepath)) {
@@ -42,10 +47,14 @@ public class LogReplicationPluginConfig {
             this.transportAdapterJARPath = prop.getProperty("transport_adapter_JAR_path");
             this.transportServerClassCanonicalName = prop.getProperty("transport_adapter_server_class_name");
             this.transportClientClassCanonicalName = prop.getProperty("transport_adapter_client_class_name");
+
             this.streamFetcherPluginJARPath = prop.getProperty("stream_fetcher_plugin_JAR_path");
             this.streamFetcherClassCanonicalName = prop.getProperty("stream_fetcher_plugin_class_name");
+
+            this.siteManagerAdatperJARPath = prop.getProperty("site_manager_adapter_JAR_path");
+            this.siteManagerAdapterName= prop.getProperty("site_manager_adapter_class_name");
         } catch (IOException e) {
-            log.warn("Exception caught while trying to load transport configuration from {}. Default configuration " +
+            log.warn("Exception caught while trying to load adapter configuration from {}. Default configuration " +
                     "will be used.", filepath);
             // Default Configuration
             this.transportAdapterJARPath = getTransportParentDir() + DEFAULT_JAR_PATH;
@@ -53,10 +62,26 @@ public class LogReplicationPluginConfig {
             this.transportServerClassCanonicalName = DEFAULT_SERVER_CLASSNAME;
             this.streamFetcherPluginJARPath = getStreamFetcherParentDir() + DEFAULT_STREAM_FETCHER_JAR_PATH;
             this.streamFetcherClassCanonicalName = DEFAULT_STREAM_FETCHER_CLASSNAME;
+
+            this.siteManagerAdatperJARPath = getSiteManagerAdapterParentDir() + DEFAULT_JAR_PATH;
+            this.siteManagerAdapterName = DEFAULT_SITE_MANAGER_CLASSNAME;
         }
+
+        log.info("Config " + this);
     }
 
     private static String getTransportParentDir() {
+        try {
+            File directory = new File("../infrastructure");
+            return directory.getCanonicalFile().getParent();
+        } catch (Exception e) {
+            String message = "Failed to load default JAR for channel adapter";
+            log.error(message, e);
+            throw new UnrecoverableCorfuError(message);
+        }
+    }
+
+    private static String getSiteManagerAdapterParentDir() {
         try {
             File directory = new File("../infrastructure");
             return directory.getCanonicalFile().getParent();
