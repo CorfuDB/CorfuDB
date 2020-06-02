@@ -94,7 +94,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
 
-        siteManager.start();
         registerToLogReplicationLock();
     }
 

@@ -137,6 +137,4 @@ public class LogReplicationTest {
             System.out.println("Verified data for the tables");
         }
     }
-
-
 }

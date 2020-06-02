@@ -7,12 +7,15 @@ import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfiguration
 
 public abstract class CorfuReplicationSiteManagerAdapter {
     @Getter
-    @Setter
     CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
 
     @Getter
     SiteConfigurationMsg siteConfigMsg;
 
+    public void setCorfuReplicationDiscoveryService(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
+        this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;
+        start();
+    }
 
     public synchronized SiteConfigurationMsg fetchSiteConfig() {
         siteConfigMsg = querySiteConfig();
@@ -39,6 +42,7 @@ public abstract class CorfuReplicationSiteManagerAdapter {
         return corfuReplicationDiscoveryService.queryReplicationStatus();
     }
 
+    //TODO: handle the case that querySiteConfig return an exception.
     public abstract SiteConfigurationMsg querySiteConfig();
 
     public abstract void start();

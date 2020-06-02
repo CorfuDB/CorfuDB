@@ -250,7 +250,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 activeServer = new CorfuInterClusterReplicationServerNode(serverContext);
 
                 replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, activeServer, siteManagerAdapter);
-                siteManagerAdapter.setCorfuReplicationDiscoveryService(replicationDiscoveryService);
 
                 Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService);
                 replicationDiscoveryThread.start();
