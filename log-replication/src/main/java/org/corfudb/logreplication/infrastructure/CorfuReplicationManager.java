@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
@@ -39,17 +40,21 @@ public class CorfuReplicationManager {
     @Getter
     CrossSiteConfiguration crossSiteConfig;
 
+    CorfuInterClusterReplicationServerNode replicationServerNode;
+
     //Setup while preparing a roletype change
     long prepareSiteRoleChangeStreamTail;
 
     long totalNumEntriesToSend;
 
-    CorfuReplicationManager(LogReplicationTransportType transport, CrossSiteConfiguration crossSiteConfig) {
+    CorfuReplicationManager(LogReplicationTransportType transport, CrossSiteConfiguration crossSiteConfig,
+        CorfuInterClusterReplicationServerNode replicationServerNode) {
         prepareSiteRoleChangeStreamTail = Address.NON_ADDRESS;
         totalNumEntriesToSend = 0;
 
         this.transport = transport;
         this.crossSiteConfig = crossSiteConfig;
+        this.replicationServerNode = replicationServerNode;
     }
 
 
@@ -58,20 +63,33 @@ public class CorfuReplicationManager {
      *
      * * @throws InterruptedException
      */
-    public void connect(LogReplicationNodeInfo localNode, CrossSiteConfiguration.SiteInfo remoteSite, CorfuReplicationDiscoveryService discoveryService) throws InterruptedException {
+    public void connect(LogReplicationNodeInfo localNode, CrossSiteConfiguration.SiteInfo siteInfo,
+        CorfuReplicationDiscoveryService discoveryService) throws InterruptedException {
 
-        log.trace("Setup runtime's from local node to remote site {}", remoteSite.getSiteId());
+        log.trace("Setup runtime's from local node to remote site {}", siteInfo.getSiteId());
 
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    remoteSite.connect(localNode, transport, discoveryService);
-                    LogReplicationNodeInfo leader = remoteSite.getRemoteLeader();
-                    log.info("connect to site {} lead node {}:{}", remoteSite.getSiteId(), leader.getIpAddress(), leader.getPortNum());
-                    remoteSiteRuntimeMap.put(remoteSite.getSiteId(), leader.getRuntime());
+                    // TODO (Xiaoqin Ma): shouldn't it connect only to the lead node on the remote site?
+                    // It needs a runtime to do the negotiation with non leader remote too.
+                    for (LogReplicationNodeInfo nodeInfo : siteInfo.getNodesInfo()) {
+                        LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
+                                .localCorfuEndpoint(localNode.getCorfuEndpoint())
+                                .remoteLogReplicationServerEndpoint(nodeInfo.getEndpoint())
+                                .transport(transport)
+                                .replicationConfig(replicationServerNode.getLogReplicationConfig())
+                                .build();
+                        CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters);
+                        replicationRuntime.connect(discoveryService, siteInfo.siteId);
+                        nodeInfo.setRuntime(replicationRuntime);
+                    }
+                    LogReplicationNodeInfo leader = siteInfo.getRemoteLeader();
+                    log.info("connect to site {} lead node {}:{}", siteInfo.getSiteId(), leader.getIpAddress(), leader.getPortNum());
+                    remoteSiteRuntimeMap.put(siteInfo.getSiteId(), leader.getRuntime());
                 } catch (Exception e) {
                     log.error("Exception {}.  Failed to connect to remote site {}. Retry after 1 second.",
-                        e, remoteSite.getSiteId());
+                        e, siteInfo.getSiteId());
                     throw new RetryNeededException();
                 }
                 return null;
@@ -81,7 +99,6 @@ public class CorfuReplicationManager {
             throw e;
         }
     }
-
 
     /**
      * Once determined this is a Lead Sender (on primary site), connect log replication.

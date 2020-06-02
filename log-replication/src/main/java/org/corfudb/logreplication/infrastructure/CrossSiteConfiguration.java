@@ -157,23 +157,6 @@ public class CrossSiteConfiguration {
             return siteMsg;
         }
 
-
-        public void connect(LogReplicationNodeInfo localNode, LogReplicationTransportType transport, CorfuReplicationDiscoveryService discoveryService) {
-            // TODO (Xiaoqin Ma): shouldn't it connect only to the lead node on the remote site?
-            // It needs a runtime to do the negotiation with non leader remote too.
-
-            for (LogReplicationNodeInfo nodeInfo : nodesInfo) {
-                LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
-                        .localCorfuEndpoint(localNode.getCorfuEndpoint())
-                        .remoteLogReplicationServerEndpoint(nodeInfo.getEndpoint())
-                        .transport(transport)
-                        .build();
-                CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters);
-                replicationRuntime.connect(discoveryService, siteId);
-                nodeInfo.setRuntime(replicationRuntime);
-            }
-        }
-
         /**
          * Retrieve Remote Leader Endpoint
          **

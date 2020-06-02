@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication;
 
 import lombok.Data;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -19,6 +20,7 @@ public class LogReplicationConfig {
     /*
      * Unique identifiers for all streams to be replicated across sites.
      */
+    @Getter
     private Set<String> streamsToReplicate;
 
     /*
