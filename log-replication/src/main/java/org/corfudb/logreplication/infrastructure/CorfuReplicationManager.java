@@ -39,17 +39,21 @@ public class CorfuReplicationManager {
     @Getter
     CrossSiteConfiguration crossSiteConfig;
 
+    CorfuInterClusterReplicationServerNode replicationServerNode;
+
     //Setup while preparing a roletype change
     long prepareSiteRoleChangeStreamTail;
 
     long totalNumEntriesToSend;
 
-    CorfuReplicationManager(LogReplicationTransportType transport, CrossSiteConfiguration crossSiteConfig) {
+    CorfuReplicationManager(LogReplicationTransportType transport, CrossSiteConfiguration crossSiteConfig,
+        CorfuInterClusterReplicationServerNode replicationServerNode) {
         prepareSiteRoleChangeStreamTail = Address.NON_ADDRESS;
         totalNumEntriesToSend = 0;
 
         this.transport = transport;
         this.crossSiteConfig = crossSiteConfig;
+        this.replicationServerNode = replicationServerNode;
     }
 
 
@@ -65,7 +69,7 @@ public class CorfuReplicationManager {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    remoteSite.connect(localNode, transport, discoveryService);
+                    remoteSite.connect(localNode, transport, discoveryService, replicationServerNode);
                     LogReplicationNodeInfo leader = remoteSite.getRemoteLeader();
                     log.info("connect to site {} lead node {}:{}", remoteSite.getSiteId(), leader.getIpAddress(), leader.getPortNum());
                     remoteSiteRuntimeMap.put(remoteSite.getSiteId(), leader.getRuntime());

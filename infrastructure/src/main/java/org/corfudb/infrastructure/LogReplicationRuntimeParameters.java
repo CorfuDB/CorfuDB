@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import lombok.Data;
 import lombok.experimental.SuperBuilder;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.runtime.RuntimeParameters;
 
@@ -15,4 +16,5 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
     private LogReplicationTransportType transport = LogReplicationTransportType.CUSTOM;
 
+    private LogReplicationConfig replicationConfig;
 }
