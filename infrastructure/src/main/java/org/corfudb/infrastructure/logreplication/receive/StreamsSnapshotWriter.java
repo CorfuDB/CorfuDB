@@ -246,7 +246,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * Snapshot data has been transferred from primary node to the standby node
      * @param entry
      */
-    public  void snapshotTransferDone(LogReplicationEntry entry) {
+    public void snapshotTransferDone(LogReplicationEntry entry) {
         phase = Phase.ApplyPhase;
         //verify that the snapshot Apply hasn't started yet and set it as started and set the seqNumber
         long ts = entry.getMetadata().getSnapshotTimestamp();

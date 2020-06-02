@@ -46,22 +46,16 @@ public class LogReplicationServer extends AbstractServer {
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
-    public LogReplicationServer(@Nonnull ServerContext context) {
+    public LogReplicationServer(@Nonnull ServerContext context, LogReplicationConfig logReplicationConfig) {
         this.serverContext = context;
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
-        LogReplicationConfig config = getDefaultLogReplicationConfig();
 
         // TODO (hack): where can we obtain the local corfu endpoint? site manager? or can we always assume port is 9000?
         String corfuPort = serverContext.getLocalEndpoint().equals("localhost:9020") ? ":9001" : ":9000";
         String corfuEndpoint = serverContext.getNodeLocator().getHost() + corfuPort;
         log.info("Initialize Sink Manager with CorfuRuntime to {}", corfuEndpoint);
-        this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, config);
-    }
-
-    private LogReplicationConfig getDefaultLogReplicationConfig() {
-        Set<String> streamsToReplicate = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
-        return new LogReplicationConfig(streamsToReplicate, UUID.randomUUID(), UUID.randomUUID());
+        this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig);
     }
 
     /* ************ Override Methods ************ */

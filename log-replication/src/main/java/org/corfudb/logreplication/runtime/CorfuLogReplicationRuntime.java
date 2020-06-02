@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.LogReplicationSourceManager;
+import org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
@@ -20,32 +21,21 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.NodeRouterPool;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.utils.CommonTypes;
-import org.corfudb.utils.LogReplicationStreams.Namespace;
-import org.corfudb.utils.LogReplicationStreams.TableInfo;
-import org.corfudb.utils.LogReplicationStreams.Version;
-import org.corfudb.utils.LogReplicationStreams.VersionString;
-
 
 import javax.annotation.Nonnull;
 import java.io.File;
-import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.*;
-import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.Function;
 
-
-import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 @Slf4j
 public class CorfuLogReplicationRuntime {
@@ -54,8 +44,6 @@ public class CorfuLogReplicationRuntime {
      */
     @Getter
     private final LogReplicationRuntimeParameters parameters;
-    private final String LOG_REPLICATION_STREAMS_NAME_TABLE = "LogReplicationStreams";
-    private final String LOG_REPLICATION_PLUGIN_VERSION_TABLE = "LogReplicationPluginVersion";
 
     private LogReplicationTransportType transport;
 
@@ -70,18 +58,6 @@ public class CorfuLogReplicationRuntime {
     private LogReplicationClient client;
 
     /**
-     * Corfu Runtime
-     */
-    private CorfuRuntime corfuRuntime;
-
-    /**
-     * Streams to Replicate
-     */
-    private Set<String> streamsToReplicate;
-
-    private static final String PLUGIN_CONFIG_FILE_PATH = "/config/corfu/corfu_plugin_config.properties";
-
-    /**
      * Log Replication Source Manager - to local Corfu Log Unit
      */
     @Getter
@@ -93,16 +69,16 @@ public class CorfuLogReplicationRuntime {
     @Getter
     private final EventLoopGroup nettyEventLoop;
 
-    /**
-     * External Plugin which fetches the streams names to replicate
-     */
-    @Getter
-    private LogReplicationStreamNameFetcher logReplicationStreamNameFetcher;
+    private LogReplicationConfig logReplicationConfig;
+
+    private CorfuRuntime corfuRuntime;
 
     public CorfuLogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters) {
         this.parameters = parameters;
 
         this.transport = parameters.getTransport();
+
+        this.logReplicationConfig = parameters.getReplicationConfig();
 
         // Generate or set the NettyEventLoop
         nettyEventLoop =  getNewEventLoopGroup();
@@ -111,45 +87,12 @@ public class CorfuLogReplicationRuntime {
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
         connectToCorfuRuntime();
-
-        initStreamNameFetcherPlugin();
-
-        // Initialize the streamsToReplicate
-        if (verifyTableExists(LOG_REPLICATION_PLUGIN_VERSION_TABLE) &&
-            verifyTableExists(LOG_REPLICATION_STREAMS_NAME_TABLE)) {
-            // The tables exist but may have been created by another runtime in which case they have to be opened with
-            // key/value/metadata type info
-            openExistingStreamNameAndVersionTables();
-            if (!tableVersionMatchesPlugin()) {
-                // delete the tables and recreate them
-                deleteExistingStreamNameAndVersionTables();
-                createStreamNameAndVersionTables(logReplicationStreamNameFetcher.fetchStreamsToReplicate());
-            }
-        } else {
-            // If any 1 of the 2 tables does not exist, delete and recreate them both as they may have been corrupted.
-            deleteExistingStreamNameAndVersionTables();
-            createStreamNameAndVersionTables(logReplicationStreamNameFetcher.fetchStreamsToReplicate());
-        }
-        streamsToReplicate = getStreamsToReplicateFromTable();
     }
 
     private void connectToCorfuRuntime() {
         corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString(parameters.getLocalCorfuEndpoint());
+            .parseConfigurationString(parameters.getLocalCorfuEndpoint());
         corfuRuntime.connect();
-    }
-
-    private void initStreamNameFetcherPlugin() {
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(PLUGIN_CONFIG_FILE_PATH);
-        File jar = new File(config.getStreamFetcherPluginJARPath());
-        try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
-            logReplicationStreamNameFetcher = (LogReplicationStreamNameFetcher) plugin.getDeclaredConstructor()
-                .newInstance();
-        } catch (Exception e) {
-            log.error("Fatal error: Failed to get Stream Fetcher Plugin", e);
-            throw new UnrecoverableCorfuError(e);
-        }
     }
 
     /**
@@ -233,101 +176,15 @@ public class CorfuLogReplicationRuntime {
         IClientRouter router = getRouter(parameters.getRemoteLogReplicationServerEndpoint());
         client = new LogReplicationClient(router, discoveryService, siteID);
 
-        LogReplicationConfig config = new LogReplicationConfig(streamsToReplicate, UUID.randomUUID(), UUID.randomUUID());
         log.info("Set Source Manager to connect to local Corfu on {}", parameters.getLocalCorfuEndpoint());
         sourceManager = new LogReplicationSourceManager(parameters.getLocalCorfuEndpoint(),
-                client, config);
+                client, logReplicationConfig);
     }
 
-
-    private boolean verifyTableExists(String tableName) {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
-        try {
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, tableName);
-        } catch (NoSuchElementException e) {
-            // Table does not exist
-            return false;
-        } catch (IllegalArgumentException e) { }
-        return true;
-    }
-
-    private void openExistingStreamNameAndVersionTables() {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
-        try {
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_STREAMS_NAME_TABLE, TableInfo.class,
-                    Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE, VersionString.class,
-                    Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
-        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            log.warn("Exception when opening existing table {}", e);
-        }
-    }
-
-    private boolean tableVersionMatchesPlugin() {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
-        corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE);
-        VersionString versionString = VersionString.newBuilder().setName("Version").build();
-        Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
-        Version version = (Version) q.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString).getPayload();
-        return (Objects.equals(version.getVersion(), logReplicationStreamNameFetcher.getVersion()));
-    }
-
-    private void deleteExistingStreamNameAndVersionTables() {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
-        try {
-            corfuStore.deleteTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_STREAMS_NAME_TABLE);
-            corfuStore.deleteTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE);
-        } catch (NoSuchElementException e) {
-            // If the table does not exist, simply return
-            return;
-        }
-    }
-
-    private void createStreamNameAndVersionTables(Map<String, String> streams) {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
-        try {
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_STREAMS_NAME_TABLE, TableInfo.class,
-                    Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE, VersionString.class,
-                    Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
-            TxBuilder tx = corfuStore.tx(CORFU_SYSTEM_NAMESPACE);
-
-            // Populate the plugin version in the version table
-            VersionString versionString = VersionString.newBuilder().setName("Version").build();
-            Version version = Version.newBuilder().setVersion(logReplicationStreamNameFetcher.getVersion()).build();
-            CommonTypes.Uuid uuid = CommonTypes.Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
-            tx.create(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString, version, uuid);
-
-            // Copy all stream names to the stream names table
-            for (Map.Entry<String, String> entry : streams.entrySet()) {
-                TableInfo tableInfo = TableInfo.newBuilder().setName(entry.getKey()).build();
-                Namespace namespace = Namespace.newBuilder().setName(entry.getValue()).build();
-                uuid = CommonTypes.Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
-                tx.create(LOG_REPLICATION_STREAMS_NAME_TABLE, tableInfo, namespace, uuid);
-            }
-            tx.commit();
-        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-            log.warn("Exception when opening the table {}", e);
-        }
-    }
-
-    private Set<String> getStreamsToReplicateFromTable() {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
-        corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_STREAMS_NAME_TABLE);
-        Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
-        Set<TableInfo> tables = q.keySet(LOG_REPLICATION_STREAMS_NAME_TABLE, null);
-        Set<String> tableNames = new HashSet<>();
-        tables.forEach(table -> {
-            tableNames.add(table.getName());
-        });
-        return tableNames;
-    }
-
-  public LogReplicationQueryLeaderShipResponse queryLeadership() throws ExecutionException, InterruptedException {
+    public LogReplicationQueryLeaderShipResponse queryLeadership() throws ExecutionException, InterruptedException {
       log.info("***** Send QueryLeadership Request on a client to: {}", client.getRouter().getPort());
         return client.sendQueryLeadership().get();
     }
-
 
     public LogReplicationNegotiationResponse startNegotiation() throws Exception {
         log.info("Send Negotiation Request");
@@ -362,6 +219,7 @@ public class CorfuLogReplicationRuntime {
     }
 
     public long getMaxStreamTail() {
+        Set<String> streamsToReplicate = logReplicationConfig.getStreamsToReplicate();
         long maxTail = Address.NON_ADDRESS;
         log.debug("streamtoReplicate " + streamsToReplicate);
         for (String s : streamsToReplicate) {
@@ -372,7 +230,6 @@ public class CorfuLogReplicationRuntime {
                 maxTail = Math.max(maxTail, currentTail);
             }
         }
-
         return maxTail;
     }
 
