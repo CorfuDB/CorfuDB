@@ -90,7 +90,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.nodeId = serverContext.getNodeId();
 
         CrossSiteConfiguration crossSiteConfig = new CrossSiteConfiguration(siteManager.fetchSiteConfig());
-        this.replicationManager = new CorfuReplicationManager(serverContext.getTransportType(), crossSiteConfig);
+        this.replicationManager = new CorfuReplicationManager(serverContext.getTransportType(), crossSiteConfig,
+            replicationServerNode);
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
 
