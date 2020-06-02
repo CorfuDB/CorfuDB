@@ -4,7 +4,6 @@ import com.google.common.reflect.TypeToken;
 import org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationManager;
-import org.corfudb.logreplication.infrastructure.CorfuReplicationSiteManagerAdapter;
 import org.corfudb.logreplication.infrastructure.CrossSiteConfiguration;
 import org.corfudb.logreplication.infrastructure.DefaultSiteManager;
 import org.corfudb.runtime.CorfuRuntime;
