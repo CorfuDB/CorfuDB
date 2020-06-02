@@ -3,7 +3,6 @@ package org.corfudb.browser;
 import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
@@ -13,15 +12,15 @@ import java.util.stream.Stream;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
@@ -134,9 +133,9 @@ public class CorfuStoreBrowser {
                 Iterables.partition(entryStream::iterator, batchSize);
         for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
             for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
-                builder = new StringBuilder("\nKey:\n" + entry.getKey())
-                        .append("\nPayload:\n" + entry.getValue().getPayload())
-                        .append("\nMetadata:\n" + entry.getValue().getMetadata())
+                builder = new StringBuilder("\nKey:\n" + entry.getKey().getKey())
+                        .append("\nPayload:\n").append(entry.getValue().getPayload())
+                        .append("\nMetadata:\n").append(entry.getValue().getMetadata())
                         .append("\n====================\n");
                 log.info(builder.toString());
             }
@@ -202,5 +201,46 @@ public class CorfuStoreBrowser {
         log.info("Table cleared successfully");
         log.info("\n======================\n");
         return tableSize;
+    }
+
+    /**
+     * Loads the table with random data
+     * @param namespace - the namespace where the table belongs
+     * @param tablename - table name without the namespace
+     * @param numItems - total number of items to load
+     * @param batchSize - number of items in each transaction
+     * @return - number of entries in the table
+     */
+    public int loadTable(String namespace, String tablename, int numItems, int batchSize) {
+        verifyNamespaceAndTablename(namespace, tablename);
+        CorfuStore store = new CorfuStore(runtime);
+        try {
+            TableOptions.TableOptionsBuilder<Object, Object> optionsBuilder = TableOptions.builder();
+            if (diskPath != null) {
+                optionsBuilder.persistentDataPath(Paths.get(diskPath));
+            }
+            store.openTable(namespace, tablename,
+                    TableName.getDefaultInstance().getClass(),
+                    TableName.getDefaultInstance().getClass(),
+                    TableName.getDefaultInstance().getClass(),
+                    optionsBuilder.build());
+
+            TableName dummyVal = TableName.newBuilder().setNamespace(namespace).setTableName(tablename).build();
+            log.info("Loading {} items in {} batchSized transactions into {}${}",
+                    numItems, batchSize, namespace, tablename);
+            while (numItems > 0) {
+                log.info("loadTable: Items left {}", numItems);
+                TxBuilder tx = store.tx(namespace);
+                for (int j = batchSize; j > 0 && numItems > 0; j--, numItems--) {
+                    TableName dummyKey = TableName.newBuilder().setNamespace(Integer.toString(numItems))
+                            .setTableName(Integer.toString(j)).build();
+                    tx.update(tablename, dummyKey, dummyVal, dummyVal);
+                }
+                tx.commit();
+            }
+        } catch (Exception e) {
+            log.error("loadTable: {} {} {} {} failed.", namespace, tablename, numItems, batchSize, e);
+        }
+        return (int)(Math.ceil((double)numItems/batchSize));
     }
 }

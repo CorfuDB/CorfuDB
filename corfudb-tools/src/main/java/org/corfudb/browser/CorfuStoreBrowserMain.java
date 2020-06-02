@@ -23,6 +23,7 @@ import org.docopt.Docopt;
 public class CorfuStoreBrowserMain {
     private enum OperationType {
         listTables,
+        loadTable,
         infoTable,
         showTable,
         dropTable
@@ -34,11 +35,13 @@ public class CorfuStoreBrowserMain {
         "[--keystore=<keystore_file>] [--ks_password=<keystore_password>] " +
         "[--truststore=<truststore_file>] [--truststore_password=<truststore_password>] " +
         "[--diskPath=<pathToTempDirForLargeTables>] "+
+        "[--numItems=<numberOfItemsToLoad>] "+
+        "[--batchSize=<itemsPerTransaction>] "+
         "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<listTables|infoTable|showTable|dropTable> Operation\n"
+        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--keystore=<keystore_file> KeyStore File\n"
@@ -46,6 +49,8 @@ public class CorfuStoreBrowserMain {
         + "--truststore=<truststore_file> TrustStore File\n"
         + "--truststore_password=<truststore_password> Truststore Password\n"
         + "--diskPath=<path to temp folder for large tables> Path to Temp Dir\n"
+        + "--numItems=<numberOfItemsToLoad> Total Number of items for loadTable\n"
+        + "--batchSize=<batchSize> Number of records per transaction for loadTable\n"
         + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) {
@@ -115,6 +120,17 @@ public class CorfuStoreBrowserMain {
                     break;
                 case showTable:
                     browser.printTable(namespace, tableName);
+                    break;
+                case loadTable:
+                    int numItems = 1000;
+                    if (opts.get("--numItems)") != null) {
+                        numItems = Integer.parseInt(opts.get("--numItems").toString());
+                    }
+                    int batchSize = 1000;
+                    if (opts.get("--batchSize") != null) {
+                        batchSize = Integer.parseInt(opts.get("--batchSize").toString());
+                    }
+                    browser.loadTable(namespace, tableName, numItems, batchSize);
                     break;
             }
         } catch (Throwable t) {
