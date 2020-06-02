@@ -20,17 +20,24 @@ import java.util.stream.Collectors;
 
 @Slf4j
 public class LogReplicationSenderBuffer {
-    public static final String config_file = "/config/corfu/corfu_replication_config.properties";
-    public static final int DEFAULT_READER_QUEUE_SIZE = 1;
-    public static final int DEFAULT_RESENT_TIMER = 5000;
-    public static final int DEFAULT_MAX_RETRY = 5;
-    public static final int DEFAULT_TIMEOUT = 5000;
+    /*
+     * The location of the file to read buffer related configuration.
+     */
+    private static final String config_file = "/config/corfu/corfu_replication_config.properties";
+    private static final int DEFAULT_READER_QUEUE_SIZE = 1;
+    private static final int DEFAULT_RESENT_TIMER = 5000;
+    private  static final int DEFAULT_MAX_RETRY = 5;
+    private static final int DEFAULT_TIMEOUT = 5000;
 
     /*
-     * for internal timer increasing for each message in milliseconds
+     * For internal timer increasing for each message in milliseconds
      */
-    final static private long TIME_INCREMENT = 10;
+    final static private long TIME_INCREMENT = 100;
 
+
+    /*
+     * The max buffer size
+     */
     private int readerBatchSize = DEFAULT_READER_QUEUE_SIZE;
 
     /*
@@ -44,7 +51,7 @@ public class LogReplicationSenderBuffer {
     private int maxRetry = DEFAULT_MAX_RETRY;
 
     /*
-     * wait for ack or not
+     * wait for an Ack or not
      */
     private boolean errorOnMsgTimeout = true;
 
@@ -54,15 +61,21 @@ public class LogReplicationSenderBuffer {
     long currentTime;
 
     /*
-     * The log entry has been sent to the receiver but hasn't ACKed yet.
+     * the max Ack received
      */
-    @Getter
-    LogReplicationSenderQueue pendingEntries;
-
     private long ackTs = Address.NON_ADDRESS;
 
     DataSender dataSender;
 
+    /*
+     * The log entries sent to the receiver but hasn't ACKed yet.
+     */
+    @Getter
+    LogReplicationSenderQueue pendingEntries;
+
+    /*
+     * track the pendingEnries' acks
+     */
     @Getter
     @Setter
     private Map<Long, CompletableFuture<LogReplicationEntry>> pendingLogEntriesAcked;
@@ -74,6 +87,9 @@ public class LogReplicationSenderBuffer {
         this.dataSender = dataSender;
     }
 
+    /**
+     * read the config from a file. If the file doesn't exist, use the default values.
+     */
     private void readConfig() {
         try {
             File configFile = new File(config_file);
@@ -106,11 +122,18 @@ public class LogReplicationSenderBuffer {
         ackTs = ackTimestamp;
 
         log.debug("Pending entries before eviction at {} is {}", ackTs, pendingEntries.getSize());
-        pendingEntries.evictAll(ackTs);
+        pendingEntries.evictAccordingToTimestamp(ackTs);
         log.debug("Pending entries AFTER eviction at {} is {}", ackTs, pendingEntries.getSize());
     }
 
 
+    /**
+     * process all Acks that have recieved.
+     * @return the max Ack
+     * @throws InterruptedException
+     * @throws ExecutionException
+     * @throws TimeoutException
+     */
     public LogReplicationEntry processAcks() throws InterruptedException, ExecutionException, TimeoutException {
         LogReplicationEntry ack = (LogReplicationEntry) CompletableFuture.anyOf(pendingLogEntriesAcked
                 .values().toArray(new CompletableFuture<?>[pendingLogEntriesAcked.size()])).get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
@@ -128,24 +151,27 @@ public class LogReplicationSenderBuffer {
         return ack;
     }
 
+    /**
+     *
+     * @param message
+     */
     public void sendWithBuffering(LogReplicationEntry message) {
+        log.debug("sending data %s", message.getMetadata());
         pendingEntries.append(message, getCurrentTime());
         CompletableFuture<LogReplicationEntry> cf = dataSender.send(message);
-        log.debug("sending data %s", message.getMetadata());
         pendingLogEntriesAcked.put(message.getMetadata().getTimestamp(), cf);
-        log.trace("send message " + message.getMetadata());
     }
 
     /**
      * resend the messages in the queue if they are timeout.
-     * @param
+     * @param force enforce a resending.
      * @return it returns false if there is an entry has been resent MAX_RETRY and timeout again.
      * Otherwise it returns true.
      */
-    public void resend() {
+    public void resend(boolean force) {
         for (int i = 0; i < pendingEntries.getSize(); i++) {
             LogReplicationPendingEntry entry  = pendingEntries.getList().get(i);
-            if (entry.timeout(getCurrentTime(), msgTimer)) {
+            if (entry.timeout(getCurrentTime(), msgTimer) || force) {
                 if (errorOnMsgTimeout && entry.retry >= maxRetry) {
                     log.warn("Entry {} of type {} has been resent max times {} for timer {}.", entry.getData().getMetadata().getTimestamp(),
                             entry.getData().getMetadata().getMessageMetadataType(), maxRetry, msgTimer);
@@ -160,17 +186,19 @@ public class LogReplicationSenderBuffer {
         }
     }
 
-    /**
-     * put into the buffer and wait for the ack
-     * @param message
-     */
-    public void send(LogReplicationEntry message){
-
-    }
 
     private long getCurrentTime() {
         currentTime += TIME_INCREMENT;
         return currentTime;
     }
 
+    /**
+     * init the buffer state
+     * @param lastAckedTimestamp
+     */
+    public void reset(long lastAckedTimestamp) {
+        ackTs = lastAckedTimestamp;
+        pendingEntries.clear();
+        pendingLogEntriesAcked.clear();
+    }
 }

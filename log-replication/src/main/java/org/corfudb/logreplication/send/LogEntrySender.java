@@ -11,13 +11,9 @@ import org.corfudb.logreplication.send.logreader.LogEntryReader;
 import org.corfudb.logreplication.send.logreader.ReadProcessor;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -25,12 +21,10 @@ import java.util.concurrent.TimeoutException;
  * i.e, reading and sending incremental updates to a remote site.
  *
  * It reads log entries from the datastore through the LogEntryReader, and sends them
- * through the LogEntryListener (the application specific callback).
+ * through LogReplicationSenderBuffer.
  */
 @Slf4j
 public class LogEntrySender {
-
-    public static final int DEFAULT_TIMEOUT = 5000;
 
     /*
      * Corfu Runtime
@@ -49,8 +43,6 @@ public class LogEntrySender {
     */
     private LogReplicationSenderBuffer dataSenderBuffer;
 
-    private long ackTs = Address.NON_ADDRESS;
-
     /*
      * Log Replication FSM (to insert internal events)
      */
@@ -59,10 +51,6 @@ public class LogEntrySender {
 
     private volatile boolean taskActive = false;
 
-    long currentTime;
-
-    //private Map<Long, CompletableFuture<LogReplicationEntry>> pendingLogEntriesAcked = new HashMap<>();
-    private List<CompletableFuture<LogReplicationEntry>> pendingForAck = new ArrayList<>();
 
     /**
      * Stop the send for Log Entry Sync
@@ -87,19 +75,18 @@ public class LogEntrySender {
         this.dataSender = dataSender;
         this.dataSenderBuffer = new LogReplicationSenderBuffer(dataSender);
         this.logReplicationFSM = logReplicationFSM;
-        //this.pendingEntries = new LogReplicationSenderQueue(readerBatchSize);
     }
 
     /**
      * Read and send incremental updates (log entries)
      */
     public void send(UUID logEntrySyncEventId) {
-        currentTime = java.lang.System.currentTimeMillis();
         taskActive = true;
 
         try {
-            // If there are pending entries, resend them.
+            // If there are pending entries in the buffer, resend them.
             if (!dataSenderBuffer.getPendingEntries().isEmpty()) {
+                boolean resendForce = false;
                 try {
                     LogReplicationEntry ack = dataSenderBuffer.processAcks();
 
@@ -109,14 +96,18 @@ public class LogEntrySender {
                                 new LogReplicationEventMetadata(ack.getMetadata().getSyncRequestId(), ack.getMetadata().getTimestamp())));
 
                 } catch (TimeoutException te) {
-                    log.info("Log Entry ACK timed out, pending acks for {}", dataSenderBuffer.getPendingLogEntriesAcked().keySet());
+                    // There is a TimeoutException while trying to access the future values.
+                    // The timeout will enforce a resend.
+                    resendForce = true;
+                    log.warn("Log Entry ACK timed out, pending acks for {}", dataSenderBuffer.getPendingLogEntriesAcked().keySet());
+
                 } catch (Exception e) {
-                    log.error("Exception caught while waiting on log entry ACK.", e);
+                    log.error("Exception caught while processing log entry ACKs.", e);
                     cancelLogEntrySync(LogReplicationError.UNKNOWN, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
                     return;
                 }
 
-                dataSenderBuffer.resend();
+                dataSenderBuffer.resend(resendForce);
             }
         } catch (LogEntrySyncTimeoutException te) {
             log.error("LogEntrySyncTimeoutException after several retries.", te);
@@ -126,6 +117,7 @@ public class LogEntrySender {
 
         while (taskActive && !dataSenderBuffer.getPendingEntries().isFull()) {
             LogReplicationEntry message;
+
             // Read and Send Log Entries
             try {
                 message = logEntryReader.read(logEntrySyncEventId);
@@ -177,11 +169,10 @@ public class LogEntrySender {
     /**
      * Reset the log entry sender to initial state
      */
-    public void reset(long ts0, long ts1) {
+    public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         taskActive = true;
-        log.info("Reset baseSnapshot %s ackTs %s", ts0, ts1);
-        logEntryReader.reset(ts0, ts1);
-        ackTs = ts1;
-        dataSenderBuffer.getPendingEntries().evictAll();
+        log.info("Reset baseSnapshot %s ackTs %s", lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
+        logEntryReader.reset(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
+        dataSenderBuffer.reset(lastAckedTimestamp);
     }
 }

@@ -1,8 +1,8 @@
 package org.corfudb.logreplication.send;
 
-import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.ArrayList;
 
@@ -14,16 +14,16 @@ import java.util.ArrayList;
 @Slf4j
 public class LogReplicationSenderQueue {
 
-    // The max number of the entries that the queue can contain
+    /*
+     * The max number of the entries that the queue can contain
+     */
     private int maxSize;
 
+    /*
+     * The list of pending entries.
+     */
     @Getter
     private ArrayList<LogReplicationPendingEntry> list;
-
-    /*
-     * reset while process messages
-     */
-    long currentTime;
 
 
     public LogReplicationSenderQueue(int maxSize) {
@@ -31,6 +31,10 @@ public class LogReplicationSenderQueue {
         list = new ArrayList<>();
     }
 
+    /**
+     * The current number of pending entries
+     * @return
+     */
     public int getSize() {
         return list.size();
     }
@@ -43,19 +47,21 @@ public class LogReplicationSenderQueue {
         return (list.size() == maxSize);
     }
 
-    public void evictAll() {
+    public void clear() {
         list = new ArrayList<>();
     }
 
-    void evictAll(long address) {
+    /**
+     * Remove all the entries whose timestamp is not larger than the address
+     * @param address
+     */
+    void evictAccordingToTimestamp(long address) {
         log.trace("evict address " + address);
         list.removeIf(a -> (a.data.getMetadata().getTimestamp() <= address));
     }
 
-    void append(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data, long timer) {
+    void append(LogReplicationEntry data, long timer) {
         LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data, timer);
         list.add(entry);
     }
-
-
 }

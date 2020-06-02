@@ -2,9 +2,10 @@ package org.corfudb.logreplication.send;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 /**
- * The element kept in the sliding windown to remember the log entries sent over but hasn't been acknowledged by the
+ * The element kept in the sliding window to remember the log entries sent over but hasn't been acknowledged by the
  * receiver and we use the time to decide when a re-send is necessary.
  */
 
@@ -12,8 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class LogReplicationPendingEntry {
 
-        // The address of the log entry
-        org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data;
+        LogReplicationEntry data;
 
         // The first time the log entry is sent over
         long time;
@@ -32,8 +32,12 @@ public class LogReplicationPendingEntry {
             return  (ctime - this.time) > timer;
         }
 
-        void retry(long time) {
-            this.time = time;
+    /**
+     * update retry number and the time with current time.
+     * @param currentTime the current system time
+     */
+    void retry(long currentTime) {
+            this.time = currentTime;
             retry++;
         }
 }
