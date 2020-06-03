@@ -6,9 +6,9 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.infrastructure.LogReplicationClientRouter;
+import org.corfudb.transport.logreplication.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.LogReplicationServerRouter;
+import org.corfudb.transport.logreplication.LogReplicationServerRouter;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;

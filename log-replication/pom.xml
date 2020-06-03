@@ -86,7 +86,12 @@
       <groupId>org.corfudb</groupId>
       <artifactId>infrastructure</artifactId>
       <version>${revision}</version>
-  </dependency>
+    </dependency>
+    <dependency>
+      <groupId>org.corfudb</groupId>
+      <artifactId>transport</artifactId>
+      <version>${revision}</version>
+    </dependency>
     <dependency>
       <groupId>org.corfudb</groupId>
       <artifactId>utils</artifactId>

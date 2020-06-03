@@ -1,8 +1,8 @@
-package org.corfudb.logreplication.infrastructure;
+package org.corfudb.transport.test;
 
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.LogReplicationServerRouter;
+import org.corfudb.transport.logreplication.LogReplicationServerRouter;
 import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.LogReplicationChannelGrpc;

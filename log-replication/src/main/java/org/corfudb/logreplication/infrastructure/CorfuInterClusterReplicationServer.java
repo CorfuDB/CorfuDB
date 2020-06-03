@@ -6,11 +6,9 @@ import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.NodeLocator;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
@@ -19,7 +17,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Map;
 
-import static org.corfudb.infrastructure.LogReplicationServerRouter.PLUGIN_CONFIG_FILE_PATH;
+import static org.corfudb.transport.logreplication.LogReplicationServerRouter.PLUGIN_CONFIG_FILE_PATH;
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 /**
@@ -357,7 +355,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     private CorfuReplicationSiteManagerAdapter constructSiteManagerAdapter() {
 
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(PLUGIN_CONFIG_FILE_PATH);
-        File jar = new File(config.getSiteManagerAdatperJARPath());
+        File jar = new File(config.getSiteManagerAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getSiteManagerAdapterName(), true, child);

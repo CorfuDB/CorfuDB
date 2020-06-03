@@ -1,8 +1,9 @@
-package org.corfudb.infrastructure;
+package org.corfudb.transport.client;
 
 import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.runtime.Messages.CorfuMessage;
+import org.corfudb.transport.logreplication.LogReplicationClientRouter;
 
 /**
  * Client Transport Adapter.

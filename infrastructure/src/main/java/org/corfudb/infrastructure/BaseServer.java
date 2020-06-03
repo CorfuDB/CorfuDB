@@ -30,7 +30,7 @@ import java.util.concurrent.Executors;
 @Slf4j
 public class BaseServer extends AbstractServer {
 
-    final ServerContext serverContext;
+    public final ServerContext serverContext;
 
     private final ExecutorService executor;
 
