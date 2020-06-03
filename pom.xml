@@ -22,7 +22,8 @@
         <module>test</module>
         <module>it</module>
         <module>utils</module>
-  </modules>
+        <module>transport</module>
+    </modules>
 
 
     <packaging>pom</packaging>
