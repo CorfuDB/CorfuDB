@@ -1,12 +1,12 @@
-package org.corfudb.logreplication.infrastructure;
+package org.corfudb.transport.test;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.LogReplicationServerRouter;
-import org.corfudb.infrastructure.IServerChannelAdapter;
+import org.corfudb.transport.logreplication.LogReplicationServerRouter;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.transport.server.IServerChannelAdapter;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
  * This router is a default implementation used for transport plugin tests.
  */
 @Slf4j
-public class GRPCLogReplicationServerChannel extends IServerChannelAdapter {
+public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapter {
 
     /*
      * GRPC Server used for listening and dispatching incoming calls.
@@ -30,7 +30,7 @@ public class GRPCLogReplicationServerChannel extends IServerChannelAdapter {
 
     private CompletableFuture<Boolean> serverCompletable;
 
-    public GRPCLogReplicationServerChannel(Integer port, LogReplicationServerRouter adapter) {
+    public GRPCLogReplicationServerChannelAdapter(Integer port, LogReplicationServerRouter adapter) {
         super(port, adapter);
         this.service = new GRPCLogReplicationServerHandler(adapter);
         this.server = ServerBuilder.forPort(port).addService(service).build();
