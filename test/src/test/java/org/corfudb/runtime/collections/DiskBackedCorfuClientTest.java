@@ -63,7 +63,6 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     private final static int STRING_MIN = 5;
     private final static int STRING_MAX = 10;
 
-
     public DiskBackedCorfuClientTest() {
         AbstractViewTest.initEventGroup();
         resetTests();
