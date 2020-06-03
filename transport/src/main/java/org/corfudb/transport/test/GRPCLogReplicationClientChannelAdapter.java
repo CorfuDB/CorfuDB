@@ -1,13 +1,13 @@
-package org.corfudb.logreplication.runtime;
+package org.corfudb.transport.test;
 
 import io.grpc.Channel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.LogReplicationClientRouter;
-import org.corfudb.infrastructure.IClientChannelAdapter;
+import org.corfudb.transport.logreplication.LogReplicationClientRouter;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.LogReplicationChannelGrpc;
+import org.corfudb.transport.client.IClientChannelAdapter;
 
 /**
  * This is a default implementation of a custom channel for Log Replication Servers inter-communication

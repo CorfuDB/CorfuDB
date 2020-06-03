@@ -1,10 +1,10 @@
-package org.corfudb.infrastructure;
-
+package org.corfudb.transport.logreplication;
 
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.Messages.CorfuMessage;
@@ -12,6 +12,7 @@ import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.transport.client.IClientChannelAdapter;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.utils.common.CorfuMessageConverter;
@@ -95,7 +96,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         initialize(adapterType);
     }
 
-    // --------------- IClientRouter Interface ----------------------
+    // ------------------- IClientRouter Interface ----------------------
 
     @Override
     public IClientRouter addClient(IClient client) {
