@@ -23,9 +23,9 @@ import java.util.Properties;
 import java.util.UUID;
 
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_MESSAGE;
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_REPLICATED;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_REPLICATED;
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_START;
 
 /**
  * This class represents the Log Replication Manager at the destination.
@@ -46,7 +46,11 @@ public class LogReplicationSinkManager implements DataReceiver {
     private int bufferSize = DEFAULT_READER_QUEUE_SIZE;
 
     private CorfuRuntime runtime;
-    private SinkBufferManager sinkBufferManager;
+
+    private LogEntrySinkBufferManager logEntrySinkBufferManager;
+
+    private SnapshotSinkBufferManager snapshotSinkBufferManager;
+
     private StreamsSnapshotWriter snapshotWriter;
     private LogEntryWriter logEntryWriter;
 
@@ -86,10 +90,10 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.rxState = RxState.LOG_ENTRY_SYNC;
         this.config = config;
-        init(LOG_ENTRY_MESSAGE);
+        init();
     }
 
-    private void init(MessageType type) {
+    private void init() {
         persistedWriterMetadata = new PersistedWriterMetadata(runtime, 0, config.getSiteID(), config.getRemoteSiteID());
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, persistedWriterMetadata);
         logEntryWriter = new LogEntryWriter(runtime, config, persistedWriterMetadata);
@@ -97,7 +101,9 @@ public class LogReplicationSinkManager implements DataReceiver {
                 persistedWriterMetadata.getLastProcessedLogTimestamp());
 
         readConfig();
-        sinkBufferManager = new SinkBufferManager(type, ackCycleTime, ackCycleCnt, bufferSize,
+        logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
+                persistedWriterMetadata.getLastProcessedLogTimestamp(), this);
+        snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 Address.NON_ADDRESS, this);
     }
 
@@ -131,7 +137,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         //If the roletype is active or it is not the leader, skip processing the message and ack the timestamp.
         //This will  trigger the active site to redo the query leadership.
         if (active || !leader) {
-            LogReplicationEntryMetadata metadata = sinkBufferManager.makeAckMessage(message);
+            LogReplicationEntryMetadata metadata = logEntrySinkBufferManager.makeAckMessage(message);
             return new LogReplicationEntry(metadata, new byte[0]);
         }
 
@@ -143,7 +149,6 @@ public class LogReplicationSinkManager implements DataReceiver {
             // If we received a start marker for snapshot sync while in LOG_ENTRY_SYNC, switch rxState
             if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_START)) {
                 rxState = RxState.SNAPSHOT_SYNC;
-                init(SNAPSHOT_MESSAGE);
             } else {
                 // Invalid message // Drop the message
                 log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
@@ -154,25 +159,19 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
 
         if (rxState.equals(RxState.LOG_ENTRY_SYNC)) {
-            return sinkBufferManager.processMsgAndBuffer(message);
+            return logEntrySinkBufferManager.processMsgAndBuffer(message);
         }
 
         // Snapshot Sync (no buffering, out of order is allowed)
-        return receiveWithoutBuffering(message);
-    }
-
-    @Override
-    public LogReplicationEntry receive(List<LogReplicationEntry> messages) {
-        for (LogReplicationEntry msg : messages) {
-            receive(msg);
+        //return receiveWithoutBuffering(message);
+        if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_START) {
+            snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
+                    Address.NON_ADDRESS, this);
+            System.out.print("\nsetup new snapshotsinkbuffer");
+            return receiveWithoutBuffering(message);
+        } else {
+            return snapshotSinkBufferManager.processMsgAndBuffer(message);
         }
-
-        // Todo (hack): ACK should be controlled from the receive method
-        if (messages.size() > 0) {
-            return LogReplicationEntry.generateAck(messages.get(0).getMetadata());
-        }
-
-        return null;
     }
 
     /**
@@ -183,6 +182,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         //check if the all the expected message has received
         rxState = RxState.LOG_ENTRY_SYNC;
         persistedWriterMetadata.setSrcBaseSnapshotDone(inputEntry);
+        logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
+                persistedWriterMetadata.getLastProcessedLogTimestamp(), this);
 
         // Prepare and Send Snapshot Sync ACK
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END,
@@ -191,9 +192,6 @@ public class LogReplicationSinkManager implements DataReceiver {
                 persistedWriterMetadata.getLastProcessedLogTimestamp(),
                 persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(),
                 snapshotRequestId);
-
-        sinkBufferManager = new SinkBufferManager(LOG_ENTRY_MESSAGE, ackCycleTime, ackCycleCnt, bufferSize,
-                persistedWriterMetadata.getLastSrcBaseSnapshotTimestamp(), this);
 
         System.out.print("Sink manager send out snapEnd message ack " + metadata);
         return LogReplicationEntry.generateAck(metadata);

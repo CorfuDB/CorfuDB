@@ -46,6 +46,15 @@ public class LogReplicationEntryMetadata {
 
     private long snapshotSyncSeqNum; //used by snapshot full sync stream only, zero means the start of the stream.
 
+    public LogReplicationEntryMetadata(LogReplicationEntryMetadata inputMetadata) {
+        this.messageMetadataType = inputMetadata.messageMetadataType;
+        this.siteConfigID = inputMetadata.siteConfigID;
+        this.syncRequestId = inputMetadata.syncRequestId;
+        this.snapshotTimestamp = inputMetadata.snapshotTimestamp;
+        this.snapshotSyncSeqNum = inputMetadata.snapshotSyncSeqNum;
+        this.previousTimestamp = inputMetadata.previousTimestamp;
+        this.timestamp = inputMetadata.timestamp;
+    }
 
     public LogReplicationEntryMetadata(MessageType type, long epoch, UUID syncRequestId, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {
         this(type, epoch, syncRequestId, entryTimeStamp, snapshotTimestamp);

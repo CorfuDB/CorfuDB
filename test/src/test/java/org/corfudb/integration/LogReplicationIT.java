@@ -121,7 +121,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private int expectedAckMessages = 0;
 
     // Set per test according to the expected ACK's timestamp.
-    private long expectedAckTimestamp = -1;
+    private long expectedAckTimestamp = Long.MAX_VALUE;
 
     // Set per test according to the expected number of errors in a test
     private int expectedErrors = 1;
@@ -800,6 +800,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
+        expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
         assertThat(expectedAckTimestamp).isEqualTo(persistedWriterMetadata.getLastProcessedLogTimestamp());
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
@@ -866,8 +867,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckTimestamp = -1;
         testConfig.setWaitOn(WAIT.ON_ACK_TS);
 
+        expectedAckMsgType = MessageType.SNAPSHOT_END;
+
         LogReplicationSourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(),
-                new HashSet<>(Arrays.asList(WAIT.ON_ACK_TS, WAIT.ON_ERROR, WAIT.ON_SINK_RECEIVE)));
+                new HashSet<>(Arrays.asList(WAIT.ON_ACK, WAIT.ON_ACK_TS, WAIT.ON_ERROR, WAIT.ON_SINK_RECEIVE)));
 
         // KWrite a checkpoint and trim
         Token token = ckStreamsAndTrim(srcDataRuntime, srcCorfuTables);
@@ -886,7 +889,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Block until snapshot sync is completed (ack is received)
         System.out.println("****** Wait until snapshot sync is completed (ack received)");
-        blockUntilExpectedValueReached.acquire();
+        //blockUntilExpectedValueReached.acquire();
+        blockUntilExpectedAckType.acquire();
 
         // Verify its in log entry sync state and that data was completely transferred to destination
         checkStateChange(sourceManager.getLogReplicationFSM(), LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
@@ -1107,15 +1111,17 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 waitConditions);
 
         // Start Snapshot Sync
-        System.out.println("****** Start Snapshot Sync");
+        System.out.println("\n****** Start Snapshot Sync");
         logReplicationSourceManager.startSnapshotSync();
 
         // Block until the wait condition is met (triggered)
-        System.out.println("****** Wait until wait condition is met " + testConfig);
+        System.out.println("\n****** Wait until wait condition is met " + waitConditions);
 
         if (waitConditions.contains(WAIT.ON_ERROR)) {
+            System.out.print("\n****** blockUnitileExpectedValueReached " + expectedErrors);
             blockUntilExpectedValueReached.acquire();
         } else {
+            System.out.print("\n****** blockUnitilExpectedAckType " + expectedAckMsgType);
             blockUntilExpectedAckType.acquire();
         }
 
@@ -1274,6 +1280,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             switch (testConfig.waitOn) {
                 case ON_ACK:
                     verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
+                case ON_ACK_TS:
+                    verifyExpectedValue(expectedAckTimestamp, logReplicationEntry.getMetadata().timestamp);
                     if (expectedAckMsgType == logReplicationEntry.getMetadata().getMessageMetadataType()) {
                         blockUntilExpectedAckType.release();
                     }
@@ -1281,9 +1289,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     if (expectedAckTimestamp == logReplicationEntry.getMetadata().timestamp) {
                         blockUntilExpectedAckTs.release();
                     }
-                    break;
-                case ON_ACK_TS:
-                    verifyExpectedValue(expectedAckTimestamp, logReplicationEntry.getMetadata().timestamp);
                     break;
             }
         }

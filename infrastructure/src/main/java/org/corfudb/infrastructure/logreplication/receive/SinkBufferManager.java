@@ -18,7 +18,7 @@ import java.util.HashMap;
  * the messages will be applied in order.
  * At the same time, we should back an ACK to the primary site to notify the primary site any possible data loss.
  */
-public class SinkBufferManager {
+public abstract class SinkBufferManager {
     // It is implemented as a hashmap.
     HashMap<Long, LogReplicationEntry> buffer;
     LogReplicationSinkManager sinkManager;
@@ -39,54 +39,32 @@ public class SinkBufferManager {
     // For snapshot sync, the ack should be nextKey - 1
     // For log entry sync, the ack is the nextKey which is the timestamp the last log
     // entry has been processed.
-    long nextKey;
+    long lastProcessedTs;
 
-    public SinkBufferManager(MessageType type, int ackCycleTime, int ackCycleCnt, int size, long nextKey, LogReplicationSinkManager sinkManager) {
+    public SinkBufferManager(MessageType type, int ackCycleTime, int ackCycleCnt, int size, long lastProcessedTs, LogReplicationSinkManager sinkManager) {
         this.type = type;
         this.ackCycleTime = ackCycleTime;
         this.ackCycleCnt = ackCycleCnt;
         this.size = size;
         this.sinkManager = sinkManager;
-        this.nextKey = nextKey;
+        this.lastProcessedTs = lastProcessedTs;
         buffer = new HashMap<>();
-    }
-
-    long getKey(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry) {
-        switch (entry.getMetadata().getMessageMetadataType()) {
-            case SNAPSHOT_MESSAGE:
-                return entry.getMetadata().getSnapshotSyncSeqNum();
-            case LOG_ENTRY_MESSAGE:
-                return entry.getMetadata().getPreviousTimestamp();
-            default:
-                log.warn("wrong type of metadata {}", entry.getMetadata());
-                return -1;
-        }
-    }
-
-    long getNextKey(LogReplicationEntry entry) {
-        switch (entry.getMetadata().getMessageMetadataType()) {
-            case SNAPSHOT_MESSAGE:
-                return entry.getMetadata().getSnapshotSyncSeqNum() + 1;
-            case LOG_ENTRY_MESSAGE:
-                return entry.getMetadata().getTimestamp();
-            default:
-                log.warn("wrong type of metadata {}", entry.getMetadata());
-                return -1;
-        }
     }
 
     void processBuffer() {
         while (true) {
-            LogReplicationEntry dataMessage = buffer.get(nextKey);
+            LogReplicationEntry dataMessage = buffer.get(lastProcessedTs);
             if (dataMessage == null)
                 return;
             sinkManager.receiveWithoutBuffering(dataMessage);
-            nextKey = getNextKey(dataMessage);
+            buffer.remove(lastProcessedTs);
+            lastProcessedTs = getCurrentTs(dataMessage);
         }
     }
 
-    boolean shouldAck() {
+    boolean shouldAck(LogReplicationEntry entry) {
         ackCnt++;
+
         long currentTime = java.lang.System.currentTimeMillis();
         if (ackCnt == ackCycleCnt || (currentTime - ackTime) >= ackCycleTime) {
             ackCnt = 0;
@@ -97,29 +75,6 @@ public class SinkBufferManager {
         return false;
     }
 
-    public LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
-        long ackTimestamp;
-        MessageType messageType;
-        switch (type) {
-            case SNAPSHOT_MESSAGE:
-                ackTimestamp = nextKey - 1;
-                messageType = MessageType.SNAPSHOT_REPLICATED;
-                break;
-            case LOG_ENTRY_MESSAGE:
-                ackTimestamp = nextKey;
-                messageType = MessageType.LOG_ENTRY_REPLICATED;
-                break;
-            default:
-                log.error("Wrong type of message {}", type);
-        }
-
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.LOG_ENTRY_REPLICATED,
-                entry.getMetadata().getSiteConfigID(),
-                entry.getMetadata().getSyncRequestId(), nextKey,
-                entry.getMetadata().getSnapshotTimestamp());
-        return metadata;
-    }
-
     /**
      * If the message is the expected message, will push down to sinkManager to process it.
      * Then process the message in the buffer if the next expected messages are in the buffer in order.
@@ -128,29 +83,37 @@ public class SinkBufferManager {
      * @param dataMessage
      */
     public LogReplicationEntry processMsgAndBuffer(LogReplicationEntry dataMessage) {
-        if (dataMessage.getMetadata().getMessageMetadataType() != type) {
-            log.warn("Got msg type {} but expecting type {}", dataMessage.getMetadata().getMessageMetadataType(), type);
-            return null;
-        }
 
-        long key = getKey(dataMessage);
+        if (verifyMessageType(dataMessage) == false)
+           return null;
 
-        if (getKey(dataMessage) == nextKey) {
+        long preTs = getPreTs(dataMessage);
+
+        System.out.print("\nSink Buffer lastProcessedTs " + lastProcessedTs + " currePreTs " + preTs);
+        if (preTs == lastProcessedTs) {
             sinkManager.receiveWithoutBuffering(dataMessage);
-            nextKey = getNextKey(dataMessage);
+            lastProcessedTs = getCurrentTs(dataMessage);
             processBuffer();
         } else {
-            buffer.put(key, dataMessage);
+            buffer.put(preTs, dataMessage);
         }
 
         /*
          * send ack up to
          */
-        if (shouldAck()) {
+        if (shouldAck(dataMessage)) {
             LogReplicationEntryMetadata metadata = makeAckMessage(dataMessage);
             return new LogReplicationEntry(metadata, new byte[0]);
         }
 
         return null;
     }
+
+    abstract long getPreTs(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry);
+
+    abstract long getCurrentTs(LogReplicationEntry entry);
+
+    public abstract LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry);
+
+    public abstract boolean verifyMessageType(LogReplicationEntry entry);
 }
