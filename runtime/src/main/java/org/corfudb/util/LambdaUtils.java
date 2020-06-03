@@ -170,7 +170,7 @@ public class LambdaUtils {
     public static void runSansThrow(Runnable runnable) {
         try {
             runnable.run();
-        } catch (Exception e) {
+        } catch (Throwable e) {
             log.error("runSansThrow: Suppressing exception while executing runnable: ", e);
         }
     }

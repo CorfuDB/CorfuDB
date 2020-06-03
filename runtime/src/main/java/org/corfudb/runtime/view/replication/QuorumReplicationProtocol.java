@@ -34,8 +34,8 @@ import org.corfudb.util.retry.RetryNeededException;
 import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.AbstractMap.SimpleImmutableEntry;
+import java.util.Collection;
 import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -108,13 +108,22 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
     @Override
     @Nonnull
     public Map<Long, ILogData> readAll(RuntimeLayout runtimeLayout,
-                                       List<Long> addresses,
+                                       Collection<Long> addresses,
                                        boolean waitForWrite,
                                        boolean cacheOnServer) {
         // TODO: replace this naive implementation
         return addresses.stream()
                 .map(addr -> new SimpleImmutableEntry<>(addr, read(runtimeLayout, addr)))
                 .collect(Collectors.toMap(SimpleImmutableEntry::getKey, SimpleImmutableEntry::getValue));
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void commitAll(RuntimeLayout runtimeLayout, Collection<Long> addresses) {
+        // TODO: parallelize this operation as in chain replication.
+        addresses.forEach(addr -> read(runtimeLayout, addr));
     }
 
     /**

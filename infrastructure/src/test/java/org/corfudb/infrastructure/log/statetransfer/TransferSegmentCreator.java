@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.log.statetransfer;
 
 
+import com.google.common.collect.ImmutableList;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;
@@ -28,12 +29,12 @@ public interface TransferSegmentCreator {
                     .builder()
                     .status(
                             builder()
-                                    .totalTransferred(end - start + 1)
                                     .segmentState(state)
                                     .build()
                     )
                     .startAddress(start)
                     .endAddress(end)
+                    .logUnitServers(ImmutableList.of())
                     .build();
         }
         // If a state is not transferred, create a segment.
@@ -42,12 +43,12 @@ public interface TransferSegmentCreator {
                     .builder()
                     .status(
                             builder()
-                                    .totalTransferred(0L)
                                     .segmentState(state)
                                     .build()
                     )
                     .startAddress(start)
                     .endAddress(end)
+                    .logUnitServers(ImmutableList.of())
                     .build();
         }
         // If a state is failed, create a transfer segment with a provided failure.
@@ -55,21 +56,21 @@ public interface TransferSegmentCreator {
             return TransferSegment
                     .builder()
                     .status(builder()
-                                    .totalTransferred(0L)
                                     .segmentState(state)
                                     .causeOfFailure(Optional.of(new TransferSegmentException()))
                                     .build()
                     )
                     .startAddress(start)
                     .endAddress(end)
+                    .logUnitServers(ImmutableList.of())
                     .build();
         }
     }
 
     // Create a transfer segment status from a given state, total transferred and an optional failure.
     default TransferSegmentStatus createStatus(
-            SegmentState state, long total, Optional<TransferSegmentException> fail) {
-        return builder().totalTransferred(total).segmentState(state).causeOfFailure(fail).build();
+            SegmentState state, Optional<TransferSegmentException> fail) {
+        return builder().segmentState(state).causeOfFailure(fail).build();
     }
 
 }

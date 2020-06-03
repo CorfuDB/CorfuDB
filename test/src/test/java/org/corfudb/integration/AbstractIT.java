@@ -29,6 +29,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -269,6 +270,20 @@ public class AbstractIT extends AbstractCorfuTest {
         return pid;
     }
 
+    /**
+     * Creates a message of specified size in bytes.
+     *
+     * @param msgSize
+     * @return
+     */
+    public static String createStringOfSize(int msgSize) {
+        StringBuilder sb = new StringBuilder(msgSize);
+        for (int i = 0; i < msgSize; i++) {
+            sb.append('a');
+        }
+        return sb.toString();
+    }
+
     public static CorfuRuntime createDefaultRuntime() {
         return createRuntime(DEFAULT_ENDPOINT);
     }
@@ -287,6 +302,15 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setPort(DEFAULT_PORT)
                 .setSingle(true)
                 .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, DEFAULT_PORT))
+                .runServer();
+    }
+
+    public static Process runPersistentServer(String address, int port, boolean singleNode) throws IOException {
+        return new CorfuServerRunner()
+                .setHost(address)
+                .setPort(port)
+                .setLogPath(getCorfuServerLogPath(address, port))
+                .setSingle(singleNode)
                 .runServer();
     }
 
@@ -361,6 +385,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
         private boolean single = true;
         private boolean tlsEnabled = false;
+        private boolean autoCommit = false;
         private String keyStore = null;
         private String keyStorePassword = null;
         private String logLevel = "INFO";
@@ -370,7 +395,6 @@ public class AbstractIT extends AbstractCorfuTest {
         private String trustStorePassword = null;
         private String compressionCodec = null;
 
-
         /**
          * Create a command line string according to the properties set for a Corfu Server
          * Instance
@@ -379,13 +403,19 @@ public class AbstractIT extends AbstractCorfuTest {
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
             command.append("-a ").append(host);
+
             if (logPath != null) {
                 command.append(" -l ").append(logPath);
             } else {
                 command.append(" -m");
             }
+
             if (single) {
                 command.append(" -s");
+            }
+
+            if (!autoCommit) {
+                command.append(" -A");
             }
 
             if (logSizeLimitPercentage != null) {

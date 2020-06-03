@@ -7,12 +7,14 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
+import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentRange;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
 import org.corfudb.runtime.view.LayoutBuilder;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.IntPredicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -168,7 +170,7 @@ public class RedundancyCalculator {
     }
 
     /**
-     * Given a layout, and global trim mark creates an initial list
+     * Given a layout, and a global trim mark, creates an initial list
      * of non-empty and bounded transfer segments.
      *
      * @param layout   A current layout.
@@ -192,7 +194,6 @@ public class RedundancyCalculator {
                         TransferSegmentStatus restored = TransferSegmentStatus
                                 .builder()
                                 .segmentState(RESTORED)
-                                .totalTransferred(segmentEnd - segmentStart + 1L)
                                 .build();
 
                         return TransferSegment
@@ -200,12 +201,12 @@ public class RedundancyCalculator {
                                 .startAddress(segmentStart)
                                 .endAddress(segmentEnd)
                                 .status(restored)
+                                .logUnitServers(ImmutableList.copyOf(segment.getAllLogServers()))
                                 .build();
                     } else {
                         TransferSegmentStatus notTransferred = TransferSegmentStatus
                                 .builder()
                                 .segmentState(NOT_TRANSFERRED)
-                                .totalTransferred(0L)
                                 .build();
 
                         return TransferSegment
@@ -213,10 +214,18 @@ public class RedundancyCalculator {
                                 .startAddress(segmentStart)
                                 .endAddress(segmentEnd)
                                 .status(notTransferred)
+                                .logUnitServers(ImmutableList.copyOf(segment.getAllLogServers()))
                                 .build();
                     }
 
                 })
                 .collect(ImmutableList.toImmutableList());
     }
+
+    public ImmutableList<TransferSegmentRange> prepareTransferWorkload(ImmutableList<TransferSegment> transferSegmentList,
+                                                                              Optional<Long> committedTail) {
+        return transferSegmentList.stream().map(segment -> segment.toTransferSegmentRange(committedTail))
+                .collect(ImmutableList.toImmutableList());
+    }
+
 }

@@ -151,13 +151,13 @@ public class ManagementServer extends AbstractServer {
                 .nodes(ImmutableMap.of())
                 .unresponsiveNodes(ImmutableList.of())
                 .build();
-        clusterContext =  ClusterStateContext.builder()
+        clusterContext = ClusterStateContext.builder()
                 .clusterView(new AtomicReference<>(defaultView))
                 .build();
 
         Layout managementLayout = serverContext.copyManagementLayout();
         managementAgent = new ManagementAgent(
-                corfuRuntime, serverContext, clusterContext, failureDetector,managementLayout
+                corfuRuntime, serverContext, clusterContext, failureDetector, managementLayout
         );
 
         orchestrator = new Orchestrator(corfuRuntime, serverContext);

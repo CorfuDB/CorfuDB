@@ -15,8 +15,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Function;
 import java.util.function.Supplier;
+
+import static java.util.function.Function.identity;
 
 /**
  * Created by mwei on 9/15/15.
@@ -133,7 +134,7 @@ public final class CFUtils {
      */
     public static <T> CompletableFuture<T> within(CompletableFuture<T> future, Duration duration) {
         final CompletableFuture<T> timeout = failAfter(duration);
-        return future.applyToEither(timeout, Function.identity());
+        return future.applyToEither(timeout, identity());
     }
 
     public static <T> CompletableFuture<Void> allOf(Collection<CompletableFuture<T>> futures) {
