@@ -119,6 +119,7 @@ public class SourceForwardingDataSender implements DataSender {
     public void onError(LogReplicationError error) {
         errorCount++;
         errors.setValue(errorCount);
+        System.out.print("\nSourceFowardingDataSender got an error " + error);
     }
 
     /*

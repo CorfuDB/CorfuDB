@@ -12,7 +12,7 @@ import java.util.ArrayList;
  * is quite big.
  */
 @Slf4j
-public class LogReplicationSenderQueue {
+public class LogReplicationPendingEntryQueue {
 
     /*
      * The max number of the entries that the queue can contain
@@ -26,7 +26,7 @@ public class LogReplicationSenderQueue {
     private ArrayList<LogReplicationPendingEntry> list;
 
 
-    public LogReplicationSenderQueue(int maxSize) {
+    public LogReplicationPendingEntryQueue(int maxSize) {
         this.maxSize = maxSize;
         list = new ArrayList<>();
     }
@@ -44,7 +44,8 @@ public class LogReplicationSenderQueue {
     }
 
     public boolean isFull() {
-        return (list.size() == maxSize);
+        //System.out.print("\nsize " + list.size() +" maxSize " + maxSize);
+        return (list.size() >= maxSize);
     }
 
     public void clear() {
@@ -57,11 +58,17 @@ public class LogReplicationSenderQueue {
      */
     void evictAccordingToTimestamp(long address) {
         log.trace("evict address " + address);
-        list.removeIf(a -> (a.data.getMetadata().getTimestamp() <= address));
+        list.removeIf(a -> (a.getData().getMetadata().getTimestamp() <= address));
     }
 
-    void append(LogReplicationEntry data, long timer) {
-        LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data, timer);
+    void evictAccordingToSeqNum(long seqNum) {
+        log.trace("evict seqNum " + seqNum);
+        list.removeIf(a -> (a.getData().getMetadata().getSnapshotSyncSeqNum() <= seqNum));
+    }
+
+    void append(LogReplicationEntry data) {
+        LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data);
         list.add(entry);
     }
+
 }

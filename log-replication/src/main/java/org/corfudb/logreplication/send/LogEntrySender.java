@@ -14,7 +14,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import java.util.UUID;
-import java.util.concurrent.TimeoutException;
 
 /**
  * This class is responsible of managing the transmission of log entries,
@@ -36,12 +35,10 @@ public class LogEntrySender {
      */
     private LogEntryReader logEntryReader;
 
-    private DataSender dataSender;
-
    /*
     * Implementation of buffering messages and sending/resending messages
     */
-    private LogReplicationSenderBuffer dataSenderBuffer;
+    private SenderBufferManager dataSenderBufferManager;
 
     /*
      * Log Replication FSM (to insert internal events)
@@ -72,8 +69,7 @@ public class LogEntrySender {
 
         this.runtime = runtime;
         this.logEntryReader = logEntryReader;
-        this.dataSender = dataSender;
-        this.dataSenderBuffer = new LogReplicationSenderBuffer(dataSender);
+        this.dataSenderBufferManager = new LogEntrySenderBufferManager(dataSender);
         this.logReplicationFSM = logReplicationFSM;
     }
 
@@ -84,30 +80,10 @@ public class LogEntrySender {
         taskActive = true;
 
         try {
-            // If there are pending entries in the buffer, resend them.
-            if (!dataSenderBuffer.getPendingEntries().isEmpty()) {
-                boolean resendForce = false;
-                try {
-                    LogReplicationEntry ack = dataSenderBuffer.processAcks();
-
-                    // Enforce a Log Entry Sync Replicated (ack) event, which will update metadata information
-                    // Todo (Consider directly updating Corfu Metadata information here, without going through FSM)
-                    logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
-                                new LogReplicationEventMetadata(ack.getMetadata().getSyncRequestId(), ack.getMetadata().getTimestamp())));
-
-                } catch (TimeoutException te) {
-                    // There is a TimeoutException while trying to access the future values.
-                    // The timeout will enforce a resend.
-                    resendForce = true;
-                    log.warn("Log Entry ACK timed out, pending acks for {}", dataSenderBuffer.getPendingLogEntriesAcked().keySet());
-
-                } catch (Exception e) {
-                    log.error("Exception caught while processing log entry ACKs.", e);
-                    cancelLogEntrySync(LogReplicationError.UNKNOWN, LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
-                    return;
-                }
-
-                dataSenderBuffer.resend(resendForce);
+            LogReplicationEntry ack = dataSenderBufferManager.resend();
+            if (ack != null) {
+                logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
+                        new LogReplicationEventMetadata(ack.getMetadata().getSyncRequestId(), ack.getMetadata().getTimestamp())));
             }
         } catch (LogEntrySyncTimeoutException te) {
             log.error("LogEntrySyncTimeoutException after several retries.", te);
@@ -115,7 +91,7 @@ public class LogEntrySender {
             return;
         }
 
-        while (taskActive && !dataSenderBuffer.getPendingEntries().isFull()) {
+        while (taskActive && !dataSenderBufferManager.getPendingEntries().isFull()) {
             LogReplicationEntry message;
 
             // Read and Send Log Entries
@@ -123,7 +99,7 @@ public class LogEntrySender {
                 message = logEntryReader.read(logEntrySyncEventId);
 
                 if (message != null) {
-                    dataSenderBuffer.sendWithBuffering(message);
+                    dataSenderBufferManager.sendWithBuffering(message);
                 } else {
                     // If no message is returned we can break out and enqueue a CONTINUE, so other processes can
                     // take over the shared thread pool of the state machine
@@ -157,13 +133,12 @@ public class LogEntrySender {
     }
 
     private void cancelLogEntrySync(LogReplicationError error, LogReplicationEventType transition, UUID logEntrySyncEventId) {
-        dataSender.onError(error);
+        dataSenderBufferManager.onError(error);
         logReplicationFSM.input(new LogReplicationEvent(transition, new LogReplicationEventMetadata(logEntrySyncEventId)));
-
     }
 
     public void updateAckTs(long ts) {
-        dataSenderBuffer.updateAckTs(ts);
+        dataSenderBufferManager.updateAckTs(ts);
     }
 
     /**
@@ -173,6 +148,6 @@ public class LogEntrySender {
         taskActive = true;
         log.info("Reset baseSnapshot %s ackTs %s", lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         logEntryReader.reset(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
-        dataSenderBuffer.reset(lastAckedTimestamp);
+        dataSenderBufferManager.reset(lastAckedTimestamp);
     }
 }

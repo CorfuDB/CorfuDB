@@ -66,7 +66,7 @@ public class LogReplicationEntryMetadata {
 
     // Constructor used for snapshot sync
     public LogReplicationEntryMetadata(MessageType type, long epoch,  UUID syncRequestId, long entryTimeStamp, long snapshotTimestamp, UUID snapshotRequestId) {
-        this(type, epoch, syncRequestId,  entryTimeStamp, Address.NON_EXIST, snapshotTimestamp, Address.NON_EXIST);
+        this(type, epoch, syncRequestId,  entryTimeStamp, Address.NON_ADDRESS, snapshotTimestamp, Address.NON_ADDRESS);
         this.syncRequestId = snapshotRequestId;
     }
 
