@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.transport.logreplication;
 
 import com.google.common.collect.ImmutableList;
 import io.netty.channel.ChannelHandlerContext;
@@ -6,6 +6,11 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.BaseServer;
+import org.corfudb.infrastructure.IServerRouter;
+import org.corfudb.infrastructure.NettyServerRouter;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -13,6 +18,7 @@ import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.transport.server.IServerChannelAdapter;
 import org.corfudb.utils.common.CorfuMessageConverter;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
