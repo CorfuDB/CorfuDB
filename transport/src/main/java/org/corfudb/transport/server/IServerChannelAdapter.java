@@ -1,7 +1,8 @@
-package org.corfudb.infrastructure;
+package org.corfudb.transport.server;
 
 import lombok.Getter;
 import org.corfudb.runtime.Messages.CorfuMessage;
+import org.corfudb.transport.logreplication.LogReplicationServerRouter;
 
 import java.util.concurrent.CompletableFuture;
 
