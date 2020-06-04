@@ -500,6 +500,20 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Open Streams on Source
         openStreams(srcCorfuTables, srcDataRuntime, NUM_STREAMS);
 
+        // Open a dump table
+        CorfuTable<Long, Long> dumpDataTable = srcDataRuntime.getObjectsView()
+                .build()
+                .setStreamName("dumpData")
+                .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {
+                })
+                .setSerializer(Serializers.PRIMITIVE)
+                .open();
+
+        // Generate some dump data to enfore an empty snapshot transfer
+        for (long i = 0; i < NUM_KEYS; i++) {
+            dumpDataTable.put(i, i);
+        }
+
         // Verify no data on source
         System.out.println("****** Verify No Data in Source Site");
         verifyNoData(srcCorfuTables);
@@ -793,6 +807,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         testConfig.setWaitOn(WAIT.ON_ACK);
         startLogEntrySync(crossTables, WAIT.ON_ACK);
 
+        expectedAckTimestamp = Long.MAX_VALUE;
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
         // Because t2 is not specified as a replicated table, we should not see it on the destination
@@ -924,8 +939,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Wait until an error occurs and drop snapshot sync request or we'll get into an infinite loop
         // as the snapshot sync will always fail due to the log being trimmed with no checkpoint.
         expectedErrors = 1;
-        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), WAIT.ON_ERROR, true,
-                new DefaultDataControlConfig(true, NUM_KEYS_LARGE));
+        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), WAIT.ON_ERROR, true);
 
         // Verify its in require snapshot sync state and that data was not completely transferred to destination
 //        checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
@@ -960,8 +974,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedSinkReceivedMessages = RX_MESSAGES_LIMIT;
 
 
-        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), WAIT.ON_SINK_RECEIVE,
-                false, new DefaultDataControlConfig(false, NUM_KEYS_LARGE));
+        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), WAIT.ON_SINK_RECEIVE, false);
 
         System.out.println("****** Trim log, will trigger a full snapshot sync");
 
@@ -1008,8 +1021,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // then enforce a trim on the log.
         System.out.println("****** Start Log Entry Sync");
         expectedAckMessages = num_keys;
-        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), WAIT.ON_ACK,
-                false, new DefaultDataControlConfig(true, NUM_KEYS_LARGE));
+        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), WAIT.ON_ACK, false);
 
         System.out.println("****** Total " + num_keys + " ACK messages received. Verify State.");
 
@@ -1128,6 +1140,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         return logReplicationSourceManager;
     }
 
+    private LogReplicationFSM startLogEntrySync(Set<String> tablesToReplicate) throws Exception {
+        testConfig.setWaitOn(WAIT.ON_ACK);
+        return startLogEntrySync(tablesToReplicate, WAIT.ON_ACK);
+    }
+
     /**
      * Start Log Entry Sync
      *
@@ -1136,26 +1153,18 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * @throws Exception
      */
     private LogReplicationFSM startLogEntrySync(Set<String> tablesToReplicate, WAIT waitCondition) throws Exception {
-        return startLogEntrySync(tablesToReplicate, waitCondition, true, defaultDataControlConfig);
+        return startLogEntrySync(tablesToReplicate, waitCondition, true);
     }
-
-    private LogReplicationFSM startLogEntrySync(Set<String> tablesToReplicate) throws Exception {
-        testConfig.setWaitOn(WAIT.ON_ACK);
-        return startLogEntrySync(tablesToReplicate, WAIT.ON_ACK);
-    }
-
 
     private LogReplicationFSM startLogEntrySync(Set<String> tablesToReplicate, WAIT waitCondition,
-                                                boolean injectTxData,
-                                                DefaultDataControlConfig dataControlConfig) throws Exception {
+                                                boolean injectTxData) throws Exception {
         HashSet<WAIT> conditions = new HashSet<>();
         conditions.add(waitCondition);
-        return startLogEntrySync(tablesToReplicate, conditions, injectTxData, dataControlConfig);
+        return startLogEntrySync(tablesToReplicate, conditions, injectTxData);
     }
 
     private LogReplicationFSM startLogEntrySync(Set<String> tablesToReplicate, Set<WAIT> waitConditions,
-                                                boolean injectTxData,
-                                                DefaultDataControlConfig dataControlConfig) throws Exception {
+                                                boolean injectTxData) throws Exception {
 
         LogReplicationSourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
                 waitConditions);
@@ -1170,9 +1179,16 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             startTx();
         }
 
+        blockUntilExpectedAckTs.acquire();
+        expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
+
         // Block until the snapshot sync completes == one ACK is received by the source manager, or an error occurs
         System.out.println("****** Wait until the wait condition is met");
-        blockUntilExpectedValueReached.acquire();
+        if (waitConditions.contains(WAIT.ON_ERROR)) {
+            blockUntilExpectedValueReached.acquire();
+        } else if (waitConditions.contains(WAIT.ON_ACK)) {
+            blockUntilExpectedAckTs.acquire();
+        }
 
         return logReplicationSourceManager.getLogReplicationFSM();
     }
@@ -1264,7 +1280,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private void verifyExpectedValue(long expectedValue, long currentValue) {
         // If expected value, release semaphore / unblock the wait
-        //System.out.println("expected " + expectedValue + " currentValue " + currentValue);
+        System.out.print("\nexpected " + expectedValue + " currentValue " + currentValue);
         if (expectedValue == currentValue) {
             if (expectedAckMsgType != null) {
                 blockUntilExpectedValueReached.release();

@@ -156,7 +156,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
 
         // Update the siteEpoch metadata.
-        replicationServerNode.getLogReplicationServer().getSinkManager().setSiteInfo(nodeInfo.getRoleType() == SiteStatus.ACTIVE ? true : false,
+        replicationServerNode.getLogReplicationServer().getSinkManager().updateSiteConfigID(nodeInfo.getRoleType() == SiteStatus.ACTIVE ? true : false,
                 replicationManager.getCrossSiteConfig().getSiteConfigID());
 
         log.debug("persit new siteConfigID " + replicationManager.getCrossSiteConfig().getSiteConfigID() + " status " +

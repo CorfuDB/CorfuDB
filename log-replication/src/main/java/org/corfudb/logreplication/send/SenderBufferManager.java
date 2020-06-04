@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.DefaultSiteConfig;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.view.Address;
@@ -25,26 +26,28 @@ public abstract class SenderBufferManager {
     /*
      * The location of the file to read buffer related configuration.
      */
-    private static final String config_file = "/config/corfu/corfu_replication_config.properties";
-    private static final int DEFAULT_READER_QUEUE_SIZE = 1;
-    private static final int DEFAULT_RESENT_TIMER = 1000;
-    private static final int DEFAULT_MAX_RETRY = 5;
-    private static final int DEFAULT_TIMEOUT = 1000;
+    public static final String config_file = "/config/corfu/corfu_replication_config.properties";
 
     /*
      * The max buffer size
      */
-    private int readerBatchSize = DEFAULT_READER_QUEUE_SIZE;
+    private int readerBatchSize;
 
     /*
      * The timer to resend an entry. This is the roundtrip time between sender/receiver.
      */
-    private int msgTimer = DEFAULT_RESENT_TIMER;
+    private int msgTimer;
 
     /*
      * The max number of retry for sending an entry.
      */
-    private int maxRetry = DEFAULT_MAX_RETRY;
+    private int maxRetry;
+
+
+    /*
+     *
+     */
+    private int timeoutTimer;
 
     /*
      * wait for an Ack or not
@@ -78,6 +81,12 @@ public abstract class SenderBufferManager {
     Map<Long, CompletableFuture<LogReplicationEntry>> pendingLogEntriesAcked;
 
     public SenderBufferManager(DataSender dataSender) {
+        maxRetry = DefaultSiteConfig.getLogSenderRetryCount();
+        readerBatchSize = DefaultSiteConfig.getLogSenderBufferSize();
+        msgTimer = DefaultSiteConfig.getLogSenderResendTimer();
+        timeoutTimer = DefaultSiteConfig.getLogSenderTimeoutTimer();
+        errorOnMsgTimeout = DefaultSiteConfig.isLogSenderTimeout();
+
         readConfig();
         pendingEntries = new LogReplicationPendingEntryQueue(readerBatchSize);
         pendingLogEntriesAcked = new HashMap<>();
@@ -95,17 +104,23 @@ public abstract class SenderBufferManager {
             Properties props = new Properties();
             props.load(reader);
 
-            maxRetry = Integer.parseInt(props.getProperty("log_reader_max_retry", Integer.toString(DEFAULT_MAX_RETRY)));
-            readerBatchSize = Integer.parseInt(props.getProperty("log_reader_queue_size", Integer.toString(DEFAULT_READER_QUEUE_SIZE)));
-            msgTimer = Integer.parseInt(props.getProperty("log_reader_resend_timer", Integer.toString(DEFAULT_RESENT_TIMER)));
-            errorOnMsgTimeout = Boolean.parseBoolean(props.getProperty("log_reader_error_on_message_timeout", "true"));
+            maxRetry = Integer.parseInt(props.getProperty("log_reader_max_retry", Integer.toString(maxRetry)));
+            readerBatchSize = Integer.parseInt(props.getProperty("log_reader_queue_size"));
+            msgTimer = Integer.parseInt(props.getProperty("log_reader_resend_timer", Integer.toString(msgTimer)));
+            timeoutTimer = Integer.parseInt(props.getProperty("log_reader_resend_timeout", Integer.toString(timeoutTimer)));
+            errorOnMsgTimeout = Boolean.parseBoolean(props.getProperty("log_reader_error_on_message_timeout",
+                    Boolean.toString(errorOnMsgTimeout)));
             reader.close();
 
         } catch (Exception e) {
             log.warn("The config file is not available {} , will use the default vaules for config.", e.getCause());
+
         } finally {
-            log.info("log logreader config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",
+            log.info("Sender Buffer config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",
                     maxRetry, readerBatchSize, msgTimer, errorOnMsgTimeout);
+
+            System.out.print("\nSender Buffer config reader_queue_size {} maxRetry {} entry_resend_timer {} waitAck {} " +
+                    readerBatchSize + " " + maxRetry + " " + msgTimer + " " + errorOnMsgTimeout);
         }
     }
 
@@ -118,7 +133,7 @@ public abstract class SenderBufferManager {
      */
     public LogReplicationEntry processAcks() throws InterruptedException, ExecutionException, TimeoutException {
         LogReplicationEntry ack = (LogReplicationEntry) CompletableFuture.anyOf(pendingLogEntriesAcked
-                .values().toArray(new CompletableFuture<?>[pendingLogEntriesAcked.size()])).get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                .values().toArray(new CompletableFuture<?>[pendingLogEntriesAcked.size()])).get(timeoutTimer, TimeUnit.MILLISECONDS);
         System.out.print("\nReceived Log Entry ack " + ack.getMetadata());
 
         updateAckTs(ack);
@@ -138,7 +153,7 @@ public abstract class SenderBufferManager {
 
         while (retry++ < maxRetry && result == false) {
             try {
-                cf.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                cf.get(timeoutTimer, TimeUnit.MILLISECONDS);
                 result = true;
             } catch (Exception e) {
                 log.warn("Caught an exception", e);

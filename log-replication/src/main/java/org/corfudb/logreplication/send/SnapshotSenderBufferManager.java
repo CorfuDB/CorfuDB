@@ -22,6 +22,7 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
         pendingLogEntriesAcked = pendingLogEntriesAcked.entrySet().stream()
                 .filter(entry -> entry.getKey() > ackTs)
                 .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
+        System.out.print("\nSnapshot Sender received ack " + newAck);
     }
 
     @Override
