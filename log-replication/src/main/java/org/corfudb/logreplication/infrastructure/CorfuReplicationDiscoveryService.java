@@ -37,7 +37,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private final CorfuInterClusterReplicationServerNode replicationServerNode;
 
-
     /**
      * Lock-related configuration parameters
      */
@@ -56,12 +55,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     @Getter
     private CorfuReplicationSiteManagerAdapter siteManager;
 
-
     /**
      * the current node's endpoint
      */
     private String localEndpoint;
-
 
     /**
      * the node's information
@@ -209,6 +206,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     public void processSiteFlip(CrossSiteConfiguration newConfig) {
         stopLogReplication();
+
+        //TODO pankti: read the configuration again and refresh the LogReplicationConfig object
+
         replicationManager.setCrossSiteConfig(newConfig);
 
         boolean leader = nodeInfo.isLeader();

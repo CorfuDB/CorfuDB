@@ -5,8 +5,10 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.logreplication.utils.LogReplicationStreamNameTableManager;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -16,6 +18,8 @@ import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.corfudb.transport.logreplication.LogReplicationServerRouter.PLUGIN_CONFIG_FILE_PATH;
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
@@ -242,10 +246,25 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             try {
+                // TODO pankti: Check if version does not match.  If if does not, create an event for site discovery to
+                // do a snapshot sync.
+
+                String corfuPort = serverContext.getLocalEndpoint()
+                    .equals("localhost:9020") ? ":9001" : ":9000";
+                LogReplicationStreamNameTableManager replicationStreamNameTableManager =
+                    new LogReplicationStreamNameTableManager(corfuPort);
+
+                // Initialize the LogReplicationConfig with site ids and tables to replicate
+                Set<String> streamsToReplicate =
+                    replicationStreamNameTableManager.getStreamsToReplicate();
+                LogReplicationConfig logReplicationConfig =
+                    new LogReplicationConfig(streamsToReplicate,
+                        UUID.randomUUID(), UUID.randomUUID());
+
                 // Start LogReplicationDiscovery Service, responsible for
                 // acquiring lock, retrieving Site Manager Info and processing this info
                 // so this node is initialized as Source (sender) or Sink (receiver)
-                activeServer = new CorfuInterClusterReplicationServerNode(serverContext);
+                activeServer = new CorfuInterClusterReplicationServerNode(serverContext, logReplicationConfig);
 
                 replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, activeServer, siteManagerAdapter);
 
