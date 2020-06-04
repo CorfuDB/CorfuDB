@@ -28,7 +28,7 @@
                             <goal>run</goal>
                         </goals>
                         <configuration>
-                            <protocVersion>3.1.0</protocVersion>
+                            <protocVersion>3.6.1</protocVersion>
                             <includeStdTypes>true</includeStdTypes>
                             <addProtoSources>inputs</addProtoSources>
                             <includeDirectories>
@@ -137,7 +137,7 @@
         <dependency>
             <groupId>org.rocksdb</groupId>
             <artifactId>rocksdbjni</artifactId>
-            <version>6.2.4</version>
+            <version>6.8.1</version>
         </dependency>
         <dependency>
             <groupId>org.roaringbitmap</groupId>

@@ -5,16 +5,18 @@ import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 import org.rocksdb.RocksIteratorInterface;
 
+import java.nio.ByteBuffer;
+
 /**
- *
  * A wrapper class that makes a access to the RocksIterator safe: the rocks library does some checks but they
  * are enforced via assert, but assert checking is disabled on many jvms by default, hence the explicit checking.
- *
+ * <p>
  * Created by Maithem on 1/24/20.
  */
 public class WrappedRocksIterator implements RocksIteratorInterface {
 
     private final RocksIterator iterator;
+
     public WrappedRocksIterator(RocksIterator iterator) {
         this.iterator = iterator;
     }
@@ -35,7 +37,7 @@ public class WrappedRocksIterator implements RocksIteratorInterface {
     @Override
     public boolean isValid() {
         checkHandle();
-        boolean res =  iterator.isValid();
+        boolean res = iterator.isValid();
         status();
         return res;
     }
@@ -66,24 +68,38 @@ public class WrappedRocksIterator implements RocksIteratorInterface {
         throw new UnsupportedOperationException("seek");
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void seek(ByteBuffer target) {
+        throw new UnsupportedOperationException("seek");
+    }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    public void seekForPrev(byte[] target){
+    public void seekForPrev(byte[] target) {
         throw new UnsupportedOperationException("seekForPrev");
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void seekForPrev(ByteBuffer target) {
+        throw new UnsupportedOperationException("seekForPrev");
+    }
 
     /**
      * {@inheritDoc}
      */
     @Override
     public void next() {
-       checkHandle();
-       iterator.next();
-       status();
+        checkHandle();
+        iterator.next();
+        status();
     }
 
     /**
@@ -113,7 +129,6 @@ public class WrappedRocksIterator implements RocksIteratorInterface {
         status();
         return res;
     }
-
 
     /**
      * {@inheritDoc}
