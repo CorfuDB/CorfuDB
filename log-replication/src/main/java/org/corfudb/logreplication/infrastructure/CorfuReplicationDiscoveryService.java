@@ -37,7 +37,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private final CorfuInterClusterReplicationServerNode replicationServerNode;
 
-
     /**
      * Lock-related configuration parameters
      */
@@ -56,12 +55,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     @Getter
     private CorfuReplicationSiteManagerAdapter siteManager;
 
-
     /**
      * the current node's endpoint
      */
     private String localEndpoint;
-
 
     /**
      * the node's information

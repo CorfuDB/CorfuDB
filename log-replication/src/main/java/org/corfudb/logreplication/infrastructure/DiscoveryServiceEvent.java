@@ -13,7 +13,6 @@ public class DiscoveryServiceEvent {
     @Setter
     String siteID;
 
-
     public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
        this.type = type;
     }
@@ -22,8 +21,6 @@ public class DiscoveryServiceEvent {
         new DiscoveryServiceEvent(type);
         this.siteID = siteID;
     }
-
-
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, LogReplicationSiteInfo.SiteConfigurationMsg siteConfigMsg) {
         this.type = type;
@@ -37,9 +34,10 @@ public class DiscoveryServiceEvent {
         ConnectionLoss( "ConnectionLoss");
 
         @Getter
-        String val;
-        DiscoveryServiceEventType(String newVal) {
-            val = newVal;
+        String description;
+
+        DiscoveryServiceEventType(String description) {
+            this.description = description;
         }
     }
 }
