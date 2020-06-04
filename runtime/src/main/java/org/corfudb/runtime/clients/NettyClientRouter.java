@@ -459,8 +459,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         // Generate a timeout future, which will complete exceptionally
         // if the main future is not completed.
-        final CompletableFuture<T> cfTimeout =
-            CFUtils.within(cfBenchmarked, timeoutResponse);
+        CompletableFuture<T> cfTimeout = CFUtils.within(cfBenchmarked, timeoutResponse);
         cfTimeout.exceptionally(e -> {
             // CFUtils.within() can wrap different kinds of exceptions in
             // CompletionException, just dealing with TimeoutException here since

@@ -35,7 +35,11 @@ abstract class AbstractClient implements IClient {
     }
 
     <T> CompletableFuture<T> sendMessageWithFuture(CorfuMsg msg) {
-        return router.sendMessageAndGetCompletable(
-                msg.setEpoch(epoch).setClusterID(clusterID).setPriorityLevel(priorityLevel));
+        CorfuMsg message = msg
+                .setEpoch(epoch)
+                .setClusterID(clusterID)
+                .setPriorityLevel(priorityLevel);
+
+        return router.sendMessageAndGetCompletable(message);
     }
 }

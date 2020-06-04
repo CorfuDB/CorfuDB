@@ -8,10 +8,10 @@ import lombok.Getter;
 public class QuorumUnreachableException extends RuntimeException {
 
     @Getter
-    public int reachable;
+    public final int reachable;
 
     @Getter
-    public int required;
+    public final int required;
 
     /**
      * Constructor.

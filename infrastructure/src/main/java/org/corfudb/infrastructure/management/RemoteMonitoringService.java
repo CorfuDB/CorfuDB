@@ -3,31 +3,23 @@ package org.corfudb.infrastructure.management;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.management.failuredetector.ClusterGraph;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
-import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics.FailureDetectorAction;
-import org.corfudb.protocols.wireprotocol.failuredetector.NodeRank;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -320,62 +312,21 @@ public class RemoteMonitoringService implements MonitoringService {
         }
 
         return CompletableFuture.supplyAsync(() -> {
-
-            // Corrects out of phase epoch issues if present in the report. This method
-            // performs re-sealing of all nodes if required and catchup of a layout server to
-            // the current state.
-            final Layout latestLayout = WrongEpochHandler.builder()
-                    .serverContext(serverContext)
-                    .runtimeSingletonResource(runtimeSingletonResource)
-                    .build()
-                    .correctWrongEpochs(pollReport, ourLayout);
-
             FailureHandler fdHandler = FailureHandler.builder()
                     .serverContext(serverContext)
                     .runtimeSingletonResource(runtimeSingletonResource)
                     .advisor(advisor)
                     .build();
 
-            Result<DetectorTask, RuntimeException> failure = Result.of(() -> {
-
-                // This is just an optimization in case we receive a WrongEpochException
-                // while one of the other management clients is trying to move to a new layout.
-                // This check is merely trying to minimize the scenario in which we end up
-                // filling the slot with an outdated layout.
-                if (!pollReport.areAllResponsiveServersSealed()) {
-                    log.debug("All responsive servers have not been sealed yet. Skipping.");
-                    return DetectorTask.COMPLETED;
-                }
-
-                Optional<Long> unfilledSlot = pollReport.getLayoutSlotUnFilled(latestLayout);
-                // If the latest slot has not been filled, fill it with the previous known layout.
-                if (unfilledSlot.isPresent()) {
-                    log.info("Trying to fill an unfilled slot {}. PollReport: {}",
-                            unfilledSlot.get(), pollReport);
-                    fdHandler.detectFailure(latestLayout, Collections.emptySet(), pollReport).join();
-                    return DetectorTask.COMPLETED;
-                }
-
-                if (!pollReport.getWrongEpochs().isEmpty()) {
-                    log.debug("Wait for next iteration. Poll report contains wrong epochs: {}",
-                            pollReport.getWrongEpochs()
-                    );
-                    return DetectorTask.COMPLETED;
-                }
-
-                // If layout was updated by correcting wrong epochs,
-                // we can't continue with failure detection,
-                // as the cluster state have changed.
-                if (!latestLayout.equals(ourLayout)) {
-                    log.warn("Layout was updated by correcting wrong epochs. " +
-                            "Cancel current round of failure detection.");
-                    return DetectorTask.COMPLETED;
-                }
-
-                return DetectorTask.NOT_COMPLETED;
-            });
-
-            failure.ifError(err -> log.error("Can't fill slot. Poll report: {}", pollReport, err));
+            // Corrects out of phase epoch issues if present in the report. This method
+            // performs re-sealing of all nodes if required and catchup of a layout server to
+            // the current state.
+            Result<DetectorTask, RuntimeException> failure = WrongEpochHandler.builder()
+                    .serverContext(serverContext)
+                    .runtimeSingletonResource(runtimeSingletonResource)
+                    .fdHandler(fdHandler)
+                    .build()
+                    .correctWrongEpochs(pollReport, ourLayout);
 
             if (failure.isValue() && failure.get() == DetectorTask.COMPLETED) {
                 return DetectorTask.COMPLETED;

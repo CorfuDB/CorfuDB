@@ -274,14 +274,16 @@ public class FailureDetector {
             Set<String> allServers, Map<String, IClientRouter> clientRouters, long epoch, UUID clusterId) {
         // Poll servers for health.  All ping activity will happen in the background.
         Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
-        allServers.forEach(s -> {
+        allServers.forEach(server -> {
             try {
-                clusterState.put(s, new ManagementClient(clientRouters.get(s), epoch, clusterId)
-                        .sendNodeStateRequest());
+                ManagementClient client = new ManagementClient(clientRouters.get(server), epoch, clusterId);
+                //I can measure how much time it takes to get a responce
+                //??? how we can use that information?
+                clusterState.put(server, client.sendNodeStateRequest());
             } catch (Exception e) {
                 CompletableFuture<NodeState> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
-                clusterState.put(s, cf);
+                clusterState.put(server, cf);
             }
         });
 

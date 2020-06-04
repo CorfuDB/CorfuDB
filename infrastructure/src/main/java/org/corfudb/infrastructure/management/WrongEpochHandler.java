@@ -3,13 +3,17 @@ package org.corfudb.infrastructure.management;
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.result.Result;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.management.RemoteMonitoringService.DetectorTask;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LayoutClient;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeSet;
@@ -27,25 +31,29 @@ public class WrongEpochHandler {
     @NonNull
     private final SingletonResource<CorfuRuntime> runtimeSingletonResource;
 
+    @NonNull
+    private final FailureHandler fdHandler;
+
     /**
      * Corrects out of phase epochs by resealing the servers.
      * This would also need to update trailing layout servers.
      *
      * @param pollReport Poll Report from running the failure detection policy.
      */
-    public Layout correctWrongEpochs(PollReport pollReport, Layout layout) {
+    public Result<DetectorTask, RuntimeException> correctWrongEpochs(PollReport pollReport, Layout ourLayout) {
 
         Map<String, Long> wrongEpochs = pollReport.getWrongEpochs();
         if (wrongEpochs.isEmpty()) {
-            return layout;
+            return Result.ok(DetectorTask.SKIPPED);
         }
 
         log.debug("Correct wrong epochs. Poll report: {}", pollReport);
 
+        Layout updatedLayout;
         try {
-            final Layout oldLayout = layout;
+            final Layout oldLayout = ourLayout;
             // Query all layout servers to get quorum Layout.
-            Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = layout
+            Map<String, CompletableFuture<Layout>> layoutCompletableFutureMap = ourLayout
                     .getLayoutServers()
                     .stream()
                     .collect(Collectors.toMap(Function.identity(),
@@ -55,30 +63,73 @@ public class WrongEpochHandler {
             // Retrieve the correct layout from quorum of members to reseal servers.
             // If we are unable to reach a consensus from a quorum we get an exception and
             // abort the epoch correction phase.
-            Optional<Layout> latestLayout = fetchLatestLayout(layoutCompletableFutureMap);
+            Optional<Layout> fetchedLayout = fetchLatestLayout(layoutCompletableFutureMap);
 
-            if (!latestLayout.isPresent()) {
+            if (!fetchedLayout.isPresent()) {
                 log.error("Can't get a layout from any server in the cluster. Layout servers: {}, wrong epochs: {}",
-                        layout.getLayoutServers(), wrongEpochs
+                        ourLayout.getLayoutServers(), wrongEpochs
                 );
                 throw new IllegalStateException("Error in correcting server epochs. Local node is disconnected");
             }
 
             // Update local layout copy.
-            Layout newManagementLayout = serverContext.saveManagementLayout(latestLayout.get());
+            Layout newManagementLayout = serverContext.saveManagementLayout(fetchedLayout.get());
 
             sealWithLatestLayout(pollReport, newManagementLayout);
 
             // Check if any layout server has a stale layout.
             // If yes patch it (commit) with the latestLayout.
             updateTrailingLayoutServers(newManagementLayout, layoutCompletableFutureMap);
-            return newManagementLayout;
-
+            updatedLayout = newManagementLayout;
         } catch (QuorumUnreachableException e) {
             log.error("Error in correcting server epochs", e);
+            updatedLayout = serverContext.copyManagementLayout();
         }
 
-        return serverContext.copyManagementLayout();
+        final Layout latestLayout = updatedLayout;
+
+        Result<DetectorTask, RuntimeException> failure = Result.of(() -> {
+
+            // This is just an optimization in case we receive a WrongEpochException
+            // while one of the other management clients is trying to move to a new layout.
+            // This check is merely trying to minimize the scenario in which we end up
+            // filling the slot with an outdated layout.
+            if (!pollReport.areAllResponsiveServersSealed()) {
+                log.debug("All responsive servers have not been sealed yet. Skipping.");
+                return DetectorTask.COMPLETED;
+            }
+
+            Optional<Long> unfilledSlot = pollReport.getLayoutSlotUnFilled(latestLayout);
+            // If the latest slot has not been filled, fill it with the previous known layout.
+            if (unfilledSlot.isPresent()) {
+                log.info("Trying to fill an unfilled slot {}. PollReport: {}",
+                        unfilledSlot.get(), pollReport);
+                fdHandler.detectFailure(latestLayout, Collections.emptySet(), pollReport).join();
+                return DetectorTask.COMPLETED;
+            }
+
+            if (!pollReport.getWrongEpochs().isEmpty()) {
+                log.debug("Wait for next iteration. Poll report contains wrong epochs: {}",
+                        pollReport.getWrongEpochs()
+                );
+                return DetectorTask.COMPLETED;
+            }
+
+            // If layout was updated by correcting wrong epochs,
+            // we can't continue with failure detection,
+            // as the cluster state have changed.
+            if (!latestLayout.equals(ourLayout)) {
+                log.warn("Layout was updated by correcting wrong epochs. " +
+                        "Cancel current round of failure detection.");
+                return DetectorTask.COMPLETED;
+            }
+
+            return DetectorTask.NOT_COMPLETED;
+        });
+
+        failure.ifError(err -> log.error("Can't fill slot. Poll report: {}", pollReport, err));
+
+        return failure;
     }
 
     /**
@@ -161,29 +212,40 @@ public class WrongEpochHandler {
             if (layout != null && layout.equals(latestLayout)) {
                 return;
             }
-            try {
-                // Committing this layout directly to the trailing layout servers.
-                // This is safe because this layout is acquired by a quorum fetch which confirms
-                // that there was a consensus on this layout and has been committed to a quorum.
-                boolean result = getCorfuRuntime()
-                        .getLayoutView()
-                        .getRuntimeLayout(latestLayout)
-                        .getLayoutClient(layoutServer)
-                        .committed(latestLayout.getEpoch(), latestLayout)
-                        .get();
-                if (result) {
-                    log.debug("Layout Server: {} successfully patched with latest layout : {}",
-                            layoutServer, latestLayout);
-                } else {
-                    log.debug("Layout Server: {} patch with latest layout failed : {}", layoutServer, latestLayout);
-                }
-            } catch (ExecutionException ee) {
-                log.error("Updating layout servers failed due to", ee);
-            } catch (InterruptedException ie) {
-                log.error("Updating layout servers failed due to", ie);
-                throw new UnrecoverableCorfuInterruptedError(ie);
-            }
+
+            LayoutClient layoutClient = getCorfuRuntime()
+                    .getLayoutView()
+                    .getRuntimeLayout(latestLayout)
+                    .getLayoutClient(layoutServer);
+            commitNewLayout(latestLayout, layoutServer, layoutClient);
         });
+    }
+
+    /**
+     * Committing this layout directly to the trailing layout servers.
+     * This is safe because this layout is acquired by a quorum fetch which confirms
+     * that there was a consensus on this layout and has been committed to a quorum.
+     * @param latestLayout latest layout
+     * @param layoutServer layout server
+     * @param layoutClient layout client
+     */
+    private void commitNewLayout(Layout latestLayout, String layoutServer, LayoutClient layoutClient) {
+        try {
+            boolean result = layoutClient
+                    .committed(latestLayout.getEpoch(), latestLayout)
+                    .get();
+            if (result) {
+                log.debug("Layout Server: {} successfully patched with latest layout : {}",
+                        layoutServer, latestLayout);
+            } else {
+                log.debug("Layout Server: {} patch with latest layout failed : {}", layoutServer, latestLayout);
+            }
+        } catch (ExecutionException ee) {
+            log.error("Updating layout servers failed due to", ee);
+        } catch (InterruptedException ie) {
+            log.error("Updating layout servers failed due to", ie);
+            throw new UnrecoverableCorfuInterruptedError(ie);
+        }
     }
 
     /**
