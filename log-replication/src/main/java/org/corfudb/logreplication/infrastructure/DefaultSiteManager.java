@@ -124,7 +124,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         for (int i = 0; i < primaryNodeNames.size(); i++) {
             log.info("Primary Site Name {}, IpAddress {}", primaryNodeNames.get(i), primaryIpAddresses.get(i));
             LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(primaryIpAddresses.get(i),
-                    primaryLogReplicationPort, SiteStatus.ACTIVE, primaryCorfuPort);
+                    primaryLogReplicationPort, SiteStatus.ACTIVE, primaryCorfuPort, PRIMARY_SITE_NAME);
             primarySite.nodesInfo.add(nodeInfo);
         }
 
@@ -135,7 +135,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         for (int i = 0; i < standbyNodeNames.size(); i++) {
             log.info("Standby Site Name {}, IpAddress {}", standbyNodeNames.get(i), standbyIpAddresses.get(i));
             LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(standbyIpAddresses.get(i),
-                    standbyLogReplicationPort, SiteStatus.STANDBY, standbyCorfuPort);
+                    standbyLogReplicationPort, SiteStatus.STANDBY, standbyCorfuPort, STANDBY_SITE_NAME);
             standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);
         }
 

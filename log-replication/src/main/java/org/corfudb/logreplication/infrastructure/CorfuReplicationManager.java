@@ -13,7 +13,6 @@ import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
-import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -77,11 +76,13 @@ public class CorfuReplicationManager {
                         LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
                                 .localCorfuEndpoint(localNode.getCorfuEndpoint())
                                 .remoteLogReplicationServerEndpoint(nodeInfo.getEndpoint())
+                                .remoteSiteId(nodeInfo.getSiteId())
                                 .transport(transport)
+                                .localSiteId(localNode.getSiteId())
                                 .replicationConfig(replicationServerNode.getLogReplicationConfig())
                                 .build();
                         CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters);
-                        replicationRuntime.connect(discoveryService, siteInfo.siteId);
+                        replicationRuntime.connect(discoveryService);
                         nodeInfo.setRuntime(replicationRuntime);
                     }
                     LogReplicationNodeInfo leader = siteInfo.getRemoteLeader();

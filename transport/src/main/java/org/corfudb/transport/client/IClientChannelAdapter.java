@@ -22,20 +22,25 @@ public abstract class IClientChannelAdapter {
     private final String host;
 
     @Getter
+    private final String localSiteId;
+
+    @Getter
     private final LogReplicationClientRouter router;
 
-    public IClientChannelAdapter(int port, String host, @NonNull LogReplicationClientRouter router) {
+    public IClientChannelAdapter(int port, String host, String localSiteId, @NonNull LogReplicationClientRouter router) {
         this.port = port;
         this.host = host;
+        this.localSiteId = localSiteId;
         this.router = router;
     }
 
     /**
      * Send a message across the channel.
      *
+     * @param remoteSiteId unique identifier of remote site
      * @param msg corfu message to be sent
      */
-    public abstract void send(CorfuMessage msg);
+    public abstract void send(String remoteSiteId, CorfuMessage msg);
 
     /**
      * Adapter initialization.

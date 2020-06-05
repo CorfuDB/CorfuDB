@@ -15,6 +15,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.transport.client.IClientChannelAdapter;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.InterClusterConnectionDescriptor;
 import org.corfudb.utils.common.CorfuMessageConverter;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
@@ -81,10 +82,20 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public final Map<Long, CompletableFuture> outstandingRequests;
 
+    /**
+     * Adapter to the channel implementation
+     */
     private IClientChannelAdapter channelAdapter;
 
-    public LogReplicationClientRouter(NodeLocator node, LogReplicationRuntimeParameters parameters, Class adapterType) {
-        this.node = node;
+    /**
+     * Remote Site/Cluster unique identifier
+     */
+    private String remoteSiteId;
+
+    public LogReplicationClientRouter(NodeLocator remoteEndpoint, String remoteSideId,
+                                      LogReplicationRuntimeParameters parameters, Class adapterType, String localSiteId) {
+        this.node = remoteEndpoint;
+        this.remoteSiteId = remoteSideId;
         this.parameters = parameters;
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
         this.handlerMap = new ConcurrentHashMap<>();
@@ -93,7 +104,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         this.outstandingRequests = new ConcurrentHashMap<>();
         this.connectionFuture = new CompletableFuture<>();
 
-        initialize(adapterType);
+        initialize(adapterType, localSiteId);
     }
 
     // ------------------- IClientRouter Interface ----------------------
@@ -128,7 +139,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             try {
                 message.setClientID(parameters.getClientId());
                 message.setRequestID(requestId);
-                channelAdapter.send(CorfuMessageConverter.toProtoBuf(message));
+                channelAdapter.send(remoteSiteId, CorfuMessageConverter.toProtoBuf(message));
             } catch (Exception e) {
                 outstandingRequests.remove(requestId);
                 log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
@@ -177,7 +188,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         // Get the next request ID.
         message.setRequestID(requestID.getAndIncrement());
         // Write this message out on the serverAdapter.
-        channelAdapter.send(CorfuMessageConverter.toProtoBuf(message));
+        channelAdapter.send(remoteSiteId, CorfuMessageConverter.toProtoBuf(message));
         log.trace("Sent one-way message: {}", message);
     }
 
@@ -263,10 +274,10 @@ public class LogReplicationClientRouter implements IClientRouter {
 
     }
 
-    public void initialize(Class adapterType) {
+    public void initialize(Class adapterType, String localSiteId) {
         try {
-            channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(Integer.class, String.class, LogReplicationClientRouter.class)
-                    .newInstance(node.getPort(), node.getHost(), this);
+            channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(Integer.class, String.class, String.class, LogReplicationClientRouter.class)
+                    .newInstance(node.getPort(), node.getHost(), localSiteId,  this);
             channelAdapter.start();
         } catch (Exception e) {
             log.error("Unhandled exception caught while initializing custom adapter {}", adapterType.getSimpleName(), e);

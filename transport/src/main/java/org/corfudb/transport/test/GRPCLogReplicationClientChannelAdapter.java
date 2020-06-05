@@ -27,15 +27,15 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private StreamObserver<CorfuMessage> responseObserver;
 
     /** Construct client for accessing LogReplicationService server using the existing channel. */
-    public GRPCLogReplicationClientChannelAdapter(Integer port, String host, LogReplicationClientRouter adapter) {
-        super(port, host, adapter);
+    public GRPCLogReplicationClientChannelAdapter(Integer port, String host, String localSiteId, LogReplicationClientRouter adapter) {
+        super(port, host, localSiteId, adapter);
         channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
         blockingStub = LogReplicationChannelGrpc.newBlockingStub(channel);
         asyncStub = LogReplicationChannelGrpc.newStub(channel);
     }
 
     @Override
-    public void send(CorfuMessage msg) {
+    public void send(String remoteSiteId, CorfuMessage msg) {
 
         CorfuMessage response = null;
 
