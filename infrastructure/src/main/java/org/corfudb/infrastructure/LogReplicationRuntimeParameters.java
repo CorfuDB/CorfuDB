@@ -12,7 +12,11 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
     private String localCorfuEndpoint;
 
+    private String localSiteId;
+
     private String remoteLogReplicationServerEndpoint;
+
+    private String remoteSiteId;
 
     private LogReplicationTransportType transport = LogReplicationTransportType.CUSTOM;
 

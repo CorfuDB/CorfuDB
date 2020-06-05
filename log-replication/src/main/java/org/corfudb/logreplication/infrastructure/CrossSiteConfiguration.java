@@ -26,7 +26,7 @@ public class CrossSiteConfiguration {
 
     @Setter
     @Getter
-    static String CorfuPortnum = DEFAULT_CORFU_PORT_NUM;
+    static String corfuPortNum = DEFAULT_CORFU_PORT_NUM;
 
     @Getter
     private long siteConfigID;
@@ -125,7 +125,8 @@ public class CrossSiteConfiguration {
             this.nodesInfo = new ArrayList<>();
             for (NodeInfoMsg nodeInfoMsg : siteMsg.getNodeInfoList()) {
                 LogReplicationNodeInfo newNode = new LogReplicationNodeInfo(nodeInfoMsg.getAddress(),
-                        Integer.toString(nodeInfoMsg.getPort()), siteMsg.getStatus(), Integer.toString(nodeInfoMsg.getCorfuPort()));
+                        Integer.toString(nodeInfoMsg.getPort()), siteMsg.getStatus(), Integer.toString(nodeInfoMsg.getCorfuPort()),
+                        siteId);
                 this.nodesInfo.add(newNode);
             }
         }
@@ -135,8 +136,9 @@ public class CrossSiteConfiguration {
             this.roleType = roleType;
             this.leader = info.leader;
             this.nodesInfo = new ArrayList<>();
-            for ( LogReplicationNodeInfo nodeInfo : info.nodesInfo) {
-                LogReplicationNodeInfo newNode = new LogReplicationNodeInfo(nodeInfo.getIpAddress(), nodeInfo.getPortNum(), roleType, nodeInfo.corfuPortNum);
+            for (LogReplicationNodeInfo nodeInfo : info.nodesInfo) {
+                LogReplicationNodeInfo newNode = new LogReplicationNodeInfo(nodeInfo.getIpAddress(), nodeInfo.getPortNum(),
+                        roleType, nodeInfo.corfuPortNum, info.siteId);
                 this.nodesInfo.add(newNode);
             }
         }
