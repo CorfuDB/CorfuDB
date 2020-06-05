@@ -32,12 +32,17 @@ class LogReplicationNodeInfo {
     @Setter
     CorfuLogReplicationRuntime runtime;
 
-    LogReplicationNodeInfo(String ipAddress, String portNum, LogReplicationSiteInfo.SiteStatus roleType, String corfuPortNum) {
+    @Getter
+    private String siteId;
+
+    LogReplicationNodeInfo(String ipAddress, String portNum, LogReplicationSiteInfo.SiteStatus roleType, String corfuPortNum,
+                           String siteId) {
         this.leader = false;
         this.ipAddress = ipAddress;
         this.roleType = roleType;
         this.portNum = portNum;
         this.corfuPortNum = corfuPortNum;
+        this.siteId = siteId;
     }
 
     public LogReplicationSiteInfo.NodeInfoMsg convert2msg() {

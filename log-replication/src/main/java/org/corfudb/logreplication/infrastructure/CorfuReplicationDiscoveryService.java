@@ -160,16 +160,14 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         replicationServerNode.getLogReplicationServer().getSinkManager().setSiteInfo(nodeInfo.getRoleType() == SiteStatus.ACTIVE ? true : false,
                 replicationManager.getCrossSiteConfig().getSiteConfigID());
 
-        log.debug("persit new siteConfigID " + replicationManager.getCrossSiteConfig().getSiteConfigID() + " status " +
+        log.debug("Persist new siteConfigID {}, status={}", replicationManager.getCrossSiteConfig().getSiteConfigID(),
                 nodeInfo.getRoleType());
 
         if (nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
-            //crossSiteConfig.getPrimarySite().setLeader(nodeInfo);
             log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
             replicationManager.startLogReplication(nodeInfo, this);
         } else if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
             // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
-
             log.info("Start as Sink (receiver) on node {} ", nodeInfo);
         }
     }
