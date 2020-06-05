@@ -67,8 +67,8 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     /*
      * The role type is of active or standby. When log replication server is up, it will has a
-     * SinkManager by default even though it has role type active. When the role type is not active,
-     * the sink manager should not process any messages. When there is a site flip, the discovery service
+     * SinkManager by default even though it has role type active. When the role type is active (sender),
+     * the sink manager should not process any messages it receives. When there is a site flip, the discovery service
      * will update the role type accordingly.
      */
     @Getter
@@ -140,8 +140,8 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     /**
-     * Read the SinkManager configuration, such as buffer size and sending ACK mechanics from a file.
-     * We can test with different values to see what is the most optimal's way to set up them.
+     * Read the SinkManager configuration, such as buffer size and how frequent to send ACKs.
+     * With changing this config file, we can do more testing to find the most optimal's way to for the setup.
      * If the configFile doesn't exist, use the default values.
      */
     private void readConfig() {
@@ -162,9 +162,6 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         log.info("Sink Manager Buffer config queue size {} ackCycleCnt {} ackCycleTime {}",
                 bufferSize, ackCycleCnt, ackCycleTime);
-        System.out.print("\nSink Manager Buffer config queue size {} ackCycleCnt {} ackCycleTime {} :" +
-                bufferSize + " " + ackCycleCnt + " " + ackCycleTime);
-
     }
 
     /**
@@ -178,8 +175,9 @@ public class LogReplicationSinkManager implements DataReceiver {
         rxMessageCount.setValue(rxMessageCounter);
 
         /*
-         * If the role type is active or it is not the leader, skip processing the message.
-         * Without any Ack, the sender will treat it as a slow receiver and redo site discovery.
+         * If the role type is active(sender role type) or it is not the leader, skip processing the message.
+         * Without any Ack, the sender will treat it as a slow receiver and redo site discovery and send messages
+         * to the correct node.
          */
         if (active || !leader) {
             return null;
@@ -188,7 +186,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         log.debug("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
 
         /*
-         * Ignore messages that have different siteConfigID
+         * Ignore messages that have different siteConfigID.
+         * It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
          * If there is a siteConfig change, the discovery service will detect it and reset the state.
          */
         if (message.getMetadata().getSiteConfigID() != siteConfigID) {
@@ -196,7 +195,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
 
         /*
-         * If it receives a SNAPSHOT_START message if it has a higher snapshot
+         * If it receives a SNAPSHOT_START message, prepare a transition
          */
         if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_START)) {
             processSnapshotStart(message);
@@ -205,21 +204,23 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         if (!receivedValidMessage(message)) {
             /*
-             * It is possible that the sender lost the SNAPSHOT_END ack and send it again, but the receiver has
-             * already transited to the LOG_ENTRY_SYNC state. Reply the ACK again and let sender do the proper transition too.
+             * It is possible that the sender doesn't receive the SNAPSHOT_END ACK message and send the SNAPSHOT_END message again,
+             * but the receiver has already transited to the LOG_ENTRY_SYNC state.
+             * Reply the SNAPSHOT_ACK again and let sender do the proper transition.
              */
             if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
                 LogReplicationEntryMetadata metadata = snapshotSinkBufferManager.makeAckMessage(message);
                 if (metadata.getMessageMetadataType() == SNAPSHOT_END) {
+                    log.warn("Sink Manager in state {} and received message {}. Resending the ACK for SNAPSHOT_END.", rxState,
+                            message.getMetadata());
                     return new LogReplicationEntry(metadata, new byte[0]);
                 }
             }
+
             // Invalid message and drop it.
             log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
                         message.getMetadata());
 
-            System.out.print("\n******Sink Manager in state {} and received message {}. Dropping Message." +  rxState + " " +
-                    message.getMetadata());
             return null;
         }
 
@@ -232,7 +233,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     /**
      * Process a SNAPSHOT_START message. This message will not be pushed to the buffer,
-     * as it may trigger a transition and reset the state.
+     * as it trigger a transition and reset the state.
      * If it is requesting a new snapshot with higher timestamp, transition to SNAPSHOT_SYNC state,
      * otherwise ignore the message.
      * @param entry
@@ -248,6 +249,10 @@ public class LogReplicationSinkManager implements DataReceiver {
          * It is out of date message due to resend, drop it.
          */
         if (entry.getMetadata().getSnapshotTimestamp() <= baseSnapshotTimestamp) {
+            // Invalid message and drop it.
+            log.warn("Sink Manager in state {} and received message {}. " +
+                            "Dropping Message due to snapshotTimestamp is smaller than the current one {}",
+                    rxState, entry.getMetadata(), baseSnapshotTimestamp);
             return;
         }
 
@@ -256,8 +261,12 @@ public class LogReplicationSinkManager implements DataReceiver {
          * or the current node is out of sync, ignore it.
          */
         if (persistedWriterMetadata.setSrcBaseSnapshotStart(siteConfigID, timestamp) == false) {
+            log.warn("Sink Manager in state {} and received message {}. " +
+                            "Dropping Message due to failure update of the metadata store {}",
+                    rxState, entry.getMetadata(), persistedWriterMetadata.getMetadata());
             return;
         }
+
 
         /*
          * Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
@@ -276,13 +285,13 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
-        System.out.print("\nSink manager snapshot start " + entry.getMetadata());
+        log.info("Sink manager entre {} state, snapshot start with {}", rxState, entry.getMetadata());
     }
 
     /**
      * Signal the manager a snapshot sync is about to complete. This is required to transition to log sync.
      */
-    private LogReplicationEntry completeSnapshotApply(LogReplicationEntry inputEntry) {
+    private void completeSnapshotApply(LogReplicationEntry inputEntry) {
         log.debug("Complete of a snapshot apply");
         //check if the all the expected message has received
         rxState = RxState.LOG_ENTRY_SYNC;
@@ -291,25 +300,21 @@ public class LogReplicationSinkManager implements DataReceiver {
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 persistedWriterMetadata.getLastProcessedLogTimestamp(), this);
 
-        // Prepare and Send Snapshot Sync ACK
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END,
-                siteConfigID,
-                snapshotRequestId,
-                persistedWriterMetadata.getLastProcessedLogTimestamp(),
-                baseSnapshotTimestamp,
-                snapshotRequestId);
 
-        System.out.print("\nSink manager send out SNAPSHOT_End message ack " + metadata);
-        return LogReplicationEntry.generateAck(metadata);
+        log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
+                inputEntry, rxState);
     }
 
+    /**
+     * Process SNAPSHOT transfer messages
+     * @param message
+     */
     private void applySnapshotSync(LogReplicationEntry message) {
         switch (message.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
                 snapshotWriter.apply(message);
                 return;
             case SNAPSHOT_END:
-                System.out.print("\nSink manager snapshot end " + message.getMetadata());
                 snapshotWriter.snapshotTransferDone(message);
                 completeSnapshotApply(message);
                 return;
@@ -319,6 +324,10 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
     }
 
+    /**
+     * While processing an inorder message, the buffer will callback and process the message
+     * @param message
+     */
     public void processMessage(LogReplicationEntry message) {
         log.trace("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
 
@@ -332,7 +341,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 break;
 
             default:
-                log.error("wrong state");
+                log.error("Wrong state {}.", rxState);
         }
     }
 

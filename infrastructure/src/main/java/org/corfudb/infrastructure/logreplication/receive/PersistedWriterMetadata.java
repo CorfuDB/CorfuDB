@@ -247,6 +247,18 @@ public class PersistedWriterMetadata {
         return;
     }
 
+    public String getMetadata() {
+        String s = new String();
+        s.concat(PersistedWriterMetadataType.SiteConfigID.getVal() + " " + getSiteConfigID() +" ");
+        s.concat(PersistedWriterMetadataType.LastSnapStart.getVal() + " " + getLastSnapStartTimestamp() +" ");
+        s.concat(PersistedWriterMetadataType.LastSnapTransferDone.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
+        s.concat(PersistedWriterMetadataType.LastSnapApplyDone.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");
+        s.concat(PersistedWriterMetadataType.LastSnapSeqNum.getVal() + " " + getLastSnapSeqNum() + " ");
+        s.concat(PersistedWriterMetadataType.LastLogProcessed.getVal() + " " + getLastProcessedLogTimestamp() + " ");
+
+        return s;
+    }
+
     public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {
         return TABLE_PREFIX_NAME + primarySite.toString() + "-to-" + dst.toString();
     }

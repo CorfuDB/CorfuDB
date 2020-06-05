@@ -158,6 +158,12 @@ public class LogReplicationFSM {
     @Getter
     long ackedTimestamp = Address.NON_ADDRESS;
 
+    /*
+     *
+     */
+    LogEntrySender logEntrySender;
+    SnapshotSender snapshotSender;
+
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
@@ -197,8 +203,8 @@ public class LogReplicationFSM {
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
-        SnapshotSender snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, this);
-        LogEntrySender logEntrySender = new LogEntrySender(runtime, logEntryReader, dataSender, readProcessor, this);
+        snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, this);
+        logEntrySender = new LogEntrySender(runtime, logEntryReader, dataSender, readProcessor, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender);

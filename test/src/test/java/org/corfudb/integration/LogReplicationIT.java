@@ -25,7 +25,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
 import java.util.Set;
@@ -286,7 +285,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         }
 
         if (cntDelete > 0) {
-            System.out.println("delete cnt " + cntDelete);
+            System.out.println("\ndelete cnt " + cntDelete);
         }
     }
 
@@ -296,8 +295,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 CorfuTable<Long, Long> table = tables0.get(name);
                 CorfuTable<Long, Long> mapKeys = tables1.get(name);
 
-                System.out.print("\nTable[" + name + "]: " + table.keySet().size() + " keys; Expected "
-                        + mapKeys.size() + " keys");
+                //System.out.print("\nTable[" + name + "]: " + table.keySet().size() + " keys; Expected "
+                //        + mapKeys.size() + " keys");
 
                 assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
                 assertThat(table.keySet().containsAll(mapKeys.keySet())).isTrue();
@@ -1280,7 +1279,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private void verifyExpectedValue(long expectedValue, long currentValue) {
         // If expected value, release semaphore / unblock the wait
-        System.out.print("\nexpected " + expectedValue + " currentValue " + currentValue);
+        // System.out.print("\nexpected " + expectedValue + " currentValue " + currentValue);
         if (expectedValue == currentValue) {
             if (expectedAckMsgType != null) {
                 blockUntilExpectedValueReached.release();

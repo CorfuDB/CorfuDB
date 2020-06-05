@@ -93,7 +93,7 @@ public class SnapshotSender {
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
             // or snapshot sync is stopped
             dataSenderBufferManager.resend();
-            while (messagesSent < SNAPSHOT_BATCH_SIZE && !dataSenderBufferManager.getPendingEntries().isFull() &&!completed && !stopSnapshotSync) {
+            while (messagesSent < SNAPSHOT_BATCH_SIZE && !dataSenderBufferManager.getPendingMessages().isFull() &&!completed && !stopSnapshotSync) {
 
                 try {
                     snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
@@ -189,7 +189,7 @@ public class SnapshotSender {
         // If Snapshot is complete, add end marker
         if (completed) {
             LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
-            System.out.print("\nSender sent out snapshotEnd " + endDataMessage.getMetadata());
+            log.info("SnapshotSender sent out SNAPSHOT_END message {} " + endDataMessage.getMetadata());
             snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;
         }

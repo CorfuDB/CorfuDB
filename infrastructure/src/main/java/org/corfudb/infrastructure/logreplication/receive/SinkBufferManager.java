@@ -148,8 +148,6 @@ public abstract class SinkBufferManager {
                 buffer.put(preTs, dataMessage);
         }
 
-        System.out.print("\nSink Buffer Send an ACK, lastProcessedSeq " + lastProcessedSeq + " currePreTs " + preTs);
-
         /*
          * Send Ack with lastProcessedSeq
          */

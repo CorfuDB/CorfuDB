@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.receive;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
-import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_MESSAGE;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_REPLICATED;
@@ -27,7 +26,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
     }
 
     /**
-     *
+     * Get the pre inorder log entry's timestamp.
      * @param entry
      * @return log entry message's previousTimestamp.
      */
@@ -37,7 +36,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
     }
 
     /**
-     *
+     * Get the log entry's timestamp that guarantees the ordering.
      * @param entry
      * @return log entry message's timestamp.
      */
@@ -47,7 +46,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
     }
 
     /**
-     *
+     * Make a ACK message according to the last processed message's timestamp.
      * @param entry
      * @return ackMessage's metadata.
      */

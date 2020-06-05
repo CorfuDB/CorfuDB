@@ -20,7 +20,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-
+/**
+ * Sender Buffer Manager to store outstanding message that hasn't got an ACK yet.
+ */
 @Slf4j
 public abstract class SenderBufferManager {
     /*
@@ -31,65 +33,72 @@ public abstract class SenderBufferManager {
     /*
      * The max buffer size
      */
-    private int readerBatchSize;
+    private int maxBufferSize;
 
     /*
-     * The timer to resend an entry. This is the roundtrip time between sender/receiver.
+     * The timer to resend an entry. This is the round trip time between sender/receiver.
      */
     private int msgTimer;
 
     /*
-     * The max number of retry for sending an entry.
+     * The max number of retry for a message
      */
     private int maxRetry;
 
 
     /*
-     *
+     * Max time to wait an ACK for a message.
      */
     private int timeoutTimer;
 
     /*
-     * wait for an Ack or not
+     * If there is a timeout for a message, should generate an error or not
      */
     private boolean errorOnMsgTimeout = true;
 
 
     /*
-     * the ack with Max timestamp
+     * the max ACK timestamp received. Used by log entry sync.
      */
-    public long ackTs = Address.NON_ADDRESS;
+    long maxAckForLogEntrySync = Address.NON_ADDRESS;
 
-    long snapshotSeqNum = Address.NON_ADDRESS;
+    /*
+     * the max snapShotSeqNum has ACKed. Used by snapshot sync.
+     */
+    private long maxAckForSnapshotSync = Address.NON_ADDRESS;
 
-    DataSender dataSender;
+    private DataSender dataSender;
 
 
     /*
-     * The log entries sent to the receiver but hasn't ACKed yet.
+     * The messages sent to the receiver but hasn't been ACKed yet.
      */
     @Getter
-    LogReplicationPendingEntryQueue pendingEntries;
+    SenderPendingMessageQueue pendingMessages;
 
     /*
-     * Track the pendingEnries' acks.
-     * For snapshot transfer, the key is the log entry sequence number.
-     * For delta transfer, the key is the log entry's timestamp.
+     * Track the pending messages' acks.
+     * For snapshot sync, the message sequence number is used as the hash key.
+     * For log entry sync, the log entry's timestamp is used as the hash key.
      */
     @Getter
     @Setter
-    Map<Long, CompletableFuture<LogReplicationEntry>> pendingLogEntriesAcked;
+    Map<Long, CompletableFuture<LogReplicationEntry>> pendingCompletableFutureForAcks;
 
+    /**
+     * Constructor
+     * @param dataSender
+     */
     public SenderBufferManager(DataSender dataSender) {
         maxRetry = DefaultSiteConfig.getLogSenderRetryCount();
-        readerBatchSize = DefaultSiteConfig.getLogSenderBufferSize();
+        maxBufferSize = DefaultSiteConfig.getLogSenderBufferSize();
         msgTimer = DefaultSiteConfig.getLogSenderResendTimer();
         timeoutTimer = DefaultSiteConfig.getLogSenderTimeoutTimer();
         errorOnMsgTimeout = DefaultSiteConfig.isLogSenderTimeout();
 
         readConfig();
-        pendingEntries = new LogReplicationPendingEntryQueue(readerBatchSize);
-        pendingLogEntriesAcked = new HashMap<>();
+        pendingMessages = new SenderPendingMessageQueue(maxBufferSize);
+        pendingCompletableFutureForAcks = new HashMap<>();
         this.dataSender = dataSender;
     }
 
@@ -105,7 +114,7 @@ public abstract class SenderBufferManager {
             props.load(reader);
 
             maxRetry = Integer.parseInt(props.getProperty("log_reader_max_retry", Integer.toString(maxRetry)));
-            readerBatchSize = Integer.parseInt(props.getProperty("log_reader_queue_size"));
+            maxBufferSize = Integer.parseInt(props.getProperty("log_reader_queue_size", Integer.toString(maxBufferSize)));
             msgTimer = Integer.parseInt(props.getProperty("log_reader_resend_timer", Integer.toString(msgTimer)));
             timeoutTimer = Integer.parseInt(props.getProperty("log_reader_resend_timeout", Integer.toString(timeoutTimer)));
             errorOnMsgTimeout = Boolean.parseBoolean(props.getProperty("log_reader_error_on_message_timeout",
@@ -117,10 +126,7 @@ public abstract class SenderBufferManager {
 
         } finally {
             log.info("Sender Buffer config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",
-                    maxRetry, readerBatchSize, msgTimer, errorOnMsgTimeout);
-
-            System.out.print("\nSender Buffer config reader_queue_size {} maxRetry {} entry_resend_timer {} waitAck {} " +
-                    readerBatchSize + " " + maxRetry + " " + msgTimer + " " + errorOnMsgTimeout);
+                    maxRetry, maxBufferSize, msgTimer, errorOnMsgTimeout);
         }
     }
 
@@ -132,13 +138,12 @@ public abstract class SenderBufferManager {
      * @throws TimeoutException
      */
     public LogReplicationEntry processAcks() throws InterruptedException, ExecutionException, TimeoutException {
-        LogReplicationEntry ack = (LogReplicationEntry) CompletableFuture.anyOf(pendingLogEntriesAcked
-                .values().toArray(new CompletableFuture<?>[pendingLogEntriesAcked.size()])).get(timeoutTimer, TimeUnit.MILLISECONDS);
-        System.out.print("\nReceived Log Entry ack " + ack.getMetadata());
+        LogReplicationEntry ack = (LogReplicationEntry) CompletableFuture.anyOf(pendingCompletableFutureForAcks
+                .values().toArray(new CompletableFuture<?>[pendingCompletableFutureForAcks.size()])).get(timeoutTimer, TimeUnit.MILLISECONDS);
 
-        updateAckTs(ack);
+        updateAck(ack);
 
-        log.trace("Total pending log entry acks: {}, for timestamps: {}", pendingLogEntriesAcked.size(), pendingLogEntriesAcked.keySet());
+        log.trace("Total pending log entry acks: {}, for timestamps: {}", pendingCompletableFutureForAcks.size(), pendingCompletableFutureForAcks.keySet());
         return ack;
     }
 
@@ -146,7 +151,7 @@ public abstract class SenderBufferManager {
      * This is used by SnapshotStart, SnapshotEnd marker messages as those messages don't have a sequence number.
      */
     public CompletableFuture<LogReplicationEntry> sendWithoutBuffering(LogReplicationEntry entry) {
-        entry.getMetadata().setSnapshotSyncSeqNum(snapshotSeqNum++);
+        entry.getMetadata().setSnapshotSyncSeqNum(maxAckForSnapshotSync++);
         CompletableFuture<LogReplicationEntry> cf = dataSender.send(entry);
         int retry = 0;
         boolean result = false;
@@ -172,9 +177,8 @@ public abstract class SenderBufferManager {
      * @param message
      */
     public CompletableFuture<LogReplicationEntry> sendWithBuffering(LogReplicationEntry message) {
-        message.getMetadata().setSnapshotSyncSeqNum(snapshotSeqNum++);
-        System.out.print("\nsending data " + message.getMetadata());
-        pendingEntries.append(message);
+        message.getMetadata().setSnapshotSyncSeqNum(maxAckForSnapshotSync++);
+        pendingMessages.append(message);
         CompletableFuture<LogReplicationEntry> cf = dataSender.send(message);
         addCFToAcked(message, cf);
         return cf;
@@ -209,8 +213,8 @@ public abstract class SenderBufferManager {
             //TODO: notify discoveryService
         }
 
-        for (int i = 0; i < pendingEntries.getSize(); i++) {
-            LogReplicationPendingEntry entry  = pendingEntries.getList().get(i);
+        for (int i = 0; i < pendingMessages.getSize(); i++) {
+            LogReplicationPendingEntry entry  = pendingMessages.getList().get(i);
             if (entry.timeout(msgTimer) || force) {
                 if (errorOnMsgTimeout && entry.retry >= maxRetry) {
                     log.warn("Entry {} of type {} has been resent max times {} for timer {}.", entry.getData().getMetadata().getTimestamp(),
@@ -234,11 +238,10 @@ public abstract class SenderBufferManager {
      * @param lastAckedTimestamp
      */
     public void reset(long lastAckedTimestamp) {
-        snapshotSeqNum = Address.NON_ADDRESS;
-        ackTs = lastAckedTimestamp;
-        pendingEntries.clear();
-        pendingLogEntriesAcked.clear();
-        System.out.print("\nreset buffer ackTs " + ackTs);
+        maxAckForSnapshotSync = Address.NON_ADDRESS;
+        maxAckForLogEntrySync = lastAckedTimestamp;
+        pendingMessages.clear();
+        pendingCompletableFutureForAcks.clear();
     }
 
     public abstract void addCFToAcked(LogReplicationEntry message, CompletableFuture<LogReplicationEntry> cf);
@@ -246,9 +249,9 @@ public abstract class SenderBufferManager {
      * Update the last ackTimestamp and evict all entries whose timestamp is less or equal to the ackTimestamp
      * @param newAck
      */
-    public abstract void updateAckTs(Long newAck);
+    public abstract void updateAck(Long newAck);
 
-    public abstract void updateAckTs(LogReplicationEntry entry);
+    public abstract void updateAck(LogReplicationEntry entry);
 
     public void onError(LogReplicationError error) {
         dataSender.onError(error);

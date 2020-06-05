@@ -61,7 +61,6 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
     @Override
     public LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());
-        System.out.print("\nsink buffer size " + buffer.size());
 
         /*
          * If SNAPSHOT_END message has been processed, send back SNAPSHOT_END to notify
@@ -74,7 +73,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
         }
 
         metadata.setSnapshotSyncSeqNum(lastProcessedSeq);
-        System.out.print("\nSnapshotSinkBufferManager send ACK " + lastProcessedSeq + " message " + metadata);
+        log.debug("SnapshotSinkBufferManager send ACK {} for {}", lastProcessedSeq, metadata);
         return metadata;
     }
 
