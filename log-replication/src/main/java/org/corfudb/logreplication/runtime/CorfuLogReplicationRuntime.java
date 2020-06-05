@@ -13,7 +13,6 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.LogReplicationSourceManager;
-import org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
@@ -23,6 +22,7 @@ import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.NettyClientRouter;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.InterClusterConnectionDescriptor;
 import org.corfudb.util.NodeLocator;
 
 import javax.annotation.Nonnull;
@@ -37,6 +37,11 @@ import java.util.concurrent.ThreadFactory;
 import java.util.function.Function;
 
 
+/**
+ * Client Runtime to connect to a Corfu Log Replication Server
+ *
+ * @author amartinezman
+ */
 @Slf4j
 public class CorfuLogReplicationRuntime {
     /**
@@ -45,6 +50,10 @@ public class CorfuLogReplicationRuntime {
     @Getter
     private final LogReplicationRuntimeParameters parameters;
 
+    /**
+     * Transport type - custom defined or netty
+     * TODO: this will be removed as soon as we implement Netty as an Adapter
+     */
     private LogReplicationTransportType transport;
 
     /**
@@ -84,7 +93,7 @@ public class CorfuLogReplicationRuntime {
         nettyEventLoop =  getNewEventLoopGroup();
 
         // Initializing the node router pool.
-        nodeRouterPool = new NodeRouterPool(getRouterFunction);
+        nodeRouterPool = new NodeRouterPool(getRouterFunction, true);
 
         connectToCorfuRuntime();
     }
@@ -118,7 +127,8 @@ public class CorfuLogReplicationRuntime {
      * a router.
      */
     @Getter
-    private final Function<String, IClientRouter> getRouterFunction = (address) -> {
+    private final Function<InterClusterConnectionDescriptor, IClientRouter> getRouterFunction = (site) -> {
+                String address = site.getRemoteNodeLocator().toEndpointUrl();
                 NodeLocator node = NodeLocator.parseString(address);
                 IClientRouter newRouter;
 
@@ -132,7 +142,8 @@ public class CorfuLogReplicationRuntime {
 
                     try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
                         Class adapter = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
-                        newRouter = new LogReplicationClientRouter(node, getParameters(), adapter);
+                        newRouter = new LogReplicationClientRouter(site.getRemoteNodeLocator(), site.getRemoteClusterId(),
+                                getParameters(), adapter, site.getLocalClusterId());
                     } catch (Exception e) {
                         log.error("Fatal error: Failed to create channel", e);
                         throw new UnrecoverableCorfuError(e);
@@ -171,10 +182,13 @@ public class CorfuLogReplicationRuntime {
         }
     }
 
-    public void connect(CorfuReplicationDiscoveryService discoveryService, String siteID) {
+    public void connect(CorfuReplicationDiscoveryService discoveryService) {
         log.info("Connected");
-        IClientRouter router = getRouter(parameters.getRemoteLogReplicationServerEndpoint());
-        client = new LogReplicationClient(router, discoveryService, siteID);
+        NodeLocator remoteNodeLocator = NodeLocator.parseString(parameters.getRemoteLogReplicationServerEndpoint());
+        InterClusterConnectionDescriptor siteDescriptor = new InterClusterConnectionDescriptor(remoteNodeLocator,
+                parameters.getRemoteSiteId(), parameters.getLocalSiteId());
+        IClientRouter router = getRouter(siteDescriptor);
+        client = new LogReplicationClient(router, discoveryService, parameters.getRemoteSiteId());
 
         log.info("Set Source Manager to connect to local Corfu on {}", parameters.getLocalCorfuEndpoint());
         sourceManager = new LogReplicationSourceManager(parameters.getLocalCorfuEndpoint(),
@@ -182,7 +196,7 @@ public class CorfuLogReplicationRuntime {
     }
 
     public LogReplicationQueryLeaderShipResponse queryLeadership() throws ExecutionException, InterruptedException {
-      log.info("***** Send QueryLeadership Request on a client to: {}", client.getRouter().getPort());
+        log.info("Request leadership of client {}:{}", client.getRouter().getHost(), client.getRouter().getPort());
         return client.sendQueryLeadership().get();
     }
 
@@ -194,24 +208,30 @@ public class CorfuLogReplicationRuntime {
     /**
      * Get a router, given the address.
      *
-     * @param address The address of the router to get.
+     * @param remoteSite remote site descriptor, includes address of router to get and remote site id.
      * @return The router.
      */
-    public IClientRouter getRouter(String address) {
-        return nodeRouterPool.getRouter(NodeLocator.parseString(address));
+    public IClientRouter getRouter(InterClusterConnectionDescriptor remoteSite) {
+        return nodeRouterPool.getRouter(remoteSite);
     }
 
+    /**
+     * Start snapshot (full) sync
+     */
     public void startSnapshotSync() {
         UUID snapshotSyncRequestId = sourceManager.startSnapshotSync();
         log.info("Start Snapshot Sync[{}]", snapshotSyncRequestId);
     }
 
+    /**
+     * Start log entry (delta) sync
+     */
     public void startLogEntrySync() {
         sourceManager.startReplication();
     }
 
-    /***
-     * clean up router, stop source manager.
+    /**
+     * Clean up router, stop source manager.
      */
     //TODO: stop the router etc.
     public void stop() {
@@ -221,7 +241,6 @@ public class CorfuLogReplicationRuntime {
     public long getMaxStreamTail() {
         Set<String> streamsToReplicate = logReplicationConfig.getStreamsToReplicate();
         long maxTail = Address.NON_ADDRESS;
-        log.debug("streamtoReplicate " + streamsToReplicate);
         for (String s : streamsToReplicate) {
             UUID currentUUID = CorfuRuntime.getStreamID(s);
             Map<UUID, Long> tailMap = corfuRuntime.getAddressSpaceView().getAllTails().getStreamTails();
@@ -233,10 +252,6 @@ public class CorfuLogReplicationRuntime {
         return maxTail;
     }
 
-    /**
-     *
-     * @return
-     */
     public long getNumEntriesToSend(long ts) {
        long ackTS = sourceManager.getLogReplicationFSM().getAckedTimestamp();
        return ts - ackTS;
