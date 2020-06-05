@@ -11,6 +11,47 @@
 
     <artifactId>transport</artifactId>
 
+    <properties>
+        <maven.deploy.skip>false</maven.deploy.skip>
+    </properties>
+
+    <!-- Make a folder `target/*-shaded.jar/` with this project and all its dependencies -->
+    <build><plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-shade-plugin</artifactId>
+            <version>3.2.1</version>
+            <executions>
+                <execution>
+                    <phase>package</phase>
+                    <goals>
+                        <goal>shade</goal>
+                    </goals>
+                    <configuration>
+                        <filters>
+                            <filter>
+                                <artifact>*:*</artifact>
+                                <excludes>
+                                    <exclude>META-INF/*.SF</exclude>
+                                    <exclude>META-INF/*.DSA</exclude>
+                                    <exclude>META-INF/*.RSA</exclude>
+                                </excludes>
+                                <includes>
+                                    <include>**</include>
+                                </includes>
+                            </filter>
+                        </filters>
+                    </configuration>
+                </execution>
+            </executions>
+            <configuration>
+                <shadedArtifactAttached>true</shadedArtifactAttached>
+                <shadedClassifierName>shaded</shadedClassifierName>
+            </configuration>
+        </plugin>
+    </plugins>
+    </build>
+
     <dependencies>
         <dependency>
             <groupId>org.corfudb</groupId>
