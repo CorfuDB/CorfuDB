@@ -42,10 +42,11 @@ public class LogReplicationStreamNameTableManager {
         connectToCorfuRuntime(corfuPort);
         initStreamNameFetcherPlugin();
     }
+
     public Set<String> getStreamsToReplicate() {
         // Initialize the streamsToReplicate
         if (verifyTableExists(LOG_REPLICATION_PLUGIN_VERSION_TABLE) &&
-                verifyTableExists(LOG_REPLICATION_STREAMS_NAME_TABLE)) {
+            verifyTableExists(LOG_REPLICATION_STREAMS_NAME_TABLE)) {
             // The tables exist but may have been created by another runtime in which case they have to be opened with
             // key/value/metadata type info
             openExistingTable(LOG_REPLICATION_PLUGIN_VERSION_TABLE);
@@ -53,12 +54,14 @@ public class LogReplicationStreamNameTableManager {
             if (!tableVersionMatchesPlugin()) {
                 // delete the tables and recreate them
                 deleteExistingStreamNameAndVersionTables();
-                createStreamNameAndVersionTables(logReplicationStreamNameFetcher.fetchStreamsToReplicate());
+                createStreamNameAndVersionTables(
+                    logReplicationStreamNameFetcher.fetchStreamsToReplicate());
             }
         } else {
             // If any 1 of the 2 tables does not exist, delete and recreate them both as they may have been corrupted.
             deleteExistingStreamNameAndVersionTables();
-            createStreamNameAndVersionTables(logReplicationStreamNameFetcher.fetchStreamsToReplicate());
+            createStreamNameAndVersionTables(
+                logReplicationStreamNameFetcher.fetchStreamsToReplicate());
         }
         return readStreamsToReplicateFromTable();
     }
@@ -97,6 +100,7 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private boolean verifyTableExists(String tableName) {
+        log.info("*** In verifyTableExists");
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         try {
             corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, tableName);
@@ -112,9 +116,9 @@ public class LogReplicationStreamNameTableManager {
         try {
             if (Objects.equals(tableName, LOG_REPLICATION_STREAMS_NAME_TABLE)) {
                 corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, tableName, LogReplicationStreams.TableInfo.class,
-                        LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
+                    LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
             } else {
-                corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, tableName, LogReplicationStreams.VersionString.class,
+                corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE, LogReplicationStreams.VersionString.class,
                         LogReplicationStreams.Version.class, CommonTypes.Uuid.class, TableOptions.builder().build());
             }
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {

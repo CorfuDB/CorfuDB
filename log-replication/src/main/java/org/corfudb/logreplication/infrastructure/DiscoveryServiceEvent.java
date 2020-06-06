@@ -31,7 +31,8 @@ public class DiscoveryServiceEvent {
         DiscoverySite("SiteChange"),
         AcquireLock("AcquireLock"),
         ReleaseLock("ReleaseLock"),
-        ConnectionLoss( "ConnectionLoss");
+        ConnectionLoss( "ConnectionLoss"),
+        Upgrade("Node Upgraded");
 
         @Getter
         String description;

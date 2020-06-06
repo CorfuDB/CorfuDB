@@ -257,6 +257,17 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         replicationManager.restartLogReplication(nodeInfo, event.getSiteID());
     }
 
+    /***
+     * After an upgrade, the active site should perform a snapshot sync
+     * @param event
+     */
+    private void processUpgrade(DiscoveryServiceEvent event) {
+        if (nodeInfo.isLeader() && nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
+            // TODO pankti: is this correct?
+            replicationManager.restartLogReplication(nodeInfo, event.getSiteID());
+        }
+    }
+
     /**
      * process event
      * @param event
@@ -277,6 +288,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
             case ConnectionLoss:
                 processConnectionLossWithLeader(event);
+                break;
+
+            case Upgrade:
+                processUpgrade(event);
                 break;
 
             default:

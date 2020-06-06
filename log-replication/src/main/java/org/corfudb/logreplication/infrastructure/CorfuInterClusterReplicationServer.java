@@ -246,17 +246,21 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             try {
-                // TODO pankti: Check if version does not match.  If if does not, create an event for site discovery to
-                // do a snapshot sync.
-
                 String corfuPort = serverContext.getLocalEndpoint()
                     .equals("localhost:9020") ? ":9001" : ":9000";
+
                 LogReplicationStreamNameTableManager replicationStreamNameTableManager =
                     new LogReplicationStreamNameTableManager(corfuPort);
+
+                // TODO pankti: Check if version does not match.  If if does not, create an event for site discovery to
+                // do a snapshot sync.
+                boolean upgraded = replicationStreamNameTableManager
+                    .isUpgraded();
 
                 // Initialize the LogReplicationConfig with site ids and tables to replicate
                 Set<String> streamsToReplicate =
                     replicationStreamNameTableManager.getStreamsToReplicate();
+
                 LogReplicationConfig logReplicationConfig =
                     new LogReplicationConfig(streamsToReplicate,
                         UUID.randomUUID(), UUID.randomUUID());
@@ -273,6 +277,11 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
                 // Start Corfu Replication Server Node
                 activeServer.startAndListen();
+
+                if (upgraded) {
+                    replicationDiscoveryService.putEvent(
+                        new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.Upgrade));
+                }
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
                 System.exit(EXIT_ERROR_CODE);
