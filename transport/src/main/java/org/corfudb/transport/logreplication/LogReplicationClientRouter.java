@@ -28,12 +28,47 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
-/**
+
+
+/*
+
+                            Corfu Consumer
++-------------------------+                    +-----------------------------+
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
++-------------------------+     Send           +-----------------------------+
+| IClientChannelAdapter   | <--------------->  | IServerChannelAdapter       |
++-------------------------+                    +-----------------------------+
+
+
+
+
+                               Corfu
++------------------------+                    +-----------------------------+
+| IClientRouter          |                    | IServerRouter               |
+| Netty(default)         |                    | Netty(default)              |
+| Custom(protobuf)       |                    | Custom(protobuf)            |
++------------------------|                    +-----------------------------+
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
++------------------------+                    +-----------------------------+
+LogReplicationServerNode                        LogReplicationServerNode
+
+
  * This Client Router is used when a custom (client-defined) transport layer is specified for
  * Log Replication Server communication.
  *
  * If default communication channel is used (Netty) instead a NettyClientRouter will be instantiated.
  */
+
 @Slf4j
 public class LogReplicationClientRouter implements IClientRouter {
 

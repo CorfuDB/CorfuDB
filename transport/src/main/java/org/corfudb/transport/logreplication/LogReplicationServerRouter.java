@@ -30,12 +30,46 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/**
+
+/*
+
+                            Corfu Consumer
++-------------------------+                    +-----------------------------+
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
++-------------------------+     Send           +-----------------------------+
+| IClientChannelAdapter   | <--------------->  | IServerChannelAdapter       |
++-------------------------+                    +-----------------------------+
+
+
+
+
+                               Corfu
++------------------------+                    +-----------------------------+
+| IClientRouter          |                    | IServerRouter               |
+| Netty(default)         |                    | Netty(default)              |
+| Custom(protobuf)       |                    | Custom(protobuf)            |
++------------------------|                    +-----------------------------+
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
++------------------------+                    +-----------------------------+
+LogReplicationServerNode                        LogReplicationServerNode
+
+
  * This class represents the Corfu interface to route incoming messages from external adapters when
  * custom communication channels are used.
  *
  * Created by annym on 14/5/20.
  */
+
 @Slf4j
 public class LogReplicationServerRouter implements IServerRouter {
 

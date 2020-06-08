@@ -6,7 +6,39 @@ import org.corfudb.transport.logreplication.LogReplicationServerRouter;
 
 import java.util.concurrent.CompletableFuture;
 
-/**
+
+/*
+
+                            Corfu Consumer
++-------------------------+                    +-----------------------------+
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
++-------------------------+     Send           +-----------------------------+
+| IClientChannelAdapter   | <--------------->  | IServerChannelAdapter       |
++-------------------------+                    +-----------------------------+
+
+
+
+
+                               Corfu
++------------------------+                    +-----------------------------+
+| IClientRouter          |                    | IServerRouter               |
+| Netty(default)         |                    | Netty(default)              |
+| Custom(protobuf)       |                    | Custom(protobuf)            |
++------------------------|                    +-----------------------------+
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
++------------------------+                    +-----------------------------+
+LogReplicationServerNode                        LogReplicationServerNode
+
  * Server Transport Adapter.
  *
  * If Log Replication relies on a custom transport protocol for communication across servers,

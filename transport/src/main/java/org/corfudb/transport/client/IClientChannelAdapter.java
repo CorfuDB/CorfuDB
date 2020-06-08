@@ -5,7 +5,42 @@ import lombok.NonNull;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.transport.logreplication.LogReplicationClientRouter;
 
-/**
+
+
+/*
+
+                            Corfu Consumer
++-------------------------+                    +-----------------------------+
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
+|                         |                    |                             |
++-------------------------+     Send           +-----------------------------+
+| IClientChannelAdapter   | <--------------->  | IServerChannelAdapter       |
++-------------------------+                    +-----------------------------+
+
+
+
+
+                               Corfu
++------------------------+                    +-----------------------------+
+| IClientRouter          |                    | IServerRouter               |
+| Netty(default)         |                    | Netty(default)              |
+| Custom(protobuf)       |                    | Custom(protobuf)            |
++------------------------|                    +-----------------------------+
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
+|                        |                    |                             |
++------------------------+                    +-----------------------------+
+LogReplicationServerNode                        LogReplicationServerNode
+
+
+
  * Client Transport Adapter.
  *
  * If Log Replication relies on a custom transport protocol for communication across servers,
