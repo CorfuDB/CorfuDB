@@ -6,14 +6,15 @@ message LogReplicationMetadataKey {
 }
 
 message LogReplicationMetadataVal {
-  uint64 val = 1;
+  string val = 1;
 }
 
 message PersistedWriterMetaData {
-  uint64 snapStart = 1;
-  uint64 snapTransferedDone = 2;
-  uint64 snapAppliedDone = 3;
-  uint64 lastLogProcessed = 4;
-  uint64 lastSnapTransferedSeqNumber = 5;
-  uint64 lastSnapAppliedSeqNumber = 6;
+  uint64 siteConfigID = 1;
+  string version = 2;
+  uint64 snapshotStart = 3;
+  uint64 snapshotSeqNum = 4;
+  uint64 snapshotTransferred = 5;
+  uint64 snapshotApplied = 6;
+  uint64 lastLogEntryProcessed = 7;
 }

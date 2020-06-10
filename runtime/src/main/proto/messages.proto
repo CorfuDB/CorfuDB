@@ -41,8 +41,12 @@ message LogReplicationEntry {
 }
 
 message LogReplicationNegotiationResponse {
-    int64 baseSnapshotTimestamp = 1;
-    int64 logEntryTimestamp = 2;
+    uint64 siteConfigID = 1;
+    string version = 2;
+    uint64 snapshotStart = 3;
+    uint64 snapshotTransferred = 4;
+    uint64 snapshotApplied = 5;
+    uint64 lastLogEntryTimestamp = 6;
 }
 
 message LogReplicationQueryLeadershipResponse {

@@ -1,0 +1,5 @@
+package org.corfudb.logreplication.infrastructure;
+
+public class LogReplicationNegotiationResult {
+    CorfuReplicationManager.LogReplicationNegotiationResultType type;
+}

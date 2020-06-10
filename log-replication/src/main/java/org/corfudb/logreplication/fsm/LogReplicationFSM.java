@@ -278,6 +278,7 @@ public class LogReplicationFSM {
                 log.info("Log Replication FSM consume event {}", event);
             }
 
+
             if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
                 if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC &&
                         state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {

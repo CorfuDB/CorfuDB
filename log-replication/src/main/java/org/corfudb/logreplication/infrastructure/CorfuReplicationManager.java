@@ -6,8 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
+import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.logreplication.send.LogReplicationEventMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -24,12 +27,12 @@ public class CorfuReplicationManager {
     // Keep map of remote site endpoints and the associated log replication runtime (client)
     Map<String, CorfuLogReplicationRuntime> remoteSiteRuntimeMap = new HashMap<>();
 
-    enum LogReplicationNegotiationResult {
+    enum LogReplicationNegotiationResultType {
         SNAPSHOT_SYNC,
         LOG_ENTRY_SYNC,
         LEADERSHIP_LOST,
         CONNECTION_LOST,
-        ERROR,
+        ERROR,  //Due to wrong version number
         UNKNOWN
     }
 
@@ -52,7 +55,6 @@ public class CorfuReplicationManager {
         CorfuInterClusterReplicationServerNode replicationServerNode, CorfuReplicationDiscoveryService discoveryService) {
         prepareSiteRoleChangeStreamTail = Address.NON_ADDRESS;
         totalNumEntriesToSend = 0;
-
         this.transport = transport;
         this.crossSiteConfig = crossSiteConfig;
         this.replicationServerNode = replicationServerNode;
@@ -124,7 +126,9 @@ public class CorfuReplicationManager {
             //If we start from a stop state due to site switch over, we need to restart the consumer.
             runtime.getSourceManager().getLogReplicationFSM().startFSM(crossSiteConfig);
 
-            LogReplicationNegotiationResult negotiationResult = startNegotiation(runtime);
+
+            //TODO: by xiaoqin
+            LogReplicationEvent negotiationResult = startNegotiation(runtime);
             log.info("Log Replication Negotiation with {} result {}", siteId, negotiationResult);
             replicate(runtime, negotiationResult);
         } catch (Exception e) {
@@ -191,15 +195,21 @@ public class CorfuReplicationManager {
         }
     }
 
-    private void replicate(CorfuLogReplicationRuntime runtime, LogReplicationNegotiationResult negotiationResult) {
-            switch (negotiationResult) {
-            case SNAPSHOT_SYNC:
+    private void replicate(CorfuLogReplicationRuntime runtime, LogReplicationEvent negotiationResult) {
+        switch (negotiationResult.getType()) {
+            case SNAPSHOT_SYNC_REQUEST:
                 log.info("Start Snapshot Sync Replication");
                 runtime.startSnapshotSync();
                 break;
-            case LOG_ENTRY_SYNC:
+            case SNAPSHOT_WAIT_COMPLETE:
+                log.info("Should Start Snapshot Sync Phase II,but for now just restart full snapshot sync");
+                // Right now it is hard to put logic for SNAPSHOT_WAIT_COMPLETE
+                // replace it with SNAPSHOT_SYNC_REQUEST, and will re-examine it later.
+                runtime.startSnapshotSync();
+                break;
+            case REPLICATION_START:
                 log.info("Start Log Entry Sync Replication");
-                runtime.startLogEntrySync();
+                runtime.startLogEntrySync(negotiationResult);
                 break;
             default:
                 log.info("Invalid Negotiation result. Re-trigger discovery.");
@@ -226,7 +236,7 @@ public class CorfuReplicationManager {
     }
 
 
-    private LogReplicationNegotiationResult startNegotiation(CorfuLogReplicationRuntime logReplicationRuntime)
+    private LogReplicationEvent startNegotiation(CorfuLogReplicationRuntime logReplicationRuntime)
             throws LogReplicationNegotiationException {
 
         LogReplicationNegotiationResponse negotiationResponse;
@@ -236,8 +246,8 @@ public class CorfuReplicationManager {
             negotiationResponse = logReplicationRuntime.startNegotiation();
             log.trace("Negotiation Response received: {} ", negotiationResponse);
         } catch (Exception e) {
-            log.error("Caught exception during log replication negotiation to {}", logReplicationRuntime.getParameters().getRemoteLogReplicationServerEndpoint());
-            throw new LogReplicationNegotiationException(LogReplicationNegotiationResult.UNKNOWN);
+            log.error("Caught exception during log replication negotiation to {} ", logReplicationRuntime.getParameters().getRemoteLogReplicationServerEndpoint(), e);
+            throw new LogReplicationNegotiationException(e.getCause().getMessage());
         }
 
         // Determine if we should proceed with Snapshot Sync or Log Entry Sync
@@ -245,11 +255,76 @@ public class CorfuReplicationManager {
 
     }
 
-    private LogReplicationNegotiationResult processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
+    private LogReplicationEvent processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
             throws LogReplicationNegotiationException {
 
-        // TODO (Anny): for now default always to snapshot sync
-        return LogReplicationNegotiationResult.SNAPSHOT_SYNC;
+        log.info("Get negoti standby site state according to the response {}, will restart with a snapshot full sync event " ,
+                negotiationResponse);
+
+        // If the version are different, report an error.
+        if (negotiationResponse.getVersion() != discoveryService.getLogReplicationMetadata().getVersion()) {
+            log.error("The active site version {} is different from standby site version {}",
+                    discoveryService.getLogReplicationMetadata().getVersion(), negotiationResponse.getVersion());
+            throw new LogReplicationNegotiationException(" Mismatch of version number");
+        }
+
+        // The standby site has a smaller config ID, redo the discovery for this standby site when
+        // getting a new notification of siteConfig change with a new added standby.
+        if (negotiationResponse.getSiteConfigID() < negotiationResponse.getSiteConfigID()) {
+            log.error("The active site configID {} is bigger than the standby configID {} ",
+                    discoveryService.getLogReplicationMetadata().getSiteConfigID(), negotiationResponse.getSiteConfigID());
+            throw new LogReplicationNegotiationException("Mismatch of configID");
+        }
+
+        // The standby site has larger config ID, redo the whole discovery for the active site when
+        // getting a new notification of siteConig ID change.
+        if (negotiationResponse.getSiteConfigID() > negotiationResponse.getSiteConfigID()) {
+            log.error("The active site configID {} is smaller than the standby configID {} ",
+                    discoveryService.getLogReplicationMetadata().getSiteConfigID(), negotiationResponse.getSiteConfigID());
+            throw new LogReplicationNegotiationException("Mismatch of configID");
+        }
+
+        // Now the active and standby have the same version and same configID.
+
+        // At the active site, get the current log head.
+        CrossSiteConfiguration.SiteInfo siteInfo = crossSiteConfig.getStandbySites().values().iterator().next();
+        CorfuRuntime runtime = siteInfo.getNodesInfo().get(0).getRuntime().getCorfuRuntime();
+        long logHead = runtime.getAddressSpaceView().getTrimMark().getSequence();
+
+        //It is a fresh start or it is in log entry sync state
+        if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
+                negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotApplied() &&
+                negotiationResponse.getLastLogProcessed() >= negotiationResponse.getSnapshotStart()) {
+            // If the next log entry is not trimmed, restart with log entry sync,
+            // otherwise, start snapshot full sync.
+            if (logHead <= negotiationResponse.getLastLogProcessed() + 1) {
+                return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START,
+                        new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogProcessed()));
+            } else {
+                return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+            }
+
+        }
+
+        //if it is in the snapshot full sync phase I, transferring data, restart the snapshot full sync
+        if (negotiationResponse.getSnapshotStart() > negotiationResponse.getSnapshotTransferred()) {
+            return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+        }
+
+        // If it is in the snapshot full sync phase II:
+        // the data has been transferred to the standby site and the the standby site is applying data from shadow streams
+        // to the real streams.
+        // It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the standby site.
+        if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
+                negotiationResponse.getSnapshotTransferred() > negotiationResponse.getSnapshotApplied()) {
+            return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_WAIT_COMPLETE,
+                    new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart()));
+        }
+
+        // For other scenarios, the standby site is in a wrong state, trigger a snapshot full sync.
+        log.error("Could not recognize the standby site state according to the response {}, will restart with a snapshot full sync event " ,
+                negotiationResponse);
+        return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
     }
 
 
