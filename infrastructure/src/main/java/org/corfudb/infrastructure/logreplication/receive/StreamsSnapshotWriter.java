@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.util.serializer.Serializers;
@@ -257,13 +258,13 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         persistedWriterMetadata.setLastSnapTransferDoneTimestamp(siteConfigID, ts);
 
         //get the number of entries to apply
-        seqNum = 1 + persistedWriterMetadata.query(null, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
+        seqNum = persistedWriterMetadata.query(null, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapSeqNum);
 
         // There is no snapshot data to apply
-        if (seqNum == 0)
+        if (seqNum == Address.NON_ADDRESS)
             return;
 
-        applyShadowStreams(seqNum);
+        applyShadowStreams(seqNum + 1);
     }
     
     enum Phase {
