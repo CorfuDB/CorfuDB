@@ -16,6 +16,9 @@ import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class CorfuReplicationSiteConfigIT extends AbstractIT {
+    static int MAX_RETRY = 10;
+    static long sleepInterval = 1000;
+
     CorfuInterClusterReplicationServer serverA;
     CorfuInterClusterReplicationServer serverB;
     CorfuTable<String, Integer> mapA;
@@ -120,8 +123,10 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
             // Wait until data is fully replicated
             System.out.println("\nWait ... Snapshot log replication in progress ...");
-            while (mapAStandby.size() != numWrites) {
-                //
+            int retry = 0;
+            while (mapAStandby.size() != numWrites && retry++ < MAX_RETRY) {
+                System.out.print("\nmapStandySize " + mapAStandby.size() + " numWrites " + numWrites);
+                sleep(sleepInterval);
             }
 
             // Verify data is present in Standby Site
@@ -171,12 +176,14 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
         }
     }
 
+    @Test
     public void runNetty() throws Exception {
         testLogReplicationEndToEnd(true, true);
     }
 
+    @Test
     public void runCustomRouter() throws Exception {
-        testLogReplicationEndToEnd(false, true);
+        testLogReplicationEndToEnd(false, false);
     }
 
     public void shutdown() {

@@ -3,6 +3,7 @@ package org.corfudb.logreplication.fsm;
 import org.corfudb.logreplication.send.logreader.SnapshotReadMessage;
 import org.corfudb.logreplication.send.logreader.SnapshotReader;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.UUID;
 
@@ -12,7 +13,7 @@ import java.util.UUID;
 public class EmptySnapshotReader implements SnapshotReader {
     @Override
     public SnapshotReadMessage read(UUID snapshotRequestId) {
-        return new SnapshotReadMessage(Collections.EMPTY_LIST, true);
+        return new SnapshotReadMessage(new ArrayList<>(), true);
     }
 
     @Override
