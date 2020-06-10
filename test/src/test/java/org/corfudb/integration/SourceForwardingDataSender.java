@@ -85,7 +85,9 @@ public class SourceForwardingDataSender implements DataSender {
         // Emulate Channel by directly accepting from the destination, whatever is sent by the source manager
         // channelExecutorWorkers.execute(() -> destinationLogReplicationManager.receive(message));
         LogReplicationEntry ack = destinationLogReplicationManager.receive(message);
-        cf.complete(ack);
+        if (ack != null) {
+            cf.complete(ack);
+        }
         ackMessages.setValue(ack);
         return cf;
     }
@@ -119,6 +121,7 @@ public class SourceForwardingDataSender implements DataSender {
     public void onError(LogReplicationError error) {
         errorCount++;
         errors.setValue(errorCount);
+        System.out.print("\nSourceFowardingDataSender got an error " + error);
     }
 
     /*
