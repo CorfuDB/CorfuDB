@@ -144,9 +144,9 @@ public class PersistedWriterMetadata {
      *
      * @param siteConfigID the current operation's siteConfigID
      * @param ts the snapshotStart snapshot time for the siteConfigID.
-     * @return the persistent snapshotStart
+     * @return if the operation succeeds or not.
      */
-    public void setSrcBaseSnapshotStart(long siteConfigID, long ts) {
+    public boolean setSrcBaseSnapshotStart(long siteConfigID, long ts) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistSiteConfigID = query(timestamp, PersistedWriterMetadataType.SiteConfigID);
         long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
@@ -158,7 +158,7 @@ public class PersistedWriterMetadata {
         if (siteConfigID != persistSiteConfigID || ts <= persistSiteConfigID) {
             log.warn("The metadata is older than the presisted one. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
                     " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
-            return;
+            return false;
         }
 
         TxBuilder txBuilder = corfuStore.tx(namespace);
@@ -176,7 +176,7 @@ public class PersistedWriterMetadata {
         log.debug("Commit. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
                 " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
 
-        return;
+        return (ts == getLastSnapStartTimestamp() && siteConfigID == getSiteConfigID());
     }
 
 
@@ -245,6 +245,18 @@ public class PersistedWriterMetadata {
                 " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
 
         return;
+    }
+
+    public String getMetadata() {
+        String s = new String();
+        s.concat(PersistedWriterMetadataType.SiteConfigID.getVal() + " " + getSiteConfigID() +" ");
+        s.concat(PersistedWriterMetadataType.LastSnapStart.getVal() + " " + getLastSnapStartTimestamp() +" ");
+        s.concat(PersistedWriterMetadataType.LastSnapTransferDone.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
+        s.concat(PersistedWriterMetadataType.LastSnapApplyDone.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");
+        s.concat(PersistedWriterMetadataType.LastSnapSeqNum.getVal() + " " + getLastSnapSeqNum() + " ");
+        s.concat(PersistedWriterMetadataType.LastLogProcessed.getVal() + " " + getLastProcessedLogTimestamp() + " ");
+
+        return s;
     }
 
     public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {

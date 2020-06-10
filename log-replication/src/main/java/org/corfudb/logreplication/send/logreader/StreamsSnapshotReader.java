@@ -127,7 +127,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param stream bookkeeping of the current stream information.
      * @return
      */
-    org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
+    LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
         List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
         org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
         log.info("Successfully pass stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);
@@ -137,14 +137,15 @@ public class StreamsSnapshotReader implements SnapshotReader {
     /**
      * If currentStreamInfo is null that is the case for the first call of read, it will init currentStreamInfo.
      * If the currentStreamInfo ends, poll the next stream.
-     * Otherwise, continue to process the current stream.
+     * Otherwise, continue to process the current stream and generate one message only.
      * @return
      */
     @Override
     public SnapshotReadMessage read(UUID syncRequestId) {
+        List<LogReplicationEntry> messages = new ArrayList<>();
 
         boolean endSnapshotSync = false;
-        List msgs = new ArrayList<LogReplicationEntry>();
+        LogReplicationEntry msg = null;
 
         // If the currentStreamInfo still has entry to process, it will reuse the currentStreamInfo
         // and process the remaining entries.
@@ -165,7 +166,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
         }
 
         if (currentStreamInfo.iterator.hasNext()) {
-            msgs.add(read(currentStreamInfo, syncRequestId));
+            msg = read(currentStreamInfo, syncRequestId);
+            if (msg != null) {
+                messages.add(msg);
+            }
         }
 
         if (!currentStreamInfo.iterator.hasNext()) {
@@ -178,7 +182,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
             }
         }
 
-        return new SnapshotReadMessage(msgs, endSnapshotSync);
+        return new SnapshotReadMessage(messages, endSnapshotSync);
     }
 
     @Override
