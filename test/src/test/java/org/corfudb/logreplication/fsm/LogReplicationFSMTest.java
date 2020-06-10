@@ -331,9 +331,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         System.out.println("**** Wait for snapshot sync to complete");
 
         // Block until the snapshot sync completes and next transition occurs.
-        // The transition should happen to IN_LOG_ENTRY_SYNC state.
-        for (int i = 0; i<(LARGE_NUM_ENTRIES/(StreamsSnapshotReader.MAX_NUM_SMR_ENTRY* SnapshotSender.SNAPSHOT_BATCH_SIZE)) + 1; i++) {
-            transitionAvailable.acquire();
+        while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
+            //
         }
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
