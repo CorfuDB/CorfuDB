@@ -275,6 +275,12 @@ public class LogReplicationFSM {
             //   Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
+                log.debug("Log Replication FSM consume event {}", event);
+            }
+
+            if (event.getType() == LogReplicationEventType.REPLICATION_START) {
+                baseSnapshot = event.getMetadata().getSyncTimestamp();
+                ackedTimestamp = baseSnapshot;
                 log.info("Log Replication FSM consume event {}", event);
             }
 
@@ -283,13 +289,14 @@ public class LogReplicationFSM {
                         state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
                     log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
                     ackedTimestamp = event.getMetadata().getSyncTimestamp();
+                    log.debug("Replicated Event ackTs {} ", ackedTimestamp);
                 }
             } else {
                 if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE) {
                     // Verify it's for the same request, as that request could've been canceled and was received later
                     if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC &&
                             state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
-                        log.debug("Snapshot Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
+                        log.info("Snapshot Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
                         baseSnapshot = event.getMetadata().getSyncTimestamp();
                         ackedTimestamp = baseSnapshot;
                     }
@@ -302,7 +309,7 @@ public class LogReplicationFSM {
                     state = newState;
                     numTransitions.setValue(numTransitions.getValue() + 1);
                 } catch (IllegalTransitionException illegalState) {
-                    log.debug("Illegal log replication event {} when in state {}", event.getType(), state.getType());
+                    log.error("Illegal log replication event {} when in state {}", event.getType(), state.getType());
                 }
             }
 

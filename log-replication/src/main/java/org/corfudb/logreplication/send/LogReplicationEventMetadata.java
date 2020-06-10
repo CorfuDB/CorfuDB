@@ -1,5 +1,7 @@
 package org.corfudb.logreplication.send;
 
+import lombok.Getter;
+
 import java.util.UUID;
 
 /**
@@ -7,6 +9,7 @@ import java.util.UUID;
  */
 public class LogReplicationEventMetadata {
 
+    @Getter
     private static final UUID NIL_UUID = new UUID(0,0);
 
     /*
@@ -30,7 +33,7 @@ public class LogReplicationEventMetadata {
      * @return an empty instance of log replication event metadata
      */
     public static LogReplicationEventMetadata empty() {
-        return new LogReplicationEventMetadata(NIL_UUID, 0L);
+        return new LogReplicationEventMetadata(NIL_UUID, -1L);
     }
 
     /**

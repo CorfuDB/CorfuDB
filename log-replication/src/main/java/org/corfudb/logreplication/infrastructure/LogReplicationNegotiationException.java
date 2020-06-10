@@ -8,7 +8,7 @@ package org.corfudb.logreplication.infrastructure;
  */
 public class LogReplicationNegotiationException extends Exception {
 
-    public LogReplicationNegotiationException(CorfuReplicationManager.LogReplicationNegotiationResult negotiationResult) {
-        super(String.format("Negotiation failed with status {}", negotiationResult.name()));
+    public LogReplicationNegotiationException(String reason) {
+        super(String.format("Negotiation failed due to {}", reason));
     }
 }

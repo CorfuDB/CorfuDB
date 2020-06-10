@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.LogReplicationSourceManager;
+import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
@@ -80,6 +81,7 @@ public class CorfuLogReplicationRuntime {
 
     private LogReplicationConfig logReplicationConfig;
 
+    @Getter
     private CorfuRuntime corfuRuntime;
 
     public CorfuLogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters) {
@@ -223,11 +225,12 @@ public class CorfuLogReplicationRuntime {
         log.info("Start Snapshot Sync[{}]", snapshotSyncRequestId);
     }
 
-    /**
-     * Start log entry (delta) sync
-     */
-    public void startLogEntrySync() {
-        sourceManager.startReplication();
+    public void startLogEntrySync(LogReplicationEvent event) {
+        sourceManager.startReplication(event);
+    }
+
+    public void startReplication(LogReplicationEvent event) {
+        sourceManager.startReplication(event);
     }
 
     /**

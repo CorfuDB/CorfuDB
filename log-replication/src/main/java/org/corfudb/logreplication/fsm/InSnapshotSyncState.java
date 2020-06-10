@@ -87,6 +87,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 } else {
                     log.warn("Unexpected snapshot sync continue event {} when in snapshot sync state {}.",
                             event.getEventID(), transitionEventId);
+                    throw new IllegalTransitionException(event.getType(), getType());
                 }
             case SYNC_CANCEL:
                 // If cancel was intended for current snapshot sync task, cancel and transition to new state

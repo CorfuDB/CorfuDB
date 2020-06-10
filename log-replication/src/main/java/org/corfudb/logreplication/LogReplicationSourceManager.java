@@ -177,12 +177,11 @@ public class LogReplicationSourceManager implements DataReceiver {
      * Connectivity and data transmission is provided by the application requiring log replication.
      * This method should be called upon connectivity to a remote site.
      */
-    public UUID startReplication() {
+    public void startReplication(LogReplicationEvent replicationEvent) {
         // Enqueue event into Log Replication FSM
-        LogReplicationEvent replicationStart = new LogReplicationEvent(LogReplicationEventType.REPLICATION_START);
-        log.info("Start Log Entry Sync for request: {}", replicationStart.getEventID());
-        logReplicationFSM.input(replicationStart);
-        return replicationStart.getEventID();
+        //LogReplicationEvent replicationStart = new LogReplicationEvent(LogReplicationEventType.REPLICATION_START);
+        log.info("Start replication event {}", replicationEvent);
+        logReplicationFSM.input(replicationEvent);
     }
 
     /**

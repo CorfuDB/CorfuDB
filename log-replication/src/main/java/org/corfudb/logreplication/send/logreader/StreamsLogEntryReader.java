@@ -74,29 +74,29 @@ public class StreamsLogEntryReader implements LogEntryReader {
         Set<UUID> tmpUUIDs = entry.getEntries().keySet();
 
         //If the entry's stream set is a subset of interested streams, it is the entry we should process
-        if (streamUUIDs.containsAll(tmpUUIDs))
+        if (streamUUIDs.containsAll(tmpUUIDs)) {
             return true;
+        }
 
         //If the entry's stream set has no overlap with the interested streams, it should be skipped.
         tmpUUIDs.retainAll(streamUUIDs);
-        if (tmpUUIDs.isEmpty())
+        if (tmpUUIDs.isEmpty()) {
             return false;
+        }
 
         //If the entry's stream set contains both interested streams and other streams, it is not
         //the expected behavior
         log.error("There are noisy streams {} in the entry, expected streams set {}",
                     entry.getEntries().keySet(), streamUUIDs);
-        throw new IllegalTransactionStreamsException("There are noisy streams in the transaction log entry");
 
+        throw new IllegalTransactionStreamsException("There are noisy streams in the transaction log entry");
     }
 
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         globalBaseSnapshot = snapshot;
         preMsgTs = Math.max(snapshot, ackTimestamp);
-        log.info("snapshot {} ackTimestamp {} preMsgTs {}", snapshot, ackTimestamp, preMsgTs);
+        log.info("snapshot {} ackTimestamp {} preMsgTs {} seek {}", snapshot, ackTimestamp, preMsgTs, preMsgTs + 1);
         txStream.seek(preMsgTs + 1);
-        log.info("snapshot ackTimestamp preMsgTs tail  " + snapshot + " " + ackTimestamp + " " + preMsgTs + " "
-                + rt.getAddressSpaceView().getLogTail());
         sequence = 0;
     }
 
@@ -116,7 +116,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
             throw e;
         }
 
-        //TODO: this I added so it compiles (fix)
         return null;
     }
 

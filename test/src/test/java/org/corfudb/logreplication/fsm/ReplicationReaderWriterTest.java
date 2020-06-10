@@ -2,7 +2,7 @@ package org.corfudb.logreplication.fsm;
 
 import org.corfudb.infrastructure.logreplication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.receive.PersistedWriterMetadata;
+import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.receive.StreamsSnapshotWriter;
 import org.corfudb.integration.ReplicationReaderWriterIT;
 import org.corfudb.logreplication.send.logreader.LogEntryReader;
@@ -84,9 +84,9 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
         UUID uuid = UUID.randomUUID();
         LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(), PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(readerRuntime, 0, uuid, uuid);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(readerRuntime, 0, uuid, uuid);
         logEntryReader = new StreamsLogEntryReader(readerRuntime, config);
-        logEntryWriter = new LogEntryWriter(writerRuntime, config, persistedWriterMetadata);
+        logEntryWriter = new LogEntryWriter(writerRuntime, config, logReplicationMetadataManager);
     }
 
     @Test
@@ -123,15 +123,15 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
     void writeMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         UUID uuid = UUID.randomUUID();
         LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, 0, uuid, uuid);
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, uuid, uuid);
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
         writer.reset(msgQ.get(0).getMetadata().getSiteConfigID(), msgQ.get(0).getMetadata().getSnapshotTimestamp());
 
         for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
         }
-        Long seq = writer.getPersistedWriterMetadata().getLastSnapSeqNum() + 1;
+        Long seq = writer.getLogReplicationMetadataManager().getLastSnapSeqNum() + 1;
 
         //for (CorfuTable<Long, Long> corfuTable : shadowTables.values()) {
         //    System.out.print("\nCorfuTable " + corfuTable.size() + " values " + corfuTable.values());

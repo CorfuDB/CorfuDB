@@ -55,6 +55,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());
         metadata.setMessageMetadataType(LOG_ENTRY_REPLICATED);
         metadata.setTimestamp(lastProcessedSeq);
+        log.debug("Sink Buffer lastProcessedSeq {}", lastProcessedSeq);
         return metadata;
     }
 

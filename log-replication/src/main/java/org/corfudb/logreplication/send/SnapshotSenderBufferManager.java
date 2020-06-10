@@ -30,7 +30,6 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
         pendingCompletableFutureForAcks = pendingCompletableFutureForAcks.entrySet().stream()
                 .filter(entry -> entry.getKey() > maxAckForLogEntrySync)
                 .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
-        System.out.print("\nSnapshot Sender received ack " + newAck);
     }
 
     /**

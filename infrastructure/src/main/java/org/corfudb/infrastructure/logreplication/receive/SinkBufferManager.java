@@ -61,7 +61,7 @@ public abstract class SinkBufferManager {
     /*
      * Time last ack sent.
      */
-    private long ackTime = 0;
+    long ackTime = 0;
 
     /*
      * The lastProcessedSeq message's ack value.
@@ -113,6 +113,7 @@ public abstract class SinkBufferManager {
      */
     boolean shouldAck() {
         long currentTime = java.lang.System.currentTimeMillis();
+        ackCnt++;
 
         if (ackCnt >= ackCycleCnt || (currentTime - ackTime) >= ackCycleTime) {
             ackCnt = 0;

@@ -62,7 +62,7 @@ public class SenderPendingMessageQueue {
 
         //As the entries are in the order of timestamp value, we can just remove the first each time
         //until the condition is not met anymore.
-        while(!list.isEmpty() && list.get(0).getData().getMetadata().getTimestamp() < ts) {
+        while(!list.isEmpty() && list.get(0).getData().getMetadata().getTimestamp() <= ts) {
             list.remove(0);
         }
     }
@@ -76,7 +76,7 @@ public class SenderPendingMessageQueue {
 
         //As the entries are in the order of timestamp value, we can just remove the first each time
         //until the condition is not met anymore.
-        while(!list.isEmpty() && list.get(0).getData().getMetadata().getSnapshotSyncSeqNum() < seqNum) {
+        while(!list.isEmpty() && list.get(0).getData().getMetadata().getSnapshotSyncSeqNum() <= seqNum) {
             list.remove(0);
         }
     }
