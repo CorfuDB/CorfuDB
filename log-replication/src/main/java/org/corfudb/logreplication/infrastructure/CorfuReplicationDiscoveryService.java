@@ -37,7 +37,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private final CorfuInterClusterReplicationServerNode replicationServerNode;
 
-
     /**
      * Lock-related configuration parameters
      */
@@ -56,12 +55,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     @Getter
     private CorfuReplicationSiteManagerAdapter siteManager;
 
-
     /**
      * the current node's endpoint
      */
     private String localEndpoint;
-
 
     /**
      * the node's information
@@ -91,7 +88,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         CrossSiteConfiguration crossSiteConfig = new CrossSiteConfiguration(siteManager.fetchSiteConfig());
         this.replicationManager = new CorfuReplicationManager(serverContext.getTransportType(), crossSiteConfig,
-            replicationServerNode);
+            replicationServerNode, this);
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
 
@@ -165,7 +162,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         if (nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
             log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
-            replicationManager.startLogReplication(nodeInfo, this);
+            replicationManager.startLogReplication(nodeInfo);
         } else if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
             // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
             log.info("Start as Sink (receiver) on node {} ", nodeInfo);
@@ -209,6 +206,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     public void processSiteFlip(CrossSiteConfiguration newConfig) {
         stopLogReplication();
+
+        //TODO pankti: read the configuration again and refresh the LogReplicationConfig object
+
         replicationManager.setCrossSiteConfig(newConfig);
 
         boolean leader = nodeInfo.isLeader();
@@ -221,18 +221,18 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     public void processSiteChangeNotification(DiscoveryServiceEvent event) {
         //stale notification, skip
-        if (event.getSiteConfigMsg().getSiteConfigID() < getReplicationManager().getCrossSiteConfig().getSiteConfigID()) {
+        if (event.getSiteConfigMsg().getSiteConfigID() < replicationManager.getCrossSiteConfig().getSiteConfigID()) {
             return;
         }
 
         CrossSiteConfiguration newConfig = new CrossSiteConfiguration(siteManager.fetchSiteConfig());
-        if (newConfig.getSiteConfigID() == getReplicationManager().getCrossSiteConfig().getSiteConfigID()) {
+        if (newConfig.getSiteConfigID() == replicationManager.getCrossSiteConfig().getSiteConfigID()) {
             if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
                 return;
             }
 
             //If the current node it active, compare with the current siteConfig, see if there are addition/removal standbys
-            getReplicationManager().processStandbyChange(nodeInfo, newConfig, this);
+            replicationManager.processStandbyChange(nodeInfo, newConfig);
         } else {
             processSiteFlip(newConfig);
         }
@@ -254,7 +254,18 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             return;
         }
 
-        replicationManager.restartLogReplication(nodeInfo, event.getSiteID(), this);
+        replicationManager.restartLogReplication(nodeInfo, event.getSiteID());
+    }
+
+    /***
+     * After an upgrade, the active site should perform a snapshot sync
+     * @param event
+     */
+    private void processUpgrade(DiscoveryServiceEvent event) {
+        if (nodeInfo.isLeader() && nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
+            // TODO pankti: is this correct?
+            replicationManager.restartLogReplication(nodeInfo, event.getSiteID());
+        }
     }
 
     /**
@@ -277,6 +288,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
             case ConnectionLoss:
                 processConnectionLossWithLeader(event);
+                break;
+
+            case Upgrade:
+                processUpgrade(event);
                 break;
 
             default:
