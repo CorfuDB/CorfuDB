@@ -31,11 +31,6 @@ import java.util.UUID;
 @NotThreadSafe
 @Slf4j
 public class LogEntryWriter {
-    private final static int MAX_NUM_TX_RETRY = 3;
-
-    @Setter
-    private int maxMsgQueSize = LogReplicationSinkManager.DEFAULT_READER_QUEUE_SIZE; //The max size of the msgQ.
-
     private HashMap<UUID, String> streamMap; //the set of streams that log entry writer will work on.
     HashMap<UUID, IStreamView> streamViewMap; //map the stream uuid to the stream view.
     CorfuRuntime rt;
@@ -174,7 +169,7 @@ public class LogEntryWriter {
      * @param snapshot
      * @param ackTimestamp
      */
-    public void setTimestamp(long snapshot, long ackTimestamp) {
+    public void reset(long snapshot, long ackTimestamp) {
         srcGlobalSnapshot = snapshot;
         lastMsgTs = ackTimestamp;
     }

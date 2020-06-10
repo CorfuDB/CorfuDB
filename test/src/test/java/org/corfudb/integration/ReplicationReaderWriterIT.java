@@ -398,7 +398,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         rt.getAddressSpaceView().gc();
         rt.getAddressSpaceView().invalidateServerCaches();
         rt.getAddressSpaceView().invalidateClientCache();
-        System.out.println("trim at " + token + " currentTail " + rt.getAddressSpaceView().getLogTail());
+        System.out.println("\ntrim at " + token + " currentTail " + rt.getAddressSpaceView().getLogTail());
     }
 
     /**

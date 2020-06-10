@@ -242,10 +242,4 @@ public class LogReplicationSourceManager implements DataReceiver {
 
         return null;
     }
-
-    @Override
-    public LogReplicationEntry receive(List<LogReplicationEntry> messages) {
-        messages.forEach(message -> receive(message));
-        return null;
-    }
 }

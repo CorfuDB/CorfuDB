@@ -24,7 +24,7 @@ public class SnapshotReadMessage {
     /**
      * Constructor
      *
-     * @param messages list of messages to send
+     * @param messages the message to send
      * @param endRead True, last read of snapshot sync. False, otherwise.
      */
     public SnapshotReadMessage(List<LogReplicationEntry> messages, boolean endRead) {

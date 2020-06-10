@@ -1,7 +1,6 @@
 package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
-import lombok.Setter;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
 

@@ -127,7 +127,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 logEntrySender.reset(fsm.getBaseSnapshot(), fsm.getAckedTimestamp());
             }
 
-            logEntrySender.updateAckTs(fsm.getAckedTimestamp());
+            //logEntrySender.updateAck(fsm.getAckedTimestamp());
             logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() -> logEntrySender.send(transitionEventId));
 
         } catch (Throwable t) {
