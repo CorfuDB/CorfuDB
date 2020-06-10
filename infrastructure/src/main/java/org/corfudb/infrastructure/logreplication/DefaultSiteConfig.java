@@ -43,11 +43,29 @@ public final class DefaultSiteConfig {
     private static String standbyLogReplicationPort = "9020";
 
     @Getter
-    private static int logWriterQueueSize = 20;
+    private static int logSenderBufferSize = 20;
 
     @Getter
-    private static int logWriterAckCycleCount = 1;
+    private static int logSenderRetryCount = 5;
 
     @Getter
-    private static int logWriterAckCycleTime = 100;
+    private static int logSenderResendTimer = 100;
+
+    @Getter
+    private static int logSenderTimeoutTimer = 1000;
+
+    @Getter
+    private static boolean logSenderTimeout = true;
+
+
+
+    @Getter
+    private static int logSinkBufferSize = 20;
+
+    @Getter
+    private static int logSinkAckCycleCount = 2;
+
+    @Getter
+    private static int logSinkAckCycleTimer = 100;
+
 }
