@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.receive.LogReplicationSinkManager;
+import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -101,7 +102,14 @@ public class LogReplicationServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST)
     private void handleLogReplicationNegotiationRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Log Replication Negotiation Request received by Server.");
-        LogReplicationNegotiationResponse response = new LogReplicationNegotiationResponse(0, 0);
+        LogReplicationMetadata metadata = sinkManager.getLogReplicationMetadata();
+        LogReplicationNegotiationResponse response = new LogReplicationNegotiationResponse(
+                metadata.getSiteConfigID(),
+                metadata.getVersion(),
+                metadata.getLastSnapStartTimestamp(),
+                metadata.getLastSnapTransferDoneTimestamp(),
+                metadata.getLastSrcBaseSnapshotTimestamp(),
+                metadata.getLastProcessedLogTimestamp());
         r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE.payloadMsg(response));
     }
 

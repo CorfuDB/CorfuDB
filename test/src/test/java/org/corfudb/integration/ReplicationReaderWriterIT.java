@@ -4,7 +4,7 @@ import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.receive.PersistedWriterMetadata;
+import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.receive.StreamsSnapshotWriter;
 import org.corfudb.logreplication.send.logreader.SnapshotReadMessage;
 import org.corfudb.logreplication.send.logreader.StreamsLogEntryReader;
@@ -286,8 +286,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeLogEntryMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        LogEntryWriter writer = new LogEntryWriter(rt, config, persistedWriterMetadata);
+        LogReplicationMetadata logReplicationMetadata = new LogReplicationMetadata(rt, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadata);
 
         if (msgQ.isEmpty()) {
             System.out.println("msgQ is empty");
@@ -354,8 +354,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeSnapLogMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        PersistedWriterMetadata persistedWriterMetadata = new PersistedWriterMetadata(rt, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, persistedWriterMetadata);
+        LogReplicationMetadata logReplicationMetadata = new LogReplicationMetadata(rt, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadata);
 
 
 
@@ -365,14 +365,14 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         long siteConfigID = msgQ.get(0).getMetadata().getSiteConfigID();
         long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
-        persistedWriterMetadata.setSrcBaseSnapshotStart(siteConfigID, snapshot);
+        logReplicationMetadata.setSrcBaseSnapshotStart(siteConfigID, snapshot);
         writer.reset(siteConfigID, snapshot);
 
         for (org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
         }
 
-        Long seq = writer.getPersistedWriterMetadata().getLastSnapSeqNum() + 1;
+        Long seq = writer.getLogReplicationMetadata().getLastSnapSeqNum() + 1;
         writer.applyShadowStreams(seq);
     }
 
@@ -615,7 +615,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public void testPersistentTable() throws IOException {
         setupEnv();
         try {
-            PersistedWriterMetadata meta = new PersistedWriterMetadata(writerRuntime, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+            LogReplicationMetadata meta = new LogReplicationMetadata(writerRuntime, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
             meta.getLastProcessedLogTimestamp();
         } catch (Exception e) {
             e.getStackTrace();

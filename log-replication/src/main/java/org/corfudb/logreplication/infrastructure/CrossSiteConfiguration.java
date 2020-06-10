@@ -22,12 +22,6 @@ import java.util.Map;
 
 @Slf4j
 public class CrossSiteConfiguration {
-    final static String DEFAULT_CORFU_PORT_NUM = "9000";
-
-    @Setter
-    @Getter
-    static String CorfuPortnum = DEFAULT_CORFU_PORT_NUM;
-
     @Getter
     private long siteConfigID;
 
