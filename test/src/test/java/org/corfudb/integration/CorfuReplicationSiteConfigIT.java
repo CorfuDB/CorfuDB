@@ -16,8 +16,8 @@ import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class CorfuReplicationSiteConfigIT extends AbstractIT {
-    static int MAX_RETRY = 10;
-    static long sleepInterval = 1000;
+    final static int MAX_RETRY = 10;
+    final static long sleepInterval = 1000;
 
     CorfuInterClusterReplicationServer serverA;
     CorfuInterClusterReplicationServer serverB;

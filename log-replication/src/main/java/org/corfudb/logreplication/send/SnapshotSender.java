@@ -125,9 +125,6 @@ public class SnapshotSender {
                         // Snapshot Sync Completed
                         log.info("Snapshot sync completed for {} on timestamp {}, ack{}", snapshotSyncEventId,
                                 baseSnapshotTimestamp, ack.getMetadata());
-                        System.out.print("\nSnapshot sync completed for {} on timestamp {}, ack{}" + snapshotSyncEventId
-                                + " ack " + ack.getMetadata());
-
                         snapshotSyncComplete(snapshotSyncEventId);
                     } else {
                         log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
@@ -164,7 +161,6 @@ public class SnapshotSender {
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
                 snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
                 snapshotSyncComplete(snapshotSyncEventId);
-                System.out.print("\nSnapshot Sender Snapshot End Ack recieved " + snapshotSyncAck);
             } catch (Exception e) {
                 //todo: generate an event for discovery service
                 log.warn("While sending data, caught an exception. Will notify discovery service");
