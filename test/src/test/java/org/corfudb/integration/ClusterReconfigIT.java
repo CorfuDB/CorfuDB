@@ -208,6 +208,10 @@ public class ClusterReconfigIT extends AbstractIT {
         moreDataToBeWritten.set(false);
         t.join();
 
+        // should have a greater committed tail after state transfer
+        long newCommittedTail = runtime.getAddressSpaceView().getCommittedTail();
+        assertThat(newCommittedTail).isGreaterThan(0L);
+
         verifyData(runtime);
 
         shutdownCorfuServer(corfuServer_1);
@@ -225,13 +229,17 @@ public class ClusterReconfigIT extends AbstractIT {
     private void verifyData(CorfuRuntime corfuRuntime) throws Exception {
 
         long lastAddress = corfuRuntime.getSequencerView().query(CorfuRuntime.getStreamID("test"));
+        long committedTail = corfuRuntime.getAddressSpaceView().getCommittedTail();
+        Map<Long, LogData> map_0 = getAllData(corfuRuntime, "localhost:9000", lastAddress);
+        Map<Long, LogData> map_1 = getAllData(corfuRuntime, "localhost:9001", lastAddress);
+        Map<Long, LogData> map_2 = getAllData(corfuRuntime, "localhost:9002", lastAddress);
 
-        Map<Long, LogData> map_0 = getAllNonEmptyData(corfuRuntime, "localhost:9000", lastAddress);
-        Map<Long, LogData> map_1 = getAllNonEmptyData(corfuRuntime, "localhost:9001", lastAddress);
-        Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, "localhost:9002", lastAddress);
+        assertThat(getUncommittedDataCount(map_0, committedTail)).isZero();
+        assertThat(getUncommittedDataCount(map_0, committedTail)).isZero();
+        assertThat(getUncommittedDataCount(map_0, committedTail)).isZero();
 
-        assertThat(map_1.entrySet()).containsExactlyElementsOf(map_0.entrySet());
-        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
+        assertThat(filterEmptyEntry(map_1).entrySet()).containsExactlyElementsOf(filterEmptyEntry(map_0).entrySet());
+        assertThat(filterEmptyEntry(map_2).entrySet()).containsExactlyElementsOf(filterEmptyEntry(map_0).entrySet());
     }
 
     /**
@@ -243,16 +251,30 @@ public class ClusterReconfigIT extends AbstractIT {
      * @return Map of all the addresses contained by the node corresponding to the data stored.
      * @throws Exception
      */
-    private Map<Long, LogData> getAllNonEmptyData(CorfuRuntime corfuRuntime,
-                                                  String endpoint, long end) throws Exception {
+    private Map<Long, LogData> getAllData(CorfuRuntime corfuRuntime,
+                                          String endpoint, long end) throws Exception {
         ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(endpoint)
                 .readAll(getRangeAddressAsList(0L, end))
                 .get();
         return readResponse.getAddresses().entrySet()
                 .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    private long getUncommittedDataCount(Map<Long, LogData> map, long committedTail) {
+        return map.entrySet()
+                .stream()
+                .filter(longLogDataEntry -> longLogDataEntry.getKey() <= committedTail &&
+                        longLogDataEntry.getValue().isEmpty())
+                .count();
+    }
+
+    private Map<Long, LogData> filterEmptyEntry(Map<Long, LogData> map) {
+        return map.entrySet()
+                .stream()
                 .filter(longLogDataEntry -> !longLogDataEntry.getValue().isEmpty())
-                .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**
@@ -685,6 +707,11 @@ public class ClusterReconfigIT extends AbstractIT {
                     && refreshedLayout.getUnresponsiveServers().size() == 0
                     && refreshedLayout.getAllActiveServers().size() == layout.getAllServers().size();
         });
+
+        // should have a greater committed tail after state transfer
+        long newCommittedTail = runtime.getAddressSpaceView().getCommittedTail();
+        assertThat(newCommittedTail).isGreaterThan(0L);
+
         verifyData(runtime);
 
         shutdownCorfuServer(corfuServer_1);

@@ -40,6 +40,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Rule;
+import org.junit.internal.AssumptionViolatedException;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
@@ -69,11 +70,12 @@ public class AbstractCorfuTest {
         TestThreadGroups.shutdownThreadGroups();
     }
 
-    /** A watcher which prints whether tests have failed or not, for a useful
+    /**
+     * A watcher which prints whether tests have failed or not, for a useful
      * report which can be read on Travis.
      */
     @Rule
-    public TestRule watcher = new TestRule() {
+    public final TestRule watcher = new TestRule() {
 
 
         /** Run the statement, which performs the actual test as well as
@@ -114,7 +116,7 @@ public class AbstractCorfuTest {
 
                             // Generate a timeout
                             CompletableFuture<Throwable> timeoutCompletion =
-                                CFUtils.within(testCompletion, PARAMETERS.TIMEOUT_LONG);
+                                    CFUtils.within(testCompletion, PARAMETERS.TIMEOUT_LONG);
                             Throwable t;
                             try {
                                 t = timeoutCompletion.join();
@@ -134,7 +136,7 @@ public class AbstractCorfuTest {
                             }
                             if (t == null) {
                                 succeeded();
-                            } else if (t instanceof org.junit.internal.AssumptionViolatedException) {
+                            } else if (t instanceof AssumptionViolatedException) {
                                 skipped(t);
                                 throw t;
                             } else {
@@ -150,13 +152,13 @@ public class AbstractCorfuTest {
                             Sleep.sleepUninterruptibly(PARAMETERS.TIMEOUT_SHORT);
                             if (testThread.isAlive()) {
                                 System.out.println(ansi().fgRed().bold()
-                                    .a("Warning: test thread could not be killed!").reset());
+                                        .a("Warning: test thread could not be killed!").reset());
                                 StackTraceElement[] testTrace = testThread.getStackTrace();
                                 if (testTrace.length > 0) {
                                     System.out.println(ansi().a("Thread method: ")
-                                        .a(testTrace[0].getClassName())
-                                        .a(":")
-                                        .a(testTrace[0].getMethodName()));
+                                            .a(testTrace[0].getClassName())
+                                            .a(":")
+                                            .a(testTrace[0].getMethodName()));
                                 }
                             }
                         }
@@ -181,21 +183,21 @@ public class AbstractCorfuTest {
          */
         protected void printThreads() {
             System.out.println(ansi().fgCyan().bold().a("Active Threads At Test Failure")
-                .reset());
+                    .reset());
             System.out.println(ansi().format("%-40s %s",
-                "Thread name", "Method"));
+                    "Thread name", "Method"));
             Map<Thread, StackTraceElement[]> threads = Thread.getAllStackTraces();
             threads.entrySet().forEach(e -> {
                 // Don't print the current thread.
                 if (!e.getKey().equals(Thread.currentThread())) {
                     if (e.getValue().length > 0) {
                         System.out.println(ansi().format("%-40s %s:%s",
-                            e.getKey().getName(),
-                            e.getValue()[0].getClassName(),
-                            e.getValue()[0].getMethodName()));
+                                e.getKey().getName(),
+                                e.getValue()[0].getClassName(),
+                                e.getValue()[0].getMethodName()));
                     } else {
                         System.out.println(ansi().format("%-40s (no trace available)",
-                            e.getKey().getName()));
+                                e.getKey().getName()));
                     }
                 }
             });
@@ -223,9 +225,9 @@ public class AbstractCorfuTest {
          */
         protected void timedOut() {
             System.out.print(ansi().a("[")
-                .fg(Ansi.Color.RED)
-                .a("TIMED OUT").reset()
-                .a("]").newline());
+                    .fg(Ansi.Color.RED)
+                    .a("TIMED OUT").reset()
+                    .a("]").newline());
             printThreads();
             System.out.flush();
         }
@@ -235,7 +237,7 @@ public class AbstractCorfuTest {
          * @param className     The string to check.
          * @param cls           The class to traverse the inheritance tree
          *                      for.
-         * @return              True, if cls inherits from (or is) the class
+         * @return True, if cls inherits from (or is) the class
          *                      given by the className string.
          */
         private boolean classInheritsFromNamedClass(String className,
@@ -263,8 +265,7 @@ public class AbstractCorfuTest {
                         .reduce((first, second) -> second)
                         .get();
                 return testElement.getLineNumber();
-            } catch (NoSuchElementException nse)
-            {
+            } catch (NoSuchElementException nse) {
                 return -1;
             }
         }

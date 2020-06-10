@@ -62,6 +62,9 @@ public interface Fixtures {
         // Default number of times to poll layout
         public static final int DEFAULT_WAIT_POLL_ITER = 300;
 
+        // Default number of values written with state transfer
+        public static final int DEFAULT_LARGE_ITER = 10000;
+
         // Default time to wait before next layout poll: 1 second
         public static final Duration DEFAULT_WAIT_TIME = Duration.ofSeconds(1);
 
