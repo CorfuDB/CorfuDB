@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.receive;
 
 import io.netty.buffer.Unpooled;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -36,11 +35,11 @@ public class LogEntryWriter {
     CorfuRuntime rt;
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
-    private PersistedWriterMetadata persistedWriterMetadata;
+    private LogReplicationMetadataManager logReplicationMetadataManager;
 
-    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config, PersistedWriterMetadata persistedWriterMetadata) {
+    public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
         this.rt = rt;
-        this.persistedWriterMetadata = persistedWriterMetadata;
+        this.logReplicationMetadataManager = logReplicationMetadataManager;
 
         Set<String> streams = config.getStreamsToReplicate();
         streamMap = new HashMap<>();
@@ -87,11 +86,11 @@ public class LogEntryWriter {
         }
 
 
-        CorfuStoreMetadata.Timestamp timestamp = persistedWriterMetadata.getTimestamp();
-        long persistSiteConfigID = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.SiteConfigID);
-        long persistSnapStart = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapStart);
-        long persistSnapDone= persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastSnapApplyDone);
-        long persistLogTS = persistedWriterMetadata.query(timestamp, PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed);
+        CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
+        long persistSiteConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.SiteConfigID);
+        long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotStarted);
+        long persistSnapDone= logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotApplied);
+        long persistLogTS = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LastLogProcessed);
 
         long siteConfigID = txMessage.getMetadata().getSiteConfigID();
         long ts = txMessage.getMetadata().getSnapshotTimestamp();
@@ -107,9 +106,9 @@ public class LogEntryWriter {
             return;
         }
 
-        TxBuilder txBuilder = persistedWriterMetadata.getTxBuilder();
-        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.SiteConfigID, siteConfigID);
-        persistedWriterMetadata.appendUpdate(txBuilder, PersistedWriterMetadata.PersistedWriterMetadataType.LastLogProcessed, entryTS);
+        TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.SiteConfigID, siteConfigID);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LastLogProcessed, entryTS);
 
         for (UUID uuid : opaqueEntry.getEntries().keySet()) {
             for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {

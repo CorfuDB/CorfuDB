@@ -62,8 +62,12 @@ public class CorfuMessageConverter {
                 return protoCorfuMsg
                         .setType(Messages.CorfuMessageType.LOG_REPLICATION_NEGOTIATION_RESPONSE)
                         .setPayload(Any.pack(Messages.LogReplicationNegotiationResponse.newBuilder()
-                                .setBaseSnapshotTimestamp(negotiationResponse.getBaseSnapshotTimestamp())
-                                .setLogEntryTimestamp(negotiationResponse.getLogEntryTimestamp())
+                                .setSiteConfigID(negotiationResponse.getSiteConfigID())
+                                .setVersion(negotiationResponse.getVersion())
+                                .setSnapshotStart(negotiationResponse.getSnapshotStart())
+                                .setSnapshotTransferred(negotiationResponse.getSnapshotTransferred())
+                                .setSnapshotApplied(negotiationResponse.getSnapshotApplied())
+                                .setLastLogEntryTimestamp(negotiationResponse.getLastLogProcessed())
                                 .build()))
                         .build();
             case LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE:

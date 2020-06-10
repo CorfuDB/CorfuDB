@@ -2,8 +2,8 @@ package org.corfudb.infrastructure.logreplication.receive;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationWriterMetadata.LogReplicationMetadataKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationWriterMetadata.LogReplicationMetadataVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -20,7 +20,7 @@ import java.util.UUID;
  * It records the logreader cluster's snapshot timestamp  and last log entry's timestamp, it has received and processed.
  */
 @Slf4j
-public class PersistedWriterMetadata {
+public class LogReplicationMetadataManager {
     private static final String namespace = "CORFU_SYSTEM";
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
     String metadataTableName;
@@ -31,7 +31,7 @@ public class PersistedWriterMetadata {
 
     CorfuRuntime runtime;
 
-    public PersistedWriterMetadata(CorfuRuntime rt, long siteConfigID, UUID primary, UUID dst) {
+    public LogReplicationMetadataManager(CorfuRuntime rt, long siteConfigID, UUID primary, UUID dst) {
         this.runtime = rt;
         this.corfuStore = new CorfuStore(runtime);
         metadataTableName = getPersistedWriterMetadataTableName(primary, dst);
@@ -57,7 +57,7 @@ public class PersistedWriterMetadata {
         return corfuStore.tx(namespace);
     }
 
-    long query(CorfuStoreMetadata.Timestamp timestamp, PersistedWriterMetadataType key) {
+    String queryString(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         CorfuRecord record;
         if (timestamp == null) {
@@ -67,7 +67,7 @@ public class PersistedWriterMetadata {
         }
 
         LogReplicationMetadataVal metadataVal = null;
-        long val = -1;
+        String val = null;
 
         if (record != null) {
             metadataVal = (LogReplicationMetadataVal)record.getPayload();
@@ -77,45 +77,60 @@ public class PersistedWriterMetadata {
             val = metadataVal.getVal();
         }
 
-        //System.out.print("\nquery timestamp " + timestamp + " record " + record + " metadataVal: " + metadataVal + " val " + val);
+        return val;
+    }
+
+    long query(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
+        long val = -1;
+        String str = queryString(timestamp, key);
+        if (str != null) {
+            val = Long.parseLong(str);
+        }
         return val;
     }
 
     public long getSiteConfigID() {
-        return query(null, PersistedWriterMetadataType.SiteConfigID);
+        return query(null, LogReplicationMetadataType.SiteConfigID);
     }
 
+    public String getVersion() { return queryString(null, LogReplicationMetadataType.Version); }
+
     public long getLastSnapStartTimestamp() {
-        return query(null, PersistedWriterMetadataType.LastSnapStart);
+        return query(null, LogReplicationMetadataType.LastSnapshotStarted);
     }
 
 
     public long getLastSnapTransferDoneTimestamp() {
-        return query(null, PersistedWriterMetadataType.LastSnapTransferDone);
+        return query(null, LogReplicationMetadataType.LastSnapshotTransferred);
     }
 
     public long getLastSrcBaseSnapshotTimestamp() {
-        return query(null, PersistedWriterMetadataType.LastSnapApplyDone);
+        return query(null, LogReplicationMetadataType.LastSnapshotApplied);
     }
 
     public long getLastSnapSeqNum() {
-        return query(null, PersistedWriterMetadataType.LastSnapSeqNum);
+        return query(null, LogReplicationMetadataType.LastSnapshotSeqNum);
     }
 
     public long getLastProcessedLogTimestamp() {
-        return query(null, PersistedWriterMetadataType.LastLogProcessed);
+        return query(null, LogReplicationMetadataType.LastLogProcessed);
     }
 
-    void appendUpdate(TxBuilder txBuilder, PersistedWriterMetadataType key, long val) {
+    void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, long val) {
+        LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
+        LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(Long.toString(val)).build();
+        txBuilder.update(metadataTableName, txKey, txVal, null);
+    }
+
+    void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, String val) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(val).build();
         txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
-
     public void setupSiteConfigID(long siteConfigID) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        long persistSiteConfigID = query(timestamp, PersistedWriterMetadataType.SiteConfigID);
+        long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.SiteConfigID);
 
         if (siteConfigID <= persistSiteConfigID) {
             log.warn("Skip setupSiteConfigID. the current siteConfigID " + siteConfigID + " is not larger than the persistSiteConfigID " + persistSiteConfigID);
@@ -124,13 +139,44 @@ public class PersistedWriterMetadata {
 
         TxBuilder txBuilder = corfuStore.tx(namespace);
 
-        for (PersistedWriterMetadataType key : PersistedWriterMetadataType.values()) {
+        for (LogReplicationMetadataType key : LogReplicationMetadataType.values()) {
             long val = Address.NON_ADDRESS;
-            if (key == PersistedWriterMetadataType.SiteConfigID) {
+            if (key == LogReplicationMetadataType.SiteConfigID) {
                 val = siteConfigID;
             }
             appendUpdate(txBuilder, key, val);
          }
+
+        txBuilder.commit(timestamp);
+        log.info("Update siteConfigID, new metadata {}", getMetadata());
+    }
+
+    public void updateVersion(String version) {
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+        String  persistVersion = queryString(timestamp, LogReplicationMetadataType.Version);
+
+        if (persistVersion.equals(version)) {
+            log.warn("Skip update the current version {} with new version {} as they are the same", persistVersion, version);
+            return;
+        }
+
+        TxBuilder txBuilder = corfuStore.tx(namespace);
+
+        for (LogReplicationMetadataType key : LogReplicationMetadataType.values()) {
+            long val = Address.NON_ADDRESS;
+
+            // For version, it will be updated with the current version
+            if (key == LogReplicationMetadataType.Version) {
+                appendUpdate(txBuilder, key, version);
+            } else if (key == LogReplicationMetadataType.SiteConfigID) {
+                // For siteConfig ID, it should not be changed. Update it to fence off other metadata updates.
+                val = query(timestamp, LogReplicationMetadataType.SiteConfigID);
+                appendUpdate(txBuilder, key, val);
+            } else {
+                // Reset all other keys to -1.
+                appendUpdate(txBuilder, key, val);
+            }
+        }
 
         txBuilder.commit(timestamp);
     }
@@ -148,8 +194,8 @@ public class PersistedWriterMetadata {
      */
     public boolean setSrcBaseSnapshotStart(long siteConfigID, long ts) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        long persistSiteConfigID = query(timestamp, PersistedWriterMetadataType.SiteConfigID);
-        long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
+        long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.SiteConfigID);
+        long persistSnapStart = query(timestamp, LogReplicationMetadataType.LastSnapshotStarted);
 
         log.debug("Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
                 " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
@@ -163,14 +209,18 @@ public class PersistedWriterMetadata {
 
         TxBuilder txBuilder = corfuStore.tx(namespace);
 
-        //Update the siteConfigID to fence all other transactions that update the metadata at the same time
-        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteConfigID, siteConfigID);
+        // Update the siteConfigID to fence all other transactions that update the metadata at the same time
+        appendUpdate(txBuilder, LogReplicationMetadataType.SiteConfigID, siteConfigID);
 
-        //Setup the LastSnapStart
-        appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapStart, ts);
+        // Setup the LastSnapshotStarted
+        appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotStarted, ts);
 
-        //Setup LastSnapSeqNum
-        appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapSeqNum, Address.NON_ADDRESS);
+        // Reset other metadata
+        appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotTransferred, Address.NON_ADDRESS);
+        appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotApplied, Address.NON_ADDRESS);
+        appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotSeqNum, Address.NON_ADDRESS);
+        appendUpdate(txBuilder, LogReplicationMetadataType.LastLogProcessed, Address.NON_ADDRESS);
+
         txBuilder.commit(timestamp);
 
         log.debug("Commit. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
@@ -186,8 +236,8 @@ public class PersistedWriterMetadata {
      */
     public void setLastSnapTransferDoneTimestamp(long siteConfigID, long ts) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        long persisteSiteConfigID = query(timestamp, PersistedWriterMetadataType.SiteConfigID);
-        long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
+        long persisteSiteConfigID = query(timestamp, LogReplicationMetadataType.SiteConfigID);
+        long persistSnapStart = query(timestamp, LogReplicationMetadataType.LastSnapshotStarted);
 
         log.debug("setLastSnapTransferDone snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
                 " persisteSiteConfigID " + persisteSiteConfigID + " persistSnapStart " + persistSnapStart);
@@ -202,10 +252,10 @@ public class PersistedWriterMetadata {
         TxBuilder txBuilder = corfuStore.tx(namespace);
 
         //Update the siteConfigID to fence all other transactions that update the metadata at the same time
-        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteConfigID, siteConfigID);
+        appendUpdate(txBuilder, LogReplicationMetadataType.SiteConfigID, siteConfigID);
 
-        //Setup the LastSnapStart
-        appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapTransferDone, ts);
+        //Setup the LastSnapshotStarted
+        appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotTransferred, ts);
 
         txBuilder.commit(timestamp);
 
@@ -214,11 +264,11 @@ public class PersistedWriterMetadata {
         return;
     }
 
-    public void setSrcBaseSnapshotDone(LogReplicationEntry entry) {
+    public void setSnapshotApplied(LogReplicationEntry entry) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        long persistSiteConfigID = query(timestamp, PersistedWriterMetadataType.SiteConfigID);
-        long persistSnapStart = query(timestamp, PersistedWriterMetadataType.LastSnapStart);
-        long persistSnapTranferDone = query(timestamp, PersistedWriterMetadataType.LastSnapTransferDone);
+        long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.SiteConfigID);
+        long persistSnapStart = query(timestamp, LogReplicationMetadataType.LastSnapshotStarted);
+        long persistSnapTranferDone = query(timestamp, LogReplicationMetadataType.LastSnapshotTransferred);
         long siteConfigID = entry.getMetadata().getSiteConfigID();
         long ts = entry.getMetadata().getSnapshotTimestamp();
 
@@ -231,13 +281,13 @@ public class PersistedWriterMetadata {
         TxBuilder txBuilder = corfuStore.tx(namespace);
 
         //Update the siteConfigID to fence all other transactions that update the metadata at the same time
-        appendUpdate(txBuilder, PersistedWriterMetadataType.SiteConfigID, siteConfigID);
+        appendUpdate(txBuilder, LogReplicationMetadataType.SiteConfigID, siteConfigID);
 
-        appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapApplyDone, ts);
-        appendUpdate(txBuilder, PersistedWriterMetadataType.LastLogProcessed, ts);
+        appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotApplied, ts);
+        appendUpdate(txBuilder, LogReplicationMetadataType.LastLogProcessed, ts);
 
         //may not need
-        appendUpdate(txBuilder, PersistedWriterMetadataType.LastSnapSeqNum, Address.NON_ADDRESS);
+        appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotSeqNum, Address.NON_ADDRESS);
 
         txBuilder.commit(timestamp);
 
@@ -249,12 +299,12 @@ public class PersistedWriterMetadata {
 
     public String getMetadata() {
         String s = new String();
-        s.concat(PersistedWriterMetadataType.SiteConfigID.getVal() + " " + getSiteConfigID() +" ");
-        s.concat(PersistedWriterMetadataType.LastSnapStart.getVal() + " " + getLastSnapStartTimestamp() +" ");
-        s.concat(PersistedWriterMetadataType.LastSnapTransferDone.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
-        s.concat(PersistedWriterMetadataType.LastSnapApplyDone.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");
-        s.concat(PersistedWriterMetadataType.LastSnapSeqNum.getVal() + " " + getLastSnapSeqNum() + " ");
-        s.concat(PersistedWriterMetadataType.LastLogProcessed.getVal() + " " + getLastProcessedLogTimestamp() + " ");
+        s.concat(LogReplicationMetadataType.SiteConfigID.getVal() + " " + getSiteConfigID() +" ");
+        s.concat(LogReplicationMetadataType.LastSnapshotStarted.getVal() + " " + getLastSnapStartTimestamp() +" ");
+        s.concat(LogReplicationMetadataType.LastSnapshotTransferred.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
+        s.concat(LogReplicationMetadataType.LastSnapshotApplied.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");
+        s.concat(LogReplicationMetadataType.LastSnapshotSeqNum.getVal() + " " + getLastSnapSeqNum() + " ");
+        s.concat(LogReplicationMetadataType.LastLogProcessed.getVal() + " " + getLastProcessedLogTimestamp() + " ");
 
         return s;
     }
@@ -263,17 +313,18 @@ public class PersistedWriterMetadata {
         return TABLE_PREFIX_NAME + primarySite.toString() + "-to-" + dst.toString();
     }
 
-    public enum PersistedWriterMetadataType {
+    public enum LogReplicationMetadataType {
         SiteConfigID("SiteConfigID"),
-        LastSnapStart("lastSnapStart"),
-        LastSnapTransferDone("lastSnapTransferDone"),
-        LastSnapApplyDone("lastSnapApplied"),
-        LastSnapSeqNum("lastSnapSeqNum"),
+        Version("Version"),
+        LastSnapshotStarted("lastSnapStart"),
+        LastSnapshotTransferred("lastSnapTransferred"),
+        LastSnapshotApplied("lastSnapApplied"),
+        LastSnapshotSeqNum("lastSnapSeqNum"),
         LastLogProcessed("lastLogProcessed");
 
         @Getter
         String val;
-        PersistedWriterMetadataType(String newVal) {
+        LogReplicationMetadataType(String newVal) {
             val  = newVal;
         }
     }
