@@ -184,9 +184,9 @@ public class CorfuReplicationManager {
                 log.info("Start Snapshot Sync Replication");
                 runtime.startSnapshotSync();
                 break;
-            case SNAPSHOT_WAIT_COMPLETE:
+            case SNAPSHOT_TRANSFER_COMPLETE:
                 log.info("Should Start Snapshot Sync Phase II,but for now just restart full snapshot sync");
-                // Right now it is hard to put logic for SNAPSHOT_WAIT_COMPLETE
+                // Right now it is hard to put logic for SNAPSHOT_TRANSFER_COMPLETE
                 // replace it with SNAPSHOT_SYNC_REQUEST, and will re-examine it later.
                 runtime.startSnapshotSync();
                 break;
@@ -300,7 +300,7 @@ public class CorfuReplicationManager {
         // It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the standby site.
         if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
                 negotiationResponse.getSnapshotTransferred() > negotiationResponse.getSnapshotApplied()) {
-            return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_WAIT_COMPLETE,
+            return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
                     new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart()));
         }
 

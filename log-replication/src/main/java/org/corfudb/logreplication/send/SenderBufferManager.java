@@ -11,6 +11,7 @@ import org.corfudb.runtime.view.Address;
 
 import java.io.File;
 import java.io.FileReader;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -138,12 +139,12 @@ public abstract class SenderBufferManager {
      * @throws TimeoutException
      */
     public LogReplicationEntry processAcks() throws InterruptedException, ExecutionException, TimeoutException {
-        LogReplicationEntry ack = (LogReplicationEntry) CompletableFuture.anyOf(pendingCompletableFutureForAcks
-                .values().toArray(new CompletableFuture<?>[pendingCompletableFutureForAcks.size()])).get(timeoutTimer, TimeUnit.MILLISECONDS);
+        LogReplicationEntry ack = (LogReplicationEntry) CompletableFuture.anyOf(pendingCompletableFutureForAcks.values()
+                .toArray(new CompletableFuture<?>[pendingCompletableFutureForAcks.size()])).get(timeoutTimer, TimeUnit.MILLISECONDS);
 
         updateAck(ack);
 
-        log.trace("Total pending log entry acks: {}, for timestamps: {}", pendingCompletableFutureForAcks.size(), pendingCompletableFutureForAcks.keySet());
+        log.trace("Total pending log entry acks: {}, for timestamps: {}", pendingCompletableFutureForAcks.size(), pendingCompletableFutureForAcks);
         return ack;
     }
 

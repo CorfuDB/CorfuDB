@@ -27,6 +27,7 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
             return;
         maxAckForLogEntrySync = newAck;
         pendingMessages.evictAccordingToSeqNum(maxAckForLogEntrySync);
+
         pendingCompletableFutureForAcks = pendingCompletableFutureForAcks.entrySet().stream()
                 .filter(entry -> entry.getKey() > maxAckForLogEntrySync)
                 .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));

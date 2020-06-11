@@ -21,8 +21,6 @@ import org.corfudb.runtime.view.Address;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  *  This class is responsible of transmitting a consistent view of the data at a given timestamp,
@@ -53,6 +51,9 @@ public class SnapshotSender {
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
     private boolean startSnapshotSync = true;
 
+    // Flag indicating the snapshot sync reader has read all entries
+    boolean readingCompleted;
+
 
     @Getter
     @VisibleForTesting
@@ -66,26 +67,21 @@ public class SnapshotSender {
         this.runtime = runtime;;
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
+        readingCompleted = false;
         dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender);
     }
 
-    private CompletableFuture<LogReplicationEntry> snapshotSyncAck;
 
     /**
-     * Initiate Snapshot Sync, this entails reading and sending data for a given snapshot.
-     *
-     * @param snapshotSyncEventId identifier of the event that initiated the snapshot sync
+     * Snapshot sync phase I: read data and send messages through the buffer.
+     * @param snapshotSyncEventId
      */
-    public void transmit(UUID snapshotSyncEventId) {
-
-        log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
-                baseSnapshotTimestamp);
-
-        boolean completed = false;    // Flag indicating the snapshot sync is completed
+    public void readAndSendMessage(UUID snapshotSyncEventId) {
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
         int messagesSent = 0;       // Limit the number of messages to SNAPSHOT_BATCH_SIZE. The reason we need to limit
-                                    // is because by design several state machines can share the same thread pool,
-                                    // therefore, we need to hand the thread for other workers to execute.
+        // is because by design several state machines can share the same thread pool,
+        // therefore, we need to hand the thread for other workers to execute.
+
         SnapshotReadMessage snapshotReadMessage;
 
         // Skip if no data is present in the log
@@ -93,11 +89,11 @@ public class SnapshotSender {
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
             // or snapshot sync is stopped
             dataSenderBufferManager.resend();
-            while (messagesSent < SNAPSHOT_BATCH_SIZE && !dataSenderBufferManager.getPendingMessages().isFull() &&!completed && !stopSnapshotSync) {
+            while (messagesSent < SNAPSHOT_BATCH_SIZE && !dataSenderBufferManager.getPendingMessages().isFull() &&!readingCompleted && !stopSnapshotSync) {
 
                 try {
                     snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
-                    completed = snapshotReadMessage.isEndRead();
+                    readingCompleted = snapshotReadMessage.isEndRead();
                     // Data Transformation / Processing
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
@@ -113,38 +109,15 @@ public class SnapshotSender {
                     break;
                 }
 
-                messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, completed);
+                messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, readingCompleted);
                 observedCounter.setValue(messagesSent);
             }
 
-            if (completed) {
-                // Block until ACK from last sent message is received
-                try {
-                    LogReplicationEntry ack = snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-                    if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp) {
-                        // Snapshot Sync Completed
-                        log.info("Snapshot sync completed for {} on timestamp {}, ack{}", snapshotSyncEventId,
-                                baseSnapshotTimestamp, ack.getMetadata());
-                        System.out.print("\nSnapshot sync completed for {} on timestamp {}, ack{}" + snapshotSyncEventId
-                                + " ack " + ack.getMetadata());
+            if (readingCompleted) {
+                readingCompleteResendMessagesInBuffer(snapshotSyncEventId);
+            }
 
-                        snapshotSyncComplete(snapshotSyncEventId);
-                    } else {
-                        log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
-                                ack.getMetadata());
-                        throw new Exception("Wrong base snapshot ack");
-                    }
-                } catch (Exception e) {
-                    log.error("Exception caught while blocking on snapshot sync {}, ack for {}",
-                            snapshotSyncEventId, baseSnapshotTimestamp, e);
-                    if (snapshotSyncAck.isCompletedExceptionally()) {
-                        log.error("...");
-                    }
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
-                } finally {
-                    snapshotSyncAck = null;
-                }
-            } else if (!cancel) {
+            if(!cancel) {
                 // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
                 // Snapshot Sync is not performed in a single run, as for the case of multi-site replication
@@ -161,10 +134,10 @@ public class SnapshotSender {
             // to complete snapshot sync and send the right ACK)
             try {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
-                snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
-                snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
+                //snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
                 snapshotSyncComplete(snapshotSyncEventId);
-                System.out.print("\nSnapshot Sender Snapshot End Ack recieved " + snapshotSyncAck);
+                //System.out.print("\nSnapshot Sender Snapshot End Ack recieved " + snapshotSyncAck);
             } catch (Exception e) {
                 //todo: generate an event for discovery service
                 log.warn("While sending data, caught an exception. Will notify discovery service");
@@ -172,10 +145,75 @@ public class SnapshotSender {
         }
     }
 
+    /**
+     * The reader has finished reading all the entries and message has been delivered.
+     * It is responsible to resend messages in the buffer and wait till the receiver send an ACK
+     * for the snapshot end marker message.
+     * @param snapshotSyncEventId
+     */
+    public void readingCompleteResendMessagesInBuffer(UUID snapshotSyncEventId) {
+        LogReplicationEntry ack = dataSenderBufferManager.resend();
+        System.out.print("\nreadingCompleteResendMessagesInBuffer ack " + ack.getMetadata());
+
+        // Block until ACK from last sent message is received]
+        try {
+            if (ack != null && ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
+                    ack.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END) {
+                // Snapshot Sync Completed
+                log.info("Snapshot sync completed for {} on timestamp {}, ack{}", snapshotSyncEventId,
+                        baseSnapshotTimestamp, ack.getMetadata());
+                System.out.print("\nSnapshot sync completed for {} on timestamp {}, ack{}" + snapshotSyncEventId
+                        + " ack " + ack.getMetadata());
+
+                snapshotSyncComplete(snapshotSyncEventId);
+            } else if (ack != null && ack.getMetadata().getSnapshotTimestamp() != baseSnapshotTimestamp){
+                log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
+                        ack.getMetadata());
+                throw new Exception("Wrong base snapshot ack");
+            } else {
+                // Maximum number of batch messages sent. This snapshot sync needs to continue.
+
+                // Snapshot Sync is not performed in a single run, as for the case of multi-site replication
+                // the shared thread pool could be lower than the number of sites, so we assign resources in
+                // a round robin fashion.
+                log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
+                fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
+                        new LogReplicationEventMetadata(snapshotSyncEventId)));
+            }
+        } catch (Exception e) {
+            log.error("Exception caught while blocking on snapshot sync {}, ack for {}",
+                    snapshotSyncEventId, baseSnapshotTimestamp, e);
+            snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
+        }
+    }
+
+
+    /**
+     * Initiate Snapshot Sync, this entails reading and sending data for a given snapshot.
+     * There are two phases:
+     * Phase I: reading data and send message through buffer till read all the data
+     * Phase II: resend the data in the buffer to receiver till the SNAPSHOT_END is acknowledged
+     * by the receiver. It may keep sending SNAPSHOT_END message to ping the receiver to know
+     * if the connection is still up.
+     *
+     * @param snapshotSyncEventId identifier of the event that initiated the snapshot sync
+     */
+    public void transmit(UUID snapshotSyncEventId) {
+
+        log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
+                baseSnapshotTimestamp);
+
+        if(!readingCompleted) {
+            readAndSendMessage(snapshotSyncEventId);
+        } else {
+            readingCompleteResendMessagesInBuffer(snapshotSyncEventId);
+            return;
+        }
+    }
+
+
     private int processReads(List<LogReplicationEntry> logReplicationEntries, UUID snapshotSyncEventId, boolean completed) {
         int numMessages = 0;
-
-        //dataSenderBufferManager.resend();
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
@@ -190,7 +228,7 @@ public class SnapshotSender {
         if (completed) {
             LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
             log.info("SnapshotSender sent out SNAPSHOT_END message {} " + endDataMessage.getMetadata());
-            snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
+            dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;
         }
 
@@ -260,6 +298,7 @@ public class SnapshotSender {
 
         stopSnapshotSync = false;
         startSnapshotSync = true;
+        readingCompleted = false;
     }
 
     /**

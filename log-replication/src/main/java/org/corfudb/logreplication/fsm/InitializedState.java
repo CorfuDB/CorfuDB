@@ -33,7 +33,7 @@ public class InitializedState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-            case SNAPSHOT_WAIT_COMPLETE:
+            case SNAPSHOT_TRANSFER_COMPLETE:
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
