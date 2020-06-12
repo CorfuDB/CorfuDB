@@ -130,7 +130,9 @@ public class CorfuServerNode implements AutoCloseable {
 
         log.info("close: Shutting down Corfu server and cleaning resources");
         serverContext.close();
-        bindFuture.channel().close().syncUninterruptibly();
+        if (bindFuture != null) {
+            bindFuture.channel().close().syncUninterruptibly();
+        }
 
         // A executor service to create the shutdown threads
         // plus name the threads correctly.
