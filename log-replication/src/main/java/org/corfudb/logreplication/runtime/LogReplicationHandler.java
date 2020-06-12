@@ -16,7 +16,6 @@ import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.clients.IHandler;
 
 import java.lang.invoke.MethodHandles;
-import java.util.ArrayList;
 import java.util.UUID;
 
 
@@ -29,7 +28,6 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     @Setter
     @Getter
     IClientRouter router;
-    ArrayList<LogReplicationEntry> ackList = new ArrayList<>();
 
     @Getter
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)

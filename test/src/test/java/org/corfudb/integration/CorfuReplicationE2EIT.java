@@ -117,7 +117,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             // Wait until data is fully replicated
             System.out.println("\nWait ... Snapshot log replication in progress ...");
             while (mapAStandby.size() != numWrites) {
-                System.out.print("\nmapAstandby size " + mapAStandby.size());
+                //
             }
 
             // Verify data is present in Standby Site
