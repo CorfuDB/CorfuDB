@@ -58,7 +58,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     private LogEntryWriter logEntryWriter;
 
     @Getter
-    private LogReplicationMetadata logReplicationMetadata;
+    private LogReplicationMetadataManager logReplicationMetadataManager;
     private RxState rxState;
 
     @Getter
@@ -124,14 +124,14 @@ public class LogReplicationSinkManager implements DataReceiver {
      * Init variables.
      */
     private void init() {
-        logReplicationMetadata = new LogReplicationMetadata(runtime, 0, config.getSiteID(), config.getRemoteSiteID());
-        snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadata);
-        logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadata);
-        logEntryWriter.reset(logReplicationMetadata.getLastSrcBaseSnapshotTimestamp(),
-                logReplicationMetadata.getLastProcessedLogTimestamp());
+        logReplicationMetadataManager = new LogReplicationMetadataManager(runtime, 0, config.getSiteID(), config.getRemoteSiteID());
+        snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
+        logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
+        logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
+                logReplicationMetadataManager.getLastProcessedLogTimestamp());
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadata.getLastProcessedLogTimestamp(), this);
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
 
         bufferSize = DefaultSiteConfig.getLogSinkBufferSize();
         ackCycleCnt = DefaultSiteConfig.getLogSinkAckCycleCount();
@@ -260,10 +260,10 @@ public class LogReplicationSinkManager implements DataReceiver {
          * Fails to set the baseSnapshot at the metadata store, it could be a out of date message,
          * or the current node is out of sync, ignore it.
          */
-        if (logReplicationMetadata.setSrcBaseSnapshotStart(siteConfigID, timestamp) == false) {
+        if (logReplicationMetadataManager.setSrcBaseSnapshotStart(siteConfigID, timestamp) == false) {
             log.warn("Sink Manager in state {} and received message {}. " +
                             "Dropping Message due to failure update of the metadata store {}",
-                    rxState, entry.getMetadata(), logReplicationMetadata.getMetadata());
+                    rxState, entry.getMetadata(), logReplicationMetadataManager.getMetadata());
             return;
         }
 
@@ -281,7 +281,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Setup buffer manager.
         snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadata.getLastSnapSeqNum(), this);
+                logReplicationMetadataManager.getLastSnapSeqNum(), this);
 
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
@@ -296,9 +296,9 @@ public class LogReplicationSinkManager implements DataReceiver {
         //check if the all the expected message has received
         rxState = RxState.LOG_ENTRY_SYNC;
 
-        logReplicationMetadata.setSnapshotApplied(inputEntry);
+        logReplicationMetadataManager.setSnapshotApplied(inputEntry);
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadata.getLastProcessedLogTimestamp(), this);
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
 
 
         log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
@@ -368,12 +368,12 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.active = active;
         this.siteConfigID = siteConfigID;
 
-        logReplicationMetadata.setupSiteConfigID(siteConfigID);
-        snapshotWriter.reset(siteConfigID, logReplicationMetadata.getLastSrcBaseSnapshotTimestamp());
-        logEntryWriter.reset(logReplicationMetadata.getLastSrcBaseSnapshotTimestamp(),
-                logReplicationMetadata.getLastProcessedLogTimestamp());
+        logReplicationMetadataManager.setupSiteConfigID(siteConfigID);
+        snapshotWriter.reset(siteConfigID, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp());
+        logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
+                logReplicationMetadataManager.getLastProcessedLogTimestamp());
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadata.getLastProcessedLogTimestamp(), this);
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
     }
 
     public void shutdown() {

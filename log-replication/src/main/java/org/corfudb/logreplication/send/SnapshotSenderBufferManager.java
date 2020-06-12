@@ -29,7 +29,7 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
         pendingMessages.evictAccordingToSeqNum(maxAckForLogEntrySync);
         pendingCompletableFutureForAcks = pendingCompletableFutureForAcks.entrySet().stream()
                 .filter(entry -> entry.getKey() > maxAckForLogEntrySync)
-                .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
+                .collect(Collectors.toMap(entry-> entry.getKey(), entry->entry.getValue()));
     }
 
     /**

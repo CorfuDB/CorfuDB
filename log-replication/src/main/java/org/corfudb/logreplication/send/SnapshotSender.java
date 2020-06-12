@@ -157,7 +157,7 @@ public class SnapshotSender {
             // Generate a special LogReplicationEntry with only metadata (used as start marker on receiver side
             // to complete snapshot sync and send the right ACK)
             try {
-                dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
+                dataSenderBufferManager.sendWithBuffering(resendMsgsAndWaitAckForSnapshotEnd(snapshotSyncEventId));
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
                 snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
                 snapshotSyncComplete(snapshotSyncEventId);
@@ -175,7 +175,7 @@ public class SnapshotSender {
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
-            dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
+            dataSenderBufferManager.sendWithBuffering(resendMsgsAndWaitAckForSnapshotEnd(snapshotSyncEventId));
             startSnapshotSync = false;
             numMessages++;
         }
@@ -200,7 +200,7 @@ public class SnapshotSender {
      * @param snapshotSyncEventId snapshot sync event identifier
      * @return snapshot sync start marker as LogReplicationEntry
      */
-    private LogReplicationEntry getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
+    private LogReplicationEntry resendMsgsAndWaitAckForSnapshotEnd(UUID snapshotSyncEventId) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START, fsm.getSiteConfigID(),
                 snapshotSyncEventId, Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);

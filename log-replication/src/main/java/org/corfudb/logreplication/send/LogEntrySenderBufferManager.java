@@ -3,6 +3,7 @@ package org.corfudb.logreplication.send;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
+import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 

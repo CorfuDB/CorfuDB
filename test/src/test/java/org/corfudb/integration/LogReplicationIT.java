@@ -5,7 +5,7 @@ import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataManager;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 import org.corfudb.logreplication.LogReplicationSourceManager;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
@@ -143,7 +143,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
     CorfuTable<String, Long> writerMetaDataTable;
-    LogReplicationMetadata logReplicationMetadata;
+    LogReplicationMetadataManager logReplicationMetadataManager;
 
     /**
      * Setup Test Environment
@@ -196,10 +196,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
 
-        logReplicationMetadata = new LogReplicationMetadata(dstTestRuntime, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
         writerMetaDataTable = dstTestRuntime.getObjectsView()
                 .build()
-                .setStreamName(LogReplicationMetadata.getPersistedWriterMetadataTableName(PRIMARY_SITE_ID, REMOTE_SITE_ID))
+                .setStreamName(LogReplicationMetadataManager.getPersistedWriterMetadataTableName(PRIMARY_SITE_ID, REMOTE_SITE_ID))
                 .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                 })
                 .setSerializer(Serializers.JSON)
@@ -816,7 +816,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
         expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
-        assertThat(expectedAckTimestamp).isEqualTo(logReplicationMetadata.getLastProcessedLogTimestamp());
+        assertThat(expectedAckTimestamp).isEqualTo(logReplicationMetadataManager.getLastProcessedLogTimestamp());
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
     }
@@ -1311,15 +1311,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        long lastSnapStart = logReplicationMetadata.getLastSnapStartTimestamp();
-        long lastSnapDone = logReplicationMetadata.getLastSrcBaseSnapshotTimestamp();
+        long lastSnapStart = logReplicationMetadataManager.getLastSnapStartTimestamp();
+        long lastSnapDone = logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp();
 
         System.out.println("\nlastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
         assertThat(lastSnapStart == lastSnapDone).isTrue();
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = logReplicationMetadata.getLastProcessedLogTimestamp();
+        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogTimestamp();
 
         System.out.println("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp);
         assertThat(expectedAckTimestamp == lastLogProcessed).isTrue();
