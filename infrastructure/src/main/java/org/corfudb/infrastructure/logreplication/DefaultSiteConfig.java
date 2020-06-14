@@ -49,10 +49,10 @@ public final class DefaultSiteConfig {
     private static int logSenderRetryCount = 5;
 
     @Getter
-    private static int logSenderResendTimer = 100;
+    private static int logSenderResendTimer = 5000;
 
     @Getter
-    private static int logSenderTimeoutTimer = 1000;
+    private static int logSenderTimeoutTimer = 5000;
 
     @Getter
     private static boolean logSenderTimeout = true;
@@ -60,12 +60,12 @@ public final class DefaultSiteConfig {
 
 
     @Getter
-    private static int logSinkBufferSize = 20;
+    private static int logSinkBufferSize = 40;
 
     @Getter
-    private static int logSinkAckCycleCount = 2;
+    private static int logSinkAckCycleCount = 4;
 
     @Getter
-    private static int logSinkAckCycleTimer = 100;
+    private static int logSinkAckCycleTimer = 1000;
 
 }
