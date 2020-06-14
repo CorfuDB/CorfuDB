@@ -339,7 +339,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
-        assertThat(listenerQueue.size()).isEqualTo(LARGE_NUM_ENTRIES/StreamsSnapshotReader.MAX_NUM_SMR_ENTRY);
+        assertThat(LARGE_NUM_ENTRIES/StreamsSnapshotReader.MAX_NUM_SMR_ENTRY).isLessThanOrEqualTo(listenerQueue.size());
 
         // Transactional puts into the stream (incremental updates)
         writeTxIncrementalUpdates();
