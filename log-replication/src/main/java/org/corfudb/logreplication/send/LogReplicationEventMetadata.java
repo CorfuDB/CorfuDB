@@ -33,7 +33,7 @@ public class LogReplicationEventMetadata {
      * @return an empty instance of log replication event metadata
      */
     public static LogReplicationEventMetadata empty() {
-        return new LogReplicationEventMetadata(NIL_UUID, 0L);
+        return new LogReplicationEventMetadata(NIL_UUID, -1L);
     }
 
     /**

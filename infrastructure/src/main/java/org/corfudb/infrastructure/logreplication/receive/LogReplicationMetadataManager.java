@@ -77,7 +77,6 @@ public class LogReplicationMetadataManager {
             val = metadataVal.getVal();
         }
 
-        //System.out.print("\nquery timestamp " + timestamp + " record " + record + " metadataVal: " + metadataVal + " val " + val);
         return val;
     }
 
@@ -149,6 +148,7 @@ public class LogReplicationMetadataManager {
          }
 
         txBuilder.commit(timestamp);
+        log.info("Update siteConfigID, new metadata {}", getMetadata());
     }
 
     public void updateVersion(String version) {

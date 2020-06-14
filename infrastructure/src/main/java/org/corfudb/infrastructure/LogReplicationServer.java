@@ -100,7 +100,6 @@ public class LogReplicationServer extends AbstractServer {
                 metadata.getLastSnapTransferDoneTimestamp(),
                 metadata.getLastSrcBaseSnapshotTimestamp(),
                 metadata.getLastProcessedLogTimestamp());
-        System.out.print("\nsending response " + response);
         r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE.payloadMsg(response));
     }
 

@@ -297,9 +297,6 @@ public class CorfuReplicationManager {
      */
     private LogReplicationEvent processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
             throws LogReplicationNegotiationException {
-
-        System.out.print("Get negotiation standby site state according to the response {} " +
-                negotiationResponse);
         /*
          * If the version are different, report an error.
          */
@@ -340,12 +337,11 @@ public class CorfuReplicationManager {
          * Get the current log head.
          */
         long logHead = runtime.getAddressSpaceView().getTrimMark().getSequence();
+        LogReplicationEvent event;
 
         /*
-         * It is a fresh start or it is in log entry sync state
-         * Following is an example that metadata value indicates a fresh start, no replicated data at standby site.
-         * If the the log at the active site has never trimmed, it can start log entry sync. If the log entry 0 has been trimmed
-         * at the active site, it needs to start snapshot full sync:
+         * It is a fresh start, start snapshot full sync.
+         * Following is an example that metadata value indicates a fresh start, no replicated data at standby site:
          * "siteConfigID": "10"
          * "version": "release-1.0"
          * "snapshotStart": "-1"
@@ -353,7 +349,55 @@ public class CorfuReplicationManager {
          * "snashotTransferred": "-1"
          * "snapshotApplied": "-1"
          * "lastLogEntryProcessed": "-1"
-         *
+         */
+        if (negotiationResponse.getSnapshotStart() == -1) {
+            negotiationResponse.getLastLogProcessed();
+            event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+            return event;
+        }
+
+        /*
+         * If it is in the snapshot full sync phase I, transferring data, restart the snapshot full sync.
+         * An example of in Snapshot Sync Phase I, transfer phase:
+         * "siteConfigID": "10"
+         * "version": "release-1.0"
+         * "snapshotStart": "100"
+         * "snapshotSeqNum": " 88"
+         * "snashotTransferred": "-1"
+         * "snapshotApplied": "-1"
+         * "lastLogEntryProcessed": "-1"
+         */
+        if (negotiationResponse.getSnapshotStart() > negotiationResponse.getSnapshotTransferred()) {
+            event =  new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+            log.info("Get the negotionation response {} and will start replication event {}.",
+                    negotiationResponse, event);
+            return event;
+        }
+
+        /*
+         * If it is in the snapshot full sync phase II:
+         * the data has been transferred to the standby site and the the standby site is applying data from shadow streams
+         * to the real streams.
+         * It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the standby site.
+         * An example of in Snapshot sync phase II: applying phase
+         * "siteConfigID": "10"
+         * "version": "release-1.0"
+         * "snapshotStart": "100"
+         * "snapshotSeqNum": " 88"
+         * "snashotTransferred": "100"
+         * "snapshotApplied": "-1"
+         * "lastLogEntryProcessed": "-1"
+         */
+        if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
+                negotiationResponse.getSnapshotTransferred() > negotiationResponse.getSnapshotApplied()) {
+            event =  new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_WAIT_COMPLETE,
+                    new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart()));
+            log.info("Get the negotionation response {} and will start replication event {}.",
+                    negotiationResponse, event);
+            return event;
+        }
+
+        /* If it is in log entry sync state, continues log entry sync state.
          * An example to show the standby site is in log entry sync phase.
          * A full snapshot transfer based on timestamp 100 has been completed, and this standby has processed all log entries
          * between 100 to 200. A log entry sync should be restart if log entry 201 is not trimmed.
@@ -374,48 +418,16 @@ public class CorfuReplicationManager {
              * otherwise, start snapshot full sync.
              */
             if (logHead <= negotiationResponse.getLastLogProcessed() + 1) {
-                return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START,
+                event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START,
                         new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogProcessed()));
-            } else {
-                return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+                } else {
+                event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
             }
 
-        }
+            log.info("Get the negotionation response {} and will start replication event {}.",
+                    negotiationResponse, event);
 
-
-        /*
-         * If it is in the snapshot full sync phase I, transferring data, restart the snapshot full sync.
-         * An example of in Snapshot Sync Phase I, transfer phase:
-         * "siteConfigID": "10"
-         * "version": "release-1.0"
-         * "snapshotStart": "100"
-         * "snapshotSeqNum": " 88"
-         * "snashotTransferred": "-1"
-         * "snapshotApplied": "-1"
-         * "lastLogEntryProcessed": "-1"
-         */
-        if (negotiationResponse.getSnapshotStart() > negotiationResponse.getSnapshotTransferred()) {
-            return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
-        }
-
-        /*
-         * If it is in the snapshot full sync phase II:
-         * the data has been transferred to the standby site and the the standby site is applying data from shadow streams
-         * to the real streams.
-         * It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the standby site.
-         * An example of in Snapshot sync phase II: applying phase
-         * "siteConfigID": "10"
-         * "version": "release-1.0"
-         * "snapshotStart": "100"
-         * "snapshotSeqNum": " 88"
-         * "snashotTransferred": "100"
-         * "snapshotApplied": "-1"
-         * "lastLogEntryProcessed": "-1"
-         */
-        if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
-                negotiationResponse.getSnapshotTransferred() > negotiationResponse.getSnapshotApplied()) {
-            return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_WAIT_COMPLETE,
-                    new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart()));
+            return event;
         }
 
         /*
@@ -478,8 +490,7 @@ public class CorfuReplicationManager {
         }
 
         long currentNumEntriesToSend = queryEntriesToSent(prepareSiteRoleChangeStreamTail);
-        log.debug("maxTail " + maxTail + " totalNumEntriesToSend " + totalNumEntriesToSend + " currentNumEntriesToSend " + currentNumEntriesToSend);
-
+        log.debug("maxTail {} totalNumEntriesToSend  {}  currentNumEntriesToSend {}", maxTail, totalNumEntriesToSend, currentNumEntriesToSend);
         if (totalNumEntriesToSend == 0 || currentNumEntriesToSend == 0)
             return PERCENTAGE_BASE;
 
