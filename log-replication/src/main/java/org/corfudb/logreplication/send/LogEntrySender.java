@@ -113,8 +113,8 @@ public class LogEntrySender {
                      * take over the shared thread pool of the state machine.
                      */
                     taskActive = false;
+                    //System.out.print("\n***read null message");
                     break;
-
                     // Request full sync (something is wrong I cant deliver)
                     // (Optimization):
                     // Back-off for couple of seconds and retry n times if not require full sync
