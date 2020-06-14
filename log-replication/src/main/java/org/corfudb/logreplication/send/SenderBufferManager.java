@@ -138,12 +138,21 @@ public abstract class SenderBufferManager {
      * @throws TimeoutException
      */
     public LogReplicationEntry processAcks() throws InterruptedException, ExecutionException, TimeoutException {
+        if (pendingCompletableFutureForAcks.isEmpty()) {
+            return null;
+        }
+
         LogReplicationEntry ack = (LogReplicationEntry) CompletableFuture.anyOf(pendingCompletableFutureForAcks
                 .values().toArray(new CompletableFuture<?>[pendingCompletableFutureForAcks.size()])).get(timeoutTimer, TimeUnit.MILLISECONDS);
 
-        updateAck(ack);
+        if (ack == null) {
+            return ack;
+        }
 
-        log.trace("Total pending log entry acks: {}, for timestamps: {}", pendingCompletableFutureForAcks.size(), pendingCompletableFutureForAcks.keySet());
+        updateAck(ack);
+        log.trace("Received ack {} total pending log entry acks {} for timestamps {}",
+                ack, pendingCompletableFutureForAcks.size(), pendingCompletableFutureForAcks.keySet());
+
         return ack;
     }
 

@@ -22,6 +22,8 @@ public class LogReplicationEvent {
         SNAPSHOT_SYNC_REQUEST,      // External event which signals start of a snapshot sync (full-sync)
         SNAPSHOT_SYNC_CONTINUE,     // Internal event to continue snapshot sync (broken to accommodate multi-site
                                     // replication for a shared thread pool)
+        SNAPSHOT_WAIT_COMPLETE,     // Has sent over all snapshot full sync data and wait the destination to set back
+                                    // an ACK for snapshot_sync_complete. It will resend the SNAPSHOT_SYNC_COMPLETE message.
         SNAPSHOT_SYNC_COMPLETE,     // External/Internal event which signals snapshot sync has been completed
         LOG_ENTRY_SYNC_CONTINUE,    // Internal event to continue log entry sync (broken to accommodate multi-site
                                     // replication for a shared thread pool)
