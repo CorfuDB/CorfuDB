@@ -24,12 +24,12 @@ public class LogReplicationConfig {
     private Set<String> streamsToReplicate;
 
     /*
-     * Unique identifier of the current site ID.
+     * Unique identifier of the current cluster ID.
      */
     private UUID siteID;
 
     /*
-     * Unique identifier of the remote/destination site ID.
+     * Unique identifier of the remote/destination cluster ID.
      */
     private UUID remoteSiteID;
 
@@ -39,7 +39,7 @@ public class LogReplicationConfig {
      * Constructor
      *
      * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
-     * @param remoteSiteID Unique identifier of the remote/destination site.
+     * @param remoteSiteID Unique identifier of the remote/destination cluster.
      */
     public LogReplicationConfig(Set<String> streamsToReplicate, @NonNull UUID siteID, @NonNull UUID remoteSiteID) {
         this.streamsToReplicate = streamsToReplicate;

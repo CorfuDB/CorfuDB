@@ -1,45 +1,28 @@
 package org.corfudb.logreplication.runtime;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.netty.channel.EventLoopGroup;
-
-import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.logreplication.cluster.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataManager;
+import org.corfudb.logreplication.infrastructure.LogReplicationNegotiationException;
+import org.corfudb.logreplication.send.LogReplicationEventMetadata;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.transport.logreplication.LogReplicationClientRouter;
-import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
-import org.corfudb.transport.logreplication.LogReplicationServerRouter;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.LogReplicationSourceManager;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
-import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.NodeRouterPool;
-import org.corfudb.runtime.clients.IClientRouter;
-import org.corfudb.runtime.clients.NettyClientRouter;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.util.InterClusterConnectionDescriptor;
-import org.corfudb.util.NodeLocator;
 
-import javax.annotation.Nonnull;
-import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ThreadFactory;
-import java.util.function.Function;
-
 
 /**
- * Client Runtime to connect to a Corfu Log Replication Server
+ * Client Runtime to connect to a Corfu Log Replication Server.
+ *
+ * The Log Replication Server is currently conformed uniquely by
+ * a Log Replication Unit. This client runtime is a wrapper around all
+ * units.
  *
  * @author amartinezman
  */
@@ -48,158 +31,86 @@ public class CorfuLogReplicationRuntime {
     /**
      * The parameters used to configure this {@link CorfuLogReplicationRuntime}.
      */
-    @Getter
     private final LogReplicationRuntimeParameters parameters;
 
     /**
-     * Transport type - custom defined or netty
-     * TODO: this will be removed as soon as we implement Netty as an Adapter
+     * Log Replication Client Router
      */
-    private LogReplicationTransportType transport;
+    private LogReplicationClientRouter router;
 
     /**
-     * Node Router Pool.
-     */
-    private NodeRouterPool nodeRouterPool;
-
-    /**
-     * Log Replication Client - to remote Log Replication Server
+     * Log Replication Client
      */
     private LogReplicationClient client;
 
     /**
-     * Log Replication Source Manager - to local Corfu Log Unit
+     * Log Replication Source Manager (producer of log updates)
      */
-    @Getter
     private LogReplicationSourceManager sourceManager;
 
     /**
-     * The {@link EventLoopGroup} provided to netty routers.
+     * Log Replication Configuration
      */
-    @Getter
-    private final EventLoopGroup nettyEventLoop;
-
     private LogReplicationConfig logReplicationConfig;
 
-    @Getter
-    private CorfuRuntime corfuRuntime;
+    private LogReplicationMetadataManager metadataManager;
 
-    public CorfuLogReplicationRuntime(@Nonnull LogReplicationRuntimeParameters parameters) {
+    private final CorfuRuntime corfuRuntime;
+
+    private final long topologyConfigId;
+
+    /**
+     * Constructor
+     *
+     * @param parameters runtime parameters
+     */
+    public CorfuLogReplicationRuntime(@NonNull LogReplicationRuntimeParameters parameters,
+                                      @NonNull LogReplicationMetadataManager metadataManager,
+                                      long topologyConfigId) {
         this.parameters = parameters;
-
-        this.transport = parameters.getTransport();
-
         this.logReplicationConfig = parameters.getReplicationConfig();
+        this.metadataManager = metadataManager;
+        this.topologyConfigId = topologyConfigId;
 
-        // Generate or set the NettyEventLoop
-        nettyEventLoop =  getNewEventLoopGroup();
-
-        // Initializing the node router pool.
-        nodeRouterPool = new NodeRouterPool(getRouterFunction, true);
-
-        connectToCorfuRuntime();
-    }
-
-    private void connectToCorfuRuntime() {
         corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-            .parseConfigurationString(parameters.getLocalCorfuEndpoint());
+                .parseConfigurationString(parameters.getLocalCorfuEndpoint());
         corfuRuntime.connect();
     }
 
     /**
-     * Get a new {@link EventLoopGroup} for scheduling threads for Netty. The
-     * {@link EventLoopGroup} is typically passed to a router.
+     * Set the transport layer for communication to remote cluster.
      *
-     * @return An {@link EventLoopGroup}.
+     * The transport layer encompasses:
+     *
+     * - Clients to direct remote counter parts (handles specific funcionalities)
+     * - A router which will manage different clients (currently
+     * we only communicate to the Log Replication Server)
      */
-    private EventLoopGroup getNewEventLoopGroup() {
-        // Calculate the number of threads which should be available in the thread pool.
-        int numThreads = Runtime.getRuntime().availableProcessors() * 2;
-        ThreadFactory factory = new ThreadFactoryBuilder()
-                .setDaemon(true)
-                .setNameFormat(parameters.getNettyEventLoopThreadFormat())
-                .setUncaughtExceptionHandler(this::handleUncaughtThread)
-                .build();
-        return parameters.getSocketType().getGenerator().generate(numThreads, factory);
+    private void configureChannel() {
+
+        ClusterDescriptor remoteSite = parameters.getRemoteClusterDescriptor();
+        String remoteClusterId = remoteSite.getClusterId();
+
+        log.info("Configure transport to remote cluster {}", remoteClusterId);
+
+        // This Router is more of a forwarder (and client manager), as it is not specific to a remote node,
+        // but instead valid to all nodes in a remote cluster. Routing to a specific node (endpoint)
+        // is the responsibility of the transport layer in place (through the adapter).
+        router = new LogReplicationClientRouter(remoteSite, parameters, this::onNegotiation);
+        router.addClient(new LogReplicationHandler());
+        router.connect();
+        // Create all clients to remote cluster components (currently only one server component is supported, Log Replication Unit)
+        client = new LogReplicationClient(router, remoteSite.getClusterId());
     }
 
     /**
-     * A function to handle getting routers. Used by test framework to inject
-     * a test router. Can also be used to provide alternative logic for obtaining
-     * a router.
-     */
-    @Getter
-    private final Function<InterClusterConnectionDescriptor, IClientRouter> getRouterFunction = (site) -> {
-                String address = site.getRemoteNodeLocator().toEndpointUrl();
-                NodeLocator node = NodeLocator.parseString(address);
-                IClientRouter newRouter;
-
-                log.trace("Get Router for underlying {} transport on {}", transport, address);
-
-                if (transport.equals(LogReplicationTransportType.CUSTOM)) {
-
-                    LogReplicationPluginConfig config = new LogReplicationPluginConfig(LogReplicationServerRouter.PLUGIN_CONFIG_FILE_PATH);
-
-                    File jar = new File(config.getTransportAdapterJARPath());
-
-                    try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-                        Class adapter = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
-                        newRouter = new LogReplicationClientRouter(site.getRemoteNodeLocator(), site.getRemoteClusterId(),
-                                getParameters(), adapter, site.getLocalClusterId());
-                    } catch (Exception e) {
-                        log.error("Fatal error: Failed to create channel", e);
-                        throw new UnrecoverableCorfuError(e);
-                    }
-
-                } else {
-                    newRouter = new NettyClientRouter(node,
-                            getNettyEventLoop(),
-                            getParameters());
-                }
-
-                log.debug("Connecting to new router {}", node);
-                try {
-                    newRouter.addClient(new LogReplicationHandler());
-                } catch (Exception e) {
-                    log.warn("Error connecting to router", e);
-                    throw e;
-                }
-                return newRouter;
-            };
-
-    /**
-     * Function which is called whenever the runtime encounters an uncaught thread.
-     *
-     * @param thread    The thread which terminated.
-     * @param throwable The throwable which caused the thread to terminate.
-     */
-    private void handleUncaughtThread(@Nonnull Thread thread, @Nonnull Throwable throwable) {
-        if (parameters.getUncaughtExceptionHandler() != null) {
-            parameters.getUncaughtExceptionHandler().uncaughtException(thread, throwable);
-        } else {
-            log.error("handleUncaughtThread: {} terminated with throwable of type {}",
-                    thread.getName(),
-                    throwable.getClass().getSimpleName(),
-                    throwable);
-        }
-    }
-
-    public void connect(CorfuReplicationDiscoveryService discoveryService) {
-        log.info("Connected");
-        NodeLocator remoteNodeLocator = NodeLocator.parseString(parameters.getRemoteLogReplicationServerEndpoint());
-        InterClusterConnectionDescriptor siteDescriptor = new InterClusterConnectionDescriptor(remoteNodeLocator,
-                parameters.getRemoteSiteId(), parameters.getLocalSiteId());
-        IClientRouter router = getRouter(siteDescriptor);
-        client = new LogReplicationClient(router, discoveryService, parameters.getRemoteSiteId());
-
-        log.info("Set Source Manager to connect to local Corfu on {}", parameters.getLocalCorfuEndpoint());
+     * Connect to remote site.
+     **/
+    public void connect() {
+        configureChannel();
+        log.info("Connected. Set Source Manager to connect to local Corfu on {}", parameters.getLocalCorfuEndpoint());
         sourceManager = new LogReplicationSourceManager(parameters.getLocalCorfuEndpoint(),
-                client, logReplicationConfig);
-    }
-
-    public LogReplicationQueryLeaderShipResponse queryLeadership() throws ExecutionException, InterruptedException {
-        log.info("Request leadership of client {}:{}", client.getRouter().getHost(), client.getRouter().getPort());
-        return client.sendQueryLeadership().get();
+                    client, logReplicationConfig);
     }
 
     public LogReplicationNegotiationResponse startNegotiation() throws Exception {
@@ -208,55 +119,225 @@ public class CorfuLogReplicationRuntime {
     }
 
     /**
-     * Get a router, given the address.
-     *
-     * @param remoteSite remote site descriptor, includes address of router to get and remote site id.
-     * @return The router.
-     */
-    public IClientRouter getRouter(InterClusterConnectionDescriptor remoteSite) {
-        return nodeRouterPool.getRouter(remoteSite);
-    }
-
-    /**
      * Start snapshot (full) sync
      */
-    public void startSnapshotSync() {
+    private void startSnapshotSync() {
         UUID snapshotSyncRequestId = sourceManager.startSnapshotSync();
         log.info("Start Snapshot Sync[{}]", snapshotSyncRequestId);
     }
 
-    public void startLogEntrySync(LogReplicationEvent event) {
-        sourceManager.startReplication(event);
-    }
-
-    public void startReplication(LogReplicationEvent event) {
+    /**
+     * Start log entry (delta) sync
+     */
+    private void startLogEntrySync(LogReplicationEvent event) {
+        log.info("Start Log Entry Sync");
         sourceManager.startReplication(event);
     }
 
     /**
      * Clean up router, stop source manager.
      */
-    //TODO: stop the router etc.
     public void stop() {
+        router.stop();
         sourceManager.shutdown();
     }
 
-    public long getMaxStreamTail() {
-        Set<String> streamsToReplicate = logReplicationConfig.getStreamsToReplicate();
-        long maxTail = Address.NON_ADDRESS;
-        for (String s : streamsToReplicate) {
-            UUID currentUUID = CorfuRuntime.getStreamID(s);
-            Map<UUID, Long> tailMap = corfuRuntime.getAddressSpaceView().getAllTails().getStreamTails();
-            Long currentTail = tailMap.get(currentUUID);
-            if (currentTail != null) {
-                maxTail = Math.max(maxTail, currentTail);
-            }
-        }
-        return maxTail;
+    /**
+     *
+     *
+     * @param ts
+     * @return
+     */
+    public long getNumEntriesToSend(long ts) {
+        long ackTS = sourceManager.getLogReplicationFSM().getAckedTimestamp();
+        return ts - ackTS;
     }
 
-    public long getNumEntriesToSend(long ts) {
-       long ackTS = sourceManager.getLogReplicationFSM().getAckedTimestamp();
-       return ts - ackTS;
+    /**
+     * Runtime callback on negotiation
+     */
+    public void onNegotiation(LogReplicationNegotiationResponse negotiationResponse) {
+        try {
+            LogReplicationEvent replicationEvent = processNegotiationResponse(negotiationResponse);
+            startLogReplication(replicationEvent);
+        } catch (LogReplicationNegotiationException e) {
+            // Cannot proceed to log replication, as negotiation did not complete successfully
+        }
     }
+
+    /**
+     * Start replication process by put replication event to FSM.
+     *
+     * @param negotiationResult
+     */
+    private void startLogReplication(LogReplicationEvent negotiationResult) {
+        // If we start from a stop state due to cluster switch over, we need to restart the consumer.
+        sourceManager.getLogReplicationFSM().startFSM(topologyConfigId);
+
+        switch (negotiationResult.getType()) {
+            case SNAPSHOT_SYNC_REQUEST:
+                log.info("Start Snapshot Sync Replication");
+                startSnapshotSync();
+                break;
+            case SNAPSHOT_WAIT_COMPLETE:
+                log.info("Should Start Snapshot Sync Phase II,but for now just restart full snapshot sync");
+                startSnapshotSync();
+                break;
+            case REPLICATION_START:
+                log.info("Start Log Entry Sync Replication");
+                startLogEntrySync(negotiationResult);
+                break;
+            default:
+                log.info("Invalid Negotiation result. Re-trigger discovery.");
+                break;
+        }
+    }
+
+    /**
+     * It will decide to do a full snapshot sync or log entry sync according to the metadata received from the standby site.
+     *
+     * @param negotiationResponse
+     * @return
+     * @throws LogReplicationNegotiationException
+     */
+    private LogReplicationEvent processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
+            throws LogReplicationNegotiationException {
+        /*
+         * If the version are different, report an error.
+         */
+        if (!negotiationResponse.getVersion().equals(metadataManager.getVersion())) {
+            log.error("The active site version {} is different from standby site version {}",
+                    metadataManager.getVersion(), negotiationResponse.getVersion());
+            throw new LogReplicationNegotiationException(" Mismatch of version number");
+        }
+
+        /*
+         * The standby site has a smaller config ID, redo the discovery for this standby site when
+         * getting a new notification of the site config change if this standby is in the new config.
+         */
+        if (negotiationResponse.getSiteConfigID() < negotiationResponse.getSiteConfigID()) {
+            log.error("The active site configID {} is bigger than the standby configID {} ",
+                    metadataManager.getSiteConfigID(), negotiationResponse.getSiteConfigID());
+            throw new LogReplicationNegotiationException("Mismatch of configID");
+        }
+
+        /*
+         * The standby site has larger config ID, redo the whole discovery for the active site
+         * it will be triggered by a notification of the site config change.
+         */
+        if (negotiationResponse.getSiteConfigID() > negotiationResponse.getSiteConfigID()) {
+            log.error("The active site configID {} is smaller than the standby configID {} ",
+                    metadataManager.getSiteConfigID(), negotiationResponse.getSiteConfigID());
+            throw new LogReplicationNegotiationException("Mismatch of configID");
+        }
+
+        /*
+         * Now the active and standby have the same version and same configID.
+         */
+
+        /*
+         * Get the current log head.
+         */
+        long logHead = corfuRuntime.getAddressSpaceView().getTrimMark().getSequence();
+        LogReplicationEvent event;
+
+        /*
+         * It is a fresh start, start snapshot full sync.
+         * Following is an example that metadata value indicates a fresh start, no replicated data at standby site:
+         * "topologyConfigId": "10"
+         * "version": "release-1.0"
+         * "snapshotStart": "-1"
+         * "snapshotSeqNum": " -1"
+         * "snapshotTransferred": "-1"
+         * "snapshotApplied": "-1"
+         * "lastLogEntryProcessed": "-1"
+         */
+        if (negotiationResponse.getSnapshotStart() == -1) {
+            negotiationResponse.getLastLogProcessed();
+            event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+            return event;
+        }
+
+        /*
+         * If it is in the snapshot full sync phase I, transferring data, restart the snapshot full sync.
+         * An example of in Snapshot Sync Phase I, transfer phase:
+         * "topologyConfigId": "10"
+         * "version": "release-1.0"
+         * "snapshotStart": "100"
+         * "snapshotSeqNum": " 88"
+         * "snapshotTransferred": "-1"
+         * "snapshotApplied": "-1"
+         * "lastLogEntryProcessed": "-1"
+         */
+        if (negotiationResponse.getSnapshotStart() > negotiationResponse.getSnapshotTransferred()) {
+            event =  new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+            log.info("Get the negotiation response {} and will start replication event {}.",
+                    negotiationResponse, event);
+            return event;
+        }
+
+        /*
+         * If it is in the snapshot full sync phase II:
+         * the data has been transferred to the standby site and the the standby site is applying data from shadow streams
+         * to the real streams.
+         * It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the standby site.
+         * An example of in Snapshot sync phase II: applying phase
+         * "topologyConfigId": "10"
+         * "version": "release-1.0"
+         * "snapshotStart": "100"
+         * "snapshotSeqNum": " 88"
+         * "snapshotTransferred": "100"
+         * "snapshotApplied": "-1"
+         * "lastLogEntryProcessed": "-1"
+         */
+        if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
+                negotiationResponse.getSnapshotTransferred() > negotiationResponse.getSnapshotApplied()) {
+            event =  new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_WAIT_COMPLETE,
+                    new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart()));
+            log.info("Get the negotiation response {} and will start replication event {}.",
+                    negotiationResponse, event);
+            return event;
+        }
+
+        /* If it is in log entry sync state, continues log entry sync state.
+         * An example to show the standby site is in log entry sync phase.
+         * A full snapshot transfer based on timestamp 100 has been completed, and this standby has processed all log entries
+         * between 100 to 200. A log entry sync should be restart if log entry 201 is not trimmed.
+         * Otherwise, start a full snapshpt full sync.
+         * "topologyConfigId": "10"
+         * "version": "release-1.0"
+         * "snapshotStart": "100"
+         * "snapshotSeqNum": " 88"
+         * "snapshotTransferred": "100"
+         * "snapshotApplied": "100"
+         * "lastLogEntryProcessed": "200"
+         */
+        if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
+                negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotApplied() &&
+                negotiationResponse.getLastLogProcessed() >= negotiationResponse.getSnapshotStart()) {
+            /*
+             * If the next log entry is not trimmed, restart with log entry sync,
+             * otherwise, start snapshot full sync.
+             */
+            if (logHead <= negotiationResponse.getLastLogProcessed() + 1) {
+                event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START,
+                        new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogProcessed()));
+            } else {
+                event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+            }
+
+            log.info("Get the negotiation response {} and will start replication event {}.",
+                    negotiationResponse, event);
+
+            return event;
+        }
+
+        /*
+         * For other scenarios, the standby site is in a notn-recognizable state, trigger a snapshot full sync.
+         */
+        log.error("Could not recognize the standby site state according to the response {}, will restart with a snapshot full sync event " ,
+                negotiationResponse);
+        return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+    }
+
 }

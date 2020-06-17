@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.IServerRouter;
-import org.corfudb.infrastructure.NettyServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -39,9 +38,6 @@ import java.util.Optional;
 @Slf4j
 public class LogReplicationServerRouter implements IServerRouter {
 
-    // TODO(Anny): perhaps move this to LogReplicationParameters and accept in command line.
-    public static String PLUGIN_CONFIG_FILE_PATH = "/config/corfu/corfu_plugin_config.properties";
-
     @Getter
     private IServerChannelAdapter serverAdapter;
 
@@ -60,28 +56,28 @@ public class LogReplicationServerRouter implements IServerRouter {
     /** The {@link AbstractServer}s this {@link LogReplicationServerRouter} routes messages for. */
     final List<AbstractServer> servers;
 
-    /** Construct a new {@link NettyServerRouter}.
+    /** Construct a new {@link LogReplicationServerRouter}.
      *
      * @param servers   A list of {@link AbstractServer}s this router will route
      *                  messages for.
      */
-    public LogReplicationServerRouter(List<AbstractServer> servers, int port) {
+    public LogReplicationServerRouter(List<AbstractServer> servers) {
         this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
         this.servers = ImmutableList.copyOf(servers);
         this.handlerMap = new EnumMap<>(CorfuMsgType.class);
         servers.forEach(server -> server.getHandler().getHandledTypes()
                 .forEach(x -> handlerMap.put(x, server)));
-        this.serverAdapter = getAdapter(port);
+        this.serverAdapter = getAdapter(((BaseServer) servers.get(0)).serverContext);
     }
 
-    private IServerChannelAdapter getAdapter(int port) {
+    private IServerChannelAdapter getAdapter(ServerContext serverContext) {
 
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(PLUGIN_CONFIG_FILE_PATH);
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
         File jar = new File(config.getTransportAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getTransportServerClassCanonicalName(), true, child);
-            return (IServerChannelAdapter) adapter.getDeclaredConstructor(Integer.class, LogReplicationServerRouter.class).newInstance(port, this);
+            return (IServerChannelAdapter) adapter.getDeclaredConstructor(ServerContext.class, LogReplicationServerRouter.class).newInstance(serverContext, this);
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);
@@ -91,7 +87,7 @@ public class LogReplicationServerRouter implements IServerRouter {
     // ============ IServerRouter Methods =============
 
     @Override
-    public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
+    public void sendResponse(CorfuMsg inMsg, CorfuMsg outMsg) {
         log.info("Ready to send response {}", outMsg.getMsgType());
         outMsg.copyBaseFields(inMsg);
         try {
@@ -100,6 +96,13 @@ public class LogReplicationServerRouter implements IServerRouter {
         } catch (IllegalArgumentException e) {
             log.warn("Illegal response type. Ignoring message.", e);
         }
+    }
+
+    @Override
+    public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
+        // This is specific to Netty implementation, which for the Log Replication Server
+        // is implemented as one of many transport plugins. This is here as we inherit the
+        // infrastructure design from CorfuServer but should be removed in the future.
     }
 
     @Override
@@ -116,6 +119,8 @@ public class LogReplicationServerRouter implements IServerRouter {
     public void setServerContext(ServerContext serverContext) {
 
     }
+
+    // ================================================
 
     /**
      * Receive messages from the 'custom' serverAdapter implementation. This message will be forwarded
@@ -146,7 +151,7 @@ public class LogReplicationServerRouter implements IServerRouter {
                 }
 
                 try {
-                    handler.handleMessage(corfuMsg, null, this);
+                    handler.handleMessage(corfuMsg, this);
                 } catch (Throwable t) {
                     log.error("channelRead: Handling {} failed due to {}:{}",
                             corfuMsg != null ? corfuMsg.getMsgType() : "UNKNOWN",

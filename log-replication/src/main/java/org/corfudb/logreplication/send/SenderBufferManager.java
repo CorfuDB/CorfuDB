@@ -215,10 +215,10 @@ public abstract class SenderBufferManager {
         try {
             ack = processAcks();
         } catch (TimeoutException e) {
-            log.warn("caught a timeout exception ", e);
+            log.warn("Caught a timeout exception ", e);
             force = true;
         } catch (Exception e) {
-            log.warn("caught an Exception and will notify discovery service ", e);
+            log.warn("Caught an Exception and will notify discovery service ", e);
             //TODO: notify discoveryService
         }
 

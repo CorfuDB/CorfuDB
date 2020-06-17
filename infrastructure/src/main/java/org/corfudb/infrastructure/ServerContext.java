@@ -11,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
-import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -83,6 +82,9 @@ public class ServerContext implements AutoCloseable {
     // LogUnit Server
     private static final String PREFIX_LOGUNIT = "LOGUNIT";
     private static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
+
+    // Corfu Replication Server
+    public static final String PLUGIN_CONFIG_FILE_PATH = "/config/corfu/corfu_plugin_config.properties";
 
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
@@ -208,9 +210,9 @@ public class ServerContext implements AutoCloseable {
         return threadCount == null ? 4 : threadCount;
     }
 
-    public LogReplicationTransportType getTransportType() {
-        return getServerConfig().get("--custom-transport") != null ? LogReplicationTransportType.CUSTOM :
-                LogReplicationTransportType.NETTY;
+    public String getPluginConfigFilePath() {
+        String pluginConfigFilePath = getServerConfig(String.class, "--plugin");
+        return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
     }
 
     /**

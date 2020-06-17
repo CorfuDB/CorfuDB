@@ -1,4 +1,5 @@
 package org.corfudb.logreplication.fsm;
+
 import lombok.Data;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
