@@ -12,15 +12,16 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Dummy implementation of snapshot logreader for testing purposes.
+ * Dummy implementation of snapshot log reader for testing purposes.
  *
- * This logreader attempts to access n entries in the log in a continuous address space and
+ * This log reader attempts to access n entries in the log in a continuous address space and
  * wraps the payload in the LogReplicationEntry.
  */
 public class TestSnapshotReader implements SnapshotReader {
-    long siteEpoch = 0;
 
-    final int FIRST_ADDRESS = 0;
+    private long siteEpoch = 0;
+
+    private final int FIRST_ADDRESS = 0;
 
     private TestReaderConfiguration config;
 

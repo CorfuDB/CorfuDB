@@ -11,12 +11,13 @@ import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.fsm.LogReplicationFSM;
 import org.corfudb.logreplication.fsm.ObservableAckMsg;
 import org.corfudb.logreplication.runtime.LogReplicationClient;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.logreplication.send.CorfuDataSender;
 import org.corfudb.logreplication.send.logreader.DefaultReadProcessor;
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
 import org.corfudb.logreplication.send.logreader.ReadProcessor;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
@@ -27,7 +28,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * This class represents the Log Replication Manager at the source site.
+ * This class represents the Log Replication Manager at the source cluster.
  *
  * It is the entry point for log replication at the sender, it allows
  * initializing, stopping or cancelling log replication. It also
@@ -109,7 +110,7 @@ public class LogReplicationSourceManager implements DataReceiver {
     /**
      * Constructor Source to provide ExecutorServices for FSM
      *
-     * For multi-site log replication multiple managers can share a common thread pool.
+     * For multi-cluster log replication multiple managers can share a common thread pool.
      *
      * @param runtime corfu runtime
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
@@ -127,7 +128,7 @@ public class LogReplicationSourceManager implements DataReceiver {
     /**
      * Constructor Source to provide ExecutorServices for FSM
      *
-     * For multi-site log replication multiple managers can share a common thread pool.
+     * For multi-cluster log replication multiple managers can share a common thread pool.
      *
      * @param runtime corfu runtime
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
@@ -175,11 +176,10 @@ public class LogReplicationSourceManager implements DataReceiver {
      * Signal start of replication.
      *
      * Connectivity and data transmission is provided by the application requiring log replication.
-     * This method should be called upon connectivity to a remote site.
+     * This method should be called upon connectivity to a remote cluster.
      */
     public void startReplication(LogReplicationEvent replicationEvent) {
         // Enqueue event into Log Replication FSM
-        //LogReplicationEvent replicationStart = new LogReplicationEvent(LogReplicationEventType.REPLICATION_START);
         log.info("Start replication event {}", replicationEvent);
         logReplicationFSM.input(replicationEvent);
     }
@@ -212,7 +212,6 @@ public class LogReplicationSourceManager implements DataReceiver {
             }
         } catch (InterruptedException e) {
             log.error("Caught an exception ", e);
-            //System.out.print("\n**** caught an exception");
         }
 
         log.info("Shutdown Log Replication.");

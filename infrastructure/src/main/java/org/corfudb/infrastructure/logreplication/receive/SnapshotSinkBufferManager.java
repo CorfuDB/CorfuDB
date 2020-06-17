@@ -10,9 +10,8 @@ import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAP
 
 @Slf4j
 public class SnapshotSinkBufferManager extends SinkBufferManager {
-    /*
-     * It is used to remember the SNAPSHOT_END message sequence number.
-     */
+
+     // It is used to remember the SNAPSHOT_END message sequence number.
     long snapshotEndSeq = Long.MAX_VALUE;
 
     /**

@@ -14,7 +14,7 @@ import java.util.concurrent.CompletableFuture;
 public interface DataSender {
 
     /**
-     * Application callback on next available message for transmission to remote site.
+     * Application callback on next available message for transmission to remote cluster.
      *
      * @param message LogReplicationEntry representing the data to send across sites.
      * @return
@@ -22,7 +22,7 @@ public interface DataSender {
     CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message);
 
     /**
-     * Application callback on next available messages for transmission to remote site.
+     * Application callback on next available messages for transmission to remote cluster.
      *
      * @param messages list of LogReplicationEntry representing the data to send across sites.
      * @return

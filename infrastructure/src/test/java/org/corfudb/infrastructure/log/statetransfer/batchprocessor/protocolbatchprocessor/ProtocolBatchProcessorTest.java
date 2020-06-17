@@ -4,7 +4,6 @@ import org.corfudb.infrastructure.log.statetransfer.DataTest;
 import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.ReadBatchException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferBatchProcessorException;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;

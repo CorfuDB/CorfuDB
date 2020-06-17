@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit;
  *  i.e, reading and sending a snapshot of the data for the requested streams.
  *
  *  It reads log entries from the data-store through the SnapshotReader, and hands it to the
- *  DataSender (the application specific callback for sending data to the remote site).
+ *  DataSender (the application specific callback for sending data to the remote cluster).
  *
  *  The SnapshotReader has a default implementation based on reads at the stream layer
  *  (no serialization/deserialization) required.
@@ -63,10 +63,10 @@ public class SnapshotSender {
 
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                           ReadProcessor readProcessor, LogReplicationFSM fsm) {
-        this.runtime = runtime;;
+        this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
-        dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender);
+        this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender);
     }
 
     private CompletableFuture<LogReplicationEntry> snapshotSyncAck;
@@ -81,7 +81,7 @@ public class SnapshotSender {
         log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
                 baseSnapshotTimestamp);
 
-        boolean completed = false;    // Flag indicating the snapshot sync is completed
+        boolean completed = false;  // Flag indicating the snapshot sync is completed
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
         int messagesSent = 0;       // Limit the number of messages to SNAPSHOT_BATCH_SIZE. The reason we need to limit
                                     // is because by design several state machines can share the same thread pool,
@@ -144,7 +144,7 @@ public class SnapshotSender {
             } else if (!cancel) {
                 // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
-                // Snapshot Sync is not performed in a single run, as for the case of multi-site replication
+                // Snapshot Sync is not performed in a single run, as for the case of multi-cluster replication
                 // the shared thread pool could be lower than the number of sites, so we assign resources in
                 // a round robin fashion.
                 log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
@@ -250,7 +250,7 @@ public class SnapshotSender {
         // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data
         baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
 
-        // Starting a new snapshot sync, reset the logreader's snapshot timestamp
+        // Starting a new snapshot sync, reset the log reader's snapshot timestamp
         snapshotReader.reset(baseSnapshotTimestamp);
         dataSenderBufferManager.reset(Address.NON_ADDRESS);
 

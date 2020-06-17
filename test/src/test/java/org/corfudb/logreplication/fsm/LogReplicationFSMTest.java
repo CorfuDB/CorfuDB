@@ -414,13 +414,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         switch(readerImpl) {
             case EMPTY:
-                // Empty implementations of logreader and listener - used for testing transitions
+                // Empty implementations of log reader and listener - used for testing transitions
                 snapshotReader = new EmptySnapshotReader();
                 dataSender = new EmptyDataSender();
                 break;
             case TEST:
-                // Dummy implementations of logreader and listener for testing
-                // The logreader queries the log for the config provided (stream name, number of entries)
+                // Dummy implementations of log reader and listener for testing
+                // The log reader queries the log for the config provided (stream name, number of entries)
                 // The listener inserts what it receives into a queue
                 TestReaderConfiguration testConfig = TestReaderConfiguration.builder()
                         .endpoint(getDefaultEndpoint())
