@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication;
 
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
@@ -49,6 +50,9 @@ import static org.corfudb.integration.ReplicationReaderWriterIT.writeLogEntryMsg
 public class ReplicationReaderWriterTest extends AbstractViewTest {
     static private final int START_VAL = 1;
     static final int NUM_KEYS = 4;
+    static final String PRIMARY_SITE_ID = "PRIMARY_SITE_0";
+    static final String REMOTE_SITE_ID = "REMOTE_SITE_0";
+
 
     CorfuRuntime srcDataRuntime = null;
     CorfuRuntime dstDataRuntime = null;
@@ -114,6 +118,21 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
                 break;
             }
         }
+    }
+
+    void writeMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
+        UUID uuid = UUID.randomUUID();
+        LogReplicationConfig config = new LogReplicationConfig(streams);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, uuid.toString());
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
+
+        writer.reset(msgQ.get(0).getMetadata().getTopologyConfigId(), msgQ.get(0).getMetadata().getSnapshotTimestamp());
+
+        for (LogReplicationEntry msg : msgQ) {
+            writer.apply(msg);
+        }
+
+        writer.applyShadowStreams();
     }
 
     @Test

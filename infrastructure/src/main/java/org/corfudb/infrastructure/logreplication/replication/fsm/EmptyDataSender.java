@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.fsm;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -17,6 +18,11 @@ public class EmptyDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntry>  send(List<LogReplicationEntry> messages) { return new CompletableFuture<>(); }
+
+    @Override
+    public LogReplicationQueryMetadataResponse sendQueryMetadata() {
+        return null;
+    }
 
     @Override
     public void onError(LogReplicationError error) {}

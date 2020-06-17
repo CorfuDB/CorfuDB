@@ -7,7 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.clients.ClientHandler;
@@ -48,8 +48,8 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
         return msg.getPayload();
     }
 
-    @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE)
-    private static Object handleLogReplicationNegotiation(CorfuPayloadMsg<LogReplicationNegotiationResponse> msg,
+    @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_RESPONSE)
+    private static Object handleLogReplicationQueryMetadata(CorfuPayloadMsg<LogReplicationQueryMetadataResponse> msg,
                                                           ChannelHandlerContext ctx, IClientRouter r) {
         log.info("Handle log replication Negotiation Response");
         return msg.getPayload();

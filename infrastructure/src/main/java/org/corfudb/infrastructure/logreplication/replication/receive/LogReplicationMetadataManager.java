@@ -115,6 +115,10 @@ public class LogReplicationMetadataManager {
         return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
     }
 
+    public long getLastSnapAppliedSeqNum() {
+        return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM);
+    }
+
     public long getLastProcessedLogTimestamp() {
         return query(null, LogReplicationMetadataType.LAST_LOG_PROCESSED);
     }
@@ -151,7 +155,7 @@ public class LogReplicationMetadataManager {
          }
 
         txBuilder.commit(timestamp);
-        log.info("Update topologyConfigId, new metadata {}", this);
+        log.info("Update siteConfigID {}, new metadata {}", siteConfigID, toString());
     }
 
     public void updateVersion(String version) {
@@ -223,6 +227,7 @@ public class LogReplicationMetadataManager {
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, Address.NON_ADDRESS);
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, Address.NON_ADDRESS);
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM, Address.NON_ADDRESS);
+        appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM, Address.NON_ADDRESS);
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_LOG_PROCESSED, Address.NON_ADDRESS);
 
         txBuilder.commit(timestamp);
@@ -292,9 +297,6 @@ public class LogReplicationMetadataManager {
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, ts);
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_LOG_PROCESSED, ts);
 
-        //may not need
-        appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM, Address.NON_ADDRESS);
-
         txBuilder.commit(timestamp);
 
         log.debug("Commit. Set snapshotStart topologyConfigId " + siteConfigID + " ts " + ts +
@@ -311,6 +313,7 @@ public class LogReplicationMetadataManager {
         s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
         s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");
         s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM.getVal() + " " + getLastSnapSeqNum() + " ");
+        s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM.getVal() + " " + getLastSnapAppliedSeqNum() + " ");
         s.concat(LogReplicationMetadataType.LAST_LOG_PROCESSED.getVal() + " " + getLastProcessedLogTimestamp() + " ");
 
         return s;
@@ -331,6 +334,7 @@ public class LogReplicationMetadataManager {
         LAST_SNAPSHOT_TRANSFERRED("lastSnapTransferred"),
         LAST_SNAPSHOT_APPLIED("lastSnapApplied"),
         LAST_SNAPSHOT_SEQ_NUM("lastSnapSeqNum"),
+        LAST_SNAPSHOT_APPLIED_SEQ_NUM("lastSnapAppliedSeqNum"),
         LAST_LOG_PROCESSED("lastLogProcessed");
 
         @Getter

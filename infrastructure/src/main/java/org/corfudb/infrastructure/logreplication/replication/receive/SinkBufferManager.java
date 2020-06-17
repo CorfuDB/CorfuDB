@@ -144,9 +144,11 @@ public abstract class SinkBufferManager {
         if (preTs == lastProcessedSeq) {
             sinkManager.processMessage(dataMessage);
             ackCnt++;
-            lastProcessedSeq = getCurrentSeq(dataMessage);
+            lastProcessedSeq = currentTs;
             processBuffer();
         } else if (currentTs > lastProcessedSeq && buffer.size() < maxSize) {
+            // If it is a future expecting message and the buffer still has space
+            // put it into the buffer.
             buffer.put(preTs, dataMessage);
         }
 

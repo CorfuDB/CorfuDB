@@ -4,10 +4,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 @Slf4j
 public class CorfuDataSender implements DataSender {
@@ -18,10 +20,13 @@ public class CorfuDataSender implements DataSender {
         this.client = client;
     }
 
+
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         log.trace("Send single log entry for request {}", message.getMetadata());
         return client.sendLogEntry(message);
+
+
     }
 
     @Override
@@ -39,6 +44,17 @@ public class CorfuDataSender implements DataSender {
         }
 
         return lastSentMessage;
+    }
+
+    /**
+     * Used by Snapshot Full Sync while has done with transferring data and waiting for the receiver to finish applying.
+     * The sender queries the receiver's status and will do the proper transition.
+     * @return
+     */
+    @Override
+    public LogReplicationQueryMetadataResponse sendQueryMetadata() throws ExecutionException, InterruptedException {
+        log.trace("query remote metadata");
+        return client.sendQueryMetadataRequest().get();
     }
 
     @Override

@@ -392,7 +392,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     private boolean isValidMessage(CorfuMsg message) {
         return message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_ENTRY) ||
-                message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST) ||
+                message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_REQUEST) ||
                 message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP);
     }
 
