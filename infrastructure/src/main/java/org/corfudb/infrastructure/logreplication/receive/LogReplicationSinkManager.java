@@ -6,7 +6,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.util.ObservableValue;
-import org.corfudb.infrastructure.logreplication.DefaultSiteConfig;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
@@ -88,7 +87,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     private long baseSnapshotTimestamp = Address.NON_ADDRESS - 1;
 
     /*
-     * current siteConfigID, used to drop out of date messages.
+     * current topologyConfigId, used to drop out of date messages.
      */
     private long siteConfigID = 0;
 
@@ -133,9 +132,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
 
-        bufferSize = DefaultSiteConfig.getLogSinkBufferSize();
-        ackCycleCnt = DefaultSiteConfig.getLogSinkAckCycleCount();
-        ackCycleTime = DefaultSiteConfig.getLogSinkAckCycleTimer();
         readConfig();
     }
 
@@ -165,7 +161,8 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     /**
-     * Reieve a message from the sender.
+     * Receive a message from the sender.
+     *
      * @param message
      * @return
      */
@@ -185,29 +182,25 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         log.debug("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
 
-        /*
-         * Ignore messages that have different siteConfigID.
-         * It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
-         * If there is a siteConfig change, the discovery service will detect it and reset the state.
-         */
-        if (message.getMetadata().getSiteConfigID() != siteConfigID) {
+         // Ignore messages that have different topologyConfigId.
+         // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
+         // If there is a siteConfig change, the discovery service will detect it and reset the state.
+        if (message.getMetadata().getTopologyConfigId() != siteConfigID) {
             return null;
         }
 
-        /*
-         * If it receives a SNAPSHOT_START message, prepare a transition
-         */
+        // If it receives a SNAPSHOT_START message, prepare a transition
         if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_START)) {
             processSnapshotStart(message);
             return null;
         }
 
         if (!receivedValidMessage(message)) {
-            /*
-             * It is possible that the sender doesn't receive the SNAPSHOT_END ACK message and send the SNAPSHOT_END message again,
-             * but the receiver has already transited to the LOG_ENTRY_SYNC state.
-             * Reply the SNAPSHOT_ACK again and let sender do the proper transition.
-             */
+
+            // It is possible that the sender doesn't receive the SNAPSHOT_END ACK message and
+            // send the SNAPSHOT_END message again, but the receiver has already transited to
+            // the LOG_ENTRY_SYNC state.
+            // Reply the SNAPSHOT_ACK again and let sender do the proper transition.
             if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
                 LogReplicationEntryMetadata metadata = snapshotSinkBufferManager.makeAckMessage(message);
                 if (metadata.getMessageMetadataType() == SNAPSHOT_END) {
@@ -239,7 +232,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param entry
      */
     private void processSnapshotStart(LogReplicationEntry entry) {
-        long siteConfigID = entry.getMetadata().getSiteConfigID();
+        long siteConfigID = entry.getMetadata().getTopologyConfigId();
         long timestamp = entry.getMetadata().getSnapshotTimestamp();
 
         log.debug("Received snapshot sync start marker for {} on base snapshot timestamp {}",
@@ -358,7 +351,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     /**
      * When there is a site role type flip, the Sink Manager needs do the followings:
-     * 1. update the metadata store with the most recent siteConfigID
+     * 1. update the metadata store with the most recent topologyConfigId
      * 2. reset snapshotWriter and logEntryWriter state
      * 3. reset buffer logEntryBuffer state.
      * @param active

@@ -45,7 +45,7 @@ public class CorfuMessageConverter {
                         // Set Log Replication Entry as payload
                         .setPayload(Any.pack(Messages.LogReplicationEntry.newBuilder()
                                 .setMetadata(LogReplicationEntryMetadata.newBuilder()
-                                        .setSiteConfigID(logReplicationEntry.getMetadata().getSiteConfigID())
+                                        .setSiteConfigID(logReplicationEntry.getMetadata().getTopologyConfigId())
                                         .setType(Messages.LogReplicationEntryType.valueOf(logReplicationEntry.getMetadata().getMessageMetadataType().name()))
                                         .setPreviousTimestamp(logReplicationEntry.getMetadata().getPreviousTimestamp())
                                         .setSnapshotSyncSeqNum(logReplicationEntry.getMetadata().getSnapshotSyncSeqNum())
@@ -78,6 +78,7 @@ public class CorfuMessageConverter {
                         .setPayload(Any.pack(Messages.LogReplicationQueryLeadershipResponse.newBuilder()
                                 .setEpoch(leaderShipResponse.getEpoch())
                                 .setIsLeader(leaderShipResponse.isLeader())
+                                .setEndpoint(leaderShipResponse.getEndpoint())
                                 .build()))
                         .build();
             case LOG_REPLICATION_NEGOTIATION_REQUEST:

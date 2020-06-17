@@ -8,8 +8,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -18,21 +21,50 @@ import static org.assertj.core.api.Assertions.assertThat;
 @RunWith(Parameterized.class)
 public class CorfuReplicationE2EIT extends AbstractIT {
 
-    private boolean useNetty;
-    private boolean runProcess = true;
+    private String pluginConfigFilePath;
+    private static boolean runProcess = true;
 
-    public CorfuReplicationE2EIT(boolean netty) {
-        this.useNetty = netty;
+    public CorfuReplicationE2EIT(String plugin) {
+        this.pluginConfigFilePath = plugin;
     }
 
     // Static method that generates and returns test data (automatically test for two transport protocols: netty and GRPC)
     @Parameterized.Parameters
     public static Collection input() {
-        return Arrays.asList(Boolean.FALSE, Boolean.TRUE);
+
+        List<String> transportPlugins = Arrays.asList("src/test/resources/transport/grpcConfig.properties",
+                "src/test/resources/transport/nettyConfig.properties");
+
+        if(runProcess) {
+            List<String> absolutePathPlugins = new ArrayList<>();
+            transportPlugins.forEach(plugin -> {
+                File f = new File(plugin);
+                absolutePathPlugins.add(f.getAbsolutePath());
+            });
+
+            return absolutePathPlugins;
+        }
+
+        return transportPlugins;
     }
 
+    /**
+     * Test Log Replication End to End for snapshot and log entry sync. These tests emulate two sites,
+     * one active and one standby. The active site is represented by one Corfu Database and one LogReplication Server,
+     * and the standby the same. Data is written into the active datastore and log replication is initiated to test
+     * snapshot sync and afterwards incremental updates are written to evaluate log entry sync.
+     *
+     * The transport (communication) layer is based on a plugin architecture. We have two sample plugins:
+     * - GRPC
+     * - Netty
+     *
+     * This is a parameterized test and both plugins are tested.
+     *
+     * @throws Exception
+     */
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
+
         ExecutorService executorService = Executors.newFixedThreadPool(2);
         Process activeCorfu = null;
         Process standbyCorfu = null;
@@ -52,7 +84,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             final String activeEndpoint = DEFAULT_HOST + ":" + activeSiteCorfuPort;
             final String standbyEndpoint = DEFAULT_HOST + ":" + standbySiteCorfuPort;
 
-            final int numWrites = 4;
+            final int numWrites = 10;
 
             // Start Single Corfu Node Cluster on Active Site
             activeCorfu = runServer(activeSiteCorfuPort, true);
@@ -100,22 +132,24 @@ public class CorfuReplicationE2EIT extends AbstractIT {
 
             if (runProcess) {
                 // Start Log Replication Server on Active Site
-                activeReplicationServer = runReplicationServer(activeReplicationServerPort, useNetty);
+                activeReplicationServer = runReplicationServer(activeReplicationServerPort, pluginConfigFilePath);
 
                 // Start Log Replication Server on Standby Site
-                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, useNetty);
+                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath);
             } else {
                 executorService.submit(() -> {
-                    CorfuInterClusterReplicationServer.main(new String[]{"--custom-transport", String.valueOf(activeReplicationServerPort)});
+                    CorfuInterClusterReplicationServer.main(new String[]{"test", "--plugin=" + pluginConfigFilePath, String.valueOf(activeReplicationServerPort)});
                 });
 
                 executorService.submit(() -> {
-                    CorfuInterClusterReplicationServer.main(new String[]{"--custom-transport", String.valueOf(standbyReplicationServerPort)});
+                    CorfuInterClusterReplicationServer.main(new String[]{"test",  "--plugin=" + pluginConfigFilePath, String.valueOf(standbyReplicationServerPort)});
                 });
             }
 
+            System.out.println("\nUsing transport defined in :: " + pluginConfigFilePath);
+
             // Wait until data is fully replicated
-            System.out.println("\nWait ... Snapshot log replication in progress ...");
+            System.out.println("Wait ... Snapshot log replication in progress ...");
             while (mapAStandby.size() != numWrites) {
                 //
             }
@@ -131,8 +165,9 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             }
 
             // Verify data is present in Standby Site
-            System.out.println("\nWait ... Delta log replication in progress ...");
+            System.out.println("Wait ... Delta log replication in progress ...");
             while (mapAStandby.size() != (numWrites + numWrites/2)) {
+                //
             }
 
             // Verify data is present in Standby Site (delta)
@@ -141,7 +176,8 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             for (int i = 0; i < (numWrites + numWrites/2) ; i++) {
                 assertThat(mapAStandby.containsKey(String.valueOf(i)));
             }
-            System.out.print("\nTest succeeds");
+
+            System.out.print("Test succeeds");
 
         } finally {
 

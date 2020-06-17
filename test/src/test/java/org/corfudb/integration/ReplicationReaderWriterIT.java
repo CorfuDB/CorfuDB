@@ -363,7 +363,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             System.out.println("msgQ is empty");
         }
 
-        long siteConfigID = msgQ.get(0).getMetadata().getSiteConfigID();
+        long siteConfigID = msgQ.get(0).getMetadata().getTopologyConfigId();
         long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
         logReplicationMetadataManager.setSrcBaseSnapshotStart(siteConfigID, snapshot);
         writer.reset(siteConfigID, snapshot);

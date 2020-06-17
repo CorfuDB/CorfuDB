@@ -1,8 +1,9 @@
-package org.corfudb.transport.test;
+package org.corfudb.transport.channel;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.transport.logreplication.LogReplicationServerRouter;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -30,14 +31,15 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
 
     private CompletableFuture<Boolean> serverCompletable;
 
-    public GRPCLogReplicationServerChannelAdapter(Integer port, LogReplicationServerRouter adapter) {
-        super(port, adapter);
+    public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter adapter) {
+        super(serverContext, adapter);
         this.service = new GRPCLogReplicationServerHandler(adapter);
-        this.server = ServerBuilder.forPort(port).addService(service).build();
+        this.server = ServerBuilder.forPort(getPort()).addService(service).build();
     }
 
     @Override
     public void send(CorfuMessage msg) {
+        log.info("Server send message {}", msg.getType());
         service.send(msg);
     }
 
@@ -49,7 +51,7 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
             log.info("Server started, listening on " + this.getPort());
         } catch (Exception e) {
             log.error("Caught exception while starting server on port {}", getPort(), e);
-            throw new UnrecoverableCorfuError(e);
+            serverCompletable.completeExceptionally(e);
         }
 
         return serverCompletable;
@@ -58,8 +60,12 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     @Override
     public void stop() {
         log.info("Stop GRPC service.");
-        server.shutdownNow();
-        serverCompletable.complete(true);
+        if (server != null) {
+            server.shutdownNow();
+        }
+        if (serverCompletable != null) {
+            serverCompletable.complete(true);
+        }
     }
 
 }

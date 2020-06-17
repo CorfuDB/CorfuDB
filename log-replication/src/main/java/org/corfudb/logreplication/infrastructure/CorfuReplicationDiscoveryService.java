@@ -4,11 +4,15 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataManager;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteStatus;
+
+import org.corfudb.infrastructure.logreplication.cluster.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.cluster.NodeDescriptor;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
+import org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -20,13 +24,11 @@ import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import static org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.DiscoverySite;
-
 /**
  * This class represents the Replication Discovery Service.
  *
  * It manages the following:
- * - Site discovery (active and standby)
+ * - Cluster (site) discovery (active and standby)
  * - Lock Acquisition (leader election)
  * - Log Replication Node role: Source (sender) or Sink (receiver)
  */
@@ -34,12 +36,12 @@ import static org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.Di
 public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicationDiscoveryServiceAdapter {
 
     /**
-     * Used by both primary site and standby site.
+     * Used by both active cluster and standby cluster.
      */
     private final CorfuInterClusterReplicationServerNode replicationServerNode;
 
     /**
-     * Bookkeeping the siteConfigID, version number and other log replication state information.
+     * Bookkeeping the topologyConfigId, version number and other log replication state information.
      * It is backed by a corfu store table.
      */
     @Getter
@@ -52,31 +54,29 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private static final String LOCK_NAME = "Log_Replication_Lock";
 
     /**
-     * Used by the primary site
+     * Used by the active cluster
      */
     @Getter
-    private final CorfuReplicationManager replicationManager;
+    private CorfuReplicationManager replicationManager;
 
     /**
-     * for site discovery service
+     * Adapter for cluster discovery service
      */
     @Getter
-    private CorfuReplicationSiteManagerAdapter siteManager;
+    private CorfuReplicationSiteManagerAdapter clusterManager;
 
     /**
-     * the current node's endpoint
+     * Current node's endpoint
      */
     private String localEndpoint;
 
     /**
-     * the node's information
+     * Current node information
      */
-    LogReplicationNodeInfo nodeInfo;
-
-    boolean shouldRun = true;
+    NodeDescriptor localNodeInfo;
 
     /**
-     * Anny: Should be it unique?
+     * Unique node identifier
      */
     private final UUID nodeId;
 
@@ -85,21 +85,34 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
 
+    /**
+     * Defines the topology of the multi-cluster setting, which is discovered through the Cluster Manager
+     */
+    private TopologyDescriptor topologyDescriptor;
+
+    private String pluginFilePath;
+
+    boolean shouldRun = true;
+
+    /**
+     * Constructor Discovery Service
+     *
+     * @param serverContext
+     * @param serverNode
+     * @param clusterManager
+     */
     public CorfuReplicationDiscoveryService(ServerContext serverContext, CorfuInterClusterReplicationServerNode serverNode,
-                                            CorfuReplicationSiteManagerAdapter siteManager) {
+                                            CorfuReplicationSiteManagerAdapter clusterManager) {
         this.replicationServerNode = serverNode;
-         this.siteManager = siteManager;
-        this.siteManager.setCorfuReplicationDiscoveryService(this);
-
-        //Anny: Does the getNodeID() give an unique id?
+        this.clusterManager = clusterManager;
+        this.clusterManager.setCorfuReplicationDiscoveryService(this);
         this.nodeId = serverContext.getNodeId();
-
-        CrossSiteConfiguration crossSiteConfig = new CrossSiteConfiguration(siteManager.fetchSiteConfig());
-        this.replicationManager = new CorfuReplicationManager(serverContext.getTransportType(), crossSiteConfig,
-            replicationServerNode, this);
         this.localEndpoint = serverContext.getLocalEndpoint();
-        this.nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
+        this.pluginFilePath = serverContext.getPluginConfigFilePath();
+        this.topologyDescriptor = new TopologyDescriptor(clusterManager.fetchTopology());
+        this.localNodeInfo = topologyDescriptor.getNodeInfo(localEndpoint);
         this.logReplicationMetadataManager = serverNode.getLogReplicationServer().getSinkManager().getLogReplicationMetadataManager();
+
         registerToLogReplicationLock();
     }
 
@@ -111,7 +124,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     processEvent(event);
                 }
             } catch (Exception e) {
-                log.error("caught an exception ", e);
+                log.error("Caught an exception. Stop discovery service.", e);
                 shouldRun = false;
                 if (e instanceof InterruptedException) {
                     Thread.interrupted();
@@ -129,10 +142,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    // TODO(Anny): this is a hack for our local tests to work, in production it will be always configured
-                    // to port 9000 (or read from a file)
-                    String corfuPort = localEndpoint.equals("localhost:9020") ? ":9001" : ":9000";
-                    String corfuEndpoint = NodeLocator.parseString(localEndpoint).getHost() + corfuPort;
+                    String corfuEndpoint = NodeLocator.parseString(localEndpoint).getHost() + ":" + localNodeInfo.getCorfuPort();
                     CorfuRuntime runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder().build())
                             .parseConfigurationString(corfuEndpoint)
                             .connect();
@@ -154,151 +164,153 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     /**
-     * it is only called on the leader node and it triggers the log replication start
+     * This method is only called on the leader node and it triggers the start of log replication
+     *
+     * Depending on the role of the cluster to which this leader node belongs to, it will start
+     * as source (sender/producer) or sink (receiver).
      */
-    public void startLogReplication() {
-        if (nodeInfo.isLeader() == false) {
+    private void startLogReplication() {
+        if (!localNodeInfo.isLeader()) {
+            log.warn("Current node {} is not the lead node, log replication cannot be started.", localEndpoint);
             return;
         }
 
-        // Update the siteEpoch metadata.
-        replicationServerNode.getLogReplicationServer().getSinkManager().updateSiteConfigID(nodeInfo.getRoleType() == SiteStatus.ACTIVE ? true : false,
-                replicationManager.getCrossSiteConfig().getSiteConfigID());
+        boolean activeCluster = localNodeInfo.getRoleType() == ClusterRole.ACTIVE;
 
-        log.debug("Persist new siteConfigID {}, status={}", replicationManager.getCrossSiteConfig().getSiteConfigID(),
-                nodeInfo.getRoleType());
+        updateTopologyConfigId(activeCluster);
 
-        if (nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
-            log.info("Start as Source (sender/replicator) on node {}.", nodeInfo);
-            replicationManager.startLogReplication(nodeInfo);
-        } else if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
+        if (activeCluster) {
+            log.info("Start as Source (sender/replicator) on node {}.", localNodeInfo);
+            replicationManager = new CorfuReplicationManager(topologyDescriptor, replicationServerNode.getLogReplicationConfig(),
+                    localNodeInfo, logReplicationMetadataManager, pluginFilePath);
+            replicationManager.start();
+        } else if (localNodeInfo.getRoleType() == ClusterRole.STANDBY) {
             // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
-            log.info("Start as Sink (receiver) on node {} ", nodeInfo);
+            log.info("Start as Sink (receiver) on node {} ", localNodeInfo);
+        } else {
+            log.error("Log Replication not started on this cluster. Leader node {} belongs to cluster with {} role.",
+                    localEndpoint, localNodeInfo.getRoleType());
         }
     }
 
-    public void stopLogReplication() {
-        if (nodeInfo.isLeader() && nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
-            replicationManager.stopLogReplication();
+    private void updateTopologyConfigId(boolean active) {
+        // TODO (Xiaoqin Ma): can you please add some info on why this is needed.
+        replicationServerNode.getLogReplicationServer().getSinkManager()
+                .updateSiteConfigID(active, topologyDescriptor.getTopologyConfigId());
+
+        log.debug("Persist new topologyConfigId {}, status={}", topologyDescriptor.getTopologyConfigId(),
+                localNodeInfo.getRoleType());
+    }
+
+    /**
+     * Stop ongoing Log Replication
+     */
+    private void stopLogReplication() {
+        if (localNodeInfo.isLeader() && localNodeInfo.getRoleType() == ClusterRole.ACTIVE) {
+            replicationManager.stop();
         }
     }
 
-
+    /**
+     * Process lock acquisition event
+     */
     public void processLockAcquire() {
-        log.debug("process lock acquire");
+        log.info("Process lock acquire event");
         replicationServerNode.getLogReplicationServer().getSinkManager().setLeader(true);
 
-        // leader transition from true to true, do nothing;
-        if (nodeInfo.isLeader()) {
-            return;
-        } else {
+        if (!localNodeInfo.isLeader()) {
             // leader transition from false to true, start log replication.
-            nodeInfo.setLeader(true);
+            localNodeInfo.setLeader(true);
             startLogReplication();
         }
     }
 
     /**
-     * transition from false to false, do nothing
-     * transition from true to false, stop replication.
+     * Process lock release event
+     *
+     * Set leadership metadata and stop log replication in the event of leadership loss
      */
     public void processLockRelease() {
         replicationServerNode.getLogReplicationServer().getSinkManager().setLeader(false);
 
-        if (nodeInfo.isLeader()) {
+        if (localNodeInfo.isLeader()) {
             stopLogReplication();
-            nodeInfo.setLeader(false);
+            localNodeInfo.setLeader(false);
         }
     }
 
 
-    public void processSiteFlip(CrossSiteConfiguration newConfig) {
+    public void processSiteFlip(TopologyDescriptor newConfig) {
         stopLogReplication();
-
         //TODO pankti: read the configuration again and refresh the LogReplicationConfig object
-
-        replicationManager.setCrossSiteConfig(newConfig);
-
-        boolean leader = nodeInfo.isLeader();
-        nodeInfo = newConfig.getNodeInfo(localEndpoint);
-        nodeInfo.setLeader(leader);
-
-        log.debug("new nodeinfo " + nodeInfo);
+        replicationManager.setTopologyDescriptor(newConfig);
         startLogReplication();
     }
 
     public void processSiteChangeNotification(DiscoveryServiceEvent event) {
-        //stale notification, skip
-        if (event.getSiteConfigMsg().getSiteConfigID() < replicationManager.getCrossSiteConfig().getSiteConfigID()) {
+        // Stale notification, skip
+        if (event.getTopologyConfig().getTopologyConfigID() < getReplicationManager().getTopologyDescriptor().getTopologyConfigId()) {
             return;
         }
 
-        CrossSiteConfiguration newConfig = new CrossSiteConfiguration(siteManager.fetchSiteConfig());
-        if (newConfig.getSiteConfigID() == replicationManager.getCrossSiteConfig().getSiteConfigID()) {
-            if (nodeInfo.getRoleType() == SiteStatus.STANDBY) {
+        TopologyDescriptor newConfig = new TopologyDescriptor(clusterManager.fetchTopology());
+        if (newConfig.getTopologyConfigId() == getReplicationManager().getTopologyDescriptor().getTopologyConfigId()) {
+            if (localNodeInfo.getRoleType() == ClusterRole.STANDBY) {
                 return;
             }
 
-            //If the current node it active, compare with the current siteConfig, see if there are addition/removal standbys
-            replicationManager.processStandbyChange(nodeInfo, newConfig);
+            // If the current node is active, compare with the current siteConfig, see if there are addition/removal standbys
+            getReplicationManager().processStandbyChange(newConfig);
         } else {
             processSiteFlip(newConfig);
         }
     }
 
     /***
-     * The standby site's leader change can lead to connection loss.
-     * If the current node is not the active site's leader, discard the notification.
-     * If the current node is the the active site's leader that is is responsible for the current
-     * replication job, will restart the replication with the remote site.
+     * The standby cluster's leader change can lead to connection loss.
+     * If the current node is not the active cluster's leader, discard the notification.
+     * If the current node is the the active cluster's leader that is is responsible for the current
+     * replication job, will restart the replication with the remote cluster.
+     *
      * @param event
      */
-    private void processConnectionLossWithLeader(DiscoveryServiceEvent event) {
+    private void processConnectionLoss(DiscoveryServiceEvent event) {
 
-        if (!nodeInfo.isLeader())
-            return;
-
-        if (nodeInfo.getRoleType() != SiteStatus.ACTIVE) {
+        if (!localNodeInfo.isLeader() || localNodeInfo.getRoleType() != ClusterRole.ACTIVE) {
             return;
         }
 
-        replicationManager.restartLogReplication(nodeInfo, event.getSiteID());
+        replicationManager.restart(event.getRemoteSiteInfo());
     }
 
     /***
      * After an upgrade, the active site should perform a snapshot sync
-     * @param event
      */
     private void processUpgrade(DiscoveryServiceEvent event) {
-        if (nodeInfo.isLeader() && nodeInfo.getRoleType() == SiteStatus.ACTIVE) {
+        if (localNodeInfo.isLeader() && localNodeInfo.getRoleType() == ClusterRole.ACTIVE) {
             // TODO pankti: is this correct?
-            replicationManager.restartLogReplication(nodeInfo, event.getSiteID());
+            replicationManager.restart(event.getRemoteSiteInfo());
         }
     }
 
     /**
-     * process event
-     * @param event
+     * Process event
      */
     public void processEvent(DiscoveryServiceEvent event) {
         switch (event.type) {
-            case AcquireLock:
+            case ACQUIRE_LOCK:
                 processLockAcquire();
                 break;
 
-            case ReleaseLock:
+            case RELEASE_LOCK:
                 processLockRelease();
                 break;
 
-            case DiscoverySite:
+            case DISCOVERY_SITE:
                 processSiteChangeNotification(event);
                 break;
 
-            case ConnectionLoss:
-                processConnectionLossWithLeader(event);
-                break;
-
-            case Upgrade:
+            case UPGRADE:
                 processUpgrade(event);
                 break;
 
@@ -313,12 +325,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     @Override
-    public void updateSiteConfig(LogReplicationSiteInfo.SiteConfigurationMsg crossSiteConfigMsg) {
-        putEvent(new DiscoveryServiceEvent(DiscoverySite, crossSiteConfigMsg));
+    public void updateSiteConfig(LogReplicationClusterInfo.TopologyConfigurationMsg topologyConfig) {
+        putEvent(new DiscoveryServiceEvent(DiscoveryServiceEventType.DISCOVERY_SITE, topologyConfig));
     }
 
     /**
-     * query the current all replication stream log tail and remeber the max
+     * Query the current all replication stream log tail and remeber the max
      * and query each standbySite information according to the ackInformation decide all manay total
      * msg needs to send out.
      */
@@ -327,9 +339,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         replicationManager.prepareSiteRoleChange();
     }
 
-
     /**
-     * query the current all replication stream log tail and calculate the number of messages to be sent.
+     * Query the current all replication stream log tail and calculate the number of messages to be sent.
      * If the max tail has changed, give 0%. Otherwise,
      */
     @Override
@@ -338,6 +349,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     public void shutdown() {
-        replicationManager.shutdown();
+        if (replicationManager != null) {
+            replicationManager.stop();
+        }
     }
 }

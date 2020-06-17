@@ -65,7 +65,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param smrEntries
      * @return
      */
-    OpaqueEntry generateOpaqueEntry(long version, UUID streamID, List smrEntries) {
+    private OpaqueEntry generateOpaqueEntry(long version, UUID streamID, List smrEntries) {
         Map<UUID, List<SMREntry>> map = new HashMap<>();
         map.put(streamID, smrEntries);
         return new OpaqueEntry(version, map);
@@ -78,7 +78,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param entries
      * @return
      */
-    org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries, UUID snapshotRequestId) {
+    private LogReplicationEntry generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries, UUID snapshotRequestId) {
         currentMsgTs = stream.maxVersion;
         OpaqueEntry opaqueEntry = generateOpaqueEntry(currentMsgTs, stream.uuid, entries);
         if (!stream.iterator.hasNext()) {
@@ -95,7 +95,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
         preMsgTs = currentMsgTs;
         sequence++;
         log.debug("Generate TxMsg {}", txMsg.getMetadata());
-        //System.out.print("\nGenerate TxMsg {} " +  txMsg.getMetadata());
         return txMsg;
     }
 
@@ -105,7 +104,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param numEntries
      * @return
      */
-    List<SMREntry> next(OpaqueStreamIterator stream, int numEntries) {
+    private List<SMREntry> next(OpaqueStreamIterator stream, int numEntries) {
         //if it is the end of the stream, set an end of stream mark, the current
         List<SMREntry> list = new ArrayList<>();
         try {
@@ -127,7 +126,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param stream bookkeeping of the current stream information.
      * @return
      */
-    LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
+    private LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
         List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
         org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
         log.info("Successfully pass stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);

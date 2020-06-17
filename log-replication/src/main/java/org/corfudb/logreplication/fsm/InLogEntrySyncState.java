@@ -9,7 +9,7 @@ import java.util.concurrent.Future;
 /**
  * This class represents the InLogEntrySync state of the Log Replication State Machine.
  *
- * In this state, incremental (delta) updates are being synced to the remote site.
+ * In this state, incremental (delta) updates are being synced to the remote cluster.
  */
 @Slf4j
 public class InLogEntrySyncState implements LogReplicationState {
@@ -77,7 +77,7 @@ public class InLogEntrySyncState implements LogReplicationState {
             case LOG_ENTRY_SYNC_CONTINUE:
                 // Snapshot sync is broken into multiple tasks, where each task sends a batch of messages
                 // corresponding to this snapshot sync. This is done to accommodate the case
-                // of multi-site replication sharing a common thread pool, continuation allows to send another
+                // of multi-cluster replication sharing a common thread pool, continuation allows to send another
                 // batch of updates for the current snapshot sync.
                 if (event.getMetadata().getRequestId() == transitionEventId) {
                     log.debug("Continuation of log entry sync for {}", event.getEventID());
