@@ -3,9 +3,9 @@ package org.corfudb.logreplication.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.cluster.ClusterDescriptor;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -15,8 +15,17 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLead
 import org.corfudb.runtime.clients.AbstractClient;
 import org.corfudb.runtime.clients.IClientRouter;
 
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * A client to send messages to the Log Replication Unit.
+ *
+ * This class provides access to operations on a remote server
+ * for the purpose of log replication.
+ *
+ * @author amartinezman
+ */
 @Slf4j
 public class LogReplicationClient extends AbstractClient {
 
@@ -26,17 +35,19 @@ public class LogReplicationClient extends AbstractClient {
 
     private CorfuReplicationDiscoveryService discoveryService;
 
-    private String remoteSiteID;
+    private ClusterDescriptor remoteSiteInfo;
+
+    public LogReplicationClient(IClientRouter router, ClusterDescriptor remoteSiteInfo,
+                                CorfuReplicationDiscoveryService discoveryService) {
+        super(router, 0, UUID.fromString(remoteSiteInfo.getClusterId()));
+        this.remoteSiteInfo = remoteSiteInfo;
+        this.discoveryService = discoveryService;
+        setRouter(router);
+    }
 
     public LogReplicationClient(IClientRouter router, long epoch) {
         super(router, epoch, null);
         setRouter(router);
-    }
-
-    public LogReplicationClient(IClientRouter router, CorfuReplicationDiscoveryService discoveryService, String remoteSiteID) {
-        this(router, 0);
-        this.discoveryService = discoveryService;
-        this.remoteSiteID = remoteSiteID;
     }
 
     public CompletableFuture<LogReplicationNegotiationResponse> sendNegotiationRequest() {
@@ -55,7 +66,7 @@ public class LogReplicationClient extends AbstractClient {
         try {
             result = getRouter().sendMessageAndGetCompletable(msg);
         } catch (Exception e) {
-            discoveryService.putEvent(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.ConnectionLoss, remoteSiteID));
+            discoveryService.putEvent(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.CONNECTION_LOSS, remoteSiteInfo));
         } finally {
             return result;
         }

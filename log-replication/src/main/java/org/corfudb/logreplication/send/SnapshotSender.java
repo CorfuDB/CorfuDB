@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit;
  *  i.e, reading and sending a snapshot of the data for the requested streams.
  *
  *  It reads log entries from the data-store through the SnapshotReader, and hands it to the
- *  DataSender (the application specific callback for sending data to the remote site).
+ *  DataSender (the application specific callback for sending data to the remote cluster).
  *
  *  The SnapshotReader has a default implementation based on reads at the stream layer
  *  (no serialization/deserialization) required.
@@ -144,7 +144,7 @@ public class SnapshotSender {
             } else if (!cancel) {
                 // Maximum number of batch messages sent. This snapshot sync needs to continue.
 
-                // Snapshot Sync is not performed in a single run, as for the case of multi-site replication
+                // Snapshot Sync is not performed in a single run, as for the case of multi-cluster replication
                 // the shared thread pool could be lower than the number of sites, so we assign resources in
                 // a round robin fashion.
                 log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);

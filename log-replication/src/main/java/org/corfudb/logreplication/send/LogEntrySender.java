@@ -17,7 +17,7 @@ import java.util.UUID;
 
 /**
  * This class is responsible of managing the transmission of log entries,
- * i.e, reading and sending incremental updates to a remote site.
+ * i.e, reading and sending incremental updates to a remote cluster.
  *
  * It reads log entries from the datastore through the LogEntryReader, and sends them
  * through LogReplicationSenderBuffer.
@@ -113,7 +113,6 @@ public class LogEntrySender {
                      * take over the shared thread pool of the state machine.
                      */
                     taskActive = false;
-                    //System.out.print("\n***read null message");
                     break;
                     // Request full sync (something is wrong I cant deliver)
                     // (Optimization):
@@ -170,7 +169,7 @@ public class LogEntrySender {
      */
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         taskActive = true;
-        log.info("Reset baseSnapshot %s maxAckForLogEntrySync %s", lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
+        log.info("Reset baseSnapshot {} maxAckForLogEntrySync {}", lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         logEntryReader.reset(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         dataSenderBufferManager.reset(lastAckedTimestamp);
     }

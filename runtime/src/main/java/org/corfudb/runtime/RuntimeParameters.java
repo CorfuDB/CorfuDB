@@ -3,7 +3,6 @@ package org.corfudb.runtime;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-import lombok.Builder;
 import lombok.Data;
 import lombok.Singular;
 import lombok.ToString;
@@ -41,7 +40,7 @@ public class RuntimeParameters {
          */
         String keyStore;
 
-        /**
+        /*
          * A file containing the password for the key store.
          */
         String ksPasswordFile;

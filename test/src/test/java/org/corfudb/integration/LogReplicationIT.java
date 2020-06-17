@@ -30,6 +30,7 @@ import java.util.Observable;
 import java.util.Observer;
 import java.util.Set;
 import java.util.UUID;
+
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
@@ -41,8 +42,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 
 /**
- * Start two servers, one as the src, the other as the dst.
- * Copy snapshot data rom src to dst
+ * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
+ * i.e., the ability to transfer a full view (snapshot) or incremental view of the datastore
+ * from a source to a destination. In these tests we disregard communication channels between
+ * clusters (sites) or CorfuLogReplicationServer.
+ *
+ * We emulate the channel by implementing a test data plane which directly forwards the data
+ * to the SinkManager. Overall, these tests bring up two CorfuServers (datastore components),
+ * one performing as the active and the other as the standby. We write different patterns of data
+ * on the source (transactional and non transactional, as well as polluted and non-polluted transactions, i.e.,
+ * transactions containing federated and non-federated streams) and verify that complete data
+ * reaches the destination after initiating log replication.
  */
 @Slf4j
 public class LogReplicationIT extends AbstractIT implements Observer {
@@ -336,7 +346,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     /* ***************************** LOG REPLICATION IT TESTS ***************************** */
 
     /**
-     * This test attempts to perform a snapshot sync through the Log Replication Manager.
+     * This test attempts to perform a snapshot sync and log entry sync through the Log Replication Manager.
      * We emulate the channel between source and destination by directly handling the received data
      * to the other side.
      */
@@ -400,7 +410,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private final String t2 = TABLE_PREFIX + 2;
 
     /**
-     * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T1 and T2 are replicated.
+     * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T0 and T1 are replicated.
      * We write following this pattern:
      *
      * - Write transactions across T0 and T1.
@@ -433,7 +443,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
-     * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T1 and T2 are replicated,
+     * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T0 and T1 are replicated,
      * however, transactions are written across the 3 tables. This scenario should fail as invalid tables are
      * crossing transactional boundaries.
      *
@@ -509,7 +519,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 .setSerializer(Serializers.PRIMITIVE)
                 .open();
 
-        // Generate some dump data to enfore an empty snapshot transfer
+        // Generate some dump data to enforce an empty snapshot transfer
         for (long i = 0; i < NUM_KEYS; i++) {
             dumpDataTable.put(i, i);
         }
@@ -637,6 +647,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Start Log Entry Sync
         expectedAckMessages = NUM_KEYS * WRITE_CYCLES;
         testConfig.clear();
+
         startLogEntrySync(crossTables);
 
         // Verify Data on Destination site
@@ -649,6 +660,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
 
+    /**
+     * Test Log Entry (delta) Sync for the case where messages are
+     */
     @Test
     public void testLogEntrySyncValidCrossTablesWithDropMsg() throws Exception {
         // Write data in transaction to t0 and t1

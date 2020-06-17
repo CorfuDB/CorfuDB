@@ -14,8 +14,8 @@ import java.util.Properties;
  * This class is an abstraction for all Log Replication plugin's configurations.
  *
  * Currently, three plugins are supported:
- * - Transport Plugin - defines the adapter to use for inter-site communication
- * - Site Information Plugin - defines the adapter to use for site information query
+ * - Transport Plugin - defines the adapter to use for inter-cluster communication
+ * - Site Information Plugin - defines the adapter to use for cluster information query
  * - Table Replication Specification Plugin - defines the adapter to use to pull the specified tables to be replicates
  */
 @Data
@@ -24,12 +24,13 @@ public class LogReplicationPluginConfig {
 
     // Transport Configurations
     public static final String DEFAULT_JAR_PATH = "/transport/target/transport-0.3.0-SNAPSHOT.jar";
-    public static final String DEFAULT_SERVER_CLASSNAME = "org.corfudb.transport.test.GRPCLogReplicationServerChannelAdapter";
-    public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.transport.test.GRPCLogReplicationClientChannelAdapter";
+    public static final String DEFAULT_SERVER_CLASSNAME = "org.corfudb.transport.channel.NettyLogReplicationServerChannelAdapter";
+    public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.transport.channel.NettyLogReplicationClientChannelAdapter";
+
+    // Stream Fetcher
     public static final String DEFAULT_STREAM_FETCHER_JAR_PATH = "/target/log-replication-0.3.0-SNAPSHOT.jar";
     public static final String DEFAULT_STREAM_FETCHER_CLASSNAME = "org.corfudb.logreplication.runtime.DefaultStreamFetcherPlugin";
-    public static final String DEFAULT_SITE_MANAGER_CLASSNAME = "org.corfudb.logreplication.infrastructure.DefaultSiteManager";
-
+    public static final String DEFAULT_SITE_MANAGER_CLASSNAME = "org.corfudb.logreplication.infrastructure.DefaultClusterManager";
 
     private String transportAdapterJARPath;
     private String transportServerClassCanonicalName;
@@ -51,37 +52,26 @@ public class LogReplicationPluginConfig {
             this.streamFetcherPluginJARPath = prop.getProperty("stream_fetcher_plugin_JAR_path");
             this.streamFetcherClassCanonicalName = prop.getProperty("stream_fetcher_plugin_class_name");
 
-            this.siteManagerAdapterJARPath = prop.getProperty("site_manager_adapter_JAR_path");
-            this.siteManagerAdapterName= prop.getProperty("site_manager_adapter_class_name");
+            this.siteManagerAdapterJARPath = prop.getProperty("cluster_manager_adapter_JAR_path");
+            this.siteManagerAdapterName= prop.getProperty("cluster_manager_adapter_class_name");
         } catch (IOException e) {
             log.warn("Exception caught while trying to load adapter configuration from {}. Default configuration " +
                     "will be used.", filepath);
             // Default Configuration
-            this.transportAdapterJARPath = getTransportParentDir() + DEFAULT_JAR_PATH;
+            this.transportAdapterJARPath = getParentDir() + DEFAULT_JAR_PATH;
             this.transportClientClassCanonicalName = DEFAULT_CLIENT_CLASSNAME;
             this.transportServerClassCanonicalName = DEFAULT_SERVER_CLASSNAME;
             this.streamFetcherPluginJARPath = getStreamFetcherParentDir() + DEFAULT_STREAM_FETCHER_JAR_PATH;
             this.streamFetcherClassCanonicalName = DEFAULT_STREAM_FETCHER_CLASSNAME;
 
-            this.siteManagerAdapterJARPath = getSiteManagerAdapterParentDir() + DEFAULT_JAR_PATH;
+            this.siteManagerAdapterJARPath = getParentDir() + DEFAULT_JAR_PATH;
             this.siteManagerAdapterName = DEFAULT_SITE_MANAGER_CLASSNAME;
         }
 
         log.info("Config " + this);
     }
 
-    private static String getTransportParentDir() {
-        try {
-            File directory = new File("../infrastructure");
-            return directory.getCanonicalFile().getParent();
-        } catch (Exception e) {
-            String message = "Failed to load default JAR for channel adapter";
-            log.error(message, e);
-            throw new UnrecoverableCorfuError(message);
-        }
-    }
-
-    private static String getSiteManagerAdapterParentDir() {
+    private static String getParentDir() {
         try {
             File directory = new File("../infrastructure");
             return directory.getCanonicalFile().getParent();

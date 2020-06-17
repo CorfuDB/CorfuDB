@@ -2,43 +2,38 @@ package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
+import org.corfudb.infrastructure.logreplication.cluster.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
 public class DiscoveryServiceEvent {
     DiscoveryServiceEventType type = null;
+
     @Getter
-    LogReplicationSiteInfo.SiteConfigurationMsg siteConfigMsg = null;
+    TopologyConfigurationMsg topologyConfig = null;
 
     @Getter
     @Setter
-    String siteID;
+    ClusterDescriptor remoteSiteInfo;
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
        this.type = type;
     }
 
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String siteID) {
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, ClusterDescriptor siteInfo) {
         new DiscoveryServiceEvent(type);
-        this.siteID = siteID;
+        this.remoteSiteInfo = siteInfo;
     }
 
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, LogReplicationSiteInfo.SiteConfigurationMsg siteConfigMsg) {
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {
         this.type = type;
-        this.siteConfigMsg = siteConfigMsg;
+        this.topologyConfig = topologyConfigMsg;
     }
 
     public enum DiscoveryServiceEventType {
-        DiscoverySite("SiteChange"),
-        AcquireLock("AcquireLock"),
-        ReleaseLock("ReleaseLock"),
-        ConnectionLoss( "ConnectionLoss"),
-        Upgrade("Node Upgraded");
-
-        @Getter
-        String description;
-
-        DiscoveryServiceEventType(String description) {
-            this.description = description;
-        }
+        DISCOVERY_SITE,
+        ACQUIRE_LOCK,
+        RELEASE_LOCK,
+        CONNECTION_LOSS,
+        UPGRADE;
     }
 }
