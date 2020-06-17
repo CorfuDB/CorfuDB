@@ -5,12 +5,11 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
 import org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.clients.AbstractClient;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -39,9 +38,9 @@ public class LogReplicationClient extends AbstractClient {
         this.remoteSiteID = remoteSiteID;
     }
 
-    public CompletableFuture<LogReplicationNegotiationResponse> sendNegotiationRequest() {
+    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadata() {
         return getRouter().sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST).setEpoch(0));
+                new CorfuMsg(CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_REQUEST).setEpoch(0));
     }
 
     public CompletableFuture<LogReplicationQueryLeaderShipResponse> sendQueryLeadership() {

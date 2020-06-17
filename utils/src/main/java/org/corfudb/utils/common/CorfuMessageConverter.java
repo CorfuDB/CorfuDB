@@ -9,7 +9,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.Messages.CorfuMessage;
@@ -56,9 +56,9 @@ public class CorfuMessageConverter {
                                 .setData(ByteString.copyFrom(logReplicationEntry.getPayload()))
                                 .build()))
                         .build();
-            case LOG_REPLICATION_NEGOTIATION_RESPONSE:
-                CorfuPayloadMsg<LogReplicationNegotiationResponse> corfuMsg = (CorfuPayloadMsg<LogReplicationNegotiationResponse>) msg;
-                LogReplicationNegotiationResponse negotiationResponse = corfuMsg.getPayload();
+            case LOG_REPLICATION_QUERY_METADATA_RESPONSE:
+                CorfuPayloadMsg<LogReplicationQueryMetadataResponse> corfuMsg = (CorfuPayloadMsg<LogReplicationQueryMetadataResponse>) msg;
+                LogReplicationQueryMetadataResponse negotiationResponse = corfuMsg.getPayload();
                 return protoCorfuMsg
                         .setType(Messages.CorfuMessageType.LOG_REPLICATION_NEGOTIATION_RESPONSE)
                         .setPayload(Any.pack(Messages.LogReplicationNegotiationResponse.newBuilder()
@@ -80,7 +80,7 @@ public class CorfuMessageConverter {
                                 .setIsLeader(leaderShipResponse.isLeader())
                                 .build()))
                         .build();
-            case LOG_REPLICATION_NEGOTIATION_REQUEST:
+            case LOG_REPLICATION_QUERY_METADATA_REQUEST:
                 return protoCorfuMsg
                         .setType(Messages.CorfuMessageType.LOG_REPLICATION_NEGOTIATION_REQUEST)
                         .build();
@@ -122,15 +122,15 @@ public class CorfuMessageConverter {
                             .setEpoch(epoch);
                 case LOG_REPLICATION_NEGOTIATION_REQUEST:
                     return new CorfuMsg(clientId, null, requestId, epoch, null,
-                            CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST, priorityLevel);
+                            CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_REQUEST, priorityLevel);
                 case LOG_REPLICATION_QUERY_LEADERSHIP:
                     return new CorfuMsg(clientId, null, requestId, epoch, null,
                             CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP, priorityLevel);
                 case LOG_REPLICATION_NEGOTIATION_RESPONSE:
-                        LogReplicationNegotiationResponse negotiationResponse = LogReplicationNegotiationResponse
+                        LogReplicationQueryMetadataResponse negotiationResponse = LogReplicationQueryMetadataResponse
                                 .fromProto(protoMessage.getPayload().unpack(Messages.LogReplicationNegotiationResponse.class));
 
-                        return new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE, negotiationResponse)
+                        return new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_RESPONSE, negotiationResponse)
                                 .setClientID(clientId)
                                 .setRequestID(requestId)
                                 .setPriorityLevel(priorityLevel)

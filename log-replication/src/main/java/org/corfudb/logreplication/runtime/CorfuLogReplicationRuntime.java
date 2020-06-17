@@ -15,7 +15,7 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.LogReplicationSourceManager;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.NodeRouterPool;
@@ -202,9 +202,9 @@ public class CorfuLogReplicationRuntime {
         return client.sendQueryLeadership().get();
     }
 
-    public LogReplicationNegotiationResponse startNegotiation() throws Exception {
-        log.info("Send Negotiation Request");
-        return client.sendNegotiationRequest().get();
+    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() throws Exception {
+        log.info("Send Query Metadata Request");
+        return client.sendQueryMetadata().get();
     }
 
     /**

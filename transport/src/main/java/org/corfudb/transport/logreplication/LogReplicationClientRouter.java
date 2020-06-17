@@ -15,7 +15,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.transport.client.IClientChannelAdapter;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.util.InterClusterConnectionDescriptor;
 import org.corfudb.utils.common.CorfuMessageConverter;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
@@ -173,8 +172,8 @@ public class LogReplicationClientRouter implements IClientRouter {
 
     private boolean isValidMessage(CorfuMsg message) {
         return message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_ENTRY) ||
-                message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST) ||
-                message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE) ||
+                message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_REQUEST) ||
+                message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_RESPONSE) ||
                 message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP) ||
                 message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE);
     }

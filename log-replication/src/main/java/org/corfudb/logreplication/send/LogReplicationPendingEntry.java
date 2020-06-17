@@ -13,13 +13,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 @Data
 @Slf4j
 public class LogReplicationPendingEntry {
-    /*
-     * For internal timer increasing for each message in milliseconds
-     */
-    final static private long TIME_INCREMENT = 100;
-
-    long currentTime = 0;
-
     @Getter
     private LogReplicationEntry data;
 
@@ -31,13 +24,13 @@ public class LogReplicationPendingEntry {
 
     public LogReplicationPendingEntry(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data) {
         this.data = data;
-        this.time = getCurrentTime();
+        this.time = System.currentTimeMillis();
         this.retry = 0;
     }
 
     boolean timeout(long timer) {
-        long ctime = getCurrentTime();
-        log.trace("current time {} - original time {} = {} timer {}", ctime, this.time, timer);
+        long ctime = System.currentTimeMillis();
+        log.trace("current time {} - original time {} = {} timer {}", ctime, this.time, ctime - this.time, timer);
         return  (ctime - this.time) > timer;
     }
 
@@ -45,12 +38,7 @@ public class LogReplicationPendingEntry {
      * update retry number and the time with current time.
      */
     void retry() {
-        this.time = getCurrentTime();
+        this.time = System.currentTimeMillis();
         retry++;
-    }
-
-    private long getCurrentTime() {
-        currentTime += TIME_INCREMENT;
-        return currentTime;
     }
 }

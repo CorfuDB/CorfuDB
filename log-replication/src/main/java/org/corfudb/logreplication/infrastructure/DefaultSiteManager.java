@@ -133,7 +133,7 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
         standbySites.put(STANDBY_SITE_NAME, new CrossSiteConfiguration.SiteInfo(standbySiteName, SiteStatus.STANDBY));
 
         for (int i = 0; i < standbyNodeNames.size(); i++) {
-            log.info("Standby Site Name {}, IpAddress {}", standbyNodeNames.get(i), standbyIpAddresses.get(i));
+            log.trace("Standby Site Name {}, IpAddress {}", standbyNodeNames.get(i), standbyIpAddresses.get(i));
             LogReplicationNodeInfo nodeInfo = new LogReplicationNodeInfo(standbyIpAddresses.get(i),
                     standbyLogReplicationPort, SiteStatus.STANDBY, standbyCorfuPort, STANDBY_SITE_NAME);
             standbySites.get(STANDBY_SITE_NAME).nodesInfo.add(nodeInfo);

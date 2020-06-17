@@ -1,10 +1,14 @@
 package org.corfudb.integration;
 
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.logreplication.LogReplicationSourceManager;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -15,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@Slf4j
 @Data
 public class AckDataSender implements DataSender {
 
@@ -44,6 +49,12 @@ public class AckDataSender implements DataSender {
         CompletableFuture<LogReplicationEntry> ackCF = new CompletableFuture<>();
         messages.forEach(msg -> send(msg));
         return ackCF;
+    }
+
+    @Override
+    public LogReplicationQueryMetadataResponse sendQueryMetadata() {
+        log.warn("Not implemented");
+        return null;
     }
 
     @Override

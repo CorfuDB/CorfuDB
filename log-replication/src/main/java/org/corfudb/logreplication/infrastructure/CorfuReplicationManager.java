@@ -9,7 +9,7 @@ import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
 import org.corfudb.logreplication.fsm.LogReplicationEvent;
 import org.corfudb.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.logreplication.send.LogReplicationEventMetadata;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.retry.IRetry;
@@ -272,11 +272,11 @@ public class CorfuReplicationManager {
     private LogReplicationEvent startNegotiation(CorfuLogReplicationRuntime logReplicationRuntime)
             throws LogReplicationNegotiationException {
 
-        LogReplicationNegotiationResponse negotiationResponse;
+        LogReplicationQueryMetadataResponse negotiationResponse;
 
         try {
             // TODO(Anny) : IRetry...
-            negotiationResponse = logReplicationRuntime.startNegotiation();
+            negotiationResponse = logReplicationRuntime.sendQueryMetadataRequest();
             log.trace("Negotiation Response received: {} ", negotiationResponse);
         } catch (Exception e) {
             log.error("Caught exception during log replication negotiation to {} ", logReplicationRuntime.getParameters().getRemoteLogReplicationServerEndpoint(), e);
@@ -295,7 +295,7 @@ public class CorfuReplicationManager {
      * @return
      * @throws LogReplicationNegotiationException
      */
-    private LogReplicationEvent processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
+    private LogReplicationEvent processNegotiationResponse(LogReplicationQueryMetadataResponse negotiationResponse)
             throws LogReplicationNegotiationException {
         /*
          * If the version are different, report an error.

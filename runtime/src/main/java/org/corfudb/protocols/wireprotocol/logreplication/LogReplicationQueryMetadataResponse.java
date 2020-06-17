@@ -6,7 +6,7 @@ import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.runtime.Messages;
 
 @Data
-public class LogReplicationNegotiationResponse implements ICorfuPayload<LogReplicationNegotiationResponse> {
+public class LogReplicationQueryMetadataResponse implements ICorfuPayload<LogReplicationQueryMetadataResponse> {
 
     private long siteConfigID;
     private String version;
@@ -15,7 +15,7 @@ public class LogReplicationNegotiationResponse implements ICorfuPayload<LogRepli
     private long snapshotApplied;
     private long lastLogProcessed;
 
-    public LogReplicationNegotiationResponse(ByteBuf buf) {
+    public LogReplicationQueryMetadataResponse(ByteBuf buf) {
         siteConfigID = ICorfuPayload.fromBuffer(buf, Long.class);
         version = ICorfuPayload.fromBuffer(buf, String.class);
         snapshotStart = ICorfuPayload.fromBuffer(buf, Long.class);
@@ -24,7 +24,7 @@ public class LogReplicationNegotiationResponse implements ICorfuPayload<LogRepli
         lastLogProcessed = ICorfuPayload.fromBuffer(buf, Long.class);
     }
 
-    public LogReplicationNegotiationResponse(long siteConfigID, String version, long snapshotStart, long lastTransferDone, long snapshotAppliedDone, long lastLogProcessed) {
+    public LogReplicationQueryMetadataResponse(long siteConfigID, String version, long snapshotStart, long lastTransferDone, long snapshotAppliedDone, long lastLogProcessed) {
         this.siteConfigID = siteConfigID;
         this.version = version;
         this.snapshotStart = snapshotStart;
@@ -33,8 +33,8 @@ public class LogReplicationNegotiationResponse implements ICorfuPayload<LogRepli
         this.lastLogProcessed = lastLogProcessed;
     }
 
-    public static LogReplicationNegotiationResponse fromProto(Messages.LogReplicationNegotiationResponse proto) {
-        return new LogReplicationNegotiationResponse(proto.getSiteConfigID(),
+    public static LogReplicationQueryMetadataResponse fromProto(Messages.LogReplicationNegotiationResponse proto) {
+        return new LogReplicationQueryMetadataResponse(proto.getSiteConfigID(),
                 proto.getVersion(),
                 proto.getSnapshotStart(),
                 proto.getSnapshotTransferred(),

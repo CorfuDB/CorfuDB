@@ -40,8 +40,26 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
     long siteConfigID;
     private long srcGlobalSnapshot; // The source snapshot timestamp
+
+    /*
+     * Used by Snapshot Full Sync Phase I: writing to shadow streams.
+     */
     private long recvSeq;
+
+
+    /*
+     *
+     */
+    private long appliedSeq;
+
+
+    /*
+     * Before writing to the shadowStream, record the current tail.
+     * It can be used to openShadowStreams. While open a shadow stream and apply entries to
+     * the real stream, we can seek the shadowStream to this address first.
+     */
     private long shadowStreamStartAddress;
+
     @Getter
     private LogReplicationMetadataManager logReplicationMetadataManager;
     HashMap<UUID, UUID> uuidMap;
@@ -70,22 +88,18 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
     }
 
-    /**
-     * clear all tables registered
-     * TODO: replace with stream API
-     */
-    void clearTables() {
+    void clearShadowTables() {
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
         long persistSiteConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.SiteConfigID);
         long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotStarted);
         long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotSeqNum);
 
-        //for transfer phase start
+        //for transfer phase start, verify it hasn't received any message yet.
         if (siteConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart ||
-                (persitSeqNum + 1)!= recvSeq) {
-            log.warn("Skip current siteConfigID " + siteConfigID + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + recvSeq +
-                    " persistedMetadata " + logReplicationMetadataManager.getSiteConfigID() + " startSnapshot " + logReplicationMetadataManager.getLastSnapStartTimestamp() +
-                    " lastSnapSeqNum " + logReplicationMetadataManager.getLastSnapSeqNum());
+                persitSeqNum != Address.NON_ADDRESS) {
+                log.warn("Skip current processing as the persistent metadata {} shows the current operation is out of date " +
+                        "current siteConfigID {} srcGlobalSnapshot {}", logReplicationMetadataManager.getMetadata(),
+                        siteConfigID, srcGlobalSnapshot);
             return;
         }
 
@@ -93,6 +107,43 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.SiteConfigID, siteConfigID);
 
+        for (UUID streamID : streamViewMap.keySet()) {
+            UUID usedStreamID = streamID;
+            if (phase == Phase.TransferPhase) {
+                usedStreamID = uuidMap.get(streamID);
+            }
+
+            SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
+            txBuilder.logUpdate(usedStreamID, entry);
+        }
+
+        txBuilder.commit(timestamp);
+    }
+
+
+    /**
+     * clear all real tables registered for replication and start applying phase
+     * TODO: replace with stream API
+     */
+    void clearTables() {
+        CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
+        long persistSiteConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.SiteConfigID);
+        long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotStarted);
+        long persistSnapTransferred = logReplicationMetadataManager.query(timestamp,
+                LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotTransferred);
+        long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotAppliedSeqNum);
+
+        //If the metadata shows it is in the apply start phase and other metadata is consistent.
+        if (siteConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart ||
+                persistSnapTransferred != srcGlobalSnapshot || persitSeqNum!= Address.NON_ADDRESS) {
+            log.warn("Skip current processing as the persistent metadata {} shows the current operation is out of date " +
+                            "current siteConfigID {} srcGlobalSnapshot {}", logReplicationMetadataManager.getMetadata(),
+                    siteConfigID, srcGlobalSnapshot);
+            return;
+        }
+
+        TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.SiteConfigID, siteConfigID);
 
         for (UUID streamID : streamViewMap.keySet()) {
             UUID usedStreamID = streamID;
@@ -129,9 +180,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         this.siteConfigID = siteConfigID;
         srcGlobalSnapshot = snapshot;
         recvSeq = 0;
+        appliedSeq = 0;
 
         //clear shadow streams and remember the start address
-        clearTables();
+        clearShadowTables();
         shadowStreamStartAddress = rt.getAddressSpaceView().getLogTail();
     }
 
@@ -172,6 +224,42 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         log.debug("Process the entries {}  and set sequence number {} ", smrEntries, currentSeqNum);
     }
 
+    /**
+     * Write a list of SMR entries to the specified stream log.
+     * @param smrEntries
+     * @param currentSeqNum
+     * @param dstUUID
+     */
+    void processShadowOpaqueEntry(List<SMREntry> smrEntries, Long currentSeqNum, UUID dstUUID) {
+        CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
+        long persistConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.SiteConfigID);
+        long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotStarted);
+        long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotAppliedSeqNum);
+
+        if (siteConfigID != persistConfigID || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
+            log.warn("Skip current processing as the persistent metadata {} has applied more recent message {} than current siteConfigID {} " +
+                    "srcGlobalSnapshot {} currentAppliedSeqNum {}", logReplicationMetadataManager.getMetadata(),
+                    siteConfigID, srcGlobalSnapshot, currentSeqNum);
+            return;
+        }
+
+        TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.SiteConfigID, siteConfigID);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotStarted, srcGlobalSnapshot);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LastSnapshotAppliedSeqNum, currentSeqNum);
+        for (SMREntry smrEntry : smrEntries) {
+            txBuilder.logUpdate(dstUUID, smrEntry);
+        }
+
+        try {
+            txBuilder.commit(timestamp);
+        } catch (Exception e) {
+            log.warn("Caught an exception ", e);
+            throw e;
+        }
+        log.debug("Process the entries {}  and set applied sequence number {} ", smrEntries, currentSeqNum);
+    }
+
     @Override
     public void apply(LogReplicationEntry message) {
         verifyMetadata(message.getMetadata());
@@ -193,7 +281,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
 
         UUID uuid = opaqueEntry.getEntries().keySet().stream().findFirst().get();
-        processOpaqueEntry(opaqueEntry.getEntries().get(uuid), message.getMetadata().getSnapshotSyncSeqNum(), uuidMap.get(uuid));
+        processOpaqueEntry(opaqueEntry.getEntries().get(uuid), recvSeq, uuidMap.get(uuid));
         recvSeq++;
     }
 
@@ -222,7 +310,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         while (iterator.hasNext()) {
             OpaqueEntry opaqueEntry = iterator.next();
             if (opaqueEntry.getVersion() > shadowStreamStartAddress) {
-                processOpaqueEntry(opaqueEntry.getEntries().get(shadowUUID), seqNum, uuid);
+                processShadowOpaqueEntry(opaqueEntry.getEntries().get(shadowUUID), seqNum, uuid);
                 seqNum = seqNum + 1;
             }
         }
@@ -234,12 +322,13 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     /**
      * read from shadowStream and append to the
      */
-    public void applyShadowStreams(Long seqNum) {
+    public void applyShadowStreams() {
         phase = Phase.ApplyPhase;
         long snapshot = rt.getAddressSpaceView().getLogTail();
         clearTables();
+
         for (UUID uuid : streamViewMap.keySet()) {
-            seqNum = applyShadowStream(uuid, seqNum, snapshot);
+            appliedSeq = applyShadowStream(uuid, appliedSeq, snapshot);
         }
     }
 
@@ -248,6 +337,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param entry
      */
     public void snapshotTransferDone(LogReplicationEntry entry) {
+        if (phase == Phase.ApplyPhase) {
+            return;
+        }
+
         phase = Phase.ApplyPhase;
         //verify that the snapshot Apply hasn't started yet and set it as started and set the seqNumber
         long ts = entry.getMetadata().getSnapshotTimestamp();
@@ -264,7 +357,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         if (seqNum == Address.NON_ADDRESS)
             return;
 
-        applyShadowStreams(seqNum + 1);
+        applyShadowStreams();
     }
     
     enum Phase {

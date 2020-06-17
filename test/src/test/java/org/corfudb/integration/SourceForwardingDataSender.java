@@ -2,14 +2,18 @@ package org.corfudb.integration;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.receive.LogReplicationSinkManager;
 import org.corfudb.logreplication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
 import org.corfudb.logreplication.fsm.ObservableAckMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
@@ -19,9 +23,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@Slf4j
 public class SourceForwardingDataSender implements DataSender {
     // Runtime to remote/destination Corfu Server
     private CorfuRuntime runtime;
+
+    private LogReplicationSourceManager sourceManager;
 
     // Manager in remote/destination site, to emulate the channel, we instantiate the destination receiver
     private LogReplicationSinkManager destinationLogReplicationManager;
@@ -118,6 +125,13 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     @Override
+    public LogReplicationQueryMetadataResponse sendQueryMetadata() {
+        log.info("Process query metadata");
+        LogReplicationQueryMetadataResponse response = destinationLogReplicationManager.processQueryMetadataRequest();
+        return response;
+    }
+
+    @Override
     public void onError(LogReplicationError error) {
         errorCount++;
         errors.setValue(errorCount);
@@ -128,6 +142,7 @@ public class SourceForwardingDataSender implements DataSender {
      * Auxiliary Methods
      */
     public void setSourceManager(LogReplicationSourceManager sourceManager) {
+        sourceManager = sourceManager;
         destinationDataSender.setSourceManager(sourceManager);
         destinationDataControl.setSourceManager(sourceManager);
     }

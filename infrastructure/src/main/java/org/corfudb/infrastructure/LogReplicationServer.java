@@ -10,7 +10,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
@@ -89,18 +89,11 @@ public class LogReplicationServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST)
-    private void handleLogReplicationNegotiationRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.info("Log Replication Negotiation Request received by Server.");
-        LogReplicationMetadataManager metadata = sinkManager.getLogReplicationMetadataManager();
-        LogReplicationNegotiationResponse response = new LogReplicationNegotiationResponse(
-                metadata.getSiteConfigID(),
-                metadata.getVersion(),
-                metadata.getLastSnapStartTimestamp(),
-                metadata.getLastSnapTransferDoneTimestamp(),
-                metadata.getLastSrcBaseSnapshotTimestamp(),
-                metadata.getLastProcessedLogTimestamp());
-        r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE.payloadMsg(response));
+    @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_REQUEST)
+    private void handleLogReplicationQueryMetadataRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.info("Log Replication Query Metadata request received by Server.");
+        LogReplicationQueryMetadataResponse response = sinkManager.processQueryMetadataRequest();
+        r.sendResponse(ctx, msg, CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_RESPONSE.payloadMsg(response));
     }
 
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP)

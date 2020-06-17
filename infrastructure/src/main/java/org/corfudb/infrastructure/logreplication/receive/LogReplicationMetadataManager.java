@@ -112,6 +112,10 @@ public class LogReplicationMetadataManager {
         return query(null, LogReplicationMetadataType.LastSnapshotSeqNum);
     }
 
+    public long getLastSnapAppliedSeqNum() {
+        return query(null, LogReplicationMetadataType.LastSnapshotAppliedSeqNum);
+    }
+
     public long getLastProcessedLogTimestamp() {
         return query(null, LogReplicationMetadataType.LastLogProcessed);
     }
@@ -148,7 +152,7 @@ public class LogReplicationMetadataManager {
          }
 
         txBuilder.commit(timestamp);
-        log.info("Update siteConfigID, new metadata {}", getMetadata());
+        log.info("Update siteConfigID {}, new metadata {}", siteConfigID, getMetadata());
     }
 
     public void updateVersion(String version) {
@@ -219,6 +223,7 @@ public class LogReplicationMetadataManager {
         appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotTransferred, Address.NON_ADDRESS);
         appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotApplied, Address.NON_ADDRESS);
         appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotSeqNum, Address.NON_ADDRESS);
+        appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotAppliedSeqNum, Address.NON_ADDRESS);
         appendUpdate(txBuilder, LogReplicationMetadataType.LastLogProcessed, Address.NON_ADDRESS);
 
         txBuilder.commit(timestamp);
@@ -286,9 +291,6 @@ public class LogReplicationMetadataManager {
         appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotApplied, ts);
         appendUpdate(txBuilder, LogReplicationMetadataType.LastLogProcessed, ts);
 
-        //may not need
-        appendUpdate(txBuilder, LogReplicationMetadataType.LastSnapshotSeqNum, Address.NON_ADDRESS);
-
         txBuilder.commit(timestamp);
 
         log.debug("Commit. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
@@ -299,13 +301,14 @@ public class LogReplicationMetadataManager {
 
     public String getMetadata() {
         String s = new String();
-        s.concat(LogReplicationMetadataType.SiteConfigID.getVal() + " " + getSiteConfigID() +" ");
-        s.concat(LogReplicationMetadataType.LastSnapshotStarted.getVal() + " " + getLastSnapStartTimestamp() +" ");
-        s.concat(LogReplicationMetadataType.LastSnapshotTransferred.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
-        s.concat(LogReplicationMetadataType.LastSnapshotApplied.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");
-        s.concat(LogReplicationMetadataType.LastSnapshotSeqNum.getVal() + " " + getLastSnapSeqNum() + " ");
-        s.concat(LogReplicationMetadataType.LastLogProcessed.getVal() + " " + getLastProcessedLogTimestamp() + " ");
-
+        s = s.concat(LogReplicationMetadataType.SiteConfigID.getVal() + " " + getSiteConfigID() +" ");
+        s = s.concat(LogReplicationMetadataType.LastSnapshotStarted.getVal() + " " + getLastSnapStartTimestamp() +" ");
+        s = s.concat(LogReplicationMetadataType.LastSnapshotTransferred.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
+        s = s.concat(LogReplicationMetadataType.LastSnapshotApplied.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");
+        s = s.concat(LogReplicationMetadataType.LastSnapshotSeqNum.getVal() + " " + getLastSnapSeqNum() + " ");
+        s = s.concat(LogReplicationMetadataType.LastSnapshotAppliedSeqNum.getVal() + " " + getLastSnapAppliedSeqNum() + " ");
+        s = s.concat(LogReplicationMetadataType.LastLogProcessed.getVal() + " " + getLastProcessedLogTimestamp() + " ");
+        log.info("metadata {}", s);
         return s;
     }
 
@@ -320,6 +323,7 @@ public class LogReplicationMetadataManager {
         LastSnapshotTransferred("lastSnapTransferred"),
         LastSnapshotApplied("lastSnapApplied"),
         LastSnapshotSeqNum("lastSnapSeqNum"),
+        LastSnapshotAppliedSeqNum("lastSnapAppliedSeqNum"),
         LastLogProcessed("lastLogProcessed");
 
         @Getter

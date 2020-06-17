@@ -49,6 +49,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
     long getCurrentSeq(LogReplicationEntry entry) {
         if (entry.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
             snapshotEndSeq = entry.getMetadata().getSnapshotSyncSeqNum();
+            log.info("Setup snapshotEndSeq {}", snapshotEndSeq);
         }
         return entry.getMetadata().getSnapshotSyncSeqNum();
     }
@@ -68,6 +69,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
          */
         if (lastProcessedSeq == snapshotEndSeq) {
             metadata.setMessageMetadataType(MessageType.SNAPSHOT_END);
+            metadata.setSnapshotSyncSeqNum(lastProcessedSeq);
         } else {
             metadata.setMessageMetadataType(MessageType.SNAPSHOT_REPLICATED);
         }
@@ -96,7 +98,10 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
     }
 
     boolean shouldAck() {
+        log.info("lastProccessedSeq {}  snapshotEndSeq {}", lastProcessedSeq, snapshotEndSeq);
+
         if (lastProcessedSeq == snapshotEndSeq) {
+            log.info("Snapshot End has been processed lastProccessedSeq {}  snapshotEndSeq {}", lastProcessedSeq, snapshotEndSeq);
             return true;
         }
 

@@ -10,6 +10,7 @@ import org.corfudb.infrastructure.logreplication.DefaultSiteConfig;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
@@ -191,6 +192,7 @@ public class LogReplicationSinkManager implements DataReceiver {
          * If there is a siteConfig change, the discovery service will detect it and reset the state.
          */
         if (message.getMetadata().getSiteConfigID() != siteConfigID) {
+            log.warn("Got a message {} that has an different siteConfigID with the current site {}", message.getMetadata(), siteConfigID);
             return null;
         }
 
@@ -209,12 +211,10 @@ public class LogReplicationSinkManager implements DataReceiver {
              * Reply the SNAPSHOT_ACK again and let sender do the proper transition.
              */
             if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
+                log.warn("Sink Manager in state {} and received message {}. Resending the ACK for SNAPSHOT_END.", rxState,
+                        message.getMetadata());
                 LogReplicationEntryMetadata metadata = snapshotSinkBufferManager.makeAckMessage(message);
-                if (metadata.getMessageMetadataType() == SNAPSHOT_END) {
-                    log.warn("Sink Manager in state {} and received message {}. Resending the ACK for SNAPSHOT_END.", rxState,
-                            message.getMetadata());
-                    return new LogReplicationEntry(metadata, new byte[0]);
-                }
+                return new LogReplicationEntry(metadata, new byte[0]);
             }
 
             // Invalid message and drop it.
@@ -285,7 +285,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
-        log.info("Sink manager entre {} state, snapshot start with {}", rxState, entry.getMetadata());
+        log.info("Sink manager enter {} state, snapshot start with {}", rxState, entry.getMetadata());
     }
 
     /**
@@ -299,7 +299,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         logReplicationMetadataManager.setSnapshotApplied(inputEntry);
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
-
 
         log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
                 inputEntry, rxState);
@@ -315,13 +314,28 @@ public class LogReplicationSinkManager implements DataReceiver {
                 snapshotWriter.apply(message);
                 return;
             case SNAPSHOT_END:
-                snapshotWriter.snapshotTransferDone(message);
-                completeSnapshotApply(message);
+                log.trace("Receive SNAPSHOT_END msg {} at phase {}", message.getMetadata(), snapshotWriter.phase);
+                if (snapshotWriter.phase != StreamsSnapshotWriter.Phase.ApplyPhase) {
+                    snapshotWriter.snapshotTransferDone(message);
+                    completeSnapshotApply(message);
+                }
                 return;
             default:
                 log.warn("Message type {} should not be applied as snapshot sync.", message.getMetadata().getMessageMetadataType());
                 break;
         }
+    }
+
+    public LogReplicationQueryMetadataResponse processQueryMetadataRequest() {
+        LogReplicationQueryMetadataResponse response = new LogReplicationQueryMetadataResponse(
+                logReplicationMetadataManager.getSiteConfigID(),
+                logReplicationMetadataManager.getVersion(),
+                logReplicationMetadataManager.getLastSnapStartTimestamp(),
+                logReplicationMetadataManager.getLastSnapTransferDoneTimestamp(),
+                logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
+                logReplicationMetadataManager.getLastProcessedLogTimestamp());
+        log.info("Query metadata response {}", response);
+        return response;
     }
 
     /**

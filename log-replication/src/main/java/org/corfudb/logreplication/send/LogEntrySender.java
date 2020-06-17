@@ -170,7 +170,7 @@ public class LogEntrySender {
      */
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         taskActive = true;
-        log.info("Reset baseSnapshot %s maxAckForLogEntrySync %s", lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
+        log.info("Reset baseSnapshot {} maxAckForLogEntrySync {}", lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         logEntryReader.reset(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         dataSenderBufferManager.reset(lastAckedTimestamp);
     }
