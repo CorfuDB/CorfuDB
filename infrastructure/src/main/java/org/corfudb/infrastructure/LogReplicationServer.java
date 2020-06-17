@@ -11,7 +11,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationLeadershipLoss;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
@@ -97,8 +97,8 @@ public class LogReplicationServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST)
-    private void handleLogReplicationNegotiationRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_REQUEST)
+    private void handleLogReplicationQueryMetadataRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Log Replication Negotiation Request received by Server.");
 
         if (isLeader(msg, r)) {
@@ -106,7 +106,7 @@ public class LogReplicationServer extends AbstractServer {
 
             // TODO (Xiaoqin Ma): That's 6 independent DB calls per one LOG_REPLICATION_NEGOTIATION_REQUEST.
             //  Can we do just one? Also, It does not look like we handle failures if one of them fails, for example.
-            LogReplicationNegotiationResponse response = new LogReplicationNegotiationResponse(
+            LogReplicationQueryMetadataResponse response = new LogReplicationQueryMetadataResponse(
                     metadata.getTopologyConfigId(),
                     metadata.getVersion(),
                     metadata.getLastSnapStartTimestamp(),
@@ -114,7 +114,7 @@ public class LogReplicationServer extends AbstractServer {
                     metadata.getLastSrcBaseSnapshotTimestamp(),
                     metadata.getLastProcessedLogTimestamp());
             log.info("Send Negotiation response");
-            r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE.payloadMsg(response));
+            r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_RESPONSE.payloadMsg(response));
         } else {
             log.warn("Dropping negotiation request as this node is not the leader.");
         }

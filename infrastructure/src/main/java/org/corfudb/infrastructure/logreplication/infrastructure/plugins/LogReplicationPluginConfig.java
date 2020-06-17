@@ -58,7 +58,7 @@ public class LogReplicationPluginConfig {
             this.topologyManagerAdapterJARPath = prop.getProperty("topology_manager_adapter_JAR_path");
             this.topologyManagerAdapterName = prop.getProperty("topology_manager_adapter_class_name");
         } catch (IOException e) {
-            log.warn("Exception caught while trying to load adapter configuration from {}. Default configuration " +
+            log.warn("The configuration file is not available {}. Default configuration " +
                     "will be used.", filepath);
             // Default Configuration
             this.transportAdapterJARPath = getParentDir() + DEFAULT_JAR_PATH;

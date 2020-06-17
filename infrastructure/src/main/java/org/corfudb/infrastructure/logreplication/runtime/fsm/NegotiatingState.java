@@ -9,7 +9,7 @@ import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRunt
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -107,9 +107,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         try {
             if(fsm.getRemoteLeader().isPresent()) {
                 String remoteLeader = fsm.getRemoteLeader().get();
-                CompletableFuture<LogReplicationNegotiationResponse> cf = router.sendMessageAndGetCompletable(
-                        new CorfuMsg(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST).setEpoch(0), remoteLeader);
-                LogReplicationNegotiationResponse response = cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                CompletableFuture<LogReplicationQueryMetadataResponse> cf = router.sendMessageAndGetCompletable(
+                        new CorfuMsg(CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_REQUEST).setEpoch(0), remoteLeader);
+                LogReplicationQueryMetadataResponse response = cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
                 // Process Negotiation Response, and determine if we start replication and which type type to start
                 // (snapshot or log entry sync). This will be carried along the negotiation_complete event.
@@ -153,7 +153,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
      * @return
      * @throws LogReplicationNegotiationException
      */
-    private void processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
+    private void processNegotiationResponse(LogReplicationQueryMetadataResponse negotiationResponse)
             throws LogReplicationNegotiationException {
         /*
          * If the version are different, report an error.

@@ -51,7 +51,7 @@ public final class DefaultClusterConfig {
     private static int logSenderRetryCount = 5;
 
     @Getter
-    private static int logSenderResendTimer = 5000;
+    private static int logSenderResendTimer = 500;
 
     @Getter
     private static int logSenderTimeoutTimer = 5000;
@@ -63,7 +63,7 @@ public final class DefaultClusterConfig {
     private static int logSinkBufferSize = 40;
 
     @Getter
-    private static int logSinkAckCycleCount = 4;
+    private static int logSinkAckCycleCount = 2;
 
     @Getter
     private static int logSinkAckCycleTimer = 1000;

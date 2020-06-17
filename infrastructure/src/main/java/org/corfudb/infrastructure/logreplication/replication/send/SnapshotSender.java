@@ -13,6 +13,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Snap
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -21,7 +22,7 @@ import org.corfudb.runtime.view.Address;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutionException;
 
 /**
  *  This class is responsible of transmitting a consistent view of the data at a given timestamp,
@@ -48,6 +49,7 @@ public class SnapshotSender {
     private SenderBufferManager dataSenderBufferManager;
     private LogReplicationFSM fsm;
     private long baseSnapshotTimestamp;
+    boolean completed = false;    // Flag indicating the snapshot reading phase is completed
 
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
     private boolean startSnapshotSync = true;
@@ -60,15 +62,97 @@ public class SnapshotSender {
 
     private volatile boolean stopSnapshotSync = false;
 
+    private DataSender dataSender;
+
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                           ReadProcessor readProcessor, LogReplicationFSM fsm) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
         this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender);
+        this.dataSender = dataSender;
     }
 
     private CompletableFuture<LogReplicationEntry> snapshotSyncAck;
+
+    /**
+     * Read the data from corfu table and send over to the sender.
+     * @param snapshotSyncEventId
+     */
+    public void readAndTransmit(UUID snapshotSyncEventId) {
+        int messagesSent = 0;
+        SnapshotReadMessage snapshotReadMessage;
+        boolean cancel = false;
+
+        while (messagesSent < SNAPSHOT_BATCH_SIZE && !dataSenderBufferManager.getPendingMessages().isFull()
+                &&!completed && !stopSnapshotSync) {
+            try {
+                snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
+                completed = snapshotReadMessage.isEndRead();
+                // Data Transformation / Processing
+                // readProcessor.process(snapshotReadMessage.getMessages())
+            } catch (TrimmedException te) {
+                log.warn("Cancel snapshot sync due to trimmed exception.", te);
+                dataSenderBufferManager.reset(Address.NON_ADDRESS);
+                snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC);
+                cancel = true;
+                break;
+            } catch (Exception e) {
+                log.error("Caught exception during snapshot sync", e);
+                snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
+                cancel = true;
+                break;
+            }
+
+            messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, completed);
+            observedCounter.setValue(messagesSent);
+        }
+
+       if (!cancel) {
+            // Maximum number of batch messages sent. This snapshot sync needs to continue.
+            // Snapshot Sync is not performed in a single run, as for the case of multi-site replication
+            // the shared thread pool could be lower than the number of sites, so we assign resources in
+            // a round robin fashion.
+            log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
+            fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
+                    new LogReplicationEventMetadata(snapshotSyncEventId)));
+       } else {
+           log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
+           fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
+                   new LogReplicationEventMetadata(snapshotSyncEventId)));
+       }
+    }
+
+    /**
+     *
+     * @param snapshotSyncEventId
+     */
+    public void querySnapshotSyncStatus(UUID snapshotSyncEventId) {
+        if (!completed) {
+            log.error("It is in the wrong state, the reading is not in the complete state {}", completed);
+            return;
+        }
+
+        try {
+            // Query receiver status
+            LogReplicationQueryMetadataResponse response = dataSender.sendQueryMetadata();
+
+            // If it has finised applying the snapshot, transition to log entry sync
+            // Otherwise query the status in another cycle.
+            if (response.getLastLogProcessed() == response.getSnapshotApplied() &&
+                response.getSnapshotApplied() == baseSnapshotTimestamp) {
+                log.info("SNAPSHOT full sync complete according to response {} ", response);
+                snapshotSyncComplete(snapshotSyncEventId);
+            } else {
+                log.info("The receiver hasn't finished applying the snapshot yet {}");
+                fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
+                        new LogReplicationEventMetadata(snapshotSyncEventId)));
+            }
+        } catch (Exception e) {
+            // There is a network issue or the receiver refuse to reply the message
+            // Todo xiaoqin rediscovery the remote site.
+        }
+    }
 
     /**
      * Initiate Snapshot Sync, this entails reading and sending data for a given snapshot.
@@ -76,105 +160,40 @@ public class SnapshotSender {
      * @param snapshotSyncEventId identifier of the event that initiated the snapshot sync
      */
     public void transmit(UUID snapshotSyncEventId) {
-
         log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
                 baseSnapshotTimestamp);
 
-        boolean completed = false;  // Flag indicating the snapshot sync is completed
-        boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
-        int messagesSent = 0;       // Limit the number of messages to SNAPSHOT_BATCH_SIZE. The reason we need to limit
-                                    // is because by design several state machines can share the same thread pool,
-                                    // therefore, we need to hand the thread for other workers to execute.
-        SnapshotReadMessage snapshotReadMessage;
+        if(!Address.isAddress(baseSnapshotTimestamp)) {
+            log.warn("The baseSnapshotTimestamp is not a correct address and will ingore the snapshot sync reqeust.", baseSnapshotTimestamp);
+            return;
+        }
 
-        // Skip if no data is present in the log
-        if (Address.isAddress(baseSnapshotTimestamp)) {
-            // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
-            // or snapshot sync is stopped
-            dataSenderBufferManager.resend();
-            while (messagesSent < SNAPSHOT_BATCH_SIZE && !dataSenderBufferManager.getPendingMessages().isFull() &&!completed && !stopSnapshotSync) {
+        //Resend messages in buffer and process the ACKs.
+        dataSenderBufferManager.resend();
 
-                try {
-                    snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
-                    completed = snapshotReadMessage.isEndRead();
-                    // Data Transformation / Processing
-                    // readProcessor.process(snapshotReadMessage.getMessages())
-                } catch (TrimmedException te) {
-                    log.warn("Cancel snapshot sync due to trimmed exception.", te);
-                    dataSenderBufferManager.reset(Address.NON_ADDRESS);
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC);
-                    cancel = true;
-                    break;
-                } catch (Exception e) {
-                    log.error("Caught exception during snapshot sync", e);
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
-                    cancel = true;
-                    break;
-                }
-
-                messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, completed);
-                observedCounter.setValue(messagesSent);
-            }
-
-            if (completed) {
-                // Block until ACK from last sent message is received
-                try {
-                    LogReplicationEntry ack = snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-                    if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp) {
-                        // Snapshot Sync Completed
-                        log.info("Snapshot sync completed for {} on timestamp {}, ack{}", snapshotSyncEventId,
-                                baseSnapshotTimestamp, ack.getMetadata());
-                        snapshotSyncComplete(snapshotSyncEventId);
-                    } else {
-                        log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
-                                ack.getMetadata());
-                        throw new Exception("Wrong base snapshot ack");
-                    }
-                } catch (Exception e) {
-                    log.error("Exception caught while blocking on snapshot sync {}, ack for {}",
-                            snapshotSyncEventId, baseSnapshotTimestamp, e);
-                    if (snapshotSyncAck.isCompletedExceptionally()) {
-                        log.error("...");
-                    }
-                    snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
-                } finally {
-                    snapshotSyncAck = null;
-                }
-            } else if (!cancel) {
-                // Maximum number of batch messages sent. This snapshot sync needs to continue.
-
-                // Snapshot Sync is not performed in a single run, as for the case of multi-cluster replication
-                // the shared thread pool could be lower than the number of sites, so we assign resources in
-                // a round robin fashion.
-                log.trace("Snapshot sync continue for {} on timestamp {}", snapshotSyncEventId, baseSnapshotTimestamp);
-                fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
-                        new LogReplicationEventMetadata(snapshotSyncEventId)));
-            }
+        if (!completed) {
+            log.info("Reading and sending phase.");
+            readAndTransmit(snapshotSyncEventId);
+        } else if (!dataSenderBufferManager.pendingMessages.isEmpty()) {
+            log.info("Snapshot full sync: snapshot reader is done, there is still data in the buffer {}",
+                    dataSenderBufferManager.pendingMessages.getSize());
+            fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
+                    new LogReplicationEventMetadata(snapshotSyncEventId)));
         } else {
-            log.info("Snapshot sync completed for {} as there is no data in the log.", snapshotSyncEventId);
-
-            // Generate a special LogReplicationEntry with only metadata (used as start marker on receiver side
-            // to complete snapshot sync and send the right ACK)
-            try {
-                dataSenderBufferManager.sendWithBuffering(resendMsgsAndWaitAckForSnapshotEnd(snapshotSyncEventId));
-                snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
-                snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-                snapshotSyncComplete(snapshotSyncEventId);
-            } catch (Exception e) {
-                //todo: generate an event for discovery service
-                log.warn("While sending data, caught an exception. Will notify discovery service");
-            }
+            // It has finished reading the snapshot data and all data has been sent over and ACKed.
+            log.info("Snapshot sync transfer has completed for {} as there is no data in the buffer.", snapshotSyncEventId);
+            querySnapshotSyncStatus(snapshotSyncEventId);
         }
     }
 
     private int processReads(List<LogReplicationEntry> logReplicationEntries, UUID snapshotSyncEventId, boolean completed) {
         int numMessages = 0;
 
-        //dataSenderBufferManager.resend();
-
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
-            dataSenderBufferManager.sendWithBuffering(resendMsgsAndWaitAckForSnapshotEnd(snapshotSyncEventId));
+            LogReplicationEntry entry = getSnapshotSyncStartMarker(snapshotSyncEventId);
+            entry.getMetadata().setSnapshotSyncSeqNum(Address.NON_ADDRESS);
+            dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
             startSnapshotSync = false;
             numMessages++;
         }
@@ -195,11 +214,11 @@ public class SnapshotSender {
 
     /**
      * Prepare a Snapshot Sync Replication start marker.
-     *
+     * This message will has seqNum -1.
      * @param snapshotSyncEventId snapshot sync event identifier
      * @return snapshot sync start marker as LogReplicationEntry
      */
-    private LogReplicationEntry resendMsgsAndWaitAckForSnapshotEnd(UUID snapshotSyncEventId) {
+    private LogReplicationEntry getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START, fsm.getTopologyConfigId(),
                 snapshotSyncEventId, Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
@@ -213,12 +232,16 @@ public class SnapshotSender {
         return emptyEntry;
     }
 
+    public boolean isTransmissionDone() {
+        return completed & dataSenderBufferManager.pendingMessages.isEmpty();
+    }
+
     /**
      * Complete Snapshot Sync, insert completion event in the FSM queue.
      *
      * @param snapshotSyncEventId unique identifier for the completed snapshot sync.
      */
-    private void snapshotSyncComplete(UUID snapshotSyncEventId) {
+    public void snapshotSyncComplete(UUID snapshotSyncEventId) {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,

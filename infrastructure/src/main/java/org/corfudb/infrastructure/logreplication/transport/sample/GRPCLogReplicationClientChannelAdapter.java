@@ -108,7 +108,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             case LOG_REPLICATION_QUERY_LEADERSHIP:
                 queryLeadership(endpoint, msg);
                 break;
-            case LOG_REPLICATION_NEGOTIATION_REQUEST:
+            case LOG_REPLICATION_QUERY_METADATA_REQUEST:
                 negotiate(endpoint, msg);
                 break;
             default:

@@ -3,11 +3,12 @@ package org.corfudb.infrastructure.logreplication.runtime;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.runtime.clients.AbstractClient;
 import org.corfudb.runtime.clients.IClientRouter;
 
@@ -39,9 +40,9 @@ public class LogReplicationClient extends AbstractClient {
         setRouter(router);
     }
 
-    public CompletableFuture<LogReplicationNegotiationResponse> sendNegotiationRequest() {
+    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() {
         return getRouter().sendMessageAndGetCompletable(
-                    new CorfuMsg(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST).setEpoch(0));
+                    new CorfuMsg(CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_RESPONSE).setEpoch(0));
     }
 
     public CompletableFuture<LogReplicationEntry> sendLogEntry(LogReplicationEntry logReplicationEntry) {
