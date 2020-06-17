@@ -1,10 +1,11 @@
 package org.corfudb.logreplication.infrastructure;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.utils.lock.LockDataTypes;
 import org.corfudb.utils.lock.LockListener;
 
-import static org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.AcquireLock;
-import static org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.ReleaseLock;
+import static org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.ACQUIRE_LOCK;
+import static org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.RELEASE_LOCK;
 
 /**
  * Lock Listener implementation for Log Replication Service.
@@ -13,6 +14,7 @@ import static org.corfudb.logreplication.infrastructure.DiscoveryServiceEvent.Di
  *
  * @author annym 05/22/2020
  */
+@Slf4j
 public class LogReplicationLockListener implements LockListener {
     CorfuReplicationDiscoveryService discoveryService;
 
@@ -22,12 +24,14 @@ public class LogReplicationLockListener implements LockListener {
 
     @Override
     public void lockAcquired(LockDataTypes.LockId lockId) {
-        discoveryService.putEvent(new DiscoveryServiceEvent(AcquireLock));
+        log.debug("Lock acquired id={}", lockId);
+        discoveryService.putEvent(new DiscoveryServiceEvent(ACQUIRE_LOCK));
     }
 
     @Override
     public void lockRevoked(LockDataTypes.LockId lockId) {
-        discoveryService.putEvent(new DiscoveryServiceEvent(ReleaseLock));
+        log.debug("Lock revoked id={}", lockId);
+        discoveryService.putEvent(new DiscoveryServiceEvent(RELEASE_LOCK));
     }
 
 }

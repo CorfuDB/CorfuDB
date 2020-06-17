@@ -6,7 +6,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Queue;
 
 /**
  * The sliding window to record the pending entries that have sent to the receiver but hasn't got an ACK yet.

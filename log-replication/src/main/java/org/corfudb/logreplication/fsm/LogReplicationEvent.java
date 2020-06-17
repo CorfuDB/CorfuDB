@@ -20,16 +20,16 @@ public class LogReplicationEvent {
         REPLICATION_START,          // External event which signals start of log replication process
         REPLICATION_STOP,           // External event which signals stop of log replication process
         SNAPSHOT_SYNC_REQUEST,      // External event which signals start of a snapshot sync (full-sync)
-        SNAPSHOT_SYNC_CONTINUE,     // Internal event to continue snapshot sync (broken to accommodate multi-site
+        SNAPSHOT_SYNC_CONTINUE,     // Internal event to continue snapshot sync (broken to accommodate multi-cluster
                                     // replication for a shared thread pool)
         SNAPSHOT_WAIT_COMPLETE,     // Has sent over all snapshot full sync data and wait the destination to set back
                                     // an ACK for snapshot_sync_complete. It will resend the SNAPSHOT_SYNC_COMPLETE message.
         SNAPSHOT_SYNC_COMPLETE,     // External/Internal event which signals snapshot sync has been completed
-        LOG_ENTRY_SYNC_CONTINUE,    // Internal event to continue log entry sync (broken to accommodate multi-site
+        LOG_ENTRY_SYNC_CONTINUE,    // Internal event to continue log entry sync (broken to accommodate multi-cluster
                                     // replication for a shared thread pool)
         SYNC_CANCEL,                // External/Internal event requesting to cancel sync (snapshot or log entry)
         LOG_ENTRY_SYNC_REPLICATED,  // External event which signals a log entry sync has been successfully replicated
-                                    // on the standby site (ack)
+                                    // on the standby cluster (ack)
         REPLICATION_SHUTDOWN        // External/Internal event which signals log replication to be terminated (only a
                                     // JVM restart can enable log replication after this)
     }

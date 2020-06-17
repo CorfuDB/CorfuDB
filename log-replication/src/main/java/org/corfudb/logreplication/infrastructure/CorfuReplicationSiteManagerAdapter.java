@@ -1,36 +1,36 @@
 package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
 public abstract class CorfuReplicationSiteManagerAdapter {
     @Getter
     CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
 
     @Getter
-    SiteConfigurationMsg siteConfigMsg;
+    TopologyConfigurationMsg topologyConfig;
 
     public void setCorfuReplicationDiscoveryService(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
         this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;
         start();
     }
 
-    public synchronized SiteConfigurationMsg fetchSiteConfig() {
-        siteConfigMsg = querySiteConfig();
-        return siteConfigMsg;
+    public synchronized TopologyConfigurationMsg fetchTopology() {
+        topologyConfig = queryTopologyConfig();
+        return topologyConfig;
     }
 
     /**
-     * Will be called when the site change and a new configuration is sent over
-     * @param newSiteConfigMsg
-     * @return
+     * Will be called when the cluster change and a new configuration is sent over
+     *
+     * @param newTopologyConfigMsg
      */
-    synchronized void updateSiteConfig(SiteConfigurationMsg newSiteConfigMsg) {
-            if (newSiteConfigMsg.getSiteConfigID() > siteConfigMsg.getSiteConfigID()) {
-                siteConfigMsg = newSiteConfigMsg;
-                corfuReplicationDiscoveryService.updateSiteConfig(siteConfigMsg);
-            }
+    synchronized void updateTopologyConfig(TopologyConfigurationMsg newTopologyConfigMsg) {
+        if (newTopologyConfigMsg.getTopologyConfigID() > topologyConfig.getTopologyConfigID()) {
+            topologyConfig = newTopologyConfigMsg;
+            corfuReplicationDiscoveryService.updateSiteConfig(topologyConfig);
+        }
     }
 
     public void prepareSiteRoleChange() {
@@ -41,8 +41,8 @@ public abstract class CorfuReplicationSiteManagerAdapter {
         return corfuReplicationDiscoveryService.queryReplicationStatus();
     }
 
-    //TODO: handle the case that querySiteConfig return an exception.
-    public abstract SiteConfigurationMsg querySiteConfig();
+    //TODO: handle the case that queryTopologyConfig return an exception.
+    public abstract TopologyConfigurationMsg queryTopologyConfig();
 
     public abstract void start();
 

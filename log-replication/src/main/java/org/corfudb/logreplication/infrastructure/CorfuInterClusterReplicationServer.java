@@ -17,18 +17,20 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.corfudb.transport.logreplication.LogReplicationServerRouter.PLUGIN_CONFIG_FILE_PATH;
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 /**
  * This class represents the Corfu Replication Server. This Server will be running on both ends
- * of the cross-site replication.
+ * of the cross-cluster replication.
  *
- * A discovery mechanism will enable a site as Source (Sender) and another as Sink (Receiver).
+ * A discovery mechanism will enable a cluster as Source (Sender) and another as Sink (Receiver).
  */
 @Slf4j
 public class CorfuInterClusterReplicationServer implements Runnable {
@@ -51,10 +53,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-i <channel-implementation>] "
+                    + "[--plugin=<plugin-config-file-path>] "
                     + "[-z <tls-protocols>]] [-H <seconds>] "
                     + "[-T <threads>] [-B <size>] "
                     + "[--metrics] [--metrics-port <metrics_port>] "
-                    + "[--custom-transport] "
                     + "[-P <prefix>] [-R <retention>] [--agent] <port> \n"
                     + "\n"
                     + "Options:\n"
@@ -90,6 +92,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "              If there is no log, then this will be the size of the log unit"
                     + "\n                                                                        "
                     + "                evicted entries will be auto-trimmed. [default: 0.5].\n"
+                    + " --plugin=<plugin-config-file-path>                                       "
+                    + "             Path to Plugin Config Path.\n                                "
                     + " -H <seconds>, --HandshakeTimeout=<seconds>                               "
                     + "              Handshake timeout in seconds [default: 10].\n               "
                     + "                                                                          "
@@ -163,8 +167,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + " --agent      Run with byteman agent to enable runtime code injection.\n  "
                     + " --metrics                                                                "
                     + "              Enable metrics provider.\n                                  "
-                    + " --custom-transport                                                       "
-                    + "              Enable custom transport layer (defined plugin).\n           "
                     + " --metrics-port=<metrics_port>                                            "
                     + "              Metrics provider server port [default: 9999].\n             "
                     + " -h, --help                                                               "
@@ -191,7 +193,15 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
     String[] args;
 
+    private static boolean test;
+
     public static void main(String[] args) {
+        // For testing purposes, inspect for test flag and remove.
+        // This flag is required to avoid forcefully shutting down the server
+        // in the event of an InterruptedException which can be part of a test workflow, once the logic
+        // is executed (executorService.shutdownNow()).
+        args = checkIfTest(args);
+
         CorfuInterClusterReplicationServer corfuReplicationServer = new CorfuInterClusterReplicationServer(args);
         corfuReplicationServer.run();
     }
@@ -205,9 +215,24 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         try {
             this.startServer();
         } catch (Throwable err) {
-            log.error("Exit. Unrecoverable error", err);
-            throw err;
+            if(!test) {
+                log.error("Exit. Unrecoverable error", err);
+                throw err;
+            }
         }
+    }
+
+    /**
+     * Set a flag if this server is run from a testing environment,
+     * so we can avoid triggering SYSTEM_EXIT when the test ends
+     * which will cause an error to be thrown.
+     */
+    private static String[] checkIfTest(String[] args) {
+        List<String> argsList = new ArrayList<>();
+        argsList.addAll(Arrays.asList(args));
+        test = argsList.contains("test");
+        argsList.remove("test");
+        return argsList.toArray(new String[0]);
     }
 
     private void startServer() {
@@ -220,7 +245,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         configureLogger(opts);
 
         log.info("Started with arguments: {}", opts);
-        this.siteManagerAdapter = constructSiteManagerAdapter();
+        String pluginConfigFilePath = opts.get("--plugin") != null ? (String) opts.get("--plugin") :
+                ServerContext.PLUGIN_CONFIG_FILE_PATH;
+
+        this.siteManagerAdapter = constructSiteManagerAdapter(pluginConfigFilePath);
 
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
@@ -250,7 +278,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     .equals("localhost:9020") ? ":9001" : ":9000";
 
                 LogReplicationStreamNameTableManager replicationStreamNameTableManager =
-                    new LogReplicationStreamNameTableManager(corfuPort);
+                    new LogReplicationStreamNameTableManager(corfuPort, pluginConfigFilePath);
 
                 // TODO pankti: Check if version does not match.  If if does not, create an event for site discovery to
                 // do a snapshot sync.
@@ -280,11 +308,13 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
                 if (upgraded) {
                     replicationDiscoveryService.putEvent(
-                        new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.Upgrade));
+                        new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
                 }
             } catch (Throwable th) {
-                log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
-                System.exit(EXIT_ERROR_CODE);
+                if (!test) {
+                    log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
+                    System.exit(EXIT_ERROR_CODE);
+                }
             }
 
             if (cleanupServer) {
@@ -360,7 +390,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     @SuppressWarnings("checkstyle:printLine")
     private static void println(Object line) {
         System.out.println(line.toString());
-        log.info(line.toString());
+        // log.info(line.toString());
     }
 
     /**
@@ -373,20 +403,20 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             println("");
             println("------------------------------------");
             println("Initializing LOG REPLICATION SERVER");
-            println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
+            println("VERSION (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
             final int port = Integer.parseInt((String) opts.get("<port>"));
             println("Serving on port " + port);
             println("------------------------------------");
             println("");
     }
 
-    private CorfuReplicationSiteManagerAdapter constructSiteManagerAdapter() {
+    private CorfuReplicationSiteManagerAdapter constructSiteManagerAdapter(String pluginConfigFilePath) {
 
-        LogReplicationPluginConfig config = new LogReplicationPluginConfig(PLUGIN_CONFIG_FILE_PATH);
-        File jar = new File(config.getSiteManagerAdapterJARPath());
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
+        File jar = new File(config.getTopologyManagerAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
-            Class adapter = Class.forName(config.getSiteManagerAdapterName(), true, child);
+            Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
             return (CorfuReplicationSiteManagerAdapter) adapter.getDeclaredConstructor().newInstance();
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);

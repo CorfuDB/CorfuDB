@@ -12,7 +12,7 @@ import java.util.concurrent.Future;
 /**
  * This class represents the InSnapshotSync state of the Log Replication State Machine.
  *
- * In this state full logs are being synced to the remote site, based on a snapshot timestamp.
+ * In this state full logs are being synced to the remote cluster, based on a snapshot timestamp.
  */
 @Slf4j
 public class InSnapshotSyncState implements LogReplicationState {
@@ -78,7 +78,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 /*
                  Snapshot sync is broken into multiple tasks, where each task sends a batch of messages
                  corresponding to this snapshot sync. This is done to accommodate the case
-                 of multi-site replication sharing a common thread pool, continuation allows to send another
+                 of multi-cluster replication sharing a common thread pool, continuation allows to send another
                  batch of updates for the current snapshot sync.
                  */
                 if (event.getMetadata().getRequestId() == transitionEventId) {

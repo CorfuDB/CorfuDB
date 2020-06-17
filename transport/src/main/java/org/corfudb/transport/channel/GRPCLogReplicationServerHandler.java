@@ -1,4 +1,4 @@
-package org.corfudb.transport.test;
+package org.corfudb.transport.channel;
 
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * GRPC Log Replication Service Stub Implementation.
  *
- * Note: GRPC is used to test the plugin-based transport architecture for log replication.
+ * Note: GRPC is used to channel the plugin-based transport architecture for log replication.
  *
  * @author annym 05/15/20
  */

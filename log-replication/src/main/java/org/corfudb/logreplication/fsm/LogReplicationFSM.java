@@ -8,7 +8,7 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.logreplication.fsm.LogReplicationEvent.LogReplicationEventType;
-import org.corfudb.logreplication.infrastructure.CrossSiteConfiguration;
+import org.corfudb.infrastructure.logreplication.cluster.TopologyDescriptor;
 import org.corfudb.logreplication.send.logreader.LogEntryReader;
 import org.corfudb.logreplication.send.LogEntrySender;
 import org.corfudb.logreplication.send.logreader.ReadProcessor;
@@ -30,14 +30,14 @@ import java.util.concurrent.LinkedBlockingQueue;
  * This class implements the Log Replication Finite State Machine.
  *
  * CorfuDB provides a Log Replication functionality, which allows logs to be automatically replicated from a primary
- * to a remote site. This feature is particularly useful in the event of failure or data corruption, so the system
+ * to a remote cluster. This feature is particularly useful in the event of failure or data corruption, so the system
  * can failover to the standby/secondary data-store.
  *
- * This functionality is initiated by the application through the LogReplicationSourceManager on the primary site and handled
- * through the LogReplicationSinkManager on the destination site. This implementation assumes that the application provides its own
+ * This functionality is initiated by the application through the LogReplicationSourceManager on the primary cluster and handled
+ * through the LogReplicationSinkManager on the destination cluster. This implementation assumes that the application provides its own
  * communication channels.
  *
- * Log Replication on the source site is defined by an event-driven finite state machine, with 5 states
+ * Log Replication on the source cluster is defined by an event-driven finite state machine, with 5 states
  * and 8 events/messages---which can trigger the transition between states.
  *
  * States:
@@ -137,32 +137,36 @@ public class LogReplicationFSM {
     private ObservableValue numTransitions = new ObservableValue(0);
 
     /**
-     *
+     * Log Entry Reader (read incremental updated from Corfu Datatore)
      */
-    LogEntryReader logEntryReader;
+    private LogEntryReader logEntryReader;
 
     /**
-     *
+     * Snapshot Reader (read data from Corfu Datastore)
      */
-    SnapshotReader snapshotReader;
+    private SnapshotReader snapshotReader;
 
     /**
-     *
+     * Version on which snapshot sync is based on.
      */
     @Getter
-    long baseSnapshot = Address.NON_ADDRESS;
+    private long baseSnapshot = Address.NON_ADDRESS;
 
     /**
-     *
+     * Acknowledged timestamp
      */
     @Getter
-    long ackedTimestamp = Address.NON_ADDRESS;
+    private long ackedTimestamp = Address.NON_ADDRESS;
 
-    /*
-     *
+    /**
+     * Log Entry Sender (send incremental updates to remote cluster)
      */
-    LogEntrySender logEntrySender;
-    SnapshotSender snapshotSender;
+    private LogEntrySender logEntrySender;
+
+    /**
+     * Snapshot Sender (send snapshot cut to remote cluster)
+     */
+    private SnapshotSender snapshotSender;
 
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
@@ -216,7 +220,7 @@ public class LogReplicationFSM {
 
         logReplicationFSMConsumer.submit(this::consume);
 
-        log.info("Log Replication FSM initialized, streams to replicate {} to remote site {}",
+        log.info("Log Replication FSM initialized, streams to replicate {} to remote cluster {}",
                 config.getStreamsToReplicate(), config.getSiteID());
     }
 
@@ -251,7 +255,7 @@ public class LogReplicationFSM {
                 return;
             }
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
-                log.info("Enqueue event {} with ID {}", event.getType(), event.getEventID());
+                log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventID());
             }
             eventQueue.put(event);
         } catch (InterruptedException ex) {
@@ -274,9 +278,6 @@ public class LogReplicationFSM {
             // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
             //   Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
-            if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
-                log.debug("Log Replication FSM consume event {}", event);
-            }
 
             if (event.getType() == LogReplicationEventType.REPLICATION_START) {
                 baseSnapshot = event.getMetadata().getSyncTimestamp();
@@ -321,7 +322,7 @@ public class LogReplicationFSM {
             }
 
             // Consume one event in the queue and re-submit, this is done so events are consumed in
-            // a round-robin fashion for the case of multi-site replication.
+            // a round-robin fashion for the case of multi-cluster replication.
             logReplicationFSMConsumer.submit(this::consume);
 
         } catch (Throwable t) {
@@ -348,18 +349,19 @@ public class LogReplicationFSM {
     }
 
     /**
-     * Start consumer again due to site switch.
+     * Start consumer again due to cluster switch.
      * It will clean the queue first and prepare the new transfer
-     * @param siteConfig
+     *
+     * @param topologyConfigId topology configuration identifier
      */
-    public void startFSM(CrossSiteConfiguration siteConfig) {
+    public void startFSM(long topologyConfigId) {
         if (state.getType() != LogReplicationStateType.INITIALIZED) {
             log.error("The FSM is not in the correct state {}, expecting state {}",
                     state, LogReplicationStateType.INITIALIZED);
         }
 
-        log.info("start the log replication with siteConfigID {}", siteConfig.getSiteConfigID());
+        log.info("start the log replication with topologyConfigId {}", topologyConfigId);
         eventQueue.clear();
-        setSiteConfigID(siteConfig.getSiteConfigID());
+        setSiteConfigID(topologyConfigId);
     }
 }

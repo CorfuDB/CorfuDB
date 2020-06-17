@@ -6,6 +6,7 @@ import lombok.Data;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
+import org.corfudb.infrastructure.logreplication.cluster.ClusterDescriptor;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.RuntimeParametersBuilder;
@@ -20,17 +21,14 @@ import java.util.UUID;
 @Data
 public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
+    private ClusterDescriptor remoteClusterDescriptor;
+
     private String localCorfuEndpoint;
 
-    private String localSiteId;
-
-    private String remoteLogReplicationServerEndpoint;
-
-    private String remoteSiteId;
-
-    private LogReplicationTransportType transport = LogReplicationTransportType.CUSTOM;
+    private String localClusterId;
 
     private LogReplicationConfig replicationConfig;
+    private String pluginFilePath;
 
     public static LogReplicationRuntimeParametersBuilder builder() {
         return new LogReplicationRuntimeParametersBuilder();
