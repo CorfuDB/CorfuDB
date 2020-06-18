@@ -300,9 +300,9 @@ public class CorfuReplicationManager {
         /*
          * If the version are different, report an error.
          */
-        if (!negotiationResponse.getVersion().equals(discoveryService.getLogReplicationMetadataManager().getVersion())) {
+        if (!negotiationResponse.getVersion().equals(discoveryService.getLogReplicationMetadataAccessor().getVersion(null))) {
             log.error("The active site version {} is different from standby site version {}",
-                    discoveryService.getLogReplicationMetadataManager().getVersion(), negotiationResponse.getVersion());
+                    discoveryService.getLogReplicationMetadataAccessor().getVersion(null), negotiationResponse.getVersion());
             throw new LogReplicationNegotiationException(" Mismatch of version number");
         }
 
@@ -312,7 +312,7 @@ public class CorfuReplicationManager {
          */
         if (negotiationResponse.getSiteConfigID() < negotiationResponse.getSiteConfigID()) {
             log.error("The active site configID {} is bigger than the standby configID {} ",
-                    discoveryService.getLogReplicationMetadataManager().getSiteConfigID(), negotiationResponse.getSiteConfigID());
+                    discoveryService.getLogReplicationMetadataAccessor().getSiteConfigID(null), negotiationResponse.getSiteConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -322,7 +322,7 @@ public class CorfuReplicationManager {
          */
         if (negotiationResponse.getSiteConfigID() > negotiationResponse.getSiteConfigID()) {
             log.error("The active site configID {} is smaller than the standby configID {} ",
-                    discoveryService.getLogReplicationMetadataManager().getSiteConfigID(), negotiationResponse.getSiteConfigID());
+                    discoveryService.getLogReplicationMetadataAccessor().getSiteConfigID(null), negotiationResponse.getSiteConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 

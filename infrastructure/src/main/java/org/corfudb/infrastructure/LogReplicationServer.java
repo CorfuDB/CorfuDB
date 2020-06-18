@@ -5,7 +5,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.receive.LogReplicationSinkManager;
-import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -45,6 +44,16 @@ public class LogReplicationServer extends AbstractServer {
 
     public LogReplicationServer(@Nonnull ServerContext context, LogReplicationConfig logReplicationConfig) {
         this.serverContext = context;
+
+        /*
+         * TODO xq: we need two thread pools
+         * One thread pool use for communication and process short messages. If we have multiple threads in this pool
+         * the SinkManager receive function need to be synchronzied.
+         *
+         * One pool is used to process the Snapshot full sync phase II: apply phase.
+         *
+         */
+
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
 
@@ -89,6 +98,15 @@ public class LogReplicationServer extends AbstractServer {
         }
     }
 
+    /**
+     * This API is used by sender to query the log replication status at the receiver side.
+     * It is used at the negotiation phase to decide to start a snapshot full sync or log entry sync.
+     * It is also used during full snapshot sync while polling the receiver's status when the receiver is
+     * applying the data to the real streams.
+     * @param msg
+     * @param ctx
+     * @param r
+     */
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_REQUEST)
     private void handleLogReplicationQueryMetadataRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Log Replication Query Metadata request received by Server.");

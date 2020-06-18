@@ -95,7 +95,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         preMsgTs = currentMsgTs;
         sequence++;
         log.debug("Generate TxMsg {}", txMsg.getMetadata());
-        //System.out.print("\nGenerate TxMsg {} " +  txMsg.getMetadata());
+        //System.out.print("\nGenerate TxMsg {} " +  txMsg.getLogReplicationStatus());
         return txMsg;
     }
 

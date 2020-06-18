@@ -79,7 +79,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                     requestObserver.onNext(msg);
                 }
                 break;
-            case LOG_REPLICATION_NEGOTIATION_REQUEST:
+            case LOG_REPLICATION_QUERY_METADATA_REQUEST:
                 try {
                     response = blockingStub.withWaitForReady().negotiate(msg);
                     getRouter().receive(response);

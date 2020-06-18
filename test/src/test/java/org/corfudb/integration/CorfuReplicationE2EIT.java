@@ -15,24 +15,9 @@ import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@RunWith(Parameterized.class)
 public class CorfuReplicationE2EIT extends AbstractIT {
 
-    private boolean useNetty;
-    private boolean runProcess = true;
-
-    public CorfuReplicationE2EIT(boolean netty) {
-        this.useNetty = netty;
-    }
-
-    // Static method that generates and returns test data (automatically test for two transport protocols: netty and GRPC)
-    @Parameterized.Parameters
-    public static Collection input() {
-        return Arrays.asList(Boolean.FALSE, Boolean.TRUE);
-    }
-
-    @Test
-    public void testLogReplicationEndToEnd() throws Exception {
+    public void testLogReplicationEndToEnd(boolean useNetty, boolean runProcess) throws Exception {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
         Process activeCorfu = null;
         Process standbyCorfu = null;
@@ -163,5 +148,15 @@ public class CorfuReplicationE2EIT extends AbstractIT {
                 standbyReplicationServer.destroy();
             }
         }
+    }
+
+    @Test
+    public void testLogReplicationEndToEndWithNetty() throws Exception {
+        testLogReplicationEndToEnd(true, false);
+    }
+
+    @Test
+    public void testLogReplicationEndToEndWithCustom() throws Exception {
+        testLogReplicationEndToEnd(false, false);
     }
 }

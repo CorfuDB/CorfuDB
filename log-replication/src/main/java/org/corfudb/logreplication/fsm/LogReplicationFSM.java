@@ -273,7 +273,10 @@ public class LogReplicationFSM {
 
             // TODO (Anny): consider strategy for continuously failing snapshot sync (never ending cancellation)
             //   Block until an event shows up in the queue.
+            log.info("eventQue {} {}", eventQueue.size(), eventQueue);
             LogReplicationEvent event = eventQueue.take();
+            log.info("process event {}", event);
+
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
                 log.debug("Log Replication FSM consume event {}", event);
             }

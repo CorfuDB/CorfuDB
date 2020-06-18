@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataAccessor;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteStatus;
 import org.corfudb.runtime.CorfuRuntime;
@@ -43,7 +43,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * It is backed by a corfu store table.
      */
     @Getter
-    private final LogReplicationMetadataManager logReplicationMetadataManager;
+    private final LogReplicationMetadataAccessor logReplicationMetadataAccessor;
 
     /**
      * Lock-related configuration parameters
@@ -99,7 +99,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             replicationServerNode, this);
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
-        this.logReplicationMetadataManager = serverNode.getLogReplicationServer().getSinkManager().getLogReplicationMetadataManager();
+        this.logReplicationMetadataAccessor = serverNode.getLogReplicationServer().getSinkManager().getLogReplicationMetadataAccessor();
         registerToLogReplicationLock();
     }
 

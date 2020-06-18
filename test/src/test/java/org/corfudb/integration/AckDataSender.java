@@ -52,7 +52,7 @@ public class AckDataSender implements DataSender {
     }
 
     @Override
-    public LogReplicationQueryMetadataResponse sendQueryMetadata() {
+    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() {
         log.warn("Not implemented");
         return null;
     }

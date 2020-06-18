@@ -6,8 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
-import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.receive.LogReplicationSinkManager;
 import org.corfudb.logreplication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.LogReplicationError;
@@ -77,7 +75,7 @@ public class SourceForwardingDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
-        //System.out.println("Send message: " + message.getMetadata().getMessageMetadataType() + " for:: " + message.getMetadata().getTimestamp());
+        //System.out.println("Send message: " + message.getLogReplicationStatus().getMessageMetadataType() + " for:: " + message.getLogReplicationStatus().getTimestamp());
         if (ifDropMsg > 0 && message.getMetadata().timestamp == firstDrop) {
             System.out.println("****** Drop log entry " + message.getMetadata().timestamp);
             if (ifDropMsg == DROP_MSG_ONCE) {
@@ -125,7 +123,7 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     @Override
-    public LogReplicationQueryMetadataResponse sendQueryMetadata() {
+    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() {
         log.info("Process query metadata");
         LogReplicationQueryMetadataResponse response = destinationLogReplicationManager.processQueryMetadataRequest();
         return response;

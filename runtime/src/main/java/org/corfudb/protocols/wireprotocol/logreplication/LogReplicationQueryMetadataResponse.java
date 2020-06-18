@@ -33,7 +33,7 @@ public class LogReplicationQueryMetadataResponse implements ICorfuPayload<LogRep
         this.lastLogProcessed = lastLogProcessed;
     }
 
-    public static LogReplicationQueryMetadataResponse fromProto(Messages.LogReplicationNegotiationResponse proto) {
+    public static LogReplicationQueryMetadataResponse fromProto(Messages.LogReplicationQueryMetadataResponse proto) {
         return new LogReplicationQueryMetadataResponse(proto.getSiteConfigID(),
                 proto.getVersion(),
                 proto.getSnapshotStart(),

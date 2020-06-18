@@ -100,6 +100,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
     boolean shouldAck() {
         log.info("lastProccessedSeq {}  snapshotEndSeq {}", lastProcessedSeq, snapshotEndSeq);
 
+        // Always send an ACK for snapshot tranfer end marker.
         if (lastProcessedSeq == snapshotEndSeq) {
             log.info("Snapshot End has been processed lastProccessedSeq {}  snapshotEndSeq {}", lastProcessedSeq, snapshotEndSeq);
             return true;

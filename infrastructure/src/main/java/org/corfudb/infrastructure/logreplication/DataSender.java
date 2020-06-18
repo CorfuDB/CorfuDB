@@ -33,11 +33,10 @@ public interface DataSender {
     CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages);
 
     /**
-     * Used by Snapshot Full Sync while has done with transferring data and waiting for the receiver to finish applying.
-     * The sender queries the receiver's status and will do the proper transition.
+     * Used by Snapshot Full Sync to poll the receiver's status.
      * @return
      */
-    public LogReplicationQueryMetadataResponse sendQueryMetadata() throws ExecutionException, InterruptedException;
+    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() throws ExecutionException, InterruptedException;
 
     /**
      * Application callback on error.

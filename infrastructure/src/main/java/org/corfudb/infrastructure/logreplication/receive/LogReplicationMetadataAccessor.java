@@ -16,22 +16,42 @@ import org.corfudb.runtime.view.Address;
 import java.util.UUID;
 
 /**
- * The table persisted at the replication writer side.
- * It records the logreader cluster's snapshot timestamp  and last log entry's timestamp, it has received and processed.
+ * The log replication metadata is stored in a corfutable in the corfustore.
+ * The log replication metadata is defined as a proto message that contains:
+ * SiteConfigID, Version, Snapshot Full Sync Status and Log Entry Sync Status.
+ * The access the metadata is using UFO API.
+ *
+ * To record replication status, it has following values:
+ * SnapshotStartTimestamp: when a full snapshot sync is started, it will first update this value and reset other snapshot related metadata to -1.
+ * The init value for this metadata is -1. When it is -1, it means a snapshot full sync is required regardless.
+ * SnapshotTranferredTimestamp: the init value is -1. When the receiver receives a snapshot transfer end marker, it will update this value to current snapshot timestamp,
+ * it will be updated to the same value as snapshot start when the snapshot data transfer is done.
+ * SnapshotSeqNum: it the sequence number of each snapshot messages to detect loss of messages and also to prevent the reappling the same message. All the messages must be
+ * applied in the order of the snapshot sequence number.
+ * SnapshotAppliedSeqNum: it records the operation's sequence during the apply phase to avoid the redo the apply if there is a leadership change.
+ * LastLogProcessed: It records the most recent log entry has been processed.
+ * When a snapshot full sync is complete, it will update this value. While processing a new log entry message, it will be updated too.
+ *
+ * While update siteConfigID or version number, the replication status will all be reset to -1 to
+ * require a snapshot full sync.
  */
 @Slf4j
-public class LogReplicationMetadataManager {
+public class LogReplicationMetadataAccessor {
     private static final String namespace = "CORFU_SYSTEM";
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
+    private static final String DEFAULT_VERSION = "Release_Test_0";
     String metadataTableName;
 
     private CorfuStore corfuStore;
 
+    /**
+     * Table used to store the log replication status
+     */
     Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable;
 
     CorfuRuntime runtime;
 
-    public LogReplicationMetadataManager(CorfuRuntime rt, long siteConfigID, UUID primary, UUID dst) {
+    public LogReplicationMetadataAccessor(CorfuRuntime rt, long siteConfigID, UUID primary, UUID dst) {
         this.runtime = rt;
         this.corfuStore = new CorfuStore(runtime);
         metadataTableName = getPersistedWriterMetadataTableName(primary, dst);
@@ -49,14 +69,28 @@ public class LogReplicationMetadataManager {
         setupSiteConfigID(siteConfigID);
     }
 
+    /**
+     * Get the corfustore log tail.
+     * @return
+     */
     CorfuStoreMetadata.Timestamp getTimestamp() {
         return corfuStore.getTimestamp();
     }
 
+    /**
+     * create a tx builder
+     * @return
+     */
     TxBuilder getTxBuilder() {
         return corfuStore.tx(namespace);
     }
 
+    /**
+     * Given a specific metadata key type, get the corresponding value in string format.
+     * @param timestamp
+     * @param key
+     * @return
+     */
     String queryString(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         CorfuRecord record;
@@ -80,6 +114,13 @@ public class LogReplicationMetadataManager {
         return val;
     }
 
+    /**
+     * Given a specific metadata key type and timestamp, get the corresponding long value.
+     * @param timestamp
+     * @param key
+     * @return
+     */
+
     long query(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
         long val = -1;
         String str = queryString(timestamp, key);
@@ -89,49 +130,118 @@ public class LogReplicationMetadataManager {
         return val;
     }
 
-    public long getSiteConfigID() {
-        return query(null, LogReplicationMetadataType.SiteConfigID);
+    /**
+     * Given a specific timestamp, get the current siteConfig metadata value.
+     * If the timestamp is null, get the most recent value.
+     * @param ts
+     * @return
+     */
+    public long getSiteConfigID(CorfuStoreMetadata.Timestamp ts) {
+        return query(ts, LogReplicationMetadataType.SiteConfigID);
     }
 
-    public String getVersion() { return queryString(null, LogReplicationMetadataType.Version); }
+    /**
+     * Given a specific timestamp, get the current version value.
+     * If the timestamp is null, get the most recent value.
+     * @param ts
+     * @return
+     */
+    public String getVersion(CorfuStoreMetadata.Timestamp ts) { return queryString(ts, LogReplicationMetadataType.Version); }
 
-    public long getLastSnapStartTimestamp() {
-        return query(null, LogReplicationMetadataType.LastSnapshotStarted);
+
+    /**
+     * Given a specific timestamp, get the most recent started full snapshot sync's timestamp.
+     * If the timestamp is null, get the most recent value.
+     * @param ts
+     * @return
+     */
+    public long getLastSnapStartTimestamp(CorfuStoreMetadata.Timestamp ts) {
+        return query(ts, LogReplicationMetadataType.LastSnapshotStarted);
     }
 
-
-    public long getLastSnapTransferDoneTimestamp() {
-        return query(null, LogReplicationMetadataType.LastSnapshotTransferred);
+    /**
+     * Given a specific timestamp, get the most recent full snapshot sync's timestamp that has complete the
+     * transferred phase.
+     * If the timestamp is null, get the most recent value.
+     * @param ts
+     * @return
+     */
+    public long getLastSnapTransferDoneTimestamp(CorfuStoreMetadata.Timestamp ts) {
+        return query(ts, LogReplicationMetadataType.LastSnapshotTransferred);
     }
 
-    public long getLastSrcBaseSnapshotTimestamp() {
-        return query(null, LogReplicationMetadataType.LastSnapshotApplied);
+    /**
+     * Given a specific timestamp, get the most recent completed snapshot full sync's timestamp.
+     * If the timestamp is null, get the most recent value.
+     * @param ts
+     * @return
+     */
+    public long getLastSrcBaseSnapshotTimestamp(CorfuStoreMetadata.Timestamp ts) {
+        return query(ts, LogReplicationMetadataType.LastSnapshotApplied);
     }
 
-    public long getLastSnapSeqNum() {
-        return query(null, LogReplicationMetadataType.LastSnapshotSeqNum);
+    /**
+     * Given a specific timestamp, get the most recent snapshot message's sequence number
+     * that the receiver has applied to the shadow streams.
+     * If the timestamp is null, get the most recent value.
+     * @param ts
+     * @return
+     */
+    public long getLastSnapSeqNum(CorfuStoreMetadata.Timestamp ts) {
+        return query(ts, LogReplicationMetadataType.LastSnapshotSeqNum);
     }
 
-    public long getLastSnapAppliedSeqNum() {
-        return query(null, LogReplicationMetadataType.LastSnapshotAppliedSeqNum);
+    /**
+     * Given a specific timestamp, get the most recent applied operation sequence number
+     * that the receiver has applied to the real streams.
+     * If the timestamp is null, get the most recent value.
+     * @param ts
+     * @return
+     */
+    public long getLastSnapAppliedSeqNum(CorfuStoreMetadata.Timestamp ts) {
+        return query(ts, LogReplicationMetadataType.LastSnapshotAppliedSeqNum);
     }
 
-    public long getLastProcessedLogTimestamp() {
-        return query(null, LogReplicationMetadataType.LastLogProcessed);
+    /**
+     * Given a specific timestamp, get the most recent log that has applied to the
+     * receiver's log.
+     * If the timestamp is null, get the most recent value.
+     * @param ts
+     * @return
+     */
+    public long getLastProcessedLogTimestamp(CorfuStoreMetadata.Timestamp ts) {
+        return query(ts, LogReplicationMetadataType.LastLogProcessed);
     }
 
+    /**
+     * Append an metadata update to the same tx with a long.
+     * @param txBuilder
+     * @param key the key to be updated.
+     * @param val the new value.
+     */
     void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, long val) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(Long.toString(val)).build();
         txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
+    /**
+     * Append an metadata update to the same tx with a String.
+     * @param txBuilder
+     * @param key the key to be updated.
+     * @param val the new value.
+     */
     void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, String val) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(val).build();
         txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
+    /**
+     * Update the siteConfigID if it is bigger than the current one.
+     * At the same time reset replication status metadata to -1.
+     * @param siteConfigID
+     */
     public void setupSiteConfigID(long siteConfigID) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.SiteConfigID);
@@ -147,14 +257,29 @@ public class LogReplicationMetadataManager {
             long val = Address.NON_ADDRESS;
             if (key == LogReplicationMetadataType.SiteConfigID) {
                 val = siteConfigID;
+            } else if (key == LogReplicationMetadataType.Version) {
+                String version;
+                version = getVersion(null);
+                if (version == null) {
+                    appendUpdate(txBuilder, key, DEFAULT_VERSION);
+                }
+                continue;
             }
             appendUpdate(txBuilder, key, val);
          }
 
+        if (getVersion(null) == null) {
+
+        }
         txBuilder.commit(timestamp);
-        log.info("Update siteConfigID {}, new metadata {}", siteConfigID, getMetadata());
+        log.info("Update siteConfigID {}, new metadata {}", siteConfigID, getLogReplicationStatus());
     }
 
+
+    /**
+     * Update the version value and reset log replication related metadata except siteConfigID.
+     * @param version
+     */
     public void updateVersion(String version) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         String  persistVersion = queryString(timestamp, LogReplicationMetadataType.Version);
@@ -231,12 +356,13 @@ public class LogReplicationMetadataManager {
         log.debug("Commit. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
                 " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
 
-        return (ts == getLastSnapStartTimestamp() && siteConfigID == getSiteConfigID());
+        return (ts == getLastSnapStartTimestamp(null) && siteConfigID == getSiteConfigID(null));
     }
 
 
     /**
-     * This call should be done in a transaction after a transfer done and before apply the snapshot.
+     * While snapshot full sync has finished the phase I: transferred all data from sender to receiver and applied to
+     * the shadow streams.
      * @param ts
      */
     public void setLastSnapTransferDoneTimestamp(long siteConfigID, long ts) {
@@ -269,6 +395,11 @@ public class LogReplicationMetadataManager {
         return;
     }
 
+    /**
+     * When the snapshot full sync completes both phase I, data transfer, and phase II, applying to the real data
+     * streams at the receiver, update the full snapshot complete value.
+     * @param entry
+     */
     public void setSnapshotApplied(LogReplicationEntry entry) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.SiteConfigID);
@@ -299,23 +430,38 @@ public class LogReplicationMetadataManager {
         return;
     }
 
-    public String getMetadata() {
+    /**
+     * Get all metadata in a user friendly string format
+     * @return
+     */
+    public String getLogReplicationStatus() {
         String s = new String();
-        s = s.concat(LogReplicationMetadataType.SiteConfigID.getVal() + " " + getSiteConfigID() +" ");
-        s = s.concat(LogReplicationMetadataType.LastSnapshotStarted.getVal() + " " + getLastSnapStartTimestamp() +" ");
-        s = s.concat(LogReplicationMetadataType.LastSnapshotTransferred.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
-        s = s.concat(LogReplicationMetadataType.LastSnapshotApplied.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");
-        s = s.concat(LogReplicationMetadataType.LastSnapshotSeqNum.getVal() + " " + getLastSnapSeqNum() + " ");
-        s = s.concat(LogReplicationMetadataType.LastSnapshotAppliedSeqNum.getVal() + " " + getLastSnapAppliedSeqNum() + " ");
-        s = s.concat(LogReplicationMetadataType.LastLogProcessed.getVal() + " " + getLastProcessedLogTimestamp() + " ");
+        CorfuStoreMetadata.Timestamp ts = getTimestamp();
+        s = s.concat(LogReplicationMetadataType.SiteConfigID.getVal() + " " + getSiteConfigID(ts) +" ");
+        s = s.concat(LogReplicationMetadataType.LastSnapshotStarted.getVal() + " " + getLastSnapStartTimestamp(ts) +" ");
+        s = s.concat(LogReplicationMetadataType.LastSnapshotTransferred.getVal() + " " + getLastSnapTransferDoneTimestamp(ts) + " ");
+        s = s.concat(LogReplicationMetadataType.LastSnapshotApplied.getVal() + " " + getLastSrcBaseSnapshotTimestamp(ts) + " ");
+        s = s.concat(LogReplicationMetadataType.LastSnapshotSeqNum.getVal() + " " + getLastSnapSeqNum(ts) + " ");
+        s = s.concat(LogReplicationMetadataType.LastSnapshotAppliedSeqNum.getVal() + " " + getLastSnapAppliedSeqNum(ts) + " ");
+        s = s.concat(LogReplicationMetadataType.LastLogProcessed.getVal() + " " + getLastProcessedLogTimestamp(ts) + " ");
         log.info("metadata {}", s);
         return s;
     }
 
+    /**
+     * The metadata table name
+     * @param primarySite
+     * @param dst
+     * @return
+     */
     public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {
         return TABLE_PREFIX_NAME + primarySite.toString() + "-to-" + dst.toString();
     }
 
+    /**
+     * All types of metadata stored in the corfu table, those corresponding strings are used as keys to access
+     * the real values.
+     */
     public enum LogReplicationMetadataType {
         SiteConfigID("SiteConfigID"),
         Version("Version"),

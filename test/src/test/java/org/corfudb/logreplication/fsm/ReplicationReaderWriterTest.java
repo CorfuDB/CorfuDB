@@ -2,7 +2,7 @@ package org.corfudb.logreplication.fsm;
 
 import org.corfudb.infrastructure.logreplication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataAccessor;
 import org.corfudb.infrastructure.logreplication.receive.StreamsSnapshotWriter;
 import org.corfudb.integration.ReplicationReaderWriterIT;
 import org.corfudb.logreplication.send.logreader.LogEntryReader;
@@ -84,9 +84,9 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
         UUID uuid = UUID.randomUUID();
         LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(), PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(readerRuntime, 0, uuid, uuid);
+        LogReplicationMetadataAccessor logReplicationMetadataAccessor = new LogReplicationMetadataAccessor(readerRuntime, 0, uuid, uuid);
         logEntryReader = new StreamsLogEntryReader(readerRuntime, config);
-        logEntryWriter = new LogEntryWriter(writerRuntime, config, logReplicationMetadataManager);
+        logEntryWriter = new LogEntryWriter(writerRuntime, config, logReplicationMetadataAccessor);
     }
 
     @Test
@@ -123,8 +123,8 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
     void writeMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         UUID uuid = UUID.randomUUID();
         LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, uuid, uuid);
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
+        LogReplicationMetadataAccessor logReplicationMetadataAccessor = new LogReplicationMetadataAccessor(rt, 0, uuid, uuid);
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataAccessor);
 
         writer.reset(msgQ.get(0).getMetadata().getSiteConfigID(), msgQ.get(0).getMetadata().getSnapshotTimestamp());
 
