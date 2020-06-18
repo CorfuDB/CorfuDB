@@ -4,7 +4,6 @@ import org.corfudb.infrastructure.log.statetransfer.DataTest;
 import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
-import org.corfudb.infrastructure.log.statetransfer.exceptions.ReadBatchException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferBatchProcessorException;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -25,6 +24,7 @@ import java.util.stream.LongStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch.ReadStatus.FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest.TransferBatchType.*;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -54,7 +54,7 @@ class ProtocolBatchProcessorTest extends DataTest {
                 .addressSpaceView(addressSpaceView)
                 .build();
         CompletableFuture<TransferBatchResponse> f =
-                batchProcessor.transfer(new TransferBatchRequest(addresses, Optional.empty()));
+                batchProcessor.transfer(new TransferBatchRequest(addresses, Optional.empty(), DATA));
         TransferBatchResponse join = f.join();
         assertThat(join.getStatus() == TransferBatchResponse.TransferStatus.SUCCEEDED).isTrue();
         assertThat(join.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
@@ -80,7 +80,7 @@ class ProtocolBatchProcessorTest extends DataTest {
                 .addressSpaceView(addressSpaceView)
                 .build();
         CompletableFuture<TransferBatchResponse> f =
-                batchProcessor.transfer(new TransferBatchRequest(addresses, Optional.empty()));
+                batchProcessor.transfer(new TransferBatchRequest(addresses, Optional.empty(), DATA));
         TransferBatchResponse join = f.join();
 
         assertThat(join.getStatus() == TransferBatchResponse.TransferStatus.FAILED).isTrue();
@@ -106,7 +106,7 @@ class ProtocolBatchProcessorTest extends DataTest {
                 .addressSpaceView(addressSpaceView)
                 .build();
         CompletableFuture<ReadBatch> f =
-                batchProcessor.readRecords(new TransferBatchRequest(addresses, Optional.empty()));
+                batchProcessor.readRecords(new TransferBatchRequest(addresses, Optional.empty(), DATA));
         ReadBatch join = f.join();
         List<LogData> expected = getRecordsFromStubMap(stubMap);
         assertThat(join.getStatus() == ReadBatch.ReadStatus.SUCCEEDED).isTrue();
@@ -225,7 +225,8 @@ class ProtocolBatchProcessorTest extends DataTest {
                 .build();
 
         TransferBatchResponse response =
-                batchProcessor.transfer(new TransferBatchRequest(addresses, Optional.empty())).join();
+                batchProcessor.transfer(new TransferBatchRequest(addresses, Optional.empty(), DATA))
+                        .join();
 
         assertThat(response.getStatus()).isEqualTo(TransferBatchResponse.TransferStatus.FAILED);
         assertThatThrownBy(() -> {
