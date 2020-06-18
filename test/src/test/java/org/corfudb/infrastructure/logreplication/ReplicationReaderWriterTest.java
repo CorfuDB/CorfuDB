@@ -14,6 +14,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Query;
@@ -25,7 +26,7 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
-import org.corfudb.test.SampleSchema.Uuid;
+import org.corfudb.test.TestSchema;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
@@ -36,6 +37,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
+import org.corfudb.test.SampleSchema.Uuid;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.corfudb.integration.ReplicationReaderWriterIT.NUM_TRANSACTIONS;

@@ -34,6 +34,7 @@ public class TestDataSender implements DataSender {
                     message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
                 // Ignore, do not account Start and End Markers as messages
                 entryQueue.add(message);
+                log.info("add message to the entryQueue {}", entryQueue.size());
             }
         }
 
@@ -65,7 +66,7 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public LogReplicationQueryMetadataResponse sendQueryMetadata() throws ExecutionException, InterruptedException {
+    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() throws ExecutionException, InterruptedException {
         log.warn("Not implemented");
         return null;
     }

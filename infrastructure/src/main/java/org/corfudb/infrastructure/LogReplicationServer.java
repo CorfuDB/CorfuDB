@@ -14,6 +14,7 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationLeadershi
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
+import org.corfudb.runtime.CorfuStoreMetadata;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
@@ -57,6 +58,15 @@ public class LogReplicationServer extends AbstractServer {
         this.metadataManager = metadataManager;
         this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig, metadataManager, serverContext, topologyConfigId);
 
+        /*
+         * TODO xq: we need two thread pools
+         * One thread pool use for communication and process short messages. If we have multiple threads in this pool
+         * the SinkManager receive function need to be synchronzied.
+         *
+         * One pool is used to process the Snapshot full sync phase II: apply phase.
+         *
+         */
+
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
     }
@@ -98,22 +108,32 @@ public class LogReplicationServer extends AbstractServer {
         }
     }
 
+    /**
+     * This API is used by sender to query the log replication status at the receiver side.
+     * It is used at the negotiation phase to decide to start a snapshot full sync or log entry sync.
+     * It is also used during full snapshot sync while polling the receiver's status when the receiver is
+     * applying the data to the real streams.
+     * @param msg
+     * @param ctx
+     * @param r
+     */
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_REQUEST)
     private void handleLogReplicationQueryMetadataRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Log Replication Negotiation Request received by Server.");
 
         if (isLeader(msg, r)) {
             LogReplicationMetadataManager metadata = sinkManager.getLogReplicationMetadataManager();
+            CorfuStoreMetadata.Timestamp ts = metadata.getTimestamp();
 
             // TODO (Xiaoqin Ma): That's 6 independent DB calls per one LOG_REPLICATION_NEGOTIATION_REQUEST.
             //  Can we do just one? Also, It does not look like we handle failures if one of them fails, for example.
             LogReplicationQueryMetadataResponse response = new LogReplicationQueryMetadataResponse(
-                    metadata.getTopologyConfigId(),
-                    metadata.getVersion(),
-                    metadata.getLastSnapStartTimestamp(),
-                    metadata.getLastSnapTransferDoneTimestamp(),
-                    metadata.getLastSrcBaseSnapshotTimestamp(),
-                    metadata.getLastProcessedLogTimestamp());
+                    metadata.getTopologyConfigID(ts),
+                    metadata.getVersion(ts),
+                    metadata.getLastSnapStartTimestamp(ts),
+                    metadata.getLastSnapTransferDoneTimestamp(ts),
+                    metadata.getLastSrcBaseSnapshotTimestamp(ts),
+                    metadata.getLastProcessedLogTimestamp(ts));
             log.info("Send Negotiation response");
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_RESPONSE.payloadMsg(response));
         } else {

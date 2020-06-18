@@ -159,9 +159,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The standby site has a smaller config ID, redo the discovery for this standby site when
          * getting a new notification of the site config change if this standby is in the new config.
          */
-        if (negotiationResponse.getTopologyConfigId() < metadataManager.getTopologyConfigId()) {
+        if (negotiationResponse.getTopologyConfigId() < metadataManager.getTopologyConfigID()) {
             log.error("The active site configID {} is bigger than the standby configID {} ",
-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigId());
+                    metadataManager.getTopologyConfigID(), negotiationResponse.getTopologyConfigId());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -169,9 +169,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The standby site has larger config ID, redo the whole discovery for the active site
          * it will be triggered by a notification of the site config change.
          */
-        if (negotiationResponse.getTopologyConfigId() > metadataManager.getTopologyConfigId()) {
+        if (negotiationResponse.getTopologyConfigId() > metadataManager.getTopologyConfigID()) {
             log.error("The active site configID {} is smaller than the standby configID {} ",
-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigId());
+                    metadataManager.getTopologyConfigID(), negotiationResponse.getTopologyConfigId());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 

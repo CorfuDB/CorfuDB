@@ -44,6 +44,12 @@ public class InitializedState implements LogReplicationState {
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState snapshotState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                 snapshotState.setTransitionEventId(event.getEventID());
+                /*
+                 * TODO xq:
+                 * options to restart snapshot sync for apply phase
+                 * 1. introduce one more message type snapshot_start_apply
+                 */
+
                 return snapshotState;
 
             case REPLICATION_START:

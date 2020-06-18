@@ -147,8 +147,8 @@ public abstract class SinkBufferManager {
             lastProcessedSeq = currentTs;
             processBuffer();
         } else if (currentTs > lastProcessedSeq && buffer.size() < maxSize) {
-            // If it is a future expecting message and the buffer still has space
-            // put it into the buffer.
+            // If it is an out of order message with higher timestamp,
+            // put it into the buffer if there is space.
             buffer.put(preTs, dataMessage);
         }
 

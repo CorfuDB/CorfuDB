@@ -64,7 +64,7 @@ public abstract class SenderBufferManager {
     /*
      * the max snapShotSeqNum has ACKed. Used by snapshot sync.
      */
-    private long msgSeqNum = Address.NON_ADDRESS;
+    private long maxAckedMsgSeqNum = Address.NON_ADDRESS;
 
     private DataSender dataSender;
 
@@ -159,7 +159,7 @@ public abstract class SenderBufferManager {
      * This is used by SnapshotStart, SnapshotEnd marker messages as those messages don't have a sequence number.
      */
     public CompletableFuture<LogReplicationEntry> sendWithoutBuffering(LogReplicationEntry entry) {
-        entry.getMetadata().setSnapshotSyncSeqNum(msgSeqNum++);
+        entry.getMetadata().setSnapshotSyncSeqNum(maxAckedMsgSeqNum++);
         CompletableFuture<LogReplicationEntry> cf = dataSender.send(entry);
         int retry = 0;
         boolean result = false;
@@ -186,7 +186,7 @@ public abstract class SenderBufferManager {
      */
     public CompletableFuture<LogReplicationEntry> sendWithBuffering(LogReplicationEntry message) {
         //todo need to be removed.
-        message.getMetadata().setSnapshotSyncSeqNum(msgSeqNum++);
+        message.getMetadata().setSnapshotSyncSeqNum(maxAckedMsgSeqNum++);
         pendingMessages.append(message);
         log.info("Send messsage {}", message.getMetadata());
         CompletableFuture<LogReplicationEntry> cf = dataSender.send(message);
@@ -252,7 +252,8 @@ public abstract class SenderBufferManager {
      * @param lastAckedTimestamp
      */
     public void reset(long lastAckedTimestamp) {
-        msgSeqNum = Address.NON_ADDRESS;
+        log.info("Reset SenderBufferManager");
+        maxAckedMsgSeqNum = Address.NON_ADDRESS;
         maxAckForLogEntrySync = lastAckedTimestamp;
         pendingMessages.clear();
         pendingCompletableFutureForAcks.clear();
