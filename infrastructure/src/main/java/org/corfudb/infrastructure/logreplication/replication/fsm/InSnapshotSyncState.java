@@ -73,6 +73,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                  */
                 setTransitionEventId(event.getEventID());
                 snapshotSender.reset();
+                log.info("process new snapshot_sync_request and reset the status");
                 return this;
             case SNAPSHOT_SYNC_CONTINUE:
                 /*
@@ -161,13 +162,8 @@ public class InSnapshotSyncState implements LogReplicationState {
             /*
              Start send of snapshot sync
              */
-            if (!snapshotSender.isTransmissionDone()) {
-                transmitFuture = fsm.getLogReplicationFSMWorkers().submit(() -> snapshotSender.transmit(transitionEventId));
-            } else {
-                //TODO: query destination state
-                //if the destination state shows has done with the snapshot applied, complete the snapshot transfer
-                transmitFuture = fsm.getLogReplicationFSMWorkers().submit(() -> snapshotSender.snapshotSyncComplete(transitionEventId));
-            }
+            transmitFuture = fsm.getLogReplicationFSMWorkers().submit(() -> snapshotSender.transmit(transitionEventId));
+
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
         }

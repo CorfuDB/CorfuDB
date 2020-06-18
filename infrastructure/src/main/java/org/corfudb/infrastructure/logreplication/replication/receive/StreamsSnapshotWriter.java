@@ -33,41 +33,68 @@ import java.util.stream.Stream;
 @Slf4j
 @NotThreadSafe
 public class StreamsSnapshotWriter implements SnapshotWriter {
+    // The suffix used to the corresponding shadow tables.
     final static String SHADOW_STREAM_NAME_SUFFIX = "_shadow";
-    HashMap<UUID, String> streamViewMap; // It contains all the streams registered for write to.
+
+    // It contains all the streams registered for write to.
+    // Mapping uuid to table name.
+    HashMap<UUID, String> streamViewMap;
+
+    // It contains all the shadow streams
     HashMap<UUID, String> shadowMap;
+
     CorfuRuntime rt;
 
+    /*
+     * Record the siteConfigID when the snapshot full sync start.
+     * If the siteConfigID has changed during the snapshot full sync,
+     * this snapshot full sync should be aborted and restart a new one.
+     */
     long siteConfigID;
-    private long srcGlobalSnapshot; // The source snapshot timestamp
+
+    /**
+     * The current snapshot full sync's snapshot timestamp.
+     */
+    private long srcGlobalSnapshot;
 
     /*
      * Used by Snapshot Full Sync Phase I: writing to shadow streams.
+     * The expecting message's snapshotSeqNum. If the message is out of order, will buffer it.
+     * The message will be processed according the snapshotSeqNum.
      */
     private long recvSeq;
 
 
     /*
-     *
+     * Used by Snapshot Full Sync Phase II: read from shadow stream and apply data to the real streams.
+     * It records the operation number.
      */
     private long appliedSeq;
 
 
     /*
      * Before writing to the shadowStream, record the current tail.
-     * It can be used to openShadowStreams. While open a shadow stream and apply entries to
-     * the real stream, we can seek the shadowStream to this address first.
+     * While open a shadow stream and apply entries to
+     * the real stream, we can seek the shadowStream to this address first to skip
+     * reading irrelevant entries.
      */
     private long shadowStreamStartAddress;
 
+    /**
+     * Used to query/update metadata
+     */
     @Getter
     private LogReplicationMetadataManager logReplicationMetadataManager;
+
+    /**
+     * Mapping of the real table's uuid to the corresponding shadow table's uuid.
+     */
     HashMap<UUID, UUID> uuidMap;
+
+    /**
+     * Record the Snapshot Full Sync phase: transfer phase or apply phase.
+     */
     Phase phase;
-
-
-    // The sequence number of the message, it has received.
-    // It is expecting the message in order of the sequence.
 
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
         this.rt = rt;
@@ -88,14 +115,18 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
     }
 
+    /**
+     * When the receiver gets a SNAPSHOT_START message, it will first clear the shadow tables.
+     */
     void clearShadowTables() {
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
         long persistSiteConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
         long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        long persistSnapTransferred = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
         long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
 
         //for transfer phase start, verify it hasn't received any message yet.
-        if (siteConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart ||
+        if (siteConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart || srcGlobalSnapshot <= persistSnapTransferred ||
                 persitSeqNum != Address.NON_ADDRESS) {
                 log.warn("Skip current processing as the persistent metadata {} shows the current operation is out of date " +
                         "current siteConfigID {} srcGlobalSnapshot {}", logReplicationMetadataManager,
@@ -107,12 +138,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
 
+        // Clear all the tables.
         for (UUID streamID : streamViewMap.keySet()) {
-            UUID usedStreamID = streamID;
-            if (phase == Phase.TransferPhase) {
-                usedStreamID = uuidMap.get(streamID);
-            }
-
+            UUID usedStreamID = uuidMap.get(streamID);
             SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
             txBuilder.logUpdate(usedStreamID, entry);
         }
@@ -122,8 +150,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
 
     /**
-     * clear all real tables registered for replication and start applying phase
-     * TODO: replace with stream API
+     * Clear all real tables registered for replication and start SNAPSHOT FULL Sync phase II:
+     * applying data to the real tables.
      */
     void clearTables() {
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
@@ -132,10 +160,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long persistSnapTransferred = logReplicationMetadataManager.query(timestamp,
                 LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
         long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
+        long persitAppliedSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM);
 
         //If the metadata shows it is in the apply start phase and other metadata is consistent.
         if (siteConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart ||
-                persistSnapTransferred != srcGlobalSnapshot || persitSeqNum!= Address.NON_ADDRESS) {
+                persistSnapTransferred != srcGlobalSnapshot || persitAppliedSeqNum != Address.NON_ADDRESS) {
             log.warn("Skip current processing as the persistent metadata {} shows the current operation is out of date " +
                             "current siteConfigID {} srcGlobalSnapshot {}", logReplicationMetadataManager,
                     siteConfigID, srcGlobalSnapshot);
@@ -146,13 +175,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
 
         for (UUID streamID : streamViewMap.keySet()) {
-            UUID usedStreamID = streamID;
-            if (phase == Phase.TransferPhase) {
-                usedStreamID = uuidMap.get(streamID);
-            }
-
             SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
-            txBuilder.logUpdate(usedStreamID, entry);
+            txBuilder.logUpdate(streamID, entry);
         }
 
         txBuilder.commit(timestamp);
@@ -189,7 +213,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
 
     /**
-     * Write a list of SMR entries to the specified stream log.
+     * Used by Full Snapshot Full Sync Phase:
+     * write a list of SMR entries to the specified shadow stream log.
      * @param smrEntries
      * @param currentSeqNum
      * @param dstUUID
@@ -200,17 +225,23 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
         long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
 
+        // Verify the message is in the correct order according to the metadata. If it is out of sync with the metadata, skip it.
         if (siteConfigID != persistConfigID || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
-            log.warn("Skip current topologyConfigId " + siteConfigID + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
-                    " persistedMetadata " + logReplicationMetadataManager.getTopologyConfigId() + " startSnapshot " + logReplicationMetadataManager.getLastSnapStartTimestamp() +
-                    " lastSnapSeqNum " + logReplicationMetadataManager.getLastSnapSeqNum());
+            log.warn("Skip processing current entry with siteConfigID {} srcGlobalSnapshot {} currentSeqNum {} " +
+                    " as it is not the expected entry according to the log replication metadata status {}",
+            siteConfigID, srcGlobalSnapshot, currentSeqNum, logReplicationMetadataManager);
             return;
         }
 
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
+
+        // Update the siteConfigID with the same value to fence off other metadata updates.
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, srcGlobalSnapshot);
+
+        // Update the snapshotSeqNumb
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM, currentSeqNum);
+
+        // Append the log entries.
         for (SMREntry smrEntry : smrEntries) {
             txBuilder.logUpdate(dstUUID, smrEntry);
         }
@@ -225,7 +256,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     /**
-     * Write a list of SMR entries to the specified stream log.
+     * Used by Full Snapshot Sync Phase II:
+     * Write a list of SMR entries to the specified real stream log.
      * @param smrEntries
      * @param currentSeqNum
      * @param dstUUID
@@ -234,8 +266,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
         long persistConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
         long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-        long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
+        long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM);
 
+        // Verify that the operation is in the correct order. If it is out of sync with the metadata, skip it.
         if (siteConfigID != persistConfigID || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
             log.warn("Skip current processing as the persistent metadata {} has applied more recent message {} than current siteConfigID {} " +
                     "srcGlobalSnapshot {} currentAppliedSeqNum {}", logReplicationMetadataManager.toString(),
@@ -244,9 +277,14 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
 
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
+
+        // Update the siteConfigID with the same value to fence off any metadata updates based on the same timestamp.
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, srcGlobalSnapshot);
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM, currentSeqNum);
+
+        // Update the appliedSeqNumber.
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM, currentSeqNum);
+
+        // Append log entries.
         for (SMREntry smrEntry : smrEntries) {
             txBuilder.logUpdate(dstUUID, smrEntry);
         }
@@ -260,10 +298,15 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         log.debug("Process the entries {}  and set applied sequence number {} ", smrEntries, currentSeqNum);
     }
 
+    /**
+     * Apply a snapshot sync message.
+     * @param message
+     */
     @Override
     public void apply(LogReplicationEntry message) {
         verifyMetadata(message.getMetadata());
 
+        // If it is out of order or it is wrong type message, skip it.
         if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq ||
                 message.getMetadata().getMessageMetadataType() != MessageType.SNAPSHOT_MESSAGE) {
             log.error("Expecting sequencer {} != recvSeq {} or wrong message type {} expecting {}",
@@ -275,16 +318,24 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         byte[] payload = message.getPayload();
         OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(payload));
 
+        // The opaqueEntry should have one key as it has only one stream.
         if (opaqueEntry.getEntries().keySet().size() != 1) {
             log.error("The opaqueEntry has more than one entry {}", opaqueEntry);
             return;
         }
 
         UUID uuid = opaqueEntry.getEntries().keySet().stream().findFirst().get();
+
+        // Process the opaqueEntries.
         processOpaqueEntry(opaqueEntry.getEntries().get(uuid), recvSeq, uuidMap.get(uuid));
         recvSeq++;
     }
 
+    /**
+     * Apply a list of messages.
+     * @param messages
+     * @throws Exception
+     */
     @Override
     public void apply(List<LogReplicationEntry> messages) throws Exception {
         for (LogReplicationEntry msg : messages) {

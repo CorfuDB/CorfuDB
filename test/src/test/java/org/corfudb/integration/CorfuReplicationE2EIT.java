@@ -18,7 +18,6 @@ import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@RunWith(Parameterized.class)
 public class CorfuReplicationE2EIT extends AbstractIT {
 
     private String pluginConfigFilePath;

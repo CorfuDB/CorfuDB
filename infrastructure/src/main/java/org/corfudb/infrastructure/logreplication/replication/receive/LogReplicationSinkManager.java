@@ -12,6 +12,7 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMeta
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.view.Address;
 import org.immutables.value.internal.$guava$.annotations.$VisibleForTesting;
 
@@ -146,11 +147,12 @@ public class LogReplicationSinkManager implements DataReceiver {
     private void init() {
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
-        logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp());
+        CorfuStoreMetadata.Timestamp ts = logReplicationMetadataManager.getTimestamp();
+        logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(ts),
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(ts));
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(ts), this);
 
         readConfig();
     }
@@ -284,7 +286,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Setup buffer manager.
         snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastSnapSeqNum(), this);
+                logReplicationMetadataManager.getLastSnapSeqNum(null), this);
 
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
@@ -301,7 +303,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         logReplicationMetadataManager.setSnapshotApplied(inputEntry);
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(null), this);
 
         log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
                 inputEntry, rxState);
@@ -318,6 +320,8 @@ public class LogReplicationSinkManager implements DataReceiver {
                 return;
             case SNAPSHOT_END:
                 log.info("Receive SNAPSHOT_END msg {} at phase {}", message.getMetadata(), snapshotWriter.phase);
+                // If it is already in the phase to applying the change to real stream.
+                // Skip handling the duplicate snapshot end message.
                 if (snapshotWriter.phase != StreamsSnapshotWriter.Phase.ApplyPhase) {
                     snapshotWriter.snapshotTransferDone(message);
                     completeSnapshotApply(message);
@@ -329,14 +333,20 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
     }
 
+    /**
+     * Query metadata corfu table and get the most recent information.
+     * @return
+     */
     public LogReplicationQueryMetadataResponse processQueryMetadataRequest() {
+        CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
+
         LogReplicationQueryMetadataResponse response = new LogReplicationQueryMetadataResponse(
-                logReplicationMetadataManager.getTopologyConfigId(),
-                logReplicationMetadataManager.getVersion(),
-                logReplicationMetadataManager.getLastSnapStartTimestamp(),
-                logReplicationMetadataManager.getLastSnapTransferDoneTimestamp(),
-                logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp());
+                logReplicationMetadataManager.getTopologyConfigID(timestamp),
+                logReplicationMetadataManager.getVersion(timestamp),
+                logReplicationMetadataManager.getLastSnapStartTimestamp(timestamp),
+                logReplicationMetadataManager.getLastSnapTransferDoneTimestamp(timestamp),
+                logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(timestamp),
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(timestamp));
         log.info("Query metadata response {}", response);
         return response;
     }
@@ -380,13 +390,17 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param topologyConfigId
      */
     public void updateTopologyConfigId(long topologyConfigId) {
+        logReplicationMetadataManager.setupTopologyConfigID(topologyConfigId);
         this.topologyConfigId = topologyConfigId;
 
-        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp());
-        logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp());
+        CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
+
+        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(timestamp));
+        logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(timestamp),
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(timestamp));
+
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(timestamp), this);
     }
 
     public void shutdown() {

@@ -52,7 +52,7 @@ public class CorfuDataSender implements DataSender {
      * @return
      */
     @Override
-    public LogReplicationQueryMetadataResponse sendQueryMetadata() throws ExecutionException, InterruptedException {
+    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() throws ExecutionException, InterruptedException {
         log.trace("query remote metadata");
         return client.sendQueryMetadataRequest().get();
     }

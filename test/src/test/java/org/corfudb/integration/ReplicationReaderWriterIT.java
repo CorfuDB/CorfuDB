@@ -356,8 +356,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
-
-
         if (msgQ.isEmpty()) {
             System.out.println("msgQ is empty");
         }
@@ -371,7 +369,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             writer.apply(msg);
         }
 
-        Long seq = writer.getLogReplicationMetadataManager().getLastSnapSeqNum() + 1;
         writer.applyShadowStreams();
     }
 

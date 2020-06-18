@@ -428,7 +428,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         updateLocalTopology(newTopology);
 
         // Update topology config id in metadata manager
-        logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
+        logReplicationMetadataManager.setupTopologyConfigID(topologyDescriptor.getTopologyConfigId());
         log.debug("Persist new topologyConfigId {}, cluster id={}, status={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
 

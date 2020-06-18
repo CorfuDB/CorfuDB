@@ -153,6 +153,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
     private LogReplicationMetadataManager logReplicationMetadataManager;
+    CorfuTable<String, Long> writerMetaDataTable;
 
     /**
      * Setup Test Environment
@@ -206,6 +207,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.connect();
 
         logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, ACTIVE_CLUSTER_ID);
+        writerMetaDataTable = dstTestRuntime.getObjectsView()
+                .build()
+                .setStreamName(LogReplicationMetadataManager.getPersistedWriterMetadataTableName(ACTIVE_CLUSTER_ID))
+                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
+                })
+                .setSerializer(Serializers.JSON)
+                .open();
     }
 
     private void cleanEnv() {
@@ -824,7 +832,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
         expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
-        assertThat(expectedAckTimestamp).isEqualTo(logReplicationMetadataManager.getLastProcessedLogTimestamp());
+        assertThat(expectedAckTimestamp).isEqualTo(logReplicationMetadataManager.getLastProcessedLogTimestamp(null));
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
     }
@@ -1303,7 +1311,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // If expected a ackTs, release semaphore / unblock the wait
         if (observableAckMsg.getDataMessage() != null) {
             LogReplicationEntry logReplicationEntry = observableAckMsg.getDataMessage();
-            //System.out.print("\nackMsg " + logReplicationEntry.getMetadata());
+            //System.out.print("\nackMsg " + logReplicationEntry.getLogReplicationStatus());
             switch (testConfig.waitOn) {
                 case ON_ACK:
                     verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
@@ -1322,15 +1330,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        long lastSnapStart = logReplicationMetadataManager.getLastSnapStartTimestamp();
-        long lastSnapDone = logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp();
+        long lastSnapStart = logReplicationMetadataManager.getLastSnapStartTimestamp(null);
+        long lastSnapDone = logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(null);
 
         System.out.println("\nlastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
         assertThat(lastSnapStart == lastSnapDone).isTrue();
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogTimestamp();
+        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogTimestamp(null);
 
         System.out.println("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp);
         assertThat(expectedAckTimestamp == lastLogProcessed).isTrue();
