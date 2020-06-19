@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.util.LinkedList;
@@ -48,6 +47,7 @@ public class BatchProcessor implements AutoCloseable {
     private ExecutorService processorService = Executors
             .newSingleThreadExecutor(new ThreadFactoryBuilder()
                     .setDaemon(false)
+                    .setPriority(Thread.MAX_PRIORITY)
                     .setNameFormat("LogUnit-BatchProcessor-%d")
                     .build());
 
