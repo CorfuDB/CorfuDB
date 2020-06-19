@@ -23,16 +23,6 @@ import java.util.Optional;
 @Builder(toBuilder = true)
 public class TransferBatchRequest {
     /**
-     * A type of transfer batch. A type of DATA signals to the transfer processor that a batch needs
-     * to be transferred, while the type of SEGMENT_INIT signals that the consecutive DATA batches
-     * will belong to the same segment.
-     */
-    public enum TransferBatchType{
-        DATA,
-        SEGMENT_INIT
-    }
-
-    /**
      * A batch of addresses, small enough to get transferred within one rpc call.
      */
     @Default
@@ -44,9 +34,4 @@ public class TransferBatchRequest {
      */
     @Default
     private final Optional<ImmutableList<String>> destinationNodes = Optional.empty();
-    /**
-     * A type of a batch.
-     */
-    @Default
-    private final TransferBatchType batchType = TransferBatchType.DATA;
 }

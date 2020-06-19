@@ -11,9 +11,8 @@ import java.util.Iterator;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
-
-import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_FAILED;
-import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_SUCCEEDED;
+import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_SUCCEEDED;
 
 
 /**
@@ -21,11 +20,10 @@ import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.Tra
  */
 @AllArgsConstructor
 @Slf4j
-public class BasicTransferProcessor implements TransferProcessor {
+public class BasicTransferProcessor {
 
     private final StateTransferBatchProcessor batchProcessor;
 
-    @Override
     public CompletableFuture<TransferProcessorResult> runStateTransfer(
             Stream<TransferBatchRequest> batchStream) {
         Iterator<TransferBatchRequest> iterator = batchStream.iterator();
@@ -33,31 +31,16 @@ public class BasicTransferProcessor implements TransferProcessor {
             while (iterator.hasNext()) {
                 TransferBatchRequest request = iterator.next();
 
-                if (request.getBatchType() == TransferBatchRequest.TransferBatchType.SEGMENT_INIT) {
-                    // For a basic transfer processor we don't care whether the consecutive batches
-                    // belong to a certain segment since we transfer all of them
-                    // via replication protocol.
-                    log.trace("Starting a new segment transfer.");
-                } else if (request.getBatchType() == TransferBatchRequest.TransferBatchType.DATA) {
-                    TransferBatchResponse result = batchProcessor.transfer(request).join();
-                    if (result.getStatus() == TransferBatchResponse.TransferStatus.FAILED) {
-                        String errorMessage = "Failed to transfer: " +
-                                result.getTransferBatchRequest();
-                        TransferSegmentException transferSegmentException = result
-                                .getCauseOfFailure().map(ex -> new TransferSegmentException(errorMessage, ex))
-                                .orElse(new TransferSegmentException(errorMessage));
-                        return TransferProcessorResult.builder()
-                                .causeOfFailure(Optional.of(transferSegmentException))
-                                .transferState(TRANSFER_FAILED)
-                                .build();
-                    }
-                } else {
-                    TransferSegmentException ex =
-                            new TransferSegmentException(
-                                    new IllegalStateException("Unrecognized batch type: " +
-                                            request.getBatchType()));
+                TransferBatchResponse result = batchProcessor.transfer(request).join();
+                if (result.getStatus() == TransferBatchResponse.TransferStatus.FAILED) {
+                    String errorMessage = "Failed to transfer: " +
+                            result.getTransferBatchRequest();
+                    TransferSegmentException transferSegmentException = result
+                            .getCauseOfFailure().map(ex ->
+                                    new TransferSegmentException(errorMessage, ex))
+                            .orElse(new TransferSegmentException(errorMessage));
                     return TransferProcessorResult.builder()
-                            .causeOfFailure(Optional.of(ex))
+                            .causeOfFailure(Optional.of(transferSegmentException))
                             .transferState(TRANSFER_FAILED)
                             .build();
                 }

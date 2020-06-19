@@ -15,7 +15,7 @@ import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentRange
 import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus;
 import org.corfudb.infrastructure.log.statetransfer.transferprocessor.BasicTransferProcessor;
 import org.corfudb.infrastructure.log.statetransfer.transferprocessor.ParallelTransferProcessor;
-import org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessor.TransferProcessorResult;
+import org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessorResult;
 import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.util.CFUtils;
 
@@ -23,16 +23,18 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
-import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest.TransferBatchType.SEGMENT_INIT;
 import static org.corfudb.infrastructure.log.statetransfer.segment.StateTransferType.CONSISTENT_READ;
 import static org.corfudb.infrastructure.log.statetransfer.segment.StateTransferType.PROTOCOL_READ;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.TRANSFERRED;
-import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_SUCCEEDED;
+import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_SUCCEEDED;
 
 /**
  * A class responsible for managing a state transfer on the current node.
@@ -105,9 +107,7 @@ public class StateTransferManager {
     }
 
     /**
-     * Transform the given range into a stream of batch requests. Prepend the transfer batch request
-     * of type SEGMENT_INIT to the data stream to signal to the transfer processor that the
-     * consecutive transfer batch requests belong to one segment.
+     * Transform the given range into a stream of batch requests.
      *
      * @param range A transfer segment range that contains unknown addresses and maybe available
      *              log unit servers.
@@ -116,19 +116,25 @@ public class StateTransferManager {
     Stream<TransferBatchRequest> rangeToBatchRequestStream(TransferSegmentRangeSingle range) {
         ImmutableList<Long> unknownAddressesInRange = range.getUnknownAddressesInRange();
         Optional<ImmutableList<String>> availableServers = range.getAvailableServers();
-        Stream<TransferBatchRequest> dataStream =
-                Lists.partition(unknownAddressesInRange, batchSize).stream()
-                        .map(partition -> TransferBatchRequest
-                                .builder()
-                                .addresses(partition)
-                                .destinationNodes(availableServers)
-                                .build());
-        return Stream.concat(
-                Stream.of(TransferBatchRequest
+        return Lists.partition(unknownAddressesInRange, batchSize).stream()
+                .map(partition -> TransferBatchRequest
                         .builder()
+                        .addresses(partition)
                         .destinationNodes(availableServers)
-                        .batchType(SEGMENT_INIT)
-                        .build()), dataStream);
+                        .build());
+    }
+
+    /**
+     * Create a batch workload for a single segment.
+     *
+     * @param range A single range
+     * @return A stream of transfer batch requests from  range.
+     */
+    private Stream<TransferBatchRequest> createBatchWorkloadForSegment(
+            TransferSegmentRangeSingle range) {
+        TransferSegmentRangeSingle rangeWithUnknownAddresses =
+                getUnknownAddressesInRangeForRange(range);
+        return rangeToBatchRequestStream(rangeWithUnknownAddresses);
     }
 
     /**
@@ -139,14 +145,14 @@ public class StateTransferManager {
      *
      * @param ranges         A list of single transfer segment ranges.
      * @param typeOfTransfer A provided type of transfer - protocol read or consistent read.
-     * @return A stream of transfer batch requests.
+     * @return A lists of streams of transfer batch requests.
      */
-    Stream<TransferBatchRequest> createBatchWorkload(List<TransferSegmentRangeSingle> ranges,
-                                                     StateTransferType typeOfTransfer) {
+    List<Stream<TransferBatchRequest>> createBatchWorkload(List<TransferSegmentRangeSingle> ranges,
+                                                           StateTransferType typeOfTransfer) {
         return ranges.stream()
                 .filter(range -> range.getTypeOfTransfer() == typeOfTransfer)
-                .map(this::getUnknownAddressesInRangeForRange)
-                .flatMap(this::rangeToBatchRequestStream);
+                .map(this::createBatchWorkloadForSegment)
+                .collect(ImmutableList.toImmutableList());
     }
 
     /**
@@ -174,6 +180,45 @@ public class StateTransferManager {
     ImmutableList<TransferSegment> toSegments(List<TransferSegmentRange> transferRanges) {
         return transferRanges.stream().map(TransferSegmentRange::toTransferSegment)
                 .collect(ImmutableList.toImmutableList());
+    }
+
+    /**
+     * Run the committed state transfer.
+     *
+     * @param consistentBatchStreamList     A list of batch streams for each segment.
+     * @param parallelismFactorForEachRange A list of parallelism factors for each stream.
+     * @return A future of transfer processor result.
+     */
+    private CompletableFuture<TransferProcessorResult> runCommittedStateTransfer(
+            List<Stream<TransferBatchRequest>> consistentBatchStreamList,
+            List<Integer> parallelismFactorForEachRange) {
+        if (consistentBatchStreamList.size() != parallelismFactorForEachRange.size()) {
+            throw new IllegalArgumentException("The lists of streams and par factors" +
+                    " should be equal.");
+        }
+        for (int i = 0; i < parallelismFactorForEachRange.size(); i++) {
+            int parFactor = parallelismFactorForEachRange.get(i);
+            Stream<TransferBatchRequest> transferBatchRequestStream =
+                    consistentBatchStreamList.get(i);
+            TransferProcessorResult parallelTransferResult = parallelTransferProcessor
+                    .runStateTransfer(transferBatchRequestStream, parFactor)
+                    .join();
+            if (parallelTransferResult.getTransferState() == TRANSFER_FAILED) {
+                return CompletableFuture.completedFuture(parallelTransferResult);
+            }
+        }
+        return CompletableFuture.completedFuture(TransferProcessorResult.builder().build());
+    }
+
+    /**
+     * Run the protocol state transfer.
+     *
+     * @param protocolBatchStream Stream of the batch requests for all the protocol segments.
+     * @return A future of transfer processor result.
+     */
+    private CompletableFuture<TransferProcessorResult> runProtocolStateTransfer(
+            Stream<TransferBatchRequest> protocolBatchStream) {
+        return basicTransferProcessor.runStateTransfer(protocolBatchStream);
     }
 
     /**
@@ -211,17 +256,39 @@ public class StateTransferManager {
         }
 
         // Split into the protocol and committed workloads.
-        Stream<TransferBatchRequest> consistentBatchStream =
+        List<Stream<TransferBatchRequest>> consistentBatchStreamList =
                 createBatchWorkload(singleNotTransferredRanges, CONSISTENT_READ);
 
         Stream<TransferBatchRequest> protocolBatchStream =
-                createBatchWorkload(singleNotTransferredRanges, PROTOCOL_READ);
+                createBatchWorkload(singleNotTransferredRanges, PROTOCOL_READ)
+                        .stream().flatMap(Function.identity());
+
+        // For the consistent transfer get the parallelism factors for each segment,
+        // which is equal to num nodes for each segment range.
+        List<Integer> parallelismFactorForEachRange = singleNotTransferredRanges
+                .stream()
+                .filter(range -> range.getTypeOfTransfer() == CONSISTENT_READ)
+                .map(range -> {
+                    if (range.getAvailableServers().isPresent()) {
+                        ImmutableList<String> strings = range.getAvailableServers().get();
+                        if (strings.isEmpty()) {
+                            throw new IllegalStateException("Server list is empty.");
+                        }
+                        return strings.size();
+                    } else {
+                        throw new IllegalStateException("No available servers " +
+                                "for consistent transfer.");
+                    }
+
+                })
+                .collect(Collectors.toList());
 
         // Execute a parallel transfer first, and then if it succeeds, execute a regular transfer.
-        TransferProcessorResult result = parallelTransferProcessor.runStateTransfer(consistentBatchStream)
+        TransferProcessorResult result = runCommittedStateTransfer(consistentBatchStreamList,
+                parallelismFactorForEachRange)
                 .thenCompose(res -> {
                     if (res.getTransferState() == TRANSFER_SUCCEEDED) {
-                        return basicTransferProcessor.runStateTransfer(protocolBatchStream);
+                        return runProtocolStateTransfer(protocolBatchStream);
                     } else {
                         return CompletableFuture.completedFuture(res);
                     }

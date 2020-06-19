@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableList;
 import org.corfudb.infrastructure.log.statetransfer.FaultyBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.SuccessfulBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
-import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest.TransferBatchType;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferBatchProcessorException;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;
 import org.junit.jupiter.api.Test;
@@ -15,9 +14,8 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessor.TransferProcessorResult;
-import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_FAILED;
-import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_SUCCEEDED;
+import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_FAILED;
+import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_SUCCEEDED;
 
 
 class ParallelTransferProcessorTest {
@@ -25,18 +23,11 @@ class ParallelTransferProcessorTest {
 
     private final Stream<TransferBatchRequest> createStream(int numBatches,
                                                             Optional<ImmutableList<String>> nodes) {
-        Stream<TransferBatchRequest> dataStream = IntStream.range(0, numBatches)
+        return IntStream.range(0, numBatches)
                 .boxed()
                 .map(x -> TransferBatchRequest
                         .builder().destinationNodes(nodes)
                         .build());
-        Stream<TransferBatchRequest> metaData =
-                Stream.of(TransferBatchRequest
-                        .builder()
-                        .batchType(TransferBatchType.SEGMENT_INIT)
-                        .destinationNodes(nodes)
-                        .build());
-        return Stream.concat(metaData, dataStream);
     }
 
     @Test
@@ -45,7 +36,7 @@ class ParallelTransferProcessorTest {
         ParallelTransferProcessor transferProcessor =
                 new ParallelTransferProcessor(new SuccessfulBatchProcessor());
         TransferProcessorResult res =
-                transferProcessor.runStateTransfer(emptyBatchStream).join();
+                transferProcessor.runStateTransfer(emptyBatchStream, 1).join();
         assertThat(res.getTransferState()).isEqualTo(TRANSFER_SUCCEEDED);
     }
 
@@ -57,7 +48,7 @@ class ParallelTransferProcessorTest {
         ParallelTransferProcessor transferProcessor =
                 new ParallelTransferProcessor(faultyBatchProcessor);
         CompletableFuture<TransferProcessorResult> result =
-                transferProcessor.runStateTransfer(stream);
+                transferProcessor.runStateTransfer(stream, 1);
         TransferProcessorResult res = result.join();
         assertThat(res.getTransferState()).isEqualTo(TRANSFER_FAILED);
         assertThat(res.getCauseOfFailure().isPresent()).isTrue();
@@ -67,20 +58,20 @@ class ParallelTransferProcessorTest {
     }
 
     @Test
-    void testRunSingleTransferIllegalState() {
+    void testRunSingleTransferIllegalArgument() {
         Stream<TransferBatchRequest> stream = createStream(1, Optional.of(ImmutableList.of()));
         FaultyBatchProcessor faultyBatchProcessor =
                 new FaultyBatchProcessor(1);
         ParallelTransferProcessor transferProcessor =
                 new ParallelTransferProcessor(faultyBatchProcessor);
         CompletableFuture<TransferProcessorResult> result =
-                transferProcessor.runStateTransfer(stream);
+                transferProcessor.runStateTransfer(stream, 0);
         TransferProcessorResult res = result.join();
         assertThat(res.getTransferState()).isEqualTo(TRANSFER_FAILED);
         assertThat(res.getCauseOfFailure().isPresent()).isTrue();
         assertThat(res.getCauseOfFailure().get())
                 .isInstanceOf(TransferSegmentException.class)
-                .hasRootCauseInstanceOf(IllegalStateException.class);
+                .hasRootCauseInstanceOf(IllegalArgumentException.class);
     }
 
 
@@ -91,7 +82,7 @@ class ParallelTransferProcessorTest {
         Stream<TransferBatchRequest> stream = createStream(1, Optional.empty());
         ParallelTransferProcessor transferProcessor = new ParallelTransferProcessor(batchProcessor);
         CompletableFuture<TransferProcessorResult> result =
-                transferProcessor.runStateTransfer(stream);
+                transferProcessor.runStateTransfer(stream, 1);
         TransferProcessorResult res = result.join();
         assertThat(res.getTransferState()).isEqualTo(TRANSFER_SUCCEEDED);
     }
@@ -107,7 +98,7 @@ class ParallelTransferProcessorTest {
                 createStream(100, Optional.of(ImmutableList.of("node1", "node2")));
         ParallelTransferProcessor transferProcessor = new ParallelTransferProcessor(batchProcessor);
         CompletableFuture<TransferProcessorResult> result =
-                transferProcessor.runStateTransfer(stream);
+                transferProcessor.runStateTransfer(stream, 2);
         TransferProcessorResult res = result.join();
         assertThat(res.getTransferState()).isEqualTo(TRANSFER_SUCCEEDED);
     }
@@ -125,7 +116,7 @@ class ParallelTransferProcessorTest {
                         .build());
         ParallelTransferProcessor transferProcessor = new ParallelTransferProcessor(batchProcessor);
         CompletableFuture<TransferProcessorResult> result =
-                transferProcessor.runStateTransfer(stream);
+                transferProcessor.runStateTransfer(stream, 3);
         TransferProcessorResult res = result.join();
         assertThat(res.getTransferState()).isEqualTo(TRANSFER_FAILED);
         assertThat(res.getCauseOfFailure().isPresent()).isTrue();
@@ -136,43 +127,21 @@ class ParallelTransferProcessorTest {
 
     @Test
     void testRunParallelTransferShortCircuitsOnFailure() {
-        // There are 100000 requests in the stream and 5 x 2 = 10 in-flight requests are allowed.
+        // There are 30 requests in the stream and 5 x 2 = 10 in-flight requests are allowed.
         // The processing time of every batch is 2 seconds.
         // The transfer fails on the 13th batch.
         // Make sure that the transfer short-circuits immediately. The number of processed batches
-        // is less than 100000.
-        final int numBatches = 100000;
+        // is less than 30.
+        final int numBatches = 30;
         FaultyBatchProcessor batchProcessor =
                 new FaultyBatchProcessor(13, Optional.of(2000L));
         Stream<TransferBatchRequest> stream =
                 createStream(numBatches, Optional.of(ImmutableList.of("node1", "node2")));
         ParallelTransferProcessor transferProcessor = new ParallelTransferProcessor(batchProcessor);
         CompletableFuture<TransferProcessorResult> result =
-                transferProcessor.runStateTransfer(stream);
+                transferProcessor.runStateTransfer(stream, 2);
         TransferProcessorResult res = result.join();
         assertThat(res.getTransferState()).isEqualTo(TRANSFER_FAILED);
         assertThat(batchProcessor.getTotalProcessed().get() < numBatches).isTrue();
-    }
-
-    @Test
-    void testParallelTransferFromMultipleSegments() {
-        // Here we create the streams from different segments:
-        // segment 1: 1000 batches and 5 source nodes, avg parallelism = 5 x 5 = 25
-        // segment 2: 10 batches and 1 source node, avg parallelism = 5 x 1 = 5
-        // segment 3: 100 batches and 2 nodes, avg parallelism = 5 x 2 = 10
-        Stream<TransferBatchRequest> stream1 = createStream(1000,
-                Optional.of(ImmutableList.of("node1", "node2", "node3", "node4", "node5")));
-        Stream<TransferBatchRequest> stream2 = createStream(10,
-                Optional.of(ImmutableList.of("node1")));
-        Stream<TransferBatchRequest> stream3 = createStream(100,
-                Optional.of(ImmutableList.of("node1", "node2")));
-        Stream<TransferBatchRequest> stream = Stream.concat(Stream.concat(stream1, stream2), stream3);
-        SuccessfulBatchProcessor batchProcessor =
-                new SuccessfulBatchProcessor(Optional.of(100L));
-        ParallelTransferProcessor transferProcessor = new ParallelTransferProcessor(batchProcessor);
-        CompletableFuture<TransferProcessorResult> result =
-                transferProcessor.runStateTransfer(stream);
-        TransferProcessorResult res = result.join();
-        assertThat(res.getTransferState()).isEqualTo(TRANSFER_SUCCEEDED);
     }
 }

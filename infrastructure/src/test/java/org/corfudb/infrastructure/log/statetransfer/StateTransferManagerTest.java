@@ -22,13 +22,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest.TransferBatchType.SEGMENT_INIT;
 import static org.corfudb.infrastructure.log.statetransfer.segment.StateTransferType.CONSISTENT_READ;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.RESTORED;
 import static org.mockito.Mockito.doAnswer;
@@ -397,9 +397,7 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         ImmutableList<TransferBatchRequest> collect =
                 transferBatchRequestStream.collect(ImmutableList.toImmutableList());
 
-        TransferBatchRequest init = TransferBatchRequest.builder().batchType(SEGMENT_INIT).build();
-        ImmutableList<TransferBatchRequest> expected = ImmutableList.of(init);
-        assertThat(collect).isEqualTo(expected);
+        assertThat(collect).isEmpty();
     }
 
     @Test
@@ -422,9 +420,7 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         ImmutableList<TransferBatchRequest> collect =
                 transferBatchRequestStream.collect(ImmutableList.toImmutableList());
 
-        TransferBatchRequest init = TransferBatchRequest.builder().batchType(SEGMENT_INIT).build();
-
-        ImmutableList<TransferBatchRequest> expected = ImmutableList.of(init, TransferBatchRequest
+        ImmutableList<TransferBatchRequest> expected = ImmutableList.of(TransferBatchRequest
                         .builder().addresses(LongStream.range(0L, 10L)
                                 .boxed().collect(ImmutableList.toImmutableList())).build(),
                 TransferBatchRequest.builder().addresses(LongStream.range(10L, 20L)
@@ -455,10 +451,7 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         ImmutableList<TransferBatchRequest> collect =
                 transferBatchRequestStream.collect(ImmutableList.toImmutableList());
 
-        TransferBatchRequest init = TransferBatchRequest.builder()
-                .batchType(SEGMENT_INIT).destinationNodes(nodes).build();
-
-        ImmutableList<TransferBatchRequest> expected = ImmutableList.of(init, TransferBatchRequest
+        ImmutableList<TransferBatchRequest> expected = ImmutableList.of(TransferBatchRequest
                         .builder().addresses(LongStream.range(0L, 10L)
                                 .boxed().collect(ImmutableList.toImmutableList())).destinationNodes(nodes).build(),
                 TransferBatchRequest.builder().addresses(LongStream.range(10L, 20L)
@@ -513,10 +506,12 @@ class StateTransferManagerTest implements TransferSegmentCreator {
                 .when(spy).getUnknownAddressesInRangeForRange(range3);
 
         Stream<TransferBatchRequest> consistentWorkload =
-                spy.createBatchWorkload(ranges, CONSISTENT_READ);
+                spy.createBatchWorkload(ranges, CONSISTENT_READ)
+                        .stream().flatMap(Function.identity());
 
         Stream<TransferBatchRequest> protocolWorkload =
-                spy.createBatchWorkload(ranges, StateTransferType.PROTOCOL_READ);
+                spy.createBatchWorkload(ranges, StateTransferType.PROTOCOL_READ)
+                        .stream().flatMap(Function.identity());
 
         ImmutableList<TransferBatchRequest> consistentList =
                 consistentWorkload.collect(ImmutableList.toImmutableList());
@@ -538,20 +533,11 @@ class StateTransferManagerTest implements TransferSegmentCreator {
         TransferBatchRequest batchThree = TransferBatchRequest.builder().addresses(batchThreeAddresses).destinationNodes(Optional.empty()).build();
         TransferBatchRequest batchFour = TransferBatchRequest.builder().addresses(batchFourAddresses).destinationNodes(Optional.empty()).build();
 
-        TransferBatchRequest consistentInit = TransferBatchRequest
-                .builder()
-                .destinationNodes(Optional.of(ImmutableList.of("test1", "test2")))
-                .batchType(SEGMENT_INIT).build();
-
-        TransferBatchRequest protocolInit = TransferBatchRequest
-                .builder()
-                .batchType(SEGMENT_INIT).build();
-
         ImmutableList<TransferBatchRequest> expectedConsistentWorkload =
-                ImmutableList.of(consistentInit, batchOne, batchTwo);
+                ImmutableList.of(batchOne, batchTwo);
 
         ImmutableList<TransferBatchRequest> expectedProtocolWorkload =
-                ImmutableList.of(protocolInit, batchThree, protocolInit, batchFour);
+                ImmutableList.of(batchThree, batchFour);
 
 
         assertThat(consistentList).isEqualTo(expectedConsistentWorkload);

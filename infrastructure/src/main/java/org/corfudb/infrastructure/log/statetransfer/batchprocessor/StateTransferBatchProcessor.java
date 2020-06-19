@@ -118,8 +118,7 @@ public interface StateTransferBatchProcessor {
                 .builder()
                 .transferBatchRequest(new TransferBatchRequest(
                         allAddressesToTransfer,
-                        readBatch.getDestinationNode().map(ImmutableList::of),
-                        TransferBatchRequest.TransferBatchType.DATA))
+                        readBatch.getDestinationNode().map(ImmutableList::of)))
                 .status(SUCCEEDED)
                 .build();
     }
@@ -151,8 +150,7 @@ public interface StateTransferBatchProcessor {
                                 .transferBatchRequest(
                                         new TransferBatchRequest(
                                                 addressesToTransfer,
-                                        readBatch.getDestinationNode().map(ImmutableList::of),
-                                                TransferBatchRequest.TransferBatchType.DATA))
+                                        readBatch.getDestinationNode().map(ImmutableList::of)))
                                 .status(SUCCEEDED)
                                 .build();
                     }
