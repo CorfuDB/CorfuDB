@@ -1,7 +1,5 @@
 package org.corfudb.runtime.view;
 
-import static java.util.Objects.requireNonNull;
-
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -35,6 +33,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * This class represents the layout of a Corfu instance.
@@ -176,9 +176,10 @@ public class Layout {
         Set<String> activeServers = new HashSet<>();
         activeServers.addAll(layoutServers);
         activeServers.addAll(sequencers);
-        segments.forEach(x ->
-                x.getStripes().forEach(y ->
-                        activeServers.addAll(y.getLogServers())));
+        segments.forEach(segment -> segment
+                .getStripes()
+                .forEach(stripe -> activeServers.addAll(stripe.getLogServers()))
+        );
         activeServers.removeAll(unresponsiveServers);
         return activeServers;
     }

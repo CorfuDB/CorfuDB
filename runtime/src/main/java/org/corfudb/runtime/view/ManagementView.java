@@ -525,9 +525,13 @@ public class ManagementView extends AbstractView {
          */
         public ClusterStatus getClusterHealth(Layout layout, Set<String> peerResponsiveNodes) {
 
-            return Stream.of(getLayoutServersClusterHealth(layout, peerResponsiveNodes),
-                    getSequencerServersClusterHealth(layout, peerResponsiveNodes),
-                    getLogUnitServersClusterHealth(layout, peerResponsiveNodes))
+            ClusterStatus layoutState = getLayoutServersClusterHealth(layout, peerResponsiveNodes);
+            ClusterStatus sequencerState = getSequencerServersClusterHealth(layout, peerResponsiveNodes);
+            ClusterStatus logUnitState = getLogUnitServersClusterHealth(layout, peerResponsiveNodes);
+
+            Stream<ClusterStatus> clusterHealth = Stream.of(layoutState, sequencerState, logUnitState);
+
+            return clusterHealth
                     // Gets cluster status from the layout, sequencer and log unit clusters.
                     // The status is then aggregated by the max of the 3 statuses acquired.
                     .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
@@ -547,21 +551,20 @@ public class ManagementView extends AbstractView {
         ClusterStatus getLayoutServersClusterHealth(
                 Layout layout, Set<String> peerResponsiveNodes) {
 
-            ClusterStatus clusterStatus = ClusterStatus.STABLE;
             // A quorum of layout servers need to be responsive for the cluster to be STABLE.
             List<String> responsiveLayoutServers = new ArrayList<>(layout.getLayoutServers());
             // Retain only the responsive servers.
             responsiveLayoutServers.retainAll(peerResponsiveNodes);
-            if (responsiveLayoutServers.size() == layout.getLayoutServers().size()) {
-                return clusterStatus;
+            if (responsiveLayoutServers.equals(layout.getLayoutServers())) {
+                return ClusterStatus.STABLE;
             }
 
-            clusterStatus = ClusterStatus.DEGRADED;
             int quorumSize = (layout.getLayoutServers().size() / 2) + 1;
             if (responsiveLayoutServers.size() < quorumSize) {
-                clusterStatus = ClusterStatus.UNAVAILABLE;
+                return ClusterStatus.UNAVAILABLE;
             }
-            return clusterStatus;
+
+            return ClusterStatus.DEGRADED;
         }
 
         /**
@@ -571,7 +574,8 @@ public class ManagementView extends AbstractView {
          * @param peerResponsiveNodes responsive nodes in the current layout.
          * @return ClusterStatus
          */
-        private ClusterStatus getSequencerServersClusterHealth(
+        @VisibleForTesting
+        ClusterStatus getSequencerServersClusterHealth(
                 Layout layout, Set<String> peerResponsiveNodes) {
             // The primary sequencer should be reachable for the cluster to be STABLE.
             return peerResponsiveNodes.contains(layout.getPrimarySequencer())
@@ -585,7 +589,8 @@ public class ManagementView extends AbstractView {
          * @param peerResponsiveNodes responsive nodes in the current layout.
          * @return ClusterStatus
          */
-        private ClusterStatus getLogUnitServersClusterHealth(
+        @VisibleForTesting
+        ClusterStatus getLogUnitServersClusterHealth(
                 Layout layout, Set<String> peerResponsiveNodes) {
 
             // logUnitRedundancyStatus marks the cluster as DB_SYNCING if any of the nodes is performing
@@ -599,8 +604,10 @@ public class ManagementView extends AbstractView {
             ClusterStatus logUnitClusterStatus = layout
                     .getSegments()
                     .stream()
-                    .map(segment -> segment.getReplicationMode()
-                            .getClusterHealthForSegment(segment, peerResponsiveNodes))
+                    .map(segment -> segment
+                            .getReplicationMode()
+                            .getClusterHealthForSegment(segment, peerResponsiveNodes)
+                    )
                     .max(Comparator.comparingInt(ClusterStatus::getHealthValue))
                     .orElse(ClusterStatus.UNAVAILABLE);
 
@@ -627,15 +634,19 @@ public class ManagementView extends AbstractView {
                 return NodeStatus.DOWN;
             }
 
-            final int segmentsCount = layout.getSegments().size();
+            int segmentsCount = layout.getSegments().size();
             int nodeInSegments = 0;
             for (LayoutSegment layoutSegment : layout.getSegments()) {
                 if (layoutSegment.getAllLogServers().contains(server)) {
                     nodeInSegments++;
                 }
             }
-            return nodeInSegments == segmentsCount || nodeInSegments == 0
-                    ? NodeStatus.UP : NodeStatus.DB_SYNCING;
+
+            if (nodeInSegments == segmentsCount || nodeInSegments == 0){
+                return NodeStatus.UP;
+            }
+
+            return NodeStatus.DB_SYNCING;
         }
     }
 }

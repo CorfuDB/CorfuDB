@@ -72,7 +72,7 @@ public class ClusterStatusReport {
         UNAVAILABLE(3);
 
         @Getter
-        final int healthValue;
+        private final int healthValue;
 
         ClusterStatus(int healthValue) {
             this.healthValue = healthValue;

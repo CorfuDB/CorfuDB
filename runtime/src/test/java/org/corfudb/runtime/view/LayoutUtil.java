@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -16,8 +17,14 @@ public class LayoutUtil {
                 Layout.ReplicationMode.CHAIN_REPLICATION,
                 0L,
                 -1L,
-                Arrays.asList(new Layout.LayoutStripe(servers))
+                Arrays.asList(new Layout.LayoutStripe(new ArrayList<>(servers)))
         );
-        return new Layout(servers, servers, Arrays.asList(segment), epoch, clusterId);
+        return new Layout(
+                new ArrayList<>(servers),
+                new ArrayList<>(servers),
+                Arrays.asList(segment),
+                epoch,
+                clusterId
+        );
     }
 }
