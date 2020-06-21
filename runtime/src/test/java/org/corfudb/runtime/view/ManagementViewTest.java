@@ -21,7 +21,7 @@ class ManagementViewTest {
      * Check that getting a quorum layout from the list of layouts works as expected
      */
     @Test
-    void testGetLayoutForQuorum() {
+    public void testGetLayoutForQuorum() {
         final String server1 = "server1";
         final String server2 = "server2";
         final String server3 = "server3";
