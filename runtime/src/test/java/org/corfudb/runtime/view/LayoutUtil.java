@@ -7,9 +7,18 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Layout helper - helps building nad manage layouts
+ */
 public class LayoutUtil {
     private final UUID clusterId = UUID.randomUUID();
 
+    /**
+     * Build a layout based on a list of servers
+     *
+     * @param servers corfu nodes
+     * @return a new layout
+     */
     public Layout getLayout(List<String> servers) {
         long epoch = 0;
 
