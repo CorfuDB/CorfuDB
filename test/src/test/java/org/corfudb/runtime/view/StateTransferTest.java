@@ -3,8 +3,11 @@ package org.corfudb.runtime.view;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
+import com.google.common.io.Files;
 import lombok.Getter;
+import org.apache.commons.io.FileUtils;
 import org.corfudb.common.compression.Codec;
+import org.corfudb.infrastructure.AutoCommitService;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
@@ -12,9 +15,13 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.orchestrator.actions.RestoreRedundancyMergeSegments;
 import org.corfudb.infrastructure.redundancy.RedundancyCalculator;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -29,11 +36,16 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.File;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
@@ -146,7 +158,7 @@ public class StateTransferTest extends AbstractViewTest {
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
 
-        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
     }
 
     @Test
@@ -231,7 +243,7 @@ public class StateTransferTest extends AbstractViewTest {
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
 
-        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
 
     }
 
@@ -357,7 +369,7 @@ public class StateTransferTest extends AbstractViewTest {
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
 
-        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
     }
 
     /**
@@ -500,7 +512,7 @@ public class StateTransferTest extends AbstractViewTest {
         // Verify Nodes' data
         Map<Long, LogData> map_0 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_0, lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(rt, SERVERS.ENDPOINT_2, lastAddress);
-        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
     }
 
     /**
@@ -599,9 +611,6 @@ public class StateTransferTest extends AbstractViewTest {
                 .setPort(SERVERS.PORT_1).build();
         addServer(SERVERS.PORT_1, sc2);
 
-        getManagementServer(SERVERS.PORT_0).shutdown();
-        getManagementServer(SERVERS.PORT_1).shutdown();
-
         final long writtenAddressesBatch1 = 100;
         final long writtenAddressesBatch2 = 5;
 
@@ -628,6 +637,9 @@ public class StateTransferTest extends AbstractViewTest {
                 .addToLayout()
                 .build();
         bootstrapAllServers(layout);
+
+        getManagementServer(SERVERS.PORT_0).shutdown();
+        getManagementServer(SERVERS.PORT_1).shutdown();
 
         CorfuRuntime rt = getNewRuntime(getDefaultNode()).connect();
 
@@ -948,5 +960,537 @@ public class StateTransferTest extends AbstractViewTest {
                     .getPayload(rt)).isEqualTo(DEFAULT_PAYLOAD);
         }
 
+    }
+
+    class AutoClosableTempDirs implements AutoCloseable {
+
+        @Getter
+        private final List<File> tempDirs;
+
+        public AutoClosableTempDirs(int numDirs) {
+            ArrayList<File> tempDirs = new ArrayList<>();
+            for (int i = 0; i < numDirs; i++) {
+                tempDirs.add(Files.createTempDir());
+            }
+            this.tempDirs = tempDirs;
+        }
+
+        @Override
+        public void close() {
+            try {
+                for (File file : tempDirs) {
+                    FileUtils.deleteDirectory(file);
+                }
+            } catch (IOException io) {
+                io.printStackTrace();
+            }
+        }
+    }
+
+    private LogData getLogData(TokenResponse token, byte[] payload) {
+        LogData ld = new LogData(DataType.DATA, payload);
+        ld.useToken(token);
+        return ld;
+    }
+
+    private void write(CorfuRuntime runtime, int numIter,
+                       Set<Long> noWriteHoles, Set<Long> partialWriteHoles) throws Exception {
+        for (long i = 0; i < numIter; i++) {
+            TokenResponse token = runtime.getSequencerView().next();
+            if (noWriteHoles.contains(i)) {
+                // Write nothing to create a hole on all log units.
+            } else if (partialWriteHoles.contains(i)) {
+                // Write to head log unit to create a partial write hole.
+                runtime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0)
+                        .write(getLogData(token, "partial write".getBytes())).get();
+            } else {
+                runtime.getAddressSpaceView().write(token, "Test Payload".getBytes());
+            }
+        }
+    }
+
+    private LogData read(CorfuRuntime runtime, long address, String server) throws Exception {
+        return runtime.getLayoutView().getRuntimeLayout().getLogUnitClient(server)
+                .read(address).get().getAddresses().get(address);
+    }
+
+
+    /**
+     * Add first node. Write 100 complete records with 5 of them being holes.
+     * Commit the addresses filling these 5 holes. Verify that CT is 99.
+     * Add second node. It should run a parallel transfer and store the CT locally.
+     * Verify CT is present on the second node.
+     * Write 100 more addresses.
+     * Add third node. It should run a parallel transfer for the first 100 addresses
+     * and a regular transfer for the next 100 addresses.
+     * Verify CT is present on the third node and its equal to 199.
+     * Check all records are equal on all the three nodes and the global CT is 199.
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void testBuild3NodeClusterWithParallelTransferAfterAutoCommit() throws Exception {
+        try (AutoClosableTempDirs dirs = new AutoClosableTempDirs(3)) {
+            List<File> tempDirs = dirs.getTempDirs();
+            ServerContext sc0 = new ServerContextBuilder()
+                    .setSingle(true)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
+                    .setPort(SERVERS.PORT_0)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(0).getAbsolutePath())
+                    .build();
+
+            addServer(SERVERS.PORT_0, sc0);
+            Layout currentLayout = sc0.getCurrentLayout();
+            bootstrapAllServers(currentLayout);
+
+            getManagementServer(SERVERS.PORT_0).shutdown();
+
+            CorfuRuntime runtime = getRuntime(currentLayout).connect();
+
+            Set<Long> noWriteHoles = new HashSet<>(Arrays.asList(10L, 20L, 30L, 40L, 50L));
+
+            write(runtime, 100, noWriteHoles, new HashSet<>());
+
+            runtime.getAddressSpaceView().commit(0L, 99L);
+
+            long committedTail = runtime.getAddressSpaceView().getCommittedTail();
+
+            assertThat(committedTail).isEqualTo(99L);
+
+            ServerContext sc1 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
+                    .setPort(SERVERS.PORT_1)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(1).getAbsolutePath())
+                    .build();
+
+            addServer(SERVERS.PORT_1, sc1);
+
+            final int addNodeRetries = 3;
+
+            runtime.getManagementView()
+                    .addNode(SERVERS.ENDPOINT_1, addNodeRetries,
+                            Duration.ofMinutes(1L), Duration.ofSeconds(1));
+
+            long tail = runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(SERVERS.ENDPOINT_1).getCommittedTail().join();
+
+            assertThat(tail).isEqualTo(99);
+
+            write(runtime, 100, new HashSet<>(), new HashSet<>());
+
+            ServerContext sc2 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
+                    .setPort(SERVERS.PORT_2)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(2).getAbsolutePath())
+                    .build();
+
+            addServer(SERVERS.PORT_2, sc2);
+
+            runtime.getManagementView()
+                    .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1));
+
+
+            long tail3 = runtime.getLayoutView().getRuntimeLayout()
+                    .getLogUnitClient(SERVERS.ENDPOINT_2).getCommittedTail().join();
+
+            assertThat(tail3).isEqualTo(199L);
+
+            for (int i = 0; i < 200; i++) {
+                LogData read1 = read(runtime, i, SERVERS.ENDPOINT_0);
+                LogData read2 = read(runtime, i, SERVERS.ENDPOINT_1);
+                LogData read3 = read(runtime, i, SERVERS.ENDPOINT_2);
+
+                assertThat(read1.getType()).isEqualTo(read2.getType());
+                assertThat(read2.getType()).isEqualTo(read3.getType());
+                assertThat(Arrays.equals(read1.getData(), read2.getData())).isTrue();
+                assertThat(Arrays.equals(read2.getData(), read3.getData())).isTrue();
+            }
+
+            assertThat(runtime.getAddressSpaceView().getCommittedTail()).isEqualTo(199L);
+        }
+    }
+
+    /**
+     * Create a layout with a split segment. A: [0, 100]. A, B: [100, 200].
+     * Commit first 150 addresses.
+     * Add node C, this will split the layout segment like this:
+     * A: [0, 100]. A, B: [100, 200], A, B, C: [200, -1]
+     * Wait until the restore redundancy workflow kicks in on node B and node C is added.
+     * Verify the segment is merged.
+     * Verify CT is equal to 199.
+     * Verify every record is the same on every node.
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void testRestoreRedundancyParallelTransfer() throws Exception {
+        try (AutoClosableTempDirs dirs = new AutoClosableTempDirs(3)) {
+            List<File> tempDirs = dirs.getTempDirs();
+
+            ServerContext sc0 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
+                    .setPort(SERVERS.PORT_0)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(0).getAbsolutePath())
+                    .build();
+
+            ServerContext sc1 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
+                    .setPort(SERVERS.PORT_1)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(1).getAbsolutePath())
+                    .build();
+
+            addServer(SERVERS.PORT_0, sc0);
+            addServer(SERVERS.PORT_1, sc1);
+
+            long writtenAddressesBatch1 = 100L;
+
+            Layout l1 = new TestLayoutBuilder()
+                    .setEpoch(1L)
+                    .addLayoutServer(SERVERS.PORT_0)
+                    .addSequencer(SERVERS.PORT_0)
+                    .buildSegment()
+                    .setStart(0L)
+                    .setEnd(writtenAddressesBatch1)
+                    .buildStripe()
+                    .addLogUnit(SERVERS.PORT_0)
+                    .addToSegment()
+                    .addToLayout()
+                    .buildSegment()
+                    .setStart(writtenAddressesBatch1)
+                    .setEnd(-1L)
+                    .buildStripe()
+                    .addLogUnit(SERVERS.PORT_0)
+                    .addLogUnit(SERVERS.PORT_1)
+                    .addToSegment()
+                    .addToLayout()
+                    .build();
+            bootstrapAllServers(l1);
+
+            CorfuRuntime runtime = getRuntime(l1).connect();
+
+            ServerContext sc2 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
+                    .setPort(SERVERS.PORT_2)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(2).getAbsolutePath())
+                    .build();
+
+            Set<Long> noWriteHoles = new HashSet<>(Arrays.asList(10L, 20L, 30L, 40L, 50L));
+
+            Set<Long> partialWriteHoles = new HashSet<>(Arrays.asList(11L, 21L, 32L, 43L, 55L, 155L));
+
+            write(runtime, 200, noWriteHoles, partialWriteHoles);
+
+            runtime.getAddressSpaceView().commit(0L, 149L);
+
+            addServer(SERVERS.PORT_2, sc2);
+
+            final int addNodeRetries = 3;
+
+            runtime.getManagementView()
+                    .addNode(SERVERS.ENDPOINT_2, addNodeRetries, Duration.ofMinutes(1L), Duration.ofSeconds(1));
+
+            setAggressiveTimeouts(runtime.getLayoutView().getLayout(), runtime);
+
+            waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty() &&
+                            layout.segments.size() == 1,
+                    runtime);
+
+            long committedTail = runtime.getAddressSpaceView().getCommittedTail();
+
+            assertThat(committedTail).isEqualTo(199L);
+
+            for (int i = 0; i < 200; i++) {
+                LogData read1 = read(runtime, i, SERVERS.ENDPOINT_0);
+                LogData read2 = read(runtime, i, SERVERS.ENDPOINT_1);
+                LogData read3 = read(runtime, i, SERVERS.ENDPOINT_2);
+
+                assertThat(read1.getType()).isEqualTo(read2.getType());
+                assertThat(read2.getType()).isEqualTo(read3.getType());
+                assertThat(Arrays.equals(read1.getData(), read2.getData())).isTrue();
+                assertThat(Arrays.equals(read2.getData(), read3.getData())).isTrue();
+            }
+        }
+    }
+
+    /**
+     * Layout is: A: [0, 1500]. A, B: [1500, 3000]. A, B: [3000, -1]. Unresponsive: [C]
+     * 0 - 3000: log with holes and partial writes
+     * Run autocommit.
+     * Allow C to heal, and B to restore redundancy.
+     * Verify the latest committed tail.
+     * Verify records on all the three nodes are the same.
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void healAndRestoreParallelTransfer() throws Exception {
+        try (AutoClosableTempDirs dirs = new AutoClosableTempDirs(3)) {
+            List<File> tempDirs = dirs.getTempDirs();
+            ServerContext sc0 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
+                    .setPort(SERVERS.PORT_0)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(0).getAbsolutePath())
+                    .build();
+
+            ServerContext sc1 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
+                    .setPort(SERVERS.PORT_1)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(1).getAbsolutePath())
+                    .build();
+
+            ServerContext sc2 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
+                    .setPort(SERVERS.PORT_2)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(2).getAbsolutePath())
+                    .build();
+
+            // Add three servers
+            addServer(SERVERS.PORT_0, sc0);
+            addServer(SERVERS.PORT_1, sc1);
+            addServer(SERVERS.PORT_2, sc2);
+
+            // Add rule to drop all msgs except for service discovery ones
+            addServerRule(SERVERS.PORT_2, new TestRule().matches(
+                    msg -> !msg.getMsgType().equals(CorfuMsgType.LAYOUT_BOOTSTRAP)
+                            && !msg.getMsgType().equals(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST))
+                    .drop());
+
+            final long writtenAddressesBatch1 = 1500L;
+            final long writtenAddressesBatch2 = 3000L;
+            Layout l1 = new TestLayoutBuilder()
+                    .setEpoch(1L)
+                    .addLayoutServer(SERVERS.PORT_0)
+                    .addLayoutServer(SERVERS.PORT_1)
+                    .addLayoutServer(SERVERS.PORT_2)
+                    .addSequencer(SERVERS.PORT_0)
+                    .addSequencer(SERVERS.PORT_1)
+                    .addSequencer(SERVERS.PORT_2)
+                    .buildSegment()
+                    .setStart(0L)
+                    .setEnd(writtenAddressesBatch1)
+                    .buildStripe()
+                    .addLogUnit(SERVERS.PORT_0)
+                    .addToSegment()
+                    .addToLayout()
+                    .buildSegment()
+                    .setStart(writtenAddressesBatch1)
+                    .setEnd(writtenAddressesBatch2)
+                    .buildStripe()
+                    .addLogUnit(SERVERS.PORT_0)
+                    .addLogUnit(SERVERS.PORT_1)
+                    .addToSegment()
+                    .addToLayout()
+                    .buildSegment()
+                    .setStart(writtenAddressesBatch2)
+                    .setEnd(-1L)
+                    .buildStripe()
+                    .addLogUnit(SERVERS.PORT_0)
+                    .addLogUnit(SERVERS.PORT_1)
+                    .addToSegment()
+                    .addToLayout()
+                    .addUnresponsiveServer(SERVERS.PORT_2)
+                    .build();
+
+
+            bootstrapAllServers(l1);
+            CorfuRuntime rt = getRuntime(l1).connect();
+            setAggressiveTimeouts(l1, rt,
+                    getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
+            setAggressiveDetectorTimeouts(SERVERS.PORT_0);
+
+            // write a non-consolidated logs
+            Set<Long> noWriteHoles = new HashSet<>(Arrays.asList(10L, 100L, 1000L, 2000L, 2500L, 2550L));
+
+            Set<Long> partialWriteHoles = new HashSet<>(Arrays.asList(11L, 101L, 1002L, 2043L, 2055L, 2555L));
+
+            write(rt, 3000, noWriteHoles, partialWriteHoles);
+
+            rt.getAddressSpaceView().commit(0L, 1999L);
+
+            // Allow node 2 to be healed.
+            clearServerRules(SERVERS.PORT_2);
+
+            rt.invalidateLayout();
+
+            // Wait until all the nodes are restored.
+            waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty() &&
+                            layout.segments.size() == 1,
+                    rt);
+
+            // Verify CT and data
+            long committedTail = rt.getAddressSpaceView().getCommittedTail();
+
+            assertThat(committedTail).isEqualTo(2999L);
+
+            for (int i = 0; i < 3000; i++) {
+                LogData read1 = read(rt, i, SERVERS.ENDPOINT_0);
+                LogData read2 = read(rt, i, SERVERS.ENDPOINT_1);
+                LogData read3 = read(rt, i, SERVERS.ENDPOINT_2);
+
+                assertThat(read1.getType()).isEqualTo(read2.getType());
+                assertThat(read2.getType()).isEqualTo(read3.getType());
+                assertThat(Arrays.equals(read1.getData(), read2.getData())).isTrue();
+                assertThat(Arrays.equals(read2.getData(), read3.getData())).isTrue();
+            }
+        }
+    }
+
+    /**
+     * Layout is: A, B: [0, 1500]. A, B, C: [1500, -1].
+     * Trim mark on A is 90, trim mark on B is 120, trim mark on C is 150
+     * Commit addresses 150 - 749.
+     * Restore redundancy for a node C and verify that the CT and TM are the latest
+     * and records on all the three nodes are the same.
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void restoreRedundancyOldAndNewTrimMarksParallelTransfer() throws Exception {
+        try (AutoClosableTempDirs dirs = new AutoClosableTempDirs(3)) {
+            List<File> tempDirs = dirs.getTempDirs();
+            ServerContext sc0 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
+                    .setPort(SERVERS.PORT_0)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(0).getAbsolutePath())
+                    .build();
+
+            ServerContext sc1 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
+                    .setPort(SERVERS.PORT_1)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(1).getAbsolutePath())
+                    .build();
+
+            ServerContext sc2 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_2))
+                    .setPort(SERVERS.PORT_2)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(2).getAbsolutePath())
+                    .build();
+
+            // Add three servers
+            addServer(SERVERS.PORT_0, sc0);
+            addServer(SERVERS.PORT_1, sc1);
+            addServer(SERVERS.PORT_2, sc2);
+
+            long writtenAddressesBatch1 = 1500L;
+
+            Layout l1 = new TestLayoutBuilder()
+                    .setEpoch(1L)
+                    .addLayoutServer(SERVERS.PORT_0)
+                    .addLayoutServer(SERVERS.PORT_1)
+                    .addLayoutServer(SERVERS.PORT_2)
+                    .addSequencer(SERVERS.PORT_0)
+                    .addSequencer(SERVERS.PORT_1)
+                    .addSequencer(SERVERS.PORT_2)
+                    .buildSegment()
+                    .setStart(0L)
+                    .setEnd(writtenAddressesBatch1)
+                    .buildStripe()
+                    .addLogUnit(SERVERS.PORT_0)
+                    .addLogUnit(SERVERS.PORT_1)
+                    .addToSegment()
+                    .addToLayout()
+                    .buildSegment()
+                    .setStart(writtenAddressesBatch1)
+                    .setEnd(-1L)
+                    .buildStripe()
+                    .addLogUnit(SERVERS.PORT_0)
+                    .addLogUnit(SERVERS.PORT_1)
+                    .addLogUnit(SERVERS.PORT_2)
+                    .addToSegment()
+                    .addToLayout()
+                    .build();
+
+            bootstrapAllServers(l1);
+
+            CorfuRuntime rt = getRuntime(l1).connect();
+            // write a non-consolidated logs
+            Set<Long> noWriteHoles = new HashSet<>(Arrays.asList(10L, 100L, 1000L));
+
+            Set<Long> partialWriteHoles = new HashSet<>(Arrays.asList(11L, 101L, 1002L, 1450L));
+
+            write(rt, 1500, noWriteHoles, partialWriteHoles);
+
+            AutoCommitService autoCommitService =
+                    getManagementServer(SERVERS.PORT_0).getManagementAgent().getAutoCommitService();
+
+            // First invocation would only set the next commit end to the current log tail.
+            autoCommitService.runAutoCommit();
+
+            Token trimMark0 = Token.of(l1.getEpoch(), 90);
+            Token trimMark1 = Token.of(l1.getEpoch(), 120);
+            Token trimMark2 = Token.of(l1.getEpoch(), 150);
+
+            rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0)
+                    .prefixTrim(trimMark0);
+            rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_1)
+                    .prefixTrim(trimMark1);
+            rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_2)
+                    .prefixTrim(trimMark2);
+
+            autoCommitService.runAutoCommit();
+
+            setAggressiveTimeouts(rt.getLayoutView().getLayout(), rt);
+
+            waitForLayoutChange(layout -> layout.getUnresponsiveServers().isEmpty() &&
+                            layout.segments.size() == 1,
+                    rt);
+
+            Long first = rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0)
+                    .getTrimMark().get();
+            Long second = rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_1)
+                    .getTrimMark().get();
+            Long third = rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_2)
+                    .getTrimMark().get();
+
+            assertThat(first).isEqualTo(151);
+            assertThat(first).isEqualTo(second);
+            assertThat(second).isEqualTo(third);
+
+            long committedTail = rt.getAddressSpaceView().getCommittedTail();
+
+            assertThat(committedTail).isEqualTo(1499L);
+
+            for (int i = 0; i < 1500; i++) {
+                LogData read1 = read(rt, i, SERVERS.ENDPOINT_0);
+                LogData read2 = read(rt, i, SERVERS.ENDPOINT_1);
+                LogData read3 = read(rt, i, SERVERS.ENDPOINT_2);
+
+                assertThat(read1.getType()).isEqualTo(read2.getType());
+                assertThat(read2.getType()).isEqualTo(read3.getType());
+                assertThat(Arrays.equals(read1.getData(), read2.getData())).isTrue();
+                assertThat(Arrays.equals(read2.getData(), read3.getData())).isTrue();
+            }
+        }
     }
 }

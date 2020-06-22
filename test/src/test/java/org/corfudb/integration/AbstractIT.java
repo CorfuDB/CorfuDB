@@ -1,7 +1,5 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,8 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.junit.After;
@@ -34,6 +34,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration tests.
@@ -136,18 +138,18 @@ public class AbstractIT extends AbstractCorfuTest {
                 builder.command("sh", "-c", KILL_COMMAND + pid.longValue());
                 Process p = builder.start();
                 p.waitFor();
-             }
+            }
 
-             if (retries == 0) {
-                 return false;
-             }
+            if (retries == 0) {
+                return false;
+            }
 
-             if (corfuServerProcess.isAlive()) {
-                 retries--;
-                 Thread.sleep(SHUTDOWN_RETRY_WAIT);
-             } else {
-                 return true;
-             }
+            if (corfuServerProcess.isAlive()) {
+                retries--;
+                Thread.sleep(SHUTDOWN_RETRY_WAIT);
+            } else {
+                return true;
+            }
         }
     }
 
@@ -269,6 +271,20 @@ public class AbstractIT extends AbstractCorfuTest {
         return pid;
     }
 
+    /**
+     * Creates a message of specified size in bytes.
+     *
+     * @param msgSize
+     * @return
+     */
+    public static String createStringOfSize(int msgSize) {
+        StringBuilder sb = new StringBuilder(msgSize);
+        for (int i = 0; i < msgSize; i++) {
+            sb.append('a');
+        }
+        return sb.toString();
+    }
+
     public static CorfuRuntime createDefaultRuntime() {
         return createRuntime(DEFAULT_ENDPOINT);
     }
@@ -287,6 +303,15 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setPort(DEFAULT_PORT)
                 .setSingle(true)
                 .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, DEFAULT_PORT))
+                .runServer();
+    }
+
+    public static Process runPersistentServer(String address, int port, boolean singleNode) throws IOException {
+        return new CorfuServerRunner()
+                .setHost(address)
+                .setPort(port)
+                .setLogPath(getCorfuServerLogPath(address, port))
+                .setSingle(singleNode)
                 .runServer();
     }
 

@@ -166,6 +166,24 @@ public final class CFUtils {
     }
 
     /**
+     * Similar to CompletableFuture.allOf() but terminates immediately as soon as one of the futures
+     * completes exceptionally.
+     *
+     * @param futures The CompletableFutures.
+     * @return A new CompletableFuture that is completed normally when all of the
+     *         given CompletableFutures complete. If at least one of the futures
+     *         complete exceptionally, it returns an exceptionally completed CompletableFuture.
+     */
+    public static CompletableFuture<Void> allOfOrTerminateExceptionally(
+            CompletableFuture<?>... futures) {
+        CompletableFuture<Void> result = CompletableFuture.allOf(futures);
+        for (CompletableFuture<?> future : futures) {
+            future.handle((res, ex) -> ex == null || result.completeExceptionally(ex));
+        }
+        return result;
+    }
+
+    /**
      * Run a future after the provided number of delay time units.
      *
      * @param future                   A future wrapped into a supplier.
