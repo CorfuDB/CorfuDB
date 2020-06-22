@@ -2,6 +2,7 @@ package org.corfudb.common.util;
 
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 /**
  * A generic class that holds two elements.
@@ -10,6 +11,7 @@ import lombok.EqualsAndHashCode;
  */
 @AllArgsConstructor
 @EqualsAndHashCode
+@ToString
 public class Tuple<T, U> {
     public final T first;
     public final U second;
