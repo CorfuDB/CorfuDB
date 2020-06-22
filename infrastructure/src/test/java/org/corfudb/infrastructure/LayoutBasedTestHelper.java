@@ -4,7 +4,8 @@ import com.google.common.collect.ImmutableList;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
+import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegment;
+import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.ArrayList;
@@ -33,7 +34,7 @@ public class LayoutBasedTestHelper {
     public class MockedSegment {
         public final long startAddress;
         public final long endAddress;
-        public StateTransferManager.TransferSegmentStatus status;
+        public TransferSegmentStatus status;
     }
 
     public Layout createNonPresentLayout() {
@@ -65,11 +66,11 @@ public class LayoutBasedTestHelper {
                 segment2, layout.getSegment(4L)));
     }
 
-    public MockedSegment transformToMock(StateTransferManager.TransferSegment segment) {
+    public MockedSegment transformToMock(TransferSegment segment) {
         return new MockedSegment(segment.getStartAddress(), segment.getEndAddress(), segment.getStatus());
     }
 
-    public ImmutableList<MockedSegment> transformListToMock(List<StateTransferManager.TransferSegment> segments) {
+    public ImmutableList<MockedSegment> transformListToMock(List<TransferSegment> segments) {
         return ImmutableList.copyOf(segments.stream().map(this::transformToMock).collect(Collectors.toList()));
     }
 

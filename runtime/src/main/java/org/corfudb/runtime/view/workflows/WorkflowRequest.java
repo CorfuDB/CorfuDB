@@ -142,7 +142,7 @@ public abstract class WorkflowRequest {
                 }
 
             } catch (NetworkException | TimeoutException | IllegalStateException e) {
-                log.warn("WorkflowRequest: Error while running {} on attempt {}, cause {}", this, x, e);
+                log.warn("WorkflowRequest: Error while running {} on attempt {}, cause:", this, x, e);
             }
 
             for (int y = 0; y < runtime.getParameters().getInvalidateRetry(); y++) {
