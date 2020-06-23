@@ -45,6 +45,11 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
         return entry.getMetadata().getTimestamp();
     }
 
+    @Override
+    long getLastProcessed() {
+        return metadataAccessor.getLastProcessedLogTimestamp(null);
+    }
+
     /**
      * Make a ACK message according to the last processed message's timestamp.
      * @param entry
@@ -52,9 +57,13 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      */
     @Override
     public LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
+        long lastProcessedSeq = getLastProcessed();
+
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());
         metadata.setMessageMetadataType(LOG_ENTRY_REPLICATED);
+        metadata.setSnapshotTimestamp(metadataAccessor.getLastSrcBaseSnapshotTimestamp(null));
         metadata.setTimestamp(lastProcessedSeq);
+
         log.debug("Sink Buffer lastProcessedSeq {}", lastProcessedSeq);
         return metadata;
     }

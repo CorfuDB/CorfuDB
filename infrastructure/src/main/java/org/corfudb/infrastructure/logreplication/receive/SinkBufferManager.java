@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.receive;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -26,6 +27,11 @@ public abstract class SinkBufferManager {
      * For Snapshot buffer, the key is the previous entry's snapshotSeqNumber
      */
     HashMap<Long, LogReplicationEntry> buffer;
+
+    /*
+     * Used to query the real ack information.
+     */
+    LogReplicationMetadataAccessor metadataAccessor;
 
     /*
      * While processing a message in the buffer, it will call
@@ -63,13 +69,6 @@ public abstract class SinkBufferManager {
      */
     long ackTime = 0;
 
-    /*
-     * The lastProcessedSeq message's ack value.
-     * For snapshot, it is the entry's seqNumber.
-     * For log entry, it is the entry's timestamp.
-     */
-    long lastProcessedSeq;
-
     /**
      *
      * @param type
@@ -84,8 +83,8 @@ public abstract class SinkBufferManager {
         this.ackCycleTime = ackCycleTime;
         this.ackCycleCnt = ackCycleCnt;
         this.maxSize = size;
+        this.metadataAccessor = sinkManager.getLogReplicationMetadataAccessor();
         this.sinkManager = sinkManager;
-        this.lastProcessedSeq = lastProcessedSeq;
         buffer = new HashMap<>();
     }
 
@@ -93,6 +92,7 @@ public abstract class SinkBufferManager {
      * Go through the buffer to find messages that are in order with the last processed message.
      */
     void processBuffer() {
+        long lastProcessedSeq = getLastProcessed();
         while (true) {
             LogReplicationEntry dataMessage = buffer.get(lastProcessedSeq);
             if (dataMessage == null)
@@ -111,7 +111,7 @@ public abstract class SinkBufferManager {
      *
      * @return
      */
-    boolean shouldAck() {
+    boolean shouldAck(LogReplicationEntry entry) {
         long currentTime = java.lang.System.currentTimeMillis();
         ackCnt++;
 
@@ -139,22 +139,24 @@ public abstract class SinkBufferManager {
 
         long preTs = getPreSeq(dataMessage);
         long currentTs = getCurrentSeq(dataMessage);
+        long lastProcessedSeq = getLastProcessed();
 
         if (preTs == lastProcessedSeq) {
+            log.info("Process the message {}, expecting TS {}", dataMessage.getMetadata(), preTs);
             sinkManager.processMessage(dataMessage);
             ackCnt++;
-            lastProcessedSeq = currentTs;
             processBuffer();
         } else if (currentTs > lastProcessedSeq && buffer.size() < maxSize) {
             // If it is an out of order message with higher timestamp,
             // put it into the buffer if there is space.
+            log.info("Buffer message {}, expecting TS {}", dataMessage.getMetadata(), preTs);
             buffer.put(preTs, dataMessage);
         }
 
         /*
          * Send Ack with lastProcessedSeq
          */
-        if (shouldAck()) {
+        if (shouldAck(dataMessage)) {
             LogReplicationEntryMetadata metadata = makeAckMessage(dataMessage);
             return new LogReplicationEntry(metadata, new byte[0]);
         }
@@ -175,6 +177,16 @@ public abstract class SinkBufferManager {
      * @return
      */
     abstract long getCurrentSeq(LogReplicationEntry entry);
+
+
+    /*
+     * The lastProcessedSeq message's ack value.
+     * For snapshot, it is the entry's seqNumber.
+     * For log entry, it is the entry's timestamp.
+     * Will use the metadata as the source of the truth.
+     */
+    //long lastProcessedSeq;
+    abstract  long getLastProcessed();
 
     /**
      * Make an Ack with the lastProcessedSeq

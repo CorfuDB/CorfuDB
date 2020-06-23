@@ -100,6 +100,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.nodeInfo = crossSiteConfig.getNodeInfo(localEndpoint);
         this.logReplicationMetadataAccessor = serverNode.getLogReplicationServer().getSinkManager().getLogReplicationMetadataAccessor();
+        logReplicationMetadataAccessor.setupSiteConfigID(crossSiteConfig.getSiteConfigID());
         registerToLogReplicationLock();
     }
 
@@ -185,7 +186,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
 
     public void processLockAcquire() {
-        log.debug("process lock acquire");
+        log.info("process lock acquire");
         replicationServerNode.getLogReplicationServer().getSinkManager().setLeader(true);
 
         // leader transition from true to true, do nothing;

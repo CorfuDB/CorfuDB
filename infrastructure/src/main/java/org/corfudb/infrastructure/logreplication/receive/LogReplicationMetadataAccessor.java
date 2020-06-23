@@ -19,15 +19,15 @@ import java.util.UUID;
  * The log replication metadata is stored in a corfutable in the corfustore.
  * The log replication metadata is defined as a proto message that contains:
  * SiteConfigID, Version, Snapshot Full Sync Status and Log Entry Sync Status.
- * The access the metadata is using UFO API.
+ * The access of the metadata is using UFO API.
  *
  * To record replication status, it has following values:
  * SnapshotStartTimestamp: when a full snapshot sync is started, it will first update this value and reset other snapshot related metadata to -1.
  * The init value for this metadata is -1. When it is -1, it means a snapshot full sync is required regardless.
- * SnapshotTranferredTimestamp: the init value is -1. When the receiver receives a snapshot transfer end marker, it will update this value to current snapshot timestamp,
- * it will be updated to the same value as snapshot start when the snapshot data transfer is done.
- * SnapshotSeqNum: it the sequence number of each snapshot messages to detect loss of messages and also to prevent the reappling the same message. All the messages must be
- * applied in the order of the snapshot sequence number.
+ * SnapshotTranferredTimestamp: the init value is -1. When the receiver receives a snapshot transfer end marker, it will update this value to the
+ * current snapshot timestamp. It will be updated to the same value as snapshot start when the snapshot data transfer is done.
+ * SnapshotSeqNum: it the sequence number of each snapshot messages to detect the message loss and to prevent the re-appling the same message.
+ * All the messages must be applied in the order of the snapshot sequence number.
  * SnapshotAppliedSeqNum: it records the operation's sequence during the apply phase to avoid the redo the apply if there is a leadership change.
  * LastLogProcessed: It records the most recent log entry has been processed.
  * When a snapshot full sync is complete, it will update this value. While processing a new log entry message, it will be updated too.
@@ -38,7 +38,7 @@ import java.util.UUID;
 @Slf4j
 public class LogReplicationMetadataAccessor {
     private static final String namespace = "CORFU_SYSTEM";
-    private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
+    private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-METADATA-";
     private static final String DEFAULT_VERSION = "Release_Test_0";
     String metadataTableName;
 
@@ -51,10 +51,10 @@ public class LogReplicationMetadataAccessor {
 
     CorfuRuntime runtime;
 
-    public LogReplicationMetadataAccessor(CorfuRuntime rt, long siteConfigID, UUID primary, UUID dst) {
+    public LogReplicationMetadataAccessor(CorfuRuntime rt, long siteConfigID, UUID srcUUID, UUID dstUUID) {
         this.runtime = rt;
         this.corfuStore = new CorfuStore(runtime);
-        metadataTableName = getPersistedWriterMetadataTableName(primary, dst);
+        metadataTableName = getPersistedWriterMetadataTableName(srcUUID, dstUUID);
         try {
             metadataTable = this.corfuStore.openTable(namespace,
                     metadataTableName,
@@ -66,6 +66,7 @@ public class LogReplicationMetadataAccessor {
             log.error("Caught an exception while open the table");
             throw new ReplicationWriterException(e);
         }
+
         setupSiteConfigID(siteConfigID);
     }
 
@@ -246,7 +247,7 @@ public class LogReplicationMetadataAccessor {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.SiteConfigID);
 
-        if (siteConfigID <= persistSiteConfigID) {
+        if (siteConfigID <= persistSiteConfigID && persistSiteConfigID != Address.NON_ADDRESS) {
             log.warn("Skip setupSiteConfigID. the current siteConfigID " + siteConfigID + " is not larger than the persistSiteConfigID " + persistSiteConfigID);
             return;
         }
@@ -326,11 +327,10 @@ public class LogReplicationMetadataAccessor {
         long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.SiteConfigID);
         long persistSnapStart = query(timestamp, LogReplicationMetadataType.LastSnapshotStarted);
 
-        log.debug("Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
-                " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
+        log.debug("Set snapshotStart siteConfigID {}  ts {}  currentMetadata {}", siteConfigID, ts, getLogReplicationStatus());
 
         // It means the site config has changed, ingore the update operation.
-        if (siteConfigID != persistSiteConfigID || ts <= persistSiteConfigID) {
+        if (siteConfigID != persistSiteConfigID || ts < persistSnapStart) {
             log.warn("The metadata is older than the presisted one. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
                     " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
             return false;
@@ -353,9 +353,7 @@ public class LogReplicationMetadataAccessor {
 
         txBuilder.commit(timestamp);
 
-        log.debug("Commit. Set snapshotStart siteConfigID " + siteConfigID + " ts " + ts +
-                " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
-
+        log.info("Set SnapshotStart Commit: {}", getLogReplicationStatus());
         return (ts == getLastSnapStartTimestamp(null) && siteConfigID == getSiteConfigID(null));
     }
 
@@ -444,18 +442,17 @@ public class LogReplicationMetadataAccessor {
         s = s.concat(LogReplicationMetadataType.LastSnapshotSeqNum.getVal() + " " + getLastSnapSeqNum(ts) + " ");
         s = s.concat(LogReplicationMetadataType.LastSnapshotAppliedSeqNum.getVal() + " " + getLastSnapAppliedSeqNum(ts) + " ");
         s = s.concat(LogReplicationMetadataType.LastLogProcessed.getVal() + " " + getLastProcessedLogTimestamp(ts) + " ");
-        log.info("metadata {}", s);
+
         return s;
     }
 
     /**
      * The metadata table name
-     * @param primarySite
      * @param dst
      * @return
      */
-    public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {
-        return TABLE_PREFIX_NAME + primarySite.toString() + "-to-" + dst.toString();
+    public static String getPersistedWriterMetadataTableName(UUID src, UUID dst) {
+        return TABLE_PREFIX_NAME + "_" + src.toString() + "_" + dst.toString();
     }
 
     /**
