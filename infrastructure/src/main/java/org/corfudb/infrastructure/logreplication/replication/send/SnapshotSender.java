@@ -22,6 +22,8 @@ import org.corfudb.runtime.view.Address;
 import java.util.List;
 import java.util.UUID;
 
+import static java.lang.Thread.sleep;
+
 /**
  *  This class is responsible of transmitting a consistent view of the data at a given timestamp,
  *  i.e, reading and sending a snapshot of the data for the requested streams.
@@ -40,6 +42,10 @@ public class SnapshotSender {
 
     public static int DEFAULT_SNAPSHOT_BATCH_SIZE = 100;
     public static final int DEFAULT_TIMEOUT = 5000;
+
+    // While waiting for the standby site applying the snapshot,
+    // the interval it polls the standby site.
+    static final int SLEEP_INTERVAL = 1000;
 
     private CorfuRuntime runtime;
 
@@ -198,6 +204,11 @@ public class SnapshotSender {
         } else {
             // It has finished reading the snapshot data and all data has been sent over and ACKed.
             log.info("Snapshot sync transfer has readingCompleted for {} as there is no data in the buffer.", snapshotSyncEventId);
+            try {
+                sleep(SLEEP_INTERVAL);
+            } catch (Exception e) {
+                log.warn("Caught an exception during sleep ", e);
+            }
             querySnapshotSyncStatus(snapshotSyncEventId);
         }
     }
@@ -255,7 +266,7 @@ public class SnapshotSender {
      * @return
      */
     private LogReplicationEntry getSnapshotSyncEndMarker(UUID snapshotSyncEventId) {
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END, fsm.getTopologyConfigId(), snapshotSyncEventId,
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_TRANSFER_END, fsm.getTopologyConfigId(), snapshotSyncEventId,
                 Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
         return emptyEntry;
