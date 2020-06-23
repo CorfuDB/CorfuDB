@@ -85,6 +85,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     static private TestConfig testConfig = new TestConfig();
 
+    // Sleep to retry.
+    static final int SLEEP_INTERVAL = 1000;
+
     Process sourceServer;
     Process destinationServer;
 
@@ -139,7 +142,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // Set per test according to the expected number ti
     private int expectedSinkReceivedMessages = 0;
 
-    private MessageType expectedAckMsgType = MessageType.SNAPSHOT_END;
+    private MessageType expectedAckMsgType = MessageType.SNAPSHOT_TRANSFER_END;
 
     /* ********* Semaphore to block until expected values are reached ********** */
 
@@ -397,8 +400,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         System.out.println("\n****** Wait until log entry sync completes and ACKs are received");
         blockUntilExpectedAckTs.acquire();
 
+
+        log.info("Final metadata {}", logReplicationMetadataManager);
+
         // Verify Data at Destination
-        System.out.println("\n****** Verify Destination Data for log entry (incremental updates)");
+        log.info("\n****** Verify Destination Data for log entry (incremental updates)");
         verifyData(dstCorfuTables, srcDataForVerification);
 
         verifyPersistedSnapshotMetadata();
@@ -898,7 +904,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckTimestamp = -1;
         testConfig.setWaitOn(WAIT.ON_ACK_TS);
 
-        expectedAckMsgType = MessageType.SNAPSHOT_END;
+        expectedAckMsgType = MessageType.SNAPSHOT_TRANSFER_END;
 
         LogReplicationSourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(),
                 new HashSet<>(Arrays.asList(WAIT.ON_ACK, WAIT.ON_ACK_TS, WAIT.ON_ERROR, WAIT.ON_SINK_RECEIVE)));
@@ -1132,7 +1138,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Observe ACKs on LogReplicationSourceManager, to assess when snapshot sync is completed
         // We only expect one message, related to the snapshot sync complete
-        expectedAckMsgType = MessageType.SNAPSHOT_END;
+        expectedAckMsgType = MessageType.SNAPSHOT_TRANSFER_END;
         blockUntilExpectedAckType.acquire();
 
         LogReplicationSourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
@@ -1151,6 +1157,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         } else {
             System.out.print("\n****** blockUnitilExpectedAckType " + expectedAckMsgType);
             blockUntilExpectedAckType.acquire();
+            while (logReplicationMetadataManager.getLastProcessedLogTimestamp(null) !=
+                    logReplicationMetadataManager.getLastSnapStartTimestamp(null)) {
+                sleep(SLEEP_INTERVAL);
+                log.info("metadata {}", logReplicationMetadataManager);
+            }
         }
 
         return logReplicationSourceManager;

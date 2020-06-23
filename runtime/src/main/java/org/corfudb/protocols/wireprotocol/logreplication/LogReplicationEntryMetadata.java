@@ -101,8 +101,8 @@ public class LogReplicationEntryMetadata {
                 return MessageType.SNAPSHOT_MESSAGE;
             case SNAPSHOT_START:
                 return MessageType.SNAPSHOT_START;
-            case SNAPSHOT_END:
-                return MessageType.SNAPSHOT_END;
+            case SNAPSHOT_TRANSFER_END:
+                return MessageType.SNAPSHOT_TRANSFER_END;
             case SNAPSHOT_REPLICATED:
                 return MessageType.SNAPSHOT_REPLICATED;
             case LOG_ENTRY_REPLICATED:

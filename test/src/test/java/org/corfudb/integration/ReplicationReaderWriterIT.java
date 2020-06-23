@@ -14,6 +14,7 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -368,8 +369,10 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             writer.apply(msg);
         }
 
-        logReplicationMetadataManager.setLastSnapTransferDoneTimestamp(siteConfigID, snapshot);
-        writer.applyShadowStreams();
+        LogReplicationEntry msg = msgQ.get(msgQ.size() - 1);
+        msg.getMetadata().setSnapshotSyncSeqNum(msg.getMetadata().getSnapshotSyncSeqNum() + 1);
+        msg.getMetadata().setMessageMetadataType(MessageType.SNAPSHOT_TRANSFER_END);
+        writer.snapshotTransferDone(msg);
     }
 
     void accessTxStream(Iterator iterator, int num) {
