@@ -392,16 +392,15 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         //get the number of entries to apply
         long seqNum = logReplicationMetadataAccessor.query(null, LogReplicationMetadataAccessor.LogReplicationMetadataType.LastSnapshotSeqNum);
 
-        // There is no snapshot data to apply
-        if (seqNum == Address.NON_ADDRESS)
-            return;
+        // There is snapshot data to apply
+        if (seqNum != Address.NON_ADDRESS) {
+            phase = Phase.ApplyPhase;
+            long snapshot = rt.getAddressSpaceView().getLogTail();
+            clearTables();
 
-        phase = Phase.ApplyPhase;
-        long snapshot = rt.getAddressSpaceView().getLogTail();
-        clearTables();
-
-        for (UUID uuid : streamViewMap.keySet()) {
-            appliedSeq = applyShadowStream(uuid, appliedSeq, snapshot);
+            for (UUID uuid : streamViewMap.keySet()) {
+                appliedSeq = applyShadowStream(uuid, appliedSeq, snapshot);
+            }
         }
 
         // Apply phase is done, update the metadata
