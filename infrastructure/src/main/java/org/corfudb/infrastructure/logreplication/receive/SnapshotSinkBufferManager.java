@@ -6,8 +6,9 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMeta
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.view.Address;
 
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_TRANSFER_END;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_TRANSFER_END;
 
 @Slf4j
 public class SnapshotSinkBufferManager extends SinkBufferManager {
@@ -48,7 +49,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      */
     @Override
     long getCurrentSeq(LogReplicationEntry entry) {
-        if (entry.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
+        if (entry.getMetadata().getMessageMetadataType() == SNAPSHOT_TRANSFER_END) {
             snapshotEndSeq = entry.getMetadata().getSnapshotSyncSeqNum();
             log.info("Setup snapshotEndSeq {}", snapshotEndSeq);
         }
@@ -82,7 +83,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
          * sender the completion of the snapshot replication.
          */
         if (lastProcessedSeq == (snapshotEndSeq -1)) {
-            metadata.setMessageMetadataType(MessageType.SNAPSHOT_END);
+            metadata.setMessageMetadataType(MessageType.SNAPSHOT_TRANSFER_END);
             metadata.setSnapshotSyncSeqNum(snapshotEndSeq);
         } else {
             metadata.setMessageMetadataType(MessageType.SNAPSHOT_REPLICATED);
@@ -102,7 +103,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
     public boolean verifyMessageType(LogReplicationEntry entry) {
         switch (entry.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
-            case SNAPSHOT_END:
+            case SNAPSHOT_TRANSFER_END:
                 return true;
             default:
                 log.error("wrong message type ", entry.getMetadata());

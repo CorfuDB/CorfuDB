@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DefaultSiteConfig;
+import org.corfudb.infrastructure.ServerThreadFactory;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
@@ -23,8 +24,10 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_TRANSFER_END;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
 
 /**
@@ -66,6 +69,9 @@ public class LogReplicationSinkManager implements DataReceiver {
     @Getter
     @Setter
     boolean leader;
+
+    // The executor is used to execute the applying phase for full snapshot sync.
+    private final ExecutorService applySnapshotExecutor;
 
     /*
      * The role type is of active or standby. When log replication server is up, it will has a
@@ -109,6 +115,10 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param config log replication configuration
      */
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config) {
+
+        this.applySnapshotExecutor = Executors.newFixedThreadPool(1,
+                new ServerThreadFactory("LogReplicationSinkManager-", new ServerThreadFactory.ExceptionHandler()));
+
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
 
@@ -119,6 +129,7 @@ public class LogReplicationSinkManager implements DataReceiver {
          */
         this.rxState = RxState.LOG_ENTRY_SYNC;
         this.config = config;
+
         init();
     }
 
@@ -214,7 +225,7 @@ public class LogReplicationSinkManager implements DataReceiver {
              * but the receiver has already transited to the LOG_ENTRY_SYNC state.
              * Reply the SNAPSHOT_ACK again and let sender do the proper transition.
              */
-            if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
+            if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_TRANSFER_END) {
                 log.warn("Sink Manager in state {} and received message {}. Resending the ACK for SNAPSHOT_END.", rxState,
                         message.getMetadata());
                 LogReplicationEntryMetadata metadata = snapshotSinkBufferManager.makeAckMessage(message);
@@ -300,12 +311,23 @@ public class LogReplicationSinkManager implements DataReceiver {
         //check if the all the expected message has received
         rxState = RxState.LOG_ENTRY_SYNC;
 
-        logReplicationMetadataAccessor.setSnapshotApplied(inputEntry);
+        //logReplicationMetadataAccessor.setSnapshotApplied(inputEntry);
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataAccessor.getLastProcessedLogTimestamp(null), this);
 
         log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
                 inputEntry, rxState);
+    }
+
+    /**
+     * Get a snapshot transfer end marker:
+     * 1. Mark the metadata that snapshot transfer phase is done.
+     * 2. Generate an APPLY_SNAPSHOT_EVENT and submit to executor
+     * @param message
+     */
+    private void processSnapshotTransferEndMarker(LogReplicationEntry message) {
+        snapshotWriter.snapshotTransferDone(message);
+        completeSnapshotApply(message);
     }
 
     /**
@@ -317,15 +339,14 @@ public class LogReplicationSinkManager implements DataReceiver {
             case SNAPSHOT_MESSAGE:
                 snapshotWriter.apply(message);
                 return;
-            case SNAPSHOT_END:
-                log.trace("Receive SNAPSHOT_END msg {} at phase {}", message.getMetadata(), snapshotWriter.phase);
-                // If it is already in the phase to applying the change to real stream.
-                // Skip handling the duplicate snapshot end message.
-                if (snapshotWriter.phase != StreamsSnapshotWriter.Phase.ApplyPhase) {
-                    snapshotWriter.snapshotTransferDone(message);
-                    completeSnapshotApply(message);
-                }
+
+            case SNAPSHOT_TRANSFER_END:
+                // Submit a job to the executor
+                applySnapshotExecutor.submit(() -> processSnapshotTransferEndMarker(message));
+
+                // Will trigger an ACK for SNAPSHOT_END MARKER
                 return;
+
             default:
                 log.warn("Message type {} should not be applied as snapshot sync.", message.getMetadata().getMessageMetadataType());
                 break;
@@ -378,7 +399,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private boolean receivedValidMessage(LogReplicationEntry message) {
         return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE
-                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END)
+                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_TRANSFER_END)
                 || rxState == RxState.LOG_ENTRY_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
 
