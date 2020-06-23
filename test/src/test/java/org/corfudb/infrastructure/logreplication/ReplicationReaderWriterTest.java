@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication;
 
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
@@ -114,6 +115,25 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
                 break;
             }
         }
+    }
+
+    void writeMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
+        UUID uuid = UUID.randomUUID();
+        LogReplicationConfig config = new LogReplicationConfig(streams);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, uuid.toString());
+        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
+
+        writer.reset(msgQ.get(0).getMetadata().getTopologyConfigId(), msgQ.get(0).getMetadata().getSnapshotTimestamp());
+
+        for (LogReplicationEntry msg : msgQ) {
+            writer.apply(msg);
+        }
+
+        //for (CorfuTable<Long, Long> corfuTable : shadowTables.values()) {
+        //    System.out.print("\nCorfuTable " + corfuTable.size() + " values " + corfuTable.values());
+        //}
+
+        writer.applyShadowStreams();
     }
 
     @Test
