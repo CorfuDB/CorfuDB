@@ -160,10 +160,10 @@ public class SnapshotSender {
             // Otherwise query the status in another cycle.
             if (response.getLastLogProcessed() == response.getSnapshotApplied() &&
                 response.getSnapshotApplied() == baseSnapshotTimestamp) {
-                log.info("SNAPSHOT full sync complete according to response {} ", response);
+                log.info("SNAPSHOT full sync complete according to response {}", response);
                 snapshotSyncComplete(snapshotSyncEventId);
             } else {
-                log.info("The receiver hasn't finished applying the snapshot yet {}");
+                log.info("The receiver hasn't finished applying the snapshot yet {}", response);
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
                         new LogReplicationEventMetadata(snapshotSyncEventId)));
             }
