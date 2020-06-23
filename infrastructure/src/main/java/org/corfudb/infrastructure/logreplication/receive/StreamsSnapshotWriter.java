@@ -205,6 +205,20 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     }
 
     /**
+     * Snapshot data has been transferred from primary node to the standby node
+     * @param entry
+     */
+    public void setSnapshotTransferDone(LogReplicationEntry entry) {
+        phase = Phase.ApplyPhase;
+        //verify that the snapshot Apply hasn't started yet and set it as started and set the seqNumber
+        long ts = entry.getMetadata().getSnapshotTimestamp();
+        siteConfigID = entry.getMetadata().getTopologyConfigId();
+
+        //update the metadata
+        logReplicationMetadataManager.setLastSnapTransferDoneTimestamp(siteConfigID, ts);
+    }
+
+    /**
      * Read from the shadow table and write to the real table
      * @param uuid: the real table uuid
      */
@@ -230,11 +244,17 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         return seqNum;
     }
 
-
     /**
-     * read from shadowStream and append to the
+     * read from shadowStreams and append to the real streams.
      */
-    public void applyShadowStreams(Long seqNum) {
+    public void applyShadowStreams() {
+        //get the number of entries to apply
+        long seqNum = logReplicationMetadataManager.query(null, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
+
+        // There is no snapshot data to apply
+        if (seqNum == Address.NON_ADDRESS)
+            return;
+
         phase = Phase.ApplyPhase;
         long snapshot = rt.getAddressSpaceView().getLogTail();
         clearTables();
@@ -243,30 +263,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         }
     }
 
-    /**
-     * Snapshot data has been transferred from primary node to the standby node
-     * @param entry
-     */
-    public void snapshotTransferDone(LogReplicationEntry entry) {
-        phase = Phase.ApplyPhase;
-        //verify that the snapshot Apply hasn't started yet and set it as started and set the seqNumber
-        long ts = entry.getMetadata().getSnapshotTimestamp();
-        long seqNum = 0;
-        siteConfigID = entry.getMetadata().getTopologyConfigId();
 
-        //update the metadata
-        logReplicationMetadataManager.setLastSnapTransferDoneTimestamp(siteConfigID, ts);
-
-        //get the number of entries to apply
-        seqNum = logReplicationMetadataManager.query(null, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
-
-        // There is no snapshot data to apply
-        if (seqNum == Address.NON_ADDRESS)
-            return;
-
-        applyShadowStreams(seqNum + 1);
-    }
-    
     enum Phase {
         TransferPhase,
         ApplyPhase

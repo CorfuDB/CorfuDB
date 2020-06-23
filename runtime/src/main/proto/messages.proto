@@ -81,7 +81,7 @@ enum LogReplicationEntryType {
     SNAPSHOT_START = 2;
     LOG_ENTRY_REPLICATED = 3;
     SNAPSHOT_REPLICATED = 4;
-    SNAPSHOT_END = 5;
+    SNAPSHOT_TRANSFER_END = 5;
 }
 
 enum CorfuPriorityLevel {

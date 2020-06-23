@@ -131,13 +131,12 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
         }
-        Long seq = writer.getLogReplicationMetadataManager().getLastSnapSeqNum() + 1;
 
         //for (CorfuTable<Long, Long> corfuTable : shadowTables.values()) {
         //    System.out.print("\nCorfuTable " + corfuTable.size() + " values " + corfuTable.values());
         //}
 
-        writer.applyShadowStreams(seq);
+        writer.applyShadowStreams();
     }
 
     @Test

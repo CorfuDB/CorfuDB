@@ -372,8 +372,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             writer.apply(msg);
         }
 
-        Long seq = writer.getLogReplicationMetadataManager().getLastSnapSeqNum() + 1;
-        writer.applyShadowStreams(seq);
+        writer.applyShadowStreams();
     }
 
     void accessTxStream(Iterator iterator, int num) {
