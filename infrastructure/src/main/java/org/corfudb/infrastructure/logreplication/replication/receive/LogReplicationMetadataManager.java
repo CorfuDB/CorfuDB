@@ -20,15 +20,15 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
  * The log replication metadata is stored in a corfutable in the corfustore.
  * The log replication metadata is defined as a proto message that contains:
  * SiteConfigID, Version, Snapshot Full Sync Status and Log Entry Sync Status.
- * The access the metadata is using UFO API.
+ * The access of the metadata is using UFO API.
  *
  * To record replication status, it has following values:
  * SnapshotStartTimestamp: when a full snapshot sync is started, it will first update this value and reset other snapshot related metadata to -1.
  * The init value for this metadata is -1. When it is -1, it means a snapshot full sync is required regardless.
- * SnapshotTranferredTimestamp: the init value is -1. When the receiver receives a snapshot transfer end marker, it will update this value to current snapshot timestamp,
- * it will be updated to the same value as snapshot start when the snapshot data transfer is done.
- * SnapshotSeqNum: it the sequence number of each snapshot messages to detect loss of messages and also to prevent the reappling the same message. All the messages must be
- * applied in the order of the snapshot sequence number.
+ * SnapshotTranferredTimestamp: the init value is -1. When the receiver receives a snapshot transfer end marker, it will update this value to the
+ * current snapshot timestamp. It will be updated to the same value as snapshot start when the snapshot data transfer is done.
+ * SnapshotSeqNum: it the sequence number of each snapshot messages to detect the message loss and to prevent the re-appling the same message.
+ * All the messages must be applied in the order of the snapshot sequence number.
  * SnapshotAppliedSeqNum: it records the operation's sequence during the apply phase to avoid the redo the apply if there is a leadership change.
  * LastLogProcessed: It records the most recent log entry has been processed.
  * When a snapshot full sync is complete, it will update this value. While processing a new log entry message, it will be updated too.
@@ -44,13 +44,12 @@ public class LogReplicationMetadataManager {
 
     private CorfuStore corfuStore;
 
-    private String metadataTableName;
+    String metadataTableName;
 
     /**
      * Table used to store the log replication status
      */
     private Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable;
-    private static final String DEFAULT_VERSION = "Release_Test_0";
 
     private CorfuRuntime runtime;
 
@@ -308,16 +307,16 @@ public class LogReplicationMetadataManager {
     public boolean setSrcBaseSnapshotStart(long topologyConfigId, long ts) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistedTopologyConfigID = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-        long persistSnapStart = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        long persistedSnapStart = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
 
         log.debug("Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, persistedSnapshotStart={}",
-                topologyConfigId, ts, persistedTopologyConfigID, persistSnapStart);
+                topologyConfigId, ts, persistedTopologyConfigID, persistedSnapStart);
 
         // It means the cluster config has changed, ignore the update operation.
-        if (topologyConfigId != persistedTopologyConfigID || ts <= persistedTopologyConfigID) {
+        if (topologyConfigId != persistedTopologyConfigID || ts <= persistedSnapStart) {
             log.warn("The metadata is older than the persisted one. Set snapshotStart topologyConfigId={}, ts={}," +
                     " persistedTopologyConfigId={}, persistedSnapshotStart={}", topologyConfigId, ts,
-                    persistedTopologyConfigID, persistSnapStart);
+                    persistedTopologyConfigID, persistedSnapStart);
             return false;
         }
 
@@ -338,10 +337,7 @@ public class LogReplicationMetadataManager {
 
         txBuilder.commit(timestamp);
 
-        log.debug("Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
-                        "persistedSnapshotStart={}",
-                topologyConfigId, ts, persistedTopologyConfigID, persistSnapStart);
-
+        log.info("Set SnapshotStart Commit: {}", toString());
         return (ts == getLastSnapStartTimestamp() && topologyConfigId == getTopologyConfigID());
     }
 
