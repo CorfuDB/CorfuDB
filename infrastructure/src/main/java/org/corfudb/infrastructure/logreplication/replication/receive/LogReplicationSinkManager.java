@@ -248,13 +248,13 @@ public class LogReplicationSinkManager implements DataReceiver {
         long siteConfigID = entry.getMetadata().getTopologyConfigId();
         long timestamp = entry.getMetadata().getSnapshotTimestamp();
 
-        log.debug("Received snapshot sync start marker for {} on base snapshot timestamp {}",
+        log.info("Received snapshot sync start marker for {} on base snapshot timestamp {}",
                 entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
 
         /*
          * It is out of date message due to resend, drop it.
          */
-        if (entry.getMetadata().getSnapshotTimestamp() <= baseSnapshotTimestamp) {
+        if (entry.getMetadata().getSnapshotTimestamp() < baseSnapshotTimestamp) {
             // Invalid message and drop it.
             log.warn("Sink Manager in state {} and received message {}. " +
                             "Dropping Message due to snapshotTimestamp is smaller than the current one {}",
