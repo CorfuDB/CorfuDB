@@ -3,7 +3,6 @@ package org.corfudb.logreplication.infrastructure;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 
 public interface CorfuReplicationDiscoveryServiceAdapter {
-
     /**
      *
      * @param topologyConfiguration

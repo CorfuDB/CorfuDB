@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
@@ -186,6 +187,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     private static final int EXIT_ERROR_CODE = 100;
 
     @Getter
+    @Setter
     private CorfuReplicationSiteManagerAdapter siteManagerAdapter;
 
     @Getter
@@ -236,7 +238,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     }
 
     private void startServer() {
-        // Parse the options given, using docopt.
+        // Parse the testCase given, using docopt.
         Map<String, Object> opts = new Docopt(USAGE)
                 .withVersion(GitRepositoryState.getRepositoryState().describe)
                 .parse(args);
@@ -248,7 +250,9 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         String pluginConfigFilePath = opts.get("--plugin") != null ? (String) opts.get("--plugin") :
                 ServerContext.PLUGIN_CONFIG_FILE_PATH;
 
-        this.siteManagerAdapter = constructSiteManagerAdapter(pluginConfigFilePath);
+        if (this.siteManagerAdapter == null) {
+            this.siteManagerAdapter = constructSiteManagerAdapter(pluginConfigFilePath);
+        }
 
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.

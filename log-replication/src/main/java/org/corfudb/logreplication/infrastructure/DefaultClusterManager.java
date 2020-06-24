@@ -1,6 +1,7 @@
 package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.cluster.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.DefaultClusterConfig;
@@ -38,8 +39,6 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
     private static final String STANDBY_SITE_CORFU_PORT = "standby_site_corfu_portnumber";
     private static final String LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM = "primary_site_portnumber";
     private static final String LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM = "standby_site_portnumber";
-    private static final String PRIMARY_SITE_NODEID = "primary_site_node_id";
-    private static final String STANDBY_SITE_NODEID = "standby_site_node_id";
 
     private static final String PRIMARY_SITE_NODE = "primary_site_node";
     private static final String STANDBY_SITE_NODE = "standby_site_node";
@@ -50,8 +49,56 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
 
     Thread thread = new Thread(siteManagerCallback);
 
+    /**
+     * TestCase 0:
+     * 1. Do a normal boot up, server A as active and server B as standby.
+     * 2. Do a normal site flip over:
+     *    Wait till the replication complete, A becomes standby first, then B becomes active.
+     *
+     * TestCase 1:
+     * Both servers boot up as Active.
+     * Observe:
+     * -- Data are sent to each other, but are dropped at both sites.
+     * -- As there is no ACK sent back, the active should stop sending message.
+     * -- Until being notified with a new config, both servers start to work again.
+     *
+     * TestCase 2:
+     * Both servers boot up as Standby.
+     * Observe:
+     * -- As both are standbys, there will be no data sent around, until being notified with a new config.
+     *
+     * TestCase 3:
+     * 1. Do a normal boot up, server A as active and server B as standby with configID = 0;
+     * 2. Do an abnomal flip, both A and B becomes active with configID 1.
+     *    Notify B with configID = 1 and A as standby and B as active.
+     *    Notify A with configID = 1 and A as active and B as standby.
+     *
+     * TestCase 4:
+     * 1. Do a normal bootup, server A as active and server B as standby with configID = 0;
+     * 2. Do an abnormal flip, both A and B becomes standby with configID 1.
+     * -- Notify B with configID = 1 and A as active and B as standby.
+     * -- Notify A with configID = 1 and A as standby and B as active.
+     *
+     */
+    int testCase;
+
+    String localEndpoint;
+
+    public DefaultClusterManager() {
+        this.testCase = 0;
+    }
+
+    public DefaultClusterManager(int testCase) {
+        this.testCase = testCase;
+    }
+
+    public void setLocalEndpoint(String endpoint) {
+        this.localEndpoint = endpoint;
+        siteManagerCallback.setLocalEndpoint(endpoint);
+    }
+
     public void start() {
-        siteManagerCallback = new SiteManagerCallback(this);
+        siteManagerCallback = new SiteManagerCallback(this, testCase);
         thread = new Thread(siteManagerCallback);
         thread.start();
     }
@@ -60,7 +107,6 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
     public void shutdown() {
         ifShutdown = true;
     }
-
 
     public static TopologyDescriptor readConfig() throws IOException {
         ClusterDescriptor primarySite;
@@ -173,6 +219,25 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
     public TopologyConfigurationMsg queryTopologyConfig() {
         if (topologyConfig == null) {
             topologyConfig = constructTopologyConfigMsg();
+
+            TopologyDescriptor siteConfig = new TopologyDescriptor(topologyConfig);;
+
+            switch (testCase) {
+                case 0:
+                case 3:
+                case 4:
+                    //do nothing;
+                    break;
+                case 1:
+                    // bootup both servers as active
+                    return setSiteAsPrimary(siteConfig, localEndpoint).convertToMessage();
+
+                case 2:
+                    // bootup both servers as standby
+                    return setSiteAsStandby(siteConfig, localEndpoint).convertToMessage();
+                default:
+                    log.warn("Use default behavior as testcase 0");
+            }
         }
 
         log.debug("new cluster config msg " + topologyConfig);
@@ -182,8 +247,7 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
     /**
      * Change one of the standby as the primary and primary become the standby
      **/
-    public static TopologyDescriptor changePrimary(TopologyConfigurationMsg topologyConfig) {
-        TopologyDescriptor siteConfig = new TopologyDescriptor(topologyConfig);
+    public static TopologyDescriptor changePrimary(TopologyDescriptor siteConfig) {
         ClusterDescriptor oldPrimary = new ClusterDescriptor(siteConfig.getActiveCluster(),
                 ClusterRole.STANDBY);
         Map<String, ClusterDescriptor> standbys = new HashMap<>();
@@ -201,9 +265,58 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
             }
         }
 
-        TopologyDescriptor newSiteConf = new TopologyDescriptor(1, newPrimary, standbys);
+        TopologyDescriptor newSiteConf = new TopologyDescriptor(siteConfig.getTopologyConfigId() + 1, newPrimary, standbys);
         return newSiteConf;
     }
+
+
+    /**
+     * Set the site that contains the localEndpoint as active site.
+     * @param siteConfig
+     * @param localEndpoint
+     * @return
+     */
+    public static TopologyDescriptor setSiteAsPrimary(TopologyDescriptor siteConfig, String localEndpoint) {
+        NodeDescriptor nodeInfo = siteConfig.getNodeInfo(localEndpoint);
+
+        if (nodeInfo.getRoleType() == ClusterRole.ACTIVE) {
+            siteConfig.setTopologyConfigId(siteConfig.getTopologyConfigId() + 1);
+        } else {
+            ClusterDescriptor oldPrimary = new ClusterDescriptor(siteConfig.getActiveCluster(),
+                    ClusterRole.STANDBY);
+            Map<String, ClusterDescriptor> standbys = new HashMap<>();
+            ClusterDescriptor newPrimary = null;
+            ClusterDescriptor standby;
+
+            standbys.put(oldPrimary.getClusterId(), oldPrimary);
+            for (String endpoint : siteConfig.getStandbyClusters().keySet()) {
+                ClusterDescriptor info = siteConfig.getStandbyClusters().get(endpoint);
+                if (localEndpoint == endpoint) {
+                    newPrimary = new ClusterDescriptor(info, ClusterRole.ACTIVE);
+                } else {
+                    standby = new ClusterDescriptor(info, ClusterRole.STANDBY);
+                    standbys.put(standby.getClusterId(), standby);
+                }
+            }
+
+            TopologyDescriptor newSiteConf = new TopologyDescriptor(1, newPrimary, standbys);
+            return newSiteConf;
+        }
+        return siteConfig;
+    }
+
+    //TODO:
+
+    /**
+     * Set the site contains the localEndpoint as the standby site if it is the active.
+     * @param curTopology
+     * @param localEndpoint
+     * @return
+     */
+    public static TopologyDescriptor setSiteAsStandby(TopologyDescriptor curTopology, String localEndpoint) {
+        return curTopology;
+    }
+
 
     /**
      * Testing purpose to generate cluster role change.
@@ -211,9 +324,33 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
     public static class SiteManagerCallback implements Runnable {
         public boolean siteFlip = false;
         DefaultClusterManager siteManager;
+        int testCase;
 
-        SiteManagerCallback(DefaultClusterManager siteManagerAdapter) {
+        @Setter
+        String localEndpoint;
+
+        SiteManagerCallback(DefaultClusterManager siteManagerAdapter, int testCase) {
             this.siteManager = siteManagerAdapter;
+            this.testCase = testCase;
+        }
+
+        TopologyDescriptor generateNewConfig(TopologyConfigurationMsg curTopology) {
+            TopologyDescriptor newTopology = new TopologyDescriptor(curTopology);;
+            switch (testCase) {
+                case 0:
+                    //Normal flip:
+                    return changePrimary(newTopology);
+
+                case 3:
+                    // set the local site as active, all others as standby.
+                    return setSiteAsPrimary(newTopology, localEndpoint);
+                case 4:
+                    // set the local site as standby, the other one as active.
+                    return setSiteAsStandby(newTopology, localEndpoint);
+                default:
+                    log.warn("No siteConfig Change");
+            }
+            return newTopology;
         }
 
         @Override
@@ -222,7 +359,7 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
                 try {
                     sleep(changeInterval);
                     if (siteFlip) {
-                        TopologyDescriptor newConfig = changePrimary(siteManager.getTopologyConfig());
+                        TopologyDescriptor newConfig = generateNewConfig(siteManager.getTopologyConfig());
                         siteManager.updateTopologyConfig(newConfig.convertToMessage());
                         log.warn("change the cluster config");
                         siteFlip = false;
@@ -233,5 +370,4 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
             }
         }
     }
-
 }

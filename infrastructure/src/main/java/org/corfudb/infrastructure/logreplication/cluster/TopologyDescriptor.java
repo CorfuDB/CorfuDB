@@ -28,6 +28,7 @@ public class TopologyDescriptor {
 
     // Represents a state of the topology configuration (a topology epoch)
     @Getter
+    @Setter
     private long topologyConfigId;
 
     @Getter

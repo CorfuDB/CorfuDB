@@ -113,6 +113,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.localNodeInfo = topologyDescriptor.getNodeInfo(localEndpoint);
         this.logReplicationMetadataManager = serverNode.getLogReplicationServer().getSinkManager().getLogReplicationMetadataManager();
 
+        clusterManager.setLocalEndpoint(localEndpoint);
+
         registerToLogReplicationLock();
     }
 
@@ -244,6 +246,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         stopLogReplication();
         //TODO pankti: read the configuration again and refresh the LogReplicationConfig object
         replicationManager.setTopologyDescriptor(newConfig);
+        localNodeInfo = newConfig.getNodeInfo(localEndpoint);
         startLogReplication();
     }
 

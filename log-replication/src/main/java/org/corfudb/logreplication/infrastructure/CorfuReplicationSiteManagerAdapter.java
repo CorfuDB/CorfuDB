@@ -44,6 +44,8 @@ public abstract class CorfuReplicationSiteManagerAdapter {
     //TODO: handle the case that queryTopologyConfig return an exception.
     public abstract TopologyConfigurationMsg queryTopologyConfig();
 
+    public abstract void setLocalEndpoint(String endpoint);
+
     public abstract void start();
 
     public abstract void shutdown();
