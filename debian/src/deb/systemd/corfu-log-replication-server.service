@@ -1,0 +1,25 @@
+[Unit]
+Description=Corfu LogReplication Server
+SourcePath=/etc/init.d/corfu-log-replication-server
+Documentation=https://github.com/corfudb/corfudb
+Before=shutdown.target
+Conflicts=shutdown.target
+After=remote-fs.target
+After=network-online.target
+After=systemd-journald-dev-log.socket
+After=nsx-custom.target
+
+[Service]
+Nice=-10
+Type=forking
+Restart=no
+TimeoutSec=5min
+IgnoreSIGPIPE=no
+KillMode=control-group
+GuessMainPID=no
+ExecStart=/etc/init.d/corfu-log-replication-server start
+ExecStop=/etc/init.d/corfu-log-replication-server stop
+ExecReload=/etc/init.d/corfu-log-replication-server restart
+
+[Install]
+WantedBy=nsx-custom.target

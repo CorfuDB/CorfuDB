@@ -15,3 +15,9 @@ if [[ -n $(which systemctl) ]]; then
 else
     update-rc.d corfu-nonconfig-server remove
 fi
+
+if [[ -n $(which systemctl) ]]; then
+    systemctl disable corfu-log-replication-server
+else
+    update-rc.d corfu-log-replication-server remove
+fi
