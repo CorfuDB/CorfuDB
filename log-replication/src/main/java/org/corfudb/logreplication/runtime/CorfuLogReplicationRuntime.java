@@ -1,5 +1,6 @@
 package org.corfudb.logreplication.runtime;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -75,6 +76,23 @@ public class CorfuLogReplicationRuntime {
         corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(parameters.getLocalCorfuEndpoint());
         corfuRuntime.connect();
+    }
+
+    /**
+     * Constructor
+     *
+     * @param parameters runtime parameters
+     */
+    @VisibleForTesting
+    CorfuLogReplicationRuntime(@NonNull LogReplicationRuntimeParameters parameters,
+                                      @NonNull LogReplicationMetadataManager metadataManager,
+                                      @NonNull CorfuRuntime corfuRuntime,
+                                      long topologyConfigId) {
+        this.parameters = parameters;
+        this.logReplicationConfig = parameters.getReplicationConfig();
+        this.metadataManager = metadataManager;
+        this.corfuRuntime = corfuRuntime;
+        this.topologyConfigId = topologyConfigId;
     }
 
     /**
@@ -200,7 +218,8 @@ public class CorfuLogReplicationRuntime {
      * @return
      * @throws LogReplicationNegotiationException
      */
-    private LogReplicationEvent processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
+    @VisibleForTesting
+    LogReplicationEvent processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
             throws LogReplicationNegotiationException {
         /*
          * If the version are different, report an error.
@@ -208,14 +227,14 @@ public class CorfuLogReplicationRuntime {
         if (!negotiationResponse.getVersion().equals(metadataManager.getVersion())) {
             log.error("The active site version {} is different from standby site version {}",
                     metadataManager.getVersion(), negotiationResponse.getVersion());
-            throw new LogReplicationNegotiationException(" Mismatch of version number");
+            throw new LogReplicationNegotiationException("Mismatch of version number");
         }
 
         /*
          * The standby site has a smaller config ID, redo the discovery for this standby site when
          * getting a new notification of the site config change if this standby is in the new config.
          */
-        if (negotiationResponse.getSiteConfigID() < negotiationResponse.getSiteConfigID()) {
+        if (negotiationResponse.getSiteConfigID() < metadataManager.getSiteConfigID()) {
             log.error("The active site configID {} is bigger than the standby configID {} ",
                     metadataManager.getSiteConfigID(), negotiationResponse.getSiteConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
@@ -225,7 +244,7 @@ public class CorfuLogReplicationRuntime {
          * The standby site has larger config ID, redo the whole discovery for the active site
          * it will be triggered by a notification of the site config change.
          */
-        if (negotiationResponse.getSiteConfigID() > negotiationResponse.getSiteConfigID()) {
+        if (negotiationResponse.getSiteConfigID() > metadataManager.getSiteConfigID()) {
             log.error("The active site configID {} is smaller than the standby configID {} ",
                     metadataManager.getSiteConfigID(), negotiationResponse.getSiteConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
@@ -270,7 +289,7 @@ public class CorfuLogReplicationRuntime {
          * "lastLogEntryProcessed": "-1"
          */
         if (negotiationResponse.getSnapshotStart() > negotiationResponse.getSnapshotTransferred()) {
-            event =  new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
+            event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
             log.info("Get the negotiation response {} and will start replication event {}.",
                     negotiationResponse, event);
             return event;
@@ -292,7 +311,7 @@ public class CorfuLogReplicationRuntime {
          */
         if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
                 negotiationResponse.getSnapshotTransferred() > negotiationResponse.getSnapshotApplied()) {
-            event =  new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_WAIT_COMPLETE,
+            event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_WAIT_COMPLETE,
                     new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart()));
             log.info("Get the negotiation response {} and will start replication event {}.",
                     negotiationResponse, event);
@@ -333,9 +352,9 @@ public class CorfuLogReplicationRuntime {
         }
 
         /*
-         * For other scenarios, the standby site is in a notn-recognizable state, trigger a snapshot full sync.
+         * For other scenarios, the standby site is in a not-recognizable state, trigger a snapshot full sync.
          */
-        log.error("Could not recognize the standby site state according to the response {}, will restart with a snapshot full sync event " ,
+        log.error("Could not recognize the standby site state according to the response {}, will restart with a snapshot full sync event ",
                 negotiationResponse);
         return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
     }

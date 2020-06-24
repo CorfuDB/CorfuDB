@@ -1,11 +1,13 @@
 package org.corfudb.protocols.wireprotocol.logreplication;
 
 import io.netty.buffer.ByteBuf;
+import lombok.Builder;
 import lombok.Data;
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.runtime.Messages;
 
 @Data
+@Builder
 public class LogReplicationNegotiationResponse implements ICorfuPayload<LogReplicationNegotiationResponse> {
 
     private long siteConfigID;

@@ -9,6 +9,6 @@ package org.corfudb.logreplication.infrastructure;
 public class LogReplicationNegotiationException extends Exception {
 
     public LogReplicationNegotiationException(String reason) {
-        super(String.format("Negotiation failed due to {}", reason));
+        super(String.format("Negotiation failed due to %s", reason));
     }
 }
