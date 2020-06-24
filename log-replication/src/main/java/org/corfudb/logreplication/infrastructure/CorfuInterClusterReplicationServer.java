@@ -184,7 +184,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     private static final int EXIT_ERROR_CODE = 100;
 
     @Getter
-    private CorfuReplicationSiteManagerAdapter siteManagerAdapter;
+    private CorfuReplicationSiteManagerImpl siteManagerAdapter;
 
     @Getter
     CorfuReplicationDiscoveryService replicationDiscoveryService;
@@ -380,14 +380,14 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             println("");
     }
 
-    private CorfuReplicationSiteManagerAdapter constructSiteManagerAdapter() {
+    private CorfuReplicationSiteManagerImpl constructSiteManagerAdapter() {
 
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(PLUGIN_CONFIG_FILE_PATH);
         File jar = new File(config.getSiteManagerAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getSiteManagerAdapterName(), true, child);
-            return (CorfuReplicationSiteManagerAdapter) adapter.getDeclaredConstructor().newInstance();
+            return (CorfuReplicationSiteManagerImpl) adapter.getDeclaredConstructor().newInstance();
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);

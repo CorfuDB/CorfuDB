@@ -1,50 +1,25 @@
 package org.corfudb.logreplication.infrastructure;
 
-import lombok.Getter;
-import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
+import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
 
+public interface CorfuReplicationSiteManagerAdapter {
 
-public abstract class CorfuReplicationSiteManagerAdapter {
-    @Getter
-    CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
+    public void setCorfuReplicationDiscoveryService(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
 
-    @Getter
-    SiteConfigurationMsg siteConfigMsg;
+    // Reference implemenation in CorfuReplicationSiteManagerImpl
+    LogReplicationSiteInfo.SiteConfigurationMsg fetchSiteConfig();
 
-    public void setCorfuReplicationDiscoveryService(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
-        this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;
-        start();
-    }
+    // This will call the API to query the siteInfos.
+    LogReplicationSiteInfo.SiteConfigurationMsg querySiteConfig();
 
-    public synchronized SiteConfigurationMsg fetchSiteConfig() {
-        siteConfigMsg = querySiteConfig();
-        return siteConfigMsg;
-    }
+    // This is called when get a notification of site config change.
+    void updateSiteConfig(LogReplicationSiteInfo.SiteConfigurationMsg newSiteConfigMsg);
 
-    /**
-     * Will be called when the site change and a new configuration is sent over
-     * @param newSiteConfigMsg
-     * @return
-     */
-    synchronized void updateSiteConfig(SiteConfigurationMsg newSiteConfigMsg) {
-            if (newSiteConfigMsg.getSiteConfigID() > siteConfigMsg.getSiteConfigID()) {
-                siteConfigMsg = newSiteConfigMsg;
-                corfuReplicationDiscoveryService.updateSiteConfig(siteConfigMsg);
-            }
-    }
+    void start();
 
-    public void prepareSiteRoleChange() {
-        corfuReplicationDiscoveryService.prepareSiteRoleChange();
-    }
+    void shutdown();
 
-    public int queryReplicationStatus() {
-        return corfuReplicationDiscoveryService.queryReplicationStatus();
-    }
+    void prepareSiteRoleChange();
 
-    //TODO: handle the case that querySiteConfig return an exception.
-    public abstract SiteConfigurationMsg querySiteConfig();
-
-    public abstract void start();
-
-    public abstract void shutdown();
+    int queryReplicationStatus();
 }

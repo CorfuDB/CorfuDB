@@ -1,7 +1,6 @@
 package org.corfudb.logreplication.infrastructure;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DefaultSiteConfig;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteStatus;
@@ -21,7 +20,7 @@ import java.util.Set;
 import static java.lang.Thread.sleep;
 
 @Slf4j
-public class DefaultSiteManager extends CorfuReplicationSiteManagerAdapter {
+public class DefaultSiteManager extends CorfuReplicationSiteManagerImpl {
     public static long epoch = 0;
     public static final int changeInterval = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";

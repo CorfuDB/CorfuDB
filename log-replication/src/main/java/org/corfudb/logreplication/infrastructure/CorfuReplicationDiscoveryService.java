@@ -61,7 +61,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * for site discovery service
      */
     @Getter
-    private CorfuReplicationSiteManagerAdapter siteManager;
+    private CorfuReplicationSiteManagerImpl siteManager;
 
     /**
      * the current node's endpoint
@@ -86,7 +86,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
 
     public CorfuReplicationDiscoveryService(ServerContext serverContext, CorfuInterClusterReplicationServerNode serverNode,
-                                            CorfuReplicationSiteManagerAdapter siteManager) {
+                                            CorfuReplicationSiteManagerImpl siteManager) {
         this.replicationServerNode = serverNode;
          this.siteManager = siteManager;
         this.siteManager.setCorfuReplicationDiscoveryService(this);
