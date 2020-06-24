@@ -1,11 +1,11 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.infrastructure.logreplication.cluster.TopologyDescriptor;
-import org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer;
-import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
-import org.corfudb.logreplication.infrastructure.CorfuReplicationManager;
-import org.corfudb.logreplication.infrastructure.DefaultClusterManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;

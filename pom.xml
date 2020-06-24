@@ -13,7 +13,6 @@
         <module>format</module>
         <module>cmdlets</module>
         <module>corfudb-tools</module>
-        <module>log-replication</module>
         <module>generator</module>
         <module>coverage</module>
         <module>annotationProcessor</module>
@@ -23,9 +22,7 @@
         <module>test</module>
         <module>it</module>
         <module>utils</module>
-        <module>transport</module>
     </modules>
-
 
     <packaging>pom</packaging>
     <name>corfu</name>
