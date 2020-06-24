@@ -5,8 +5,8 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.LogReplicationTransportType;
-import org.corfudb.infrastructure.logreplication.cluster.ClusterDescriptor;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.RuntimeParametersBuilder;
@@ -21,14 +21,11 @@ import java.util.UUID;
 @Data
 public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
-    private ClusterDescriptor remoteClusterDescriptor;
-
     private String localCorfuEndpoint;
-
     private String localClusterId;
-
-    private LogReplicationConfig replicationConfig;
+    private ClusterDescriptor remoteLogReplicationCluster;
     private String pluginFilePath;
+    private LogReplicationConfig replicationConfig;
 
     public static LogReplicationRuntimeParametersBuilder builder() {
         return new LogReplicationRuntimeParametersBuilder();
@@ -63,10 +60,9 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
         volatile Runnable beforeRpcHandler = () -> {
         };*/
         private String localCorfuEndpoint;
-        private String localSiteId;
-        private String remoteLogReplicationServerEndpoint;
-        private String remoteSiteId;
-        private LogReplicationTransportType transport = LogReplicationTransportType.CUSTOM;
+        private String localClusterId;
+        private ClusterDescriptor remoteClusterDescriptor;
+        private String pluginFilePath;
         private LogReplicationConfig replicationConfig;
         private int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
 
@@ -78,13 +74,13 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             return this;
         }
 
-        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder localSiteId(String localSiteId) {
-            this.localSiteId = localSiteId;
+        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder localClusterId(String localClusterId) {
+            this.localClusterId = localClusterId;
             return this;
         }
 
-        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder remoteLogReplicationServerEndpoint(String remoteLogReplicationServerEndpoint) {
-            this.remoteLogReplicationServerEndpoint = remoteLogReplicationServerEndpoint;
+        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder remoteClusterDescriptor(ClusterDescriptor remoteLogReplicationCluster) {
+            this.remoteClusterDescriptor = remoteLogReplicationCluster;
             return this;
         }
 
@@ -262,10 +258,9 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setSystemDownHandler(systemDownHandler);
             runtimeParameters.setBeforeRpcHandler(beforeRpcHandler);
             runtimeParameters.setLocalCorfuEndpoint(localCorfuEndpoint);
-            runtimeParameters.setLocalSiteId(localSiteId);
-            runtimeParameters.setRemoteLogReplicationServerEndpoint(remoteLogReplicationServerEndpoint);
-            runtimeParameters.setRemoteSiteId(remoteSiteId);
-            runtimeParameters.setTransport(transport);
+            runtimeParameters.setLocalClusterId(localClusterId);
+            runtimeParameters.setRemoteLogReplicationCluster(remoteClusterDescriptor);
+            runtimeParameters.setPluginFilePath(pluginFilePath);
             runtimeParameters.setReplicationConfig(replicationConfig);
             return runtimeParameters;
         }

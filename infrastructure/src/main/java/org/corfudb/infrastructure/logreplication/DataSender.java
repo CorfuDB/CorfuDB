@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication;
 
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.List;

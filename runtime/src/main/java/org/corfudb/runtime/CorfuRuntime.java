@@ -2,6 +2,7 @@ package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import lombok.Builder.Default;
 import lombok.Data;
@@ -49,6 +50,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -413,7 +415,6 @@ public class CorfuRuntime {
         super.shutdownNettyEventLoop(shutdownNettyEventLoop);
         return this;
     }
-
     public CorfuRuntimeParametersBuilder customNettyChannelOptions(Map<ChannelOption, Object> customNettyChannelOptions) {
         super.customNettyChannelOptions(customNettyChannelOptions);
         return this;
