@@ -2,9 +2,9 @@ package org.corfudb.integration;
 
 import lombok.Data;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.logreplication.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.infrastructure.logreplication.LogReplicationError;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;

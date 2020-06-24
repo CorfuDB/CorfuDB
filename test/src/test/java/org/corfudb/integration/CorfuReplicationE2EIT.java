@@ -1,7 +1,7 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
