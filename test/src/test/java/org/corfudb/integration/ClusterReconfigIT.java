@@ -730,7 +730,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Create map and set up daemon writer thread.
         CorfuRuntimeParameters corfuRuntimeParameters = CorfuRuntimeParameters.builder()
-                .layoutServer(NodeLocator.parseString("localhost:9000"))
+                .layoutServers(Arrays.asList(NodeLocator.parseString("localhost:9000")))
                 .cacheDisabled(true)
                 .systemDownHandlerTriggerLimit(1)
                 // Register the system down handler to throw a RuntimeException.
@@ -945,7 +945,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         final int systemDownHandlerLimit = 10;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
-                .layoutServer(NodeLocator.parseString(DEFAULT_ENDPOINT))
+                .layoutServers(Arrays.asList(NodeLocator.parseString(DEFAULT_ENDPOINT)))
                 .systemDownHandlerTriggerLimit(systemDownHandlerLimit)
                 // Register the system down handler to throw a RuntimeException.
                 .systemDownHandler(() -> {
@@ -1039,7 +1039,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         final int systemDownHandlerLimit = 10;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
-                .layoutServer(NodeLocator.parseString(DEFAULT_ENDPOINT))
+                .layoutServers(Arrays.asList(NodeLocator.parseString(DEFAULT_ENDPOINT)))
                 .systemDownHandler(() -> {
                     throw new RuntimeException();
                 })
