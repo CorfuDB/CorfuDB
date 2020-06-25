@@ -7,8 +7,8 @@ import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplication
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
 /***
- * This the base class for CorfuReplicationSiteManager, and have the basic functionalities implemented.
- * Any SiteMangerImplementation should extends this class or implements the interface.
+ * This is the base class for CorfuReplicationSiteManager and implements the basic functionality.
+ * Any SiteMangerImplementation should extend this class or implements the interface.
  *
  */
 @Slf4j
