@@ -290,14 +290,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 Set<String> streamsToReplicate =
                     replicationStreamNameTableManager.getStreamsToReplicate();
 
-                LogReplicationConfig logReplicationConfig =
-                    new LogReplicationConfig(streamsToReplicate,
-                        UUID.randomUUID(), UUID.randomUUID());
-
                 // Start LogReplicationDiscovery Service, responsible for
                 // acquiring lock, retrieving Site Manager Info and processing this info
                 // so this node is initialized as Source (sender) or Sink (receiver)
-                activeServer = new CorfuInterClusterReplicationServerNode(serverContext, logReplicationConfig);
+                activeServer = new CorfuInterClusterReplicationServerNode(serverContext,  new LogReplicationConfig(streamsToReplicate));
 
                 replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, activeServer, siteManagerAdapter);
 

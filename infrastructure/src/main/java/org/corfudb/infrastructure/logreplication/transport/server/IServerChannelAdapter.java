@@ -3,7 +3,7 @@ package org.corfudb.infrastructure.logreplication.transport.server;
 import lombok.Getter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.Messages.CorfuMessage;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
 
 import java.util.concurrent.CompletableFuture;
 

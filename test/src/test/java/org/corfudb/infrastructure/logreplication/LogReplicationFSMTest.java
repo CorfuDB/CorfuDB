@@ -55,8 +55,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
     private static final int WAIT_TIME = 100;
-    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
-    static final UUID REMOTE_SITE_ID = UUID.randomUUID();
+    static final String ACTIVE_CLUSTER_ID = "Cluster-London-168290";
+    static final String STANDBY_CLUSTER_ID = "Cluster-Paris-836492";
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -444,7 +444,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
             case STREAMS:
                 // Default implementation used for Log Replication (stream-based)
                 LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME),
-                        PRIMARY_SITE_ID, REMOTE_SITE_ID);
+                        ACTIVE_CLUSTER_ID, STANDBY_CLUSTER_ID);
                 snapshotReader = new StreamsSnapshotReader(getNewRuntime(getDefaultNode()).connect(),
                         logReplicationConfig);
                 dataSender = new TestDataSender();
@@ -454,7 +454,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET, PRIMARY_SITE_ID, REMOTE_SITE_ID),
+                new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET, ACTIVE_CLUSTER_ID, STANDBY_CLUSTER_ID),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
@@ -545,7 +545,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
                 // System.out.println("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
 
-                System.out.println("REPLICATION STOP");
+                System.out.println("REPLICATION STOPPING");
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
             }
         }

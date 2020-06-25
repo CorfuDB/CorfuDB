@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
@@ -61,8 +60,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
 
-    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
-    static final UUID REMOTE_SITE_ID = UUID.randomUUID();
+    static final String ACTIVE_CLUSTER_ID = UUID.randomUUID().toString();
+    static final String REMOTE_CLUSTER_ID = UUID.randomUUID().toString();
     static final String TABLE_PREFIX = "test";
 
     static private final int NUM_KEYS = 4;
@@ -81,9 +80,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static private final int DELETE_PACE = 4;
 
     static private TestConfig testConfig = new TestConfig();
-
-    // Data Control Test Config (default) no message drop
-    private DefaultDataControlConfig defaultDataControlConfig = new DefaultDataControlConfig(false, 0);
 
     Process sourceServer;
     Process destinationServer;
@@ -206,10 +202,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, ACTIVE_CLUSTER_ID.toString());
         writerMetaDataTable = dstTestRuntime.getObjectsView()
                 .build()
-                .setStreamName(LogReplicationMetadataManager.getPersistedWriterMetadataTableName(PRIMARY_SITE_ID, REMOTE_SITE_ID))
+                .setStreamName(LogReplicationMetadataManager.getPersistedWriterMetadataTableName(ACTIVE_CLUSTER_ID.toString()))
                 .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
                 })
                 .setSerializer(Serializers.JSON)
@@ -1219,7 +1215,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                                             Set<WAIT> waitConditions) throws InterruptedException {
         // Config
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, ACTIVE_CLUSTER_ID, REMOTE_CLUSTER_ID);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel());

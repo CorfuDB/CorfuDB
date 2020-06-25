@@ -8,7 +8,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

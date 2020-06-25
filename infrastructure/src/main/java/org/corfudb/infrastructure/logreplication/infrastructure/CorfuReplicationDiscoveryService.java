@@ -124,6 +124,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             } catch (Exception e) {
                 log.error("Caught an exception. Stop discovery service.", e);
                 shouldRun = false;
+                stopLogReplication();
                 if (e instanceof InterruptedException) {
                     Thread.interrupted();
                 }

@@ -123,7 +123,11 @@ public class LogReplicationSinkManager implements DataReceiver {
      * Init variables.
      */
     private void init() {
-        logReplicationMetadataManager = new LogReplicationMetadataManager(runtime, 0, config.getSiteID(), config.getRemoteSiteID());
+        // TODO: the config does not have this node's actual cluster id, it is actually empty,
+        //   it should obtain it from the DiscoveryService
+
+        logReplicationMetadataManager = new LogReplicationMetadataManager(runtime, 0,
+                config.getLocalClusterId());
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
@@ -256,10 +260,9 @@ public class LogReplicationSinkManager implements DataReceiver {
         if (logReplicationMetadataManager.setSrcBaseSnapshotStart(siteConfigID, timestamp) == false) {
             log.warn("Sink Manager in state {} and received message {}. " +
                             "Dropping Message due to failure update of the metadata store {}",
-                    rxState, entry.getMetadata(), logReplicationMetadataManager.getMetadata());
+                    rxState, entry.getMetadata(), logReplicationMetadataManager);
             return;
         }
-
 
         /*
          * Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
@@ -278,7 +281,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
-        log.info("Sink manager entre {} state, snapshot start with {}", rxState, entry.getMetadata());
+        log.info("Sink manager entry {} state, snapshot start with {}", rxState, entry.getMetadata());
     }
 
     /**
@@ -361,7 +364,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.active = active;
         this.siteConfigID = siteConfigID;
 
-        logReplicationMetadataManager.setupSiteConfigID(siteConfigID);
+        logReplicationMetadataManager.setupTopologyConfigId(siteConfigID);
         snapshotWriter.reset(siteConfigID, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp());
         logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
                 logReplicationMetadataManager.getLastProcessedLogTimestamp());

@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationLeadershipLoss;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.Messages;
@@ -18,7 +19,9 @@ import org.corfudb.runtime.Messages.CorfuMessageType;
 
 import java.util.UUID;
 
-
+/**
+ * Utility class to convert between legacy Corfu Messages and ProtoBuf messages
+ */
 public class CorfuMessageConverter {
 
     /**
@@ -62,7 +65,7 @@ public class CorfuMessageConverter {
                 return protoCorfuMsg
                         .setType(Messages.CorfuMessageType.LOG_REPLICATION_NEGOTIATION_RESPONSE)
                         .setPayload(Any.pack(Messages.LogReplicationNegotiationResponse.newBuilder()
-                                .setSiteConfigID(negotiationResponse.getSiteConfigID())
+                                .setSiteConfigID(negotiationResponse.getTopologyConfigId())
                                 .setVersion(negotiationResponse.getVersion())
                                 .setSnapshotStart(negotiationResponse.getSnapshotStart())
                                 .setSnapshotTransferred(negotiationResponse.getSnapshotTransferred())
@@ -88,6 +91,14 @@ public class CorfuMessageConverter {
             case LOG_REPLICATION_QUERY_LEADERSHIP:
                 return protoCorfuMsg
                         .setType(Messages.CorfuMessageType.LOG_REPLICATION_QUERY_LEADERSHIP)
+                        .build();
+            case LOG_REPLICATION_LEADERSHIP_LOSS:
+                LogReplicationLeadershipLoss leadershipLoss = ((CorfuPayloadMsg<LogReplicationLeadershipLoss>) msg).getPayload();
+                return protoCorfuMsg
+                        .setType(CorfuMessageType.LOG_REPLICATION_LEADERSHIP_LOSS)
+                        .setPayload(Any.pack(Messages.LogReplicationLeadershipLoss.newBuilder()
+                        .setEndpoint(leadershipLoss.getEndpoint())
+                        .build()))
                         .build();
             default:
                 throw new IllegalArgumentException(String.format("{} type is not supported", msg.getMsgType()));
@@ -147,6 +158,15 @@ public class CorfuMessageConverter {
                                 .setPriorityLevel(priorityLevel)
                                 .setBuf(buf)
                                 .setEpoch(epoch);
+                case LOG_REPLICATION_LEADERSHIP_LOSS:
+                    LogReplicationLeadershipLoss leadershipLoss = LogReplicationLeadershipLoss
+                            .fromProto(protoMessage.getPayload().unpack(Messages.LogReplicationLeadershipLoss.class));
+                    return new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_LEADERSHIP_LOSS, leadershipLoss)
+                            .setClientID(clientId)
+                            .setRequestID(requestId)
+                            .setPriorityLevel(priorityLevel)
+                            .setBuf(buf)
+                            .setEpoch(epoch);
                 default:
                     throw new IllegalArgumentException(String.format("{} type is not supported", protoMessage.getType().name()));
             }

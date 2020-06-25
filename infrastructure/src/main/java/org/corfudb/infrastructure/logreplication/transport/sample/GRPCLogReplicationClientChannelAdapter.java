@@ -9,7 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.runtime.LogReplicationChannelGrpc;
 import org.corfudb.runtime.LogReplicationChannelGrpc.LogReplicationChannelStub;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.LogReplicationChannelGrpc.LogReplicationChannelBlockingStub;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;

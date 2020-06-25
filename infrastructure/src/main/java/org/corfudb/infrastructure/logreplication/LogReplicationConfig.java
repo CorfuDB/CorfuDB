@@ -1,58 +1,53 @@
 package org.corfudb.infrastructure.logreplication;
 
 import lombok.Data;
-import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Properties;
 import java.util.Set;
-import java.util.UUID;
 
-@Data
+/**
+ * This class represents any Log Replication Configuration,
+ * i.e., set of parameters common across all Clusters.
+ */
 @Slf4j
+@Data
 public class LogReplicationConfig {
+
+    // TODO: It's cleaner to make LogReplicationConfig agnostic of cluster information (common across all clusters) .
 
     /*
      * Unique identifiers for all streams to be replicated across sites.
      */
-    @Getter
     private Set<String> streamsToReplicate;
 
     /*
      * Unique identifier of the current cluster ID.
      */
-    private UUID siteID;
+    private String localClusterId;
 
     /*
      * Unique identifier of the remote/destination cluster ID.
      */
-    private UUID remoteSiteID;
-
-    private static final String REMOTE_SITE_UUID_KEY = "RemoteSiteId";
+    private String remoteClusterId;
 
     /**
      * Constructor
      *
      * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
-     * @param remoteSiteID Unique identifier of the remote/destination cluster.
      */
-    public LogReplicationConfig(Set<String> streamsToReplicate, @NonNull UUID siteID, @NonNull UUID remoteSiteID) {
+    public LogReplicationConfig(Set<String> streamsToReplicate) {
         this.streamsToReplicate = streamsToReplicate;
-        this.siteID = siteID;
-        this.remoteSiteID = remoteSiteID;
     }
 
     /**
-     * TODO: Perhaps we want to keep this for testing?
-     * @return
+     * Constructor
+     *
+     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
      */
-    private static LogReplicationConfig getDefaultConfig() {
-        Set<String> streamsToReplicate = new HashSet<>(Arrays.asList("Table001", "Table002", "Table003"));
-        return new LogReplicationConfig(streamsToReplicate, UUID.randomUUID(), UUID.randomUUID());
+    public LogReplicationConfig(Set<String> streamsToReplicate, @NonNull String localClusterId, @NonNull String remoteClusterId) {
+        this(streamsToReplicate);
+        this.localClusterId = localClusterId;
+        this.remoteClusterId = remoteClusterId;
     }
 }

@@ -23,10 +23,6 @@ public class ClusterDescriptor {
     ClusterRole role;
 
     @Getter
-    @Setter
-    NodeDescriptor leader;
-
-    @Getter
     List<NodeDescriptor> nodesDescriptors;
 
     public ClusterDescriptor(ClusterConfigurationMsg clusterConfig) {
@@ -44,7 +40,6 @@ public class ClusterDescriptor {
     public ClusterDescriptor(ClusterDescriptor info, ClusterRole roleType) {
         this.clusterId = info.clusterId;
         this.role = roleType;
-        this.leader = info.leader;
         this.nodesDescriptors = new ArrayList<>();
         for (NodeDescriptor nodeInfo : info.nodesDescriptors) {
             NodeDescriptor newNode = new NodeDescriptor(nodeInfo.getIpAddress(), nodeInfo.getPort(),

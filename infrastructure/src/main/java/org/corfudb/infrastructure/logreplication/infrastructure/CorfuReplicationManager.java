@@ -76,14 +76,15 @@ public class CorfuReplicationManager {
     }
 
     /**
-     * Start log replication to every standby cluster
+     * Start Log Replication Manager, this will initiate a runtime against
+     * each standby cluster, to further start log replication.
      */
     public void start() {
         for (ClusterDescriptor remoteCluster : topologyDescriptor.getStandbyClusters().values()) {
             try {
-                startLogReplication(remoteCluster);
+                startLogReplicationRuntime(remoteCluster);
             } catch (Exception e) {
-                log.error("Failed to start log replication to remote cluster {}", remoteCluster.getClusterId());
+                log.error("Failed to start log replication runtime for remote cluster {}", remoteCluster.getClusterId());
 
                 // Remove cluster from the list of standby's, as the cluster discovery process will receive
                 // change notification when this site becomes stable/available again.
@@ -96,69 +97,67 @@ public class CorfuReplicationManager {
      * Stop log replication for all the standby sites
      */
     public void stop() {
-        for(String siteId: topologyDescriptor.getStandbyClusters().keySet()) {
-            stopLogReplication(siteId);
+        for(String clusterId : topologyDescriptor.getStandbyClusters().keySet()) {
+            stopLogReplicationRuntime(clusterId);
         }
     }
 
     /**
-     * Stop the current runtime, reestablish runtime and query the new leader.
+     * Restart connection to remote cluster
      */
-    public void restart(ClusterDescriptor remoteSiteInfo) {
-        stopLogReplication(remoteSiteInfo.getClusterId());
-        startLogReplication(remoteSiteInfo);
+    public void restart(ClusterDescriptor remoteCluster) {
+        stopLogReplicationRuntime(remoteCluster.getClusterId());
+        startLogReplicationRuntime(remoteCluster);
     }
 
     /**
-     * Start Log Replication to a specific standby Cluster
+     * Start Log Replication Runtime to a specific standby Cluster
      */
-    private void startLogReplication(ClusterDescriptor remoteClusterDescriptor) {
+    private void startLogReplicationRuntime(ClusterDescriptor remoteClusterDescriptor) {
 
         String remoteClusterId = remoteClusterDescriptor.getClusterId();
 
         try {
-            log.info("Start Log Replication to Standby Cluster id={}", remoteClusterId);
-
-            // a clean start up of the replication has done for this remote cluster
-            if (runtimeToRemoteCluster.get(remoteClusterId) != null) {
-                return;
+            if (!runtimeToRemoteCluster.containsKey(remoteClusterId)) {
+                log.info("Starting Log Replication Runtime to Standby Cluster id={}", remoteClusterId);
+                connect(remoteClusterDescriptor);
+            } else {
+                log.warn("Log Replication Runtime to remote cluster {}, already exists. Skipping init.", remoteClusterId);
             }
-
-            connect(localNodeDescriptor, remoteClusterDescriptor);
         } catch (Exception e) {
-            log.error("Caught exception, stop this cluster replication", e);
-            // The remote runtime will be stopped and removed from the runtimeMap.
-            stopLogReplication(remoteClusterId);
+            log.error("Caught exception, stop log replication runtime to {}", remoteClusterDescriptor, e);
+            stopLogReplicationRuntime(remoteClusterId);
         }
     }
 
     /**
-     * Connect Local Log Replicator to a remote Log Replicator.
+     * Connect to a remote Log Replicator, through a Log Replication Runtime.
      *
      * @throws InterruptedException
      */
-    private void connect(NodeDescriptor localNode, ClusterDescriptor remoteSiteInfo) throws InterruptedException {
-
-        log.trace("Setup log replication runtime from local node {} to remote cluster {}", localNode.getEndpoint(),
-                remoteSiteInfo.getClusterId());
-
+    private void connect(ClusterDescriptor remoteCluster) throws InterruptedException {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
+                    // TODO: It's cleaner to make LogReplicationConfig agnostic of cluster information (shared across
+                    //  all clusters) so it would be better to push down the remote cluster id or info as a separate object
+                    //  this requires to change signatures down the pipe. TBD.
+
                     LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
-                            .localCorfuEndpoint(localNode.getCorfuEndpoint())
-                            .remoteClusterDescriptor(remoteSiteInfo)
-                            .localClusterId(localNode.getClusterId())
-                            .replicationConfig(logReplicationConfig)
+                            .localCorfuEndpoint(localNodeDescriptor.getCorfuEndpoint())
+                            .remoteClusterDescriptor(remoteCluster)
+                            .localClusterId(localNodeDescriptor.getClusterId())
+                            .replicationConfig(new LogReplicationConfig(logReplicationConfig.getStreamsToReplicate(),
+                                    localNodeDescriptor.getClusterId(), remoteCluster.clusterId))
                             .pluginFilePath(pluginFilePath)
+                            .topologyConfigId(topologyDescriptor.getTopologyConfigId())
                             .build();
-                    CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters, metadataManager,
-                            topologyDescriptor.getTopologyConfigId());
-                    replicationRuntime.connect();
-                    runtimeToRemoteCluster.put(remoteSiteInfo.getClusterId(), replicationRuntime);
+                    CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters, metadataManager);
+                    replicationRuntime.start();
+                    runtimeToRemoteCluster.put(remoteCluster.getClusterId(), replicationRuntime);
                 } catch (Exception e) {
                     log.error("Exception {}. Failed to connect to remote cluster {}. Retry after 1 second.",
-                            e, remoteSiteInfo.getClusterId());
+                            e, remoteCluster.getClusterId());
                     throw new RetryNeededException();
                 }
                 return null;
@@ -172,10 +171,11 @@ public class CorfuReplicationManager {
     /**
      * Stop Log Replication to a specific standby Cluster
      */
-    private void stopLogReplication(String remoteClusterId) {
-        CorfuLogReplicationRuntime runtime = runtimeToRemoteCluster.get(remoteClusterId);
-        if (runtime != null) {
-            runtime.stop();
+    private void stopLogReplicationRuntime(String remoteClusterId) {
+        CorfuLogReplicationRuntime logReplicationRuntime = runtimeToRemoteCluster.get(remoteClusterId);
+        if (logReplicationRuntime != null) {
+            log.info("Stop log replication runtime to remote cluster id={}", remoteClusterId);
+            logReplicationRuntime.stop();
             runtimeToRemoteCluster.remove(remoteClusterId);
         } else {
             log.warn("Runtime not found to remote cluster {}", remoteClusterId);
@@ -204,7 +204,7 @@ public class CorfuReplicationManager {
          * Remove standbys that are not in the new config
          */
         for (String siteID : standbysToRemove) {
-            stopLogReplication(siteID);
+            stopLogReplicationRuntime(siteID);
             topologyDescriptor.removeStandbySite(siteID);
         }
 
@@ -213,18 +213,17 @@ public class CorfuReplicationManager {
             if (runtimeToRemoteCluster.get(clusterId) == null) {
                 ClusterDescriptor clusterInfo = newConfig.getStandbyClusters().get(clusterId);
                 topologyDescriptor.addStandbySite(clusterInfo);
-                startLogReplication(clusterInfo);
+                startLogReplicationRuntime(clusterInfo);
             }
         }
     }
 
-
-
     /**
+     * Query max stream tail for all streams to be replicated.
      *
      * @return max tail of all relevant streams.
      */
-    long queryStreamTail() {
+    private long queryStreamTail() {
         Set<String> streamsToReplicate = logReplicationConfig.getStreamsToReplicate();
         long maxTail = Address.NON_ADDRESS;
         for (String s : streamsToReplicate) {
@@ -243,7 +242,7 @@ public class CorfuReplicationManager {
      *
      * @param timestamp
      */
-    long queryEntriesToSend(long timestamp) {
+    private long queryEntriesToSend(long timestamp) {
         int totalNumEntries = 0;
 
         for (CorfuLogReplicationRuntime runtime: runtimeToRemoteCluster.values()) {
@@ -266,6 +265,7 @@ public class CorfuReplicationManager {
     /**
      * Query the all replication stream log tail and calculate the number of messages to be sent.
      * If the max tail has changed, give 0 percent has done.
+     *
      * @return Percentage of work has been done, when it return 100, the replication is done.
      */
     public int queryReplicationStatus() {

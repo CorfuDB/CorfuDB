@@ -1,152 +1,286 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
-import lombok.NonNull;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
-import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationNegotiationException;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationClientRouter;
-import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeStateType;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppingState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionException;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.NegotiatingState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.ReplicatingState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteLeaderState;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
 
-import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
- * Client Runtime to connect to a Corfu Log Replication Server.
+ * Runtime to connect to a remote Corfu Log Replication Cluster.
  *
- * The Log Replication Server is currently conformed uniquely by
- * a Log Replication Unit. This client runtime is a wrapper around all
- * units.
+ * This class represents the Log Replication Runtime Finite State Machine, which defines
+ * all states in which the leader node on the active cluster can be.
+ *
+ *
+ *                                                      R-LEADER_LOSS
+ *                                             +-------------------------------+
+ *                              ON_CONNECTION  |                               |    ON_CONNECTION_DOWN
+ *                                    UP       |       ON_CONNECTION_DOWN      |       (NON_LEADER)
+ *                                    +----+   |          (R-LEADER)           |
+ *                                    |    |   |   +-----------------------+   |        +-----+
+ *                                    |    |   |   |                       |   |        |     |
+ * +---------------+  ON_CONNECTION  ++----v---v---v--+                  +-+---+--------+-+   |
+ * |               |       UP        |                |  R-REMOTE_LEADER_FOUND  |                <---+
+ * |    WAITING    +---------------->+    VERIFYING   +------------------>                +---+
+ * |      FOR      |                 |     REMOTE     |                  |   NEGOTIATING  |   | NEGOTIATION_FAILED
+ * |  CONNECTIONS  +<----------------+     LEADER     |                  |                <---+
+ * |               |  ON_CONNECTION  |                +<-----------+     |                +----+
+ * +---------------+      DOWN       +-^----+---^----++            |     +-------+-----^--+    |
+ *                       (ALL)         |    |   |    |             |             |     |       |
+ *                                     |    |   |    |        R-LEADER_LOSS      |     +-------+
+ *                                     +----+   +----+             |             |  ON_CONNECTION_UP
+ *                              ON_CONNECTION     R-LEADER_NOT     |             |    (NON-LEADER)
+ *                                  DOWN              FOUND        |             |
+ *                                (NOT ALL)                        |     NEGOTIATION_COMPLETE
+ *                                                                 |             |
+ *                                                           ON_CONNECTION       |   ON_CONNECTION_UP
+ *                                                               DOWN            |     (NON-LEADER)
+ *                                                             (R-LEADER)        |      +-----+
+ *                                                                 |             |      |     |
+ *                                                                 |     +-------v------+-+   |
+ *            +---------------+      ALL STATES                    +-----+                <---+
+ *            |               |                                          |                |
+ *            |   STOPPING    <---- L-LEADER_LOSS                        |  REPLICATING   |
+ *            |               |                                          |                |
+ *            |               |                                          |                +----+
+ *            +---------------+                                          +--------------^-+    |
+ *                                                                                      |      |
+ *                                                                                      +------+
+ *            +---------------+     ALL STATES
+ *            |               |                                                     ON_CONNECTION_DOWN
+ *            | UNRECOVERABLE <---- ON_ERROR                                           (NON-LEADER)
+ *            |    STATE      |
+ *            |               |
+ *            +---------------+
+ *
+ *
+ *
+ *
+ * States:
+ * ------
+ *
+ * - WAITING_FOR_CONNECTIVITY    :: initial state, waiting for any connection to remote cluster to be established.
+ * - VERIFYING_REMOTE_LEADER     :: verifying the leader endpoint on remote cluster (querying all connected nodes)
+ * - NEGOTIATING                 :: negotiating against the leader endpoint
+ * - REPLICATING                 :: replicating data to remote cluster through the leader endpoint
+ * - STOPPING                    :: stop state machine, no error, just lost leadership so replication stops from this node
+ * - UNRECOVERABLE_STATE         :: error state, unrecoverable error reported by replication, transport or cluster manager, despite
+ *                                  being the leader node.
+ *
+ *
+ * Events / Transitions:
+ * --------------------
+ *
+ * - ON_CONNECTION_UP           :: connection to a remote endpoint comes UP
+ * - ON_CONNECTION_DOWN         :: connection to a remote endpoint comes DOWN
+ * - REMOTE_LEADER_NOT_FOUND,   :: remote leader not found
+ * - REMOTE_LEADER_FOUND,       :: remote leader found
+ * - REMOTE_LEADER_LOSS,        :: remote Leader Lost (remote node reports it is no longer the leader)
+ * - LOCAL_LEADER_LOSS          :: local node looses leadership
+ * - NEGOTIATION_COMPLETE,      :: negotiation succeeded and completed
+ * - NEGOTIATION_FAILED,        :: negotiation failed
+ * - STOPPING                   :: stop log replication server (fatal state)
  *
  * @author amartinezman
+ *
+ *
  */
 @Slf4j
 public class CorfuLogReplicationRuntime {
-    /**
-     * The parameters used to configure this {@link CorfuLogReplicationRuntime}.
-     */
-    private final LogReplicationRuntimeParameters parameters;
+
+    public static final int DEFAULT_TIMEOUT = 5000;
 
     /**
-     * Log Replication Client Router
+     * Current state of the FSM.
      */
-    private LogReplicationClientRouter router;
+    private volatile LogReplicationRuntimeState state;
 
     /**
-     * Log Replication Client
+     * Map of all Log Replication Communication FSM States (reuse single instance for each state)
      */
-    private LogReplicationClient client;
+    @Getter
+    private Map<LogReplicationRuntimeStateType, LogReplicationRuntimeState> states = new HashMap<>();
 
     /**
-     * Log Replication Source Manager (producer of log updates)
+     * Executor service for FSM state tasks
      */
-    private LogReplicationSourceManager sourceManager;
+    private ExecutorService communicationFSMWorkers;
 
     /**
-     * Log Replication Configuration
+     * Executor service for FSM event queue consume
      */
-    private LogReplicationConfig logReplicationConfig;
-
-    private LogReplicationMetadataManager metadataManager;
-
-    private final CorfuRuntime corfuRuntime;
-
-    private final long topologyConfigId;
+    private ExecutorService communicationFSMConsumer;
 
     /**
-     * Constructor
-     *
-     * @param parameters runtime parameters
+     * A queue of events.
      */
-    public CorfuLogReplicationRuntime(@NonNull LogReplicationRuntimeParameters parameters,
-                                      @NonNull LogReplicationMetadataManager metadataManager,
-                                      long topologyConfigId) {
-        this.parameters = parameters;
-        this.logReplicationConfig = parameters.getReplicationConfig();
+    private final LinkedBlockingQueue<LogReplicationRuntimeEvent> eventQueue = new LinkedBlockingQueue<>();
+
+    private final LogReplicationClientRouter router;
+    private final LogReplicationMetadataManager metadataManager;
+    private final LogReplicationSourceManager sourceManager;
+    private volatile Set<String> connectedEndpoints = ConcurrentHashMap.newKeySet();
+    private volatile Optional<String> leaderEndpoint = Optional.empty();
+    public final String remoteClusterId;
+
+    /**
+     * Default Constructor
+     */
+    public CorfuLogReplicationRuntime(LogReplicationRuntimeParameters parameters, LogReplicationMetadataManager metadataManager) {
+        this.remoteClusterId = parameters.getRemoteClusterDescriptor().getClusterId();
         this.metadataManager = metadataManager;
-        this.topologyConfigId = topologyConfigId;
+        this.router = new LogReplicationClientRouter(parameters, this);
+        this.router.addClient(new LogReplicationHandler());
+        this.sourceManager = new LogReplicationSourceManager(parameters.getLocalCorfuEndpoint(),
+                new LogReplicationClient(router, remoteClusterId), parameters.getReplicationConfig());
+        this.communicationFSMWorkers = Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build());
+        this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("runtime-fsm-consumer").build());
 
-        corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString(parameters.getLocalCorfuEndpoint());
-        corfuRuntime.connect();
+        initializeStates();
+        this.state = states.get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
+
+        log.info("Log Replication Runtime State Machine initialized");
     }
 
     /**
-     * Set the transport layer for communication to remote cluster.
-     *
-     * The transport layer encompasses:
-     *
-     * - Clients to direct remote counter parts (handles specific funcionalities)
-     * - A router which will manage different clients (currently
-     * we only communicate to the Log Replication Server)
+     * Start Log Replication Communication FSM
      */
-    private void configureChannel() {
-
-        ClusterDescriptor remoteSite = parameters.getRemoteLogReplicationCluster();
-        String remoteClusterId = remoteSite.getClusterId();
-
-        log.info("Configure transport to remote cluster :: {}", remoteClusterId);
-
-        // This Router is more of a forwarder (and client manager), as it is not specific to a remote node,
-        // but instead valid to all nodes in a remote cluster. Routing to a specific node (endpoint)
-        // is the responsibility of the transport layer in place (through the adapter).
-        router = new LogReplicationClientRouter(remoteSite, parameters, this::onNegotiation);
-        router.addClient(new LogReplicationHandler());
-        // Create all clients to remote cluster components (currently only one server component is supported, Log Replication Unit)
-        client = new LogReplicationClient(router, remoteSite.getClusterId());
-        sourceManager = new LogReplicationSourceManager(parameters.getLocalCorfuEndpoint(),
-                client, logReplicationConfig);
+    public void start() {
+        // Start Consumer Thread for this state machine (dedicated thread for event consumption)
+        communicationFSMConsumer.submit(this::consume);
         router.connect();
     }
 
     /**
-     * Connect to remote site.
-     **/
-    public void connect() {
-        configureChannel();
-        log.info("Connected. Set Source Manager to connect to local Corfu on {}", parameters.getLocalCorfuEndpoint());
-    }
-
-    public LogReplicationNegotiationResponse startNegotiation() throws Exception {
-        log.info("Send Negotiation Request");
-        return client.sendNegotiationRequest().get();
-    }
-
-    /**
-     * Start snapshot (full) sync
+     * Initialize all states for the Log Replication Runtime FSM.
      */
-    private void startSnapshotSync() {
-        UUID snapshotSyncRequestId = sourceManager.startSnapshotSync();
-        log.info("Start Snapshot Sync[{}]", snapshotSyncRequestId);
+    private void initializeStates() {
+        /*
+         * Log Replication Runtime State instances are kept in a map to be reused in transitions, avoid creating one
+         * per every transition (reduce GC cycles).
+         */
+        states.put(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY, new WaitingForConnectionsState(this));
+        states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteLeaderState(this, communicationFSMWorkers, router));
+        states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers, router, metadataManager));
+        states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager));
+        states.put(LogReplicationRuntimeStateType.STOPPING, new StoppingState(sourceManager));
+        states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState());
     }
 
     /**
-     * Start log entry (delta) sync
-     */
-    private void startLogEntrySync(LogReplicationEvent event) {
-        log.info("Start Log Entry Sync");
-        sourceManager.startReplication(event);
-    }
-
-    /**
-     * Clean up router, stop source manager.
-     */
-    public void stop() {
-        router.stop();
-        sourceManager.shutdown();
-    }
-
-    /**
+     * Input function of the FSM.
      *
+     * This method enqueues runtime events for further processing.
      *
-     * @param ts
-     * @return
+     * @param event LogReplicationRuntimeEvent to process.
+     */
+    public synchronized void input(LogReplicationRuntimeEvent event) {
+        try {
+            if (state.getType().equals(LogReplicationRuntimeStateType.STOPPING)) {
+                // Not accepting events, in stopped state
+                return;
+            }
+            eventQueue.put(event);
+        } catch (InterruptedException ex) {
+            log.error("Log Replication interrupted Exception: ", ex);
+        }
+    }
+
+    /**
+     * Consumer of the eventQueue.
+     * <p>
+     * This method consumes the log replication events and does the state transition.
+     */
+    private void consume() {
+        try {
+            if (state.getType() == LogReplicationRuntimeStateType.STOPPING) {
+                log.info("Log Replication Communication State Machine has been stopped. No more events will be processed.");
+                return;
+            }
+
+            //  Block until an event shows up in the queue.
+            LogReplicationRuntimeEvent event = eventQueue.take();
+
+            try {
+                LogReplicationRuntimeState newState = state.processEvent(event);
+                transition(state, newState);
+                state = newState;
+            } catch (IllegalTransitionException illegalState) {
+                log.error("Illegal log replication event {} when in state {}", event.getType(), state.getType());
+            }
+
+            communicationFSMConsumer.submit(this::consume);
+
+        } catch (Throwable t) {
+            log.error("Error on event consumer: ", t);
+        }
+    }
+
+    /**
+     * Perform transition between states.
+     *
+     * @param from initial state
+     * @param to   final state
+     */
+    private void transition(LogReplicationRuntimeState from, LogReplicationRuntimeState to) {
+        log.trace("Transition from {} to {}", from, to);
+        from.onExit(to);
+        to.clear();
+        to.onEntry(from);
+    }
+
+    public synchronized void updateConnectedEndpoints(String endpoint) {
+        connectedEndpoints.add(endpoint);
+    }
+
+    public synchronized void updateDisconnectedEndpoints(String endpoint) {
+        connectedEndpoints.remove(endpoint);
+    }
+
+    public synchronized void setLeaderEndpoint(String leader) {
+        leaderEndpoint = Optional.ofNullable(leader);
+    }
+
+    public synchronized Optional<String> getLeader() {
+        return leaderEndpoint;
+    }
+
+    public synchronized Set<String> getConnectedEndpoints() {
+        return connectedEndpoints;
+    }
+
+    /**
+     * Retrieve total number of entries to be sent based on a given timestamp.
+     *
+     * This is required for progress status reporting.
+     *
+     * @param ts base (reference) timestamp
+     *
+     * @return pending number of entries to send
      */
     public long getNumEntriesToSend(long ts) {
         long ackTS = sourceManager.getLogReplicationFSM().getAckedTimestamp();
@@ -154,190 +288,10 @@ public class CorfuLogReplicationRuntime {
     }
 
     /**
-     * Runtime callback on negotiation
+     * Stop Log Replication, regardless of current state.
      */
-    public void onNegotiation(LogReplicationNegotiationResponse negotiationResponse) {
-        try {
-            LogReplicationEvent replicationEvent = processNegotiationResponse(negotiationResponse);
-            startLogReplication(replicationEvent);
-        } catch (LogReplicationNegotiationException e) {
-            // Cannot proceed to log replication, as negotiation did not complete successfully
-        }
+    public void stop() {
+        log.info("Local leadership lost. Log Replication will immediately stop.");
+        input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS));
     }
-
-    /**
-     * Start replication process by put replication event to FSM.
-     *
-     * @param negotiationResult
-     */
-    private void startLogReplication(LogReplicationEvent negotiationResult) {
-        // If we start from a stop state due to cluster switch over, we need to restart the consumer.
-        sourceManager.getLogReplicationFSM().startFSM(topologyConfigId);
-
-        switch (negotiationResult.getType()) {
-            case SNAPSHOT_SYNC_REQUEST:
-                log.info("Start Snapshot Sync Replication");
-                startSnapshotSync();
-                break;
-            case SNAPSHOT_WAIT_COMPLETE:
-                log.info("Should Start Snapshot Sync Phase II,but for now just restart full snapshot sync");
-                startSnapshotSync();
-                break;
-            case REPLICATION_START:
-                log.info("Start Log Entry Sync Replication");
-                startLogEntrySync(negotiationResult);
-                break;
-            default:
-                log.info("Invalid Negotiation result. Re-trigger discovery.");
-                break;
-        }
-    }
-
-    /**
-     * It will decide to do a full snapshot sync or log entry sync according to the metadata received from the standby site.
-     *
-     * @param negotiationResponse
-     * @return
-     * @throws LogReplicationNegotiationException
-     */
-    private LogReplicationEvent processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
-            throws LogReplicationNegotiationException {
-        /*
-         * If the version are different, report an error.
-         */
-        if (!negotiationResponse.getVersion().equals(metadataManager.getVersion())) {
-            log.error("The active site version {} is different from standby site version {}",
-                    metadataManager.getVersion(), negotiationResponse.getVersion());
-            throw new LogReplicationNegotiationException(" Mismatch of version number");
-        }
-
-        /*
-         * The standby site has a smaller config ID, redo the discovery for this standby site when
-         * getting a new notification of the site config change if this standby is in the new config.
-         */
-        if (negotiationResponse.getSiteConfigID() < negotiationResponse.getSiteConfigID()) {
-            log.error("The active site configID {} is bigger than the standby configID {} ",
-                    metadataManager.getSiteConfigID(), negotiationResponse.getSiteConfigID());
-            throw new LogReplicationNegotiationException("Mismatch of configID");
-        }
-
-        /*
-         * The standby site has larger config ID, redo the whole discovery for the active site
-         * it will be triggered by a notification of the site config change.
-         */
-        if (negotiationResponse.getSiteConfigID() > negotiationResponse.getSiteConfigID()) {
-            log.error("The active site configID {} is smaller than the standby configID {} ",
-                    metadataManager.getSiteConfigID(), negotiationResponse.getSiteConfigID());
-            throw new LogReplicationNegotiationException("Mismatch of configID");
-        }
-
-        /*
-         * Now the active and standby have the same version and same configID.
-         */
-
-        /*
-         * Get the current log head.
-         */
-        long logHead = corfuRuntime.getAddressSpaceView().getTrimMark().getSequence();
-        LogReplicationEvent event;
-
-        /*
-         * It is a fresh start, start snapshot full sync.
-         * Following is an example that metadata value indicates a fresh start, no replicated data at standby site:
-         * "topologyConfigId": "10"
-         * "version": "release-1.0"
-         * "snapshotStart": "-1"
-         * "snapshotSeqNum": " -1"
-         * "snapshotTransferred": "-1"
-         * "snapshotApplied": "-1"
-         * "lastLogEntryProcessed": "-1"
-         */
-        if (negotiationResponse.getSnapshotStart() == -1) {
-            negotiationResponse.getLastLogProcessed();
-            event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
-            return event;
-        }
-
-        /*
-         * If it is in the snapshot full sync phase I, transferring data, restart the snapshot full sync.
-         * An example of in Snapshot Sync Phase I, transfer phase:
-         * "topologyConfigId": "10"
-         * "version": "release-1.0"
-         * "snapshotStart": "100"
-         * "snapshotSeqNum": " 88"
-         * "snapshotTransferred": "-1"
-         * "snapshotApplied": "-1"
-         * "lastLogEntryProcessed": "-1"
-         */
-        if (negotiationResponse.getSnapshotStart() > negotiationResponse.getSnapshotTransferred()) {
-            event =  new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
-            log.info("Get the negotiation response {} and will start replication event {}.",
-                    negotiationResponse, event);
-            return event;
-        }
-
-        /*
-         * If it is in the snapshot full sync phase II:
-         * the data has been transferred to the standby site and the the standby site is applying data from shadow streams
-         * to the real streams.
-         * It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the standby site.
-         * An example of in Snapshot sync phase II: applying phase
-         * "topologyConfigId": "10"
-         * "version": "release-1.0"
-         * "snapshotStart": "100"
-         * "snapshotSeqNum": " 88"
-         * "snapshotTransferred": "100"
-         * "snapshotApplied": "-1"
-         * "lastLogEntryProcessed": "-1"
-         */
-        if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
-                negotiationResponse.getSnapshotTransferred() > negotiationResponse.getSnapshotApplied()) {
-            event =  new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_WAIT_COMPLETE,
-                    new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart()));
-            log.info("Get the negotiation response {} and will start replication event {}.",
-                    negotiationResponse, event);
-            return event;
-        }
-
-        /* If it is in log entry sync state, continues log entry sync state.
-         * An example to show the standby site is in log entry sync phase.
-         * A full snapshot transfer based on timestamp 100 has been completed, and this standby has processed all log entries
-         * between 100 to 200. A log entry sync should be restart if log entry 201 is not trimmed.
-         * Otherwise, start a full snapshpt full sync.
-         * "topologyConfigId": "10"
-         * "version": "release-1.0"
-         * "snapshotStart": "100"
-         * "snapshotSeqNum": " 88"
-         * "snapshotTransferred": "100"
-         * "snapshotApplied": "100"
-         * "lastLogEntryProcessed": "200"
-         */
-        if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
-                negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotApplied() &&
-                negotiationResponse.getLastLogProcessed() >= negotiationResponse.getSnapshotStart()) {
-            /*
-             * If the next log entry is not trimmed, restart with log entry sync,
-             * otherwise, start snapshot full sync.
-             */
-            if (logHead <= negotiationResponse.getLastLogProcessed() + 1) {
-                event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START,
-                        new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogProcessed()));
-            } else {
-                event = new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
-            }
-
-            log.info("Get the negotiation response {} and will start replication event {}.",
-                    negotiationResponse, event);
-
-            return event;
-        }
-
-        /*
-         * For other scenarios, the standby site is in a notn-recognizable state, trigger a snapshot full sync.
-         */
-        log.error("Could not recognize the standby site state according to the response {}, will restart with a snapshot full sync event " ,
-                negotiationResponse);
-        return new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST);
-    }
-
 }
