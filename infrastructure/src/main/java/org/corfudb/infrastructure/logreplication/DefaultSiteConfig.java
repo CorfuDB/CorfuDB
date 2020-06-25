@@ -31,7 +31,7 @@ public final class DefaultSiteConfig {
     private static String primaryCorfuPort = "9000";
 
     @Getter
-    private static String primaryLogReplicationPort = "9010";
+    private static List<String> primaryLogReplicationPorts = Arrays.asList("9010", "9011", "9012");
 
     @Getter
     private static String standbySiteName = "standby site";
@@ -40,7 +40,7 @@ public final class DefaultSiteConfig {
     private static String standbyCorfuPort = "9001";
 
     @Getter
-    private static String standbyLogReplicationPort = "9020";
+    private static List<String> standbyLogReplicationPorts = Arrays.asList("9020");
 
     @Getter
     private static int logSenderBufferSize = 20;
@@ -56,7 +56,6 @@ public final class DefaultSiteConfig {
 
     @Getter
     private static boolean logSenderTimeout = true;
-
 
 
     @Getter

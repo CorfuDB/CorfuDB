@@ -5,9 +5,9 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.logreplication.utils.LogReplicationStreamNameTableManager;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
@@ -27,7 +27,7 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 /**
  * This class represents the Corfu Replication Server. This Server will be running on both ends
  * of the cross-site replication.
- *
+ * <p>
  * A discovery mechanism will enable a site as Source (Sender) and another as Sink (Receiver).
  */
 @Slf4j
@@ -46,8 +46,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "\n"
                     + "Usage:\n"
                     + "\tlog_replication_server [-a <address>|-q <interface-name>] "
-                    + "[-c <ratio>] [-d <level>] [-p <seconds>] "
-                    + "[--base-server-threads=<base_server_threads>] "
+                    + "[-c <ratio>] [-d <level>] [-p <seconds>] [--site-manager-config <config>]"
+                    + "[--base-server-threads=<base_server_threads>] [--node-id <id>]"
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-i <channel-implementation>] "
@@ -76,6 +76,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + " -i <channel-implementation>, --implementation <channel-implementation>   "
                     + "              The type of channel to use (auto, nio, epoll, kqueue)"
                     + "[default: nio].\n"
+                    + " --site-manager-config <config>                                           "
+                    + "              Path to a config of a site manager.     \n"
+                    + " --node-id <id>                                                           "
+                    + "              A predefined node id.                   \n"
                     + " -m, --memory                                                             "
                     + "              Run the unit in-memory (non-persistent).\n"
                     + "                                                                          "
@@ -215,12 +219,18 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         Map<String, Object> opts = new Docopt(USAGE)
                 .withVersion(GitRepositoryState.getRepositoryState().describe)
                 .parse(args);
-
         printStartupMsg(opts);
         configureLogger(opts);
 
         log.info("Started with arguments: {}", opts);
-        this.siteManagerAdapter = constructSiteManagerAdapter();
+
+        if (opts.get("--site-manager-config") != null) {
+            String siteConfigPath = (String) opts.get("--site-manager-config");
+            this.siteManagerAdapter = new DefaultSiteManager(siteConfigPath);
+        } else {
+            this.siteManagerAdapter = constructSiteManagerAdapter();
+        }
+
 
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.

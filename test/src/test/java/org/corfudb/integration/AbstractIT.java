@@ -1,7 +1,5 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,6 +12,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
+import org.corfudb.util.UuidUtils;
 import org.junit.After;
 import org.junit.Before;
 
@@ -29,11 +28,14 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Integration tests.
@@ -140,18 +142,18 @@ public class AbstractIT extends AbstractCorfuTest {
                 builder.command("sh", "-c", KILL_COMMAND + pid.longValue());
                 Process p = builder.start();
                 p.waitFor();
-             }
+            }
 
-             if (retries == 0) {
-                 return false;
-             }
+            if (retries == 0) {
+                return false;
+            }
 
-             if (corfuServerProcess.isAlive()) {
-                 retries--;
-                 Thread.sleep(SHUTDOWN_RETRY_WAIT);
-             } else {
-                 return true;
-             }
+            if (corfuServerProcess.isAlive()) {
+                retries--;
+                Thread.sleep(SHUTDOWN_RETRY_WAIT);
+            } else {
+                return true;
+            }
         }
     }
 
@@ -219,10 +221,9 @@ public class AbstractIT extends AbstractCorfuTest {
      *
      * @param pid parent process identifier
      * @return list of children process identifiers
-     *
      * @throws IOException
      */
-    private static List<Long> getChildPIDs (long pid) {
+    private static List<Long> getChildPIDs(long pid) {
         List<Long> childPIDs = new ArrayList<>();
         try {
             // Get child pid(s)
@@ -290,6 +291,17 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setNettyTransport(netty)
+                .runServer();
+    }
+
+    public static Process runReplicationServer(int port, boolean netty, UUID nodeId,
+                                               String siteConfigResourcePath) throws IOException {
+        return new CorfuReplicationServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setNodeId(nodeId)
+                .setPort(port)
+                .setNettyTransport(netty)
+                .setSiteConfigPath(siteConfigResourcePath)
                 .runServer();
     }
 
@@ -459,15 +471,16 @@ public class AbstractIT extends AbstractCorfuTest {
 
         private String host = DEFAULT_HOST;
         private int port = DEFAULT_LOG_REPLICATION_PORT;
-
+        private UUID nodeId = null;
         private boolean tlsEnabled = false;
         private boolean nettyTransport = true;
         private String keyStore = null;
         private String keyStorePassword = null;
-        private String logLevel = "INFO";
+        private String logLevel = "DEBUG";
         private String trustStore = null;
         private String trustStorePassword = null;
         private String compressionCodec = null;
+        private String siteConfigPath = null;
 
 
         /**
@@ -481,6 +494,14 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if (!nettyTransport) {
                 command.append(" --custom-transport");
+            }
+
+            if (siteConfigPath != null) {
+                command.append(" --site-manager-config ").append(siteConfigPath);
+            }
+
+            if (nodeId != null) {
+                command.append(" --node-id ").append(UuidUtils.asBase64(nodeId));
             }
 
             if (tlsEnabled) {

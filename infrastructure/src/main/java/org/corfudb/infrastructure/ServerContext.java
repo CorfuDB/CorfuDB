@@ -160,7 +160,15 @@ public class ServerContext implements AutoCloseable {
     public ServerContext(Map<String, Object> serverConfig) {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig, this::dataStoreFileCleanup);
-        generateNodeId();
+
+        if (serverConfig.get("--node-id") != null) {
+            UUID serverId = UuidUtils.fromBase64(getServerConfig(String.class, "--node-id"));
+            generateNodeId(serverId);
+        }
+        else {
+            generateNodeId();
+        }
+
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
 
         // Setup the netty event loops. In tests, these loops may be provided by
@@ -293,9 +301,16 @@ public class ServerContext implements AutoCloseable {
      * Generate a Node Id if not present.
      */
     private void generateNodeId() {
+        generateNodeId(UUID.randomUUID());
+    }
+
+    /**
+     * Generate a Node Id if not present.
+     */
+    private void generateNodeId(UUID nodeId) {
         String currentId = getDataStore().get(NODE_ID_RECORD);
         if (currentId == null) {
-            String idString = UuidUtils.asBase64(UUID.randomUUID());
+            String idString = UuidUtils.asBase64(nodeId);
             log.info("No Node Id, setting to new Id={}", idString);
             getDataStore().put(NODE_ID_RECORD, idString);
         } else {

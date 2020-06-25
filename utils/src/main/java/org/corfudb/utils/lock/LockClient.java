@@ -14,8 +14,10 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.utils.lock.LockDataTypes.LockData;
 import org.corfudb.utils.lock.LockDataTypes.LockId;
 import org.corfudb.utils.lock.persistence.LockStore;
+import org.corfudb.utils.lock.persistence.LockStoreException;
 import org.corfudb.utils.lock.states.LockEvent;
 
 import java.lang.reflect.InvocationTargetException;
@@ -127,6 +129,21 @@ public class LockClient {
         lock.input(LockEvent.LEASE_REVOKED);
 
         monitorLocks();
+    }
+
+    /**
+     * Get current lock data.
+     * @param lockGroup
+     * @param lockName
+     * @return
+     * @throws LockStoreException
+     */
+    public Optional<LockData> getCurrentLockData(@NonNull String lockGroup, @NonNull String lockName) throws LockStoreException {
+        LockId lockId = LockDataTypes.LockId.newBuilder()
+                .setLockGroup(lockGroup)
+                .setLockName(lockName)
+                .build();
+        return lockStore.get(lockId);
     }
 
     /**
