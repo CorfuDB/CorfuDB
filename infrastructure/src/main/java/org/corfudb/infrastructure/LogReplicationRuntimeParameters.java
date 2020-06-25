@@ -18,14 +18,29 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Log Replication Runtime Parameters (a runtime is specific per remote cluster)
+ */
 @Data
 public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
+    // Remote Cluster Descriptor
+    private ClusterDescriptor remoteClusterDescriptor;
+
+    // Local Corfu Endpoint (used for database access)
     private String localCorfuEndpoint;
+
+    // Local Cluster Identifier
     private String localClusterId;
-    private ClusterDescriptor remoteLogReplicationCluster;
-    private String pluginFilePath;
+
+    // Log Replication Configuration (streams to replicate)
     private LogReplicationConfig replicationConfig;
+
+    // Plugin File Path (file with plugin configurations - absolute paths of JAR and canonical name of  classes)
+    private String pluginFilePath;
+
+    // Topology Configuration Identifier (configuration epoch)
+    private long topologyConfigId;
 
     public static LogReplicationRuntimeParametersBuilder builder() {
         return new LogReplicationRuntimeParametersBuilder();
@@ -63,6 +78,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
         private String localClusterId;
         private ClusterDescriptor remoteClusterDescriptor;
         private String pluginFilePath;
+        private long topologyConfigId;
         private LogReplicationConfig replicationConfig;
         private int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
 
@@ -86,6 +102,11 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder pluginFilePath(String pluginFilePath) {
             this.pluginFilePath = pluginFilePath;
+            return this;
+        }
+
+        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder topologyConfigId(long topologyConfigId) {
+            this.topologyConfigId = topologyConfigId;
             return this;
         }
 
@@ -254,11 +275,11 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setBeforeRpcHandler(beforeRpcHandler);
             runtimeParameters.setLocalCorfuEndpoint(localCorfuEndpoint);
             runtimeParameters.setLocalClusterId(localClusterId);
-            runtimeParameters.setRemoteLogReplicationCluster(remoteClusterDescriptor);
+            runtimeParameters.setRemoteClusterDescriptor(remoteClusterDescriptor);
+            runtimeParameters.setTopologyConfigId(topologyConfigId);
             runtimeParameters.setPluginFilePath(pluginFilePath);
             runtimeParameters.setReplicationConfig(replicationConfig);
             return runtimeParameters;
         }
     }
-
 }

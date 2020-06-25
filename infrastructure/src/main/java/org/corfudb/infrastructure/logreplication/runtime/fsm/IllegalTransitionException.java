@@ -15,7 +15,7 @@ public class IllegalTransitionException extends Exception {
      * @param event     incoming lock event
      * @param stateType current state type
      */
-    public IllegalTransitionException(CommunicationEvent.CommunicationEventType event, CommunicationStateType stateType) {
+    public IllegalTransitionException(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType event, LogReplicationRuntimeStateType stateType) {
         super(String.format("Illegal transition for event %s while in state %s", event, stateType));
     }
 

@@ -19,7 +19,7 @@ import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 
 

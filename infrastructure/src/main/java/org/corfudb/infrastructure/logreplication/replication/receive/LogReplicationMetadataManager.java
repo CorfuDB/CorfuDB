@@ -21,15 +21,17 @@ import java.util.UUID;
  */
 @Slf4j
 public class LogReplicationMetadataManager {
+
     private static final String namespace = "CORFU_SYSTEM";
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
-    String metadataTableName;
+
+    private String metadataTableName;
 
     private CorfuStore corfuStore;
 
-    Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable;
+    private Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable;
 
-    CorfuRuntime runtime;
+    private CorfuRuntime runtime;
 
     public LogReplicationMetadataManager(CorfuRuntime rt, long siteConfigID, UUID primary, UUID dst) {
         this.runtime = rt;
@@ -311,6 +313,10 @@ public class LogReplicationMetadataManager {
 
     public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {
         return TABLE_PREFIX_NAME + primarySite.toString() + "-to-" + dst.toString();
+    }
+
+    public long getLogHead() {
+        return runtime.getAddressSpaceView().getTrimMark().getSequence();
     }
 
     public enum LogReplicationMetadataType {

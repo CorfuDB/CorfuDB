@@ -1,6 +1,7 @@
 package org.corfudb.protocols.wireprotocol.logreplication;
 
 import io.netty.buffer.ByteBuf;
+import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.runtime.Messages;
 
@@ -14,6 +15,7 @@ import org.corfudb.runtime.Messages;
  */
 public class LogReplicationLeadershipLoss implements ICorfuPayload<LogReplicationLeadershipLoss> {
 
+    @Getter
     private final String endpoint;
 
     public LogReplicationLeadershipLoss(String endpoint) {

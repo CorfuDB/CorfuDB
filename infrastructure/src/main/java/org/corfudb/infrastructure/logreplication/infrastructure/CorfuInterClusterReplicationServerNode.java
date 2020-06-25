@@ -5,7 +5,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerThreadFactory;
@@ -98,6 +99,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         serverContext.close();
 
         this.router.getServerAdapter().stop();
+        this.getLogReplicationServer().getSinkManager().shutdown();
 
         // A executor service to create the shutdown threads
         // plus name the threads correctly.

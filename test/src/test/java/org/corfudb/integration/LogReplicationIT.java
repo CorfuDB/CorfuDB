@@ -82,9 +82,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     static private TestConfig testConfig = new TestConfig();
 
-    // Data Control Test Config (default) no message drop
-    private DefaultDataControlConfig defaultDataControlConfig = new DefaultDataControlConfig(false, 0);
-
     Process sourceServer;
     Process destinationServer;
 

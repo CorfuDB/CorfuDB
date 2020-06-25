@@ -1,6 +1,8 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
@@ -12,53 +14,52 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Communication FSM Verify Leader State.
+ * Log Replication Runtime Verifying Remote Leader State.
  *
  * In this state the leader node in the remote cluster is identified.
  *
  * @author amartinezman
  */
 @Slf4j
-public class VerifyLeaderState implements CommunicationState {
+public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
     private static final int LEADERSHIP_RETRIES = 5;
 
-    private LogReplicationCommunicationFSM fsm;
+    private CorfuLogReplicationRuntime fsm;
 
-    private ExecutorService workers;
+    private ExecutorService worker;
 
     private LogReplicationClientRouter router;
 
-    public VerifyLeaderState(LogReplicationCommunicationFSM fsm, ExecutorService workers, LogReplicationClientRouter router) {
+    public VerifyingRemoteLeaderState(CorfuLogReplicationRuntime fsm, ExecutorService worker, LogReplicationClientRouter router) {
         this.fsm = fsm;
-        this.workers = workers;
+        this.worker = worker;
         this.router = router;
     }
 
     @Override
-    public CommunicationStateType getType() {
-        return CommunicationStateType.VERIFY_LEADER;
+    public LogReplicationRuntimeStateType getType() {
+        return LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER;
     }
 
     @Override
-    public CommunicationState processEvent(CommunicationEvent event) throws IllegalTransitionException {
+    public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
-            case LEADER_FOUND:
-                ((NegotiateState)fsm.getStates().get(CommunicationStateType.NEGOTIATE)).setLeaderEndpoint(event.getEndpoint());
-                return fsm.getStates().get(CommunicationStateType.NEGOTIATE);
-            case CONNECTION_DOWN:
+            case REMOTE_LEADER_FOUND:
+                ((NegotiatingState)fsm.getStates().get(LogReplicationRuntimeStateType.NEGOTIATING)).setLeaderEndpoint(event.getEndpoint());
+                return fsm.getStates().get(LogReplicationRuntimeStateType.NEGOTIATING);
+            case ON_CONNECTION_DOWN:
                 String endpointDown = event.getEndpoint();
                 fsm.updateDisconnectedEndpoints(endpointDown);
-                fsm.reconnectAsync(endpointDown);
 
                 // If no connection exists, return to init state, until a connection is established.
                 if (fsm.getConnectedEndpoints().size() == 0) {
-                    return fsm.getStates().get(CommunicationStateType.INIT);
+                    return fsm.getStates().get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
                 }
                 return this;
-            case LEADER_NOT_FOUND:
+            case REMOTE_LEADER_NOT_FOUND:
                 return this;
-            case CONNECTION_UP:
+            case ON_CONNECTION_UP:
                 // Add new connected node, for leadership verification
                 fsm.updateConnectedEndpoints(event.getEndpoint());
                 return this;
@@ -70,10 +71,10 @@ public class VerifyLeaderState implements CommunicationState {
     }
 
     @Override
-    public void onEntry(CommunicationState from) {
+    public void onEntry(LogReplicationRuntimeState from) {
+        log.debug("onEntry :: Verifying Remote Leader, transition from {}", from);
         // Verify Leadership on connected nodes (ignore those for which leadership is pending)
-        workers.submit(this::verifyLeadership);
-
+        this.worker.submit(this::verifyLeadership);
     }
 
 
@@ -108,7 +109,7 @@ public class VerifyLeaderState implements CommunicationState {
                     // Block until all leadership requests are completed, or a leader is discovered.
                     while (!leadershipVerified || pendingLeadershipQueries.size() != 0) {
                         LogReplicationQueryLeaderShipResponse leadershipResponse = (LogReplicationQueryLeaderShipResponse) CompletableFuture.anyOf(pendingLeadershipQueries.values()
-                                .toArray(new CompletableFuture<?>[pendingLeadershipQueries.size()])).get(LogReplicationCommunicationFSM.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                                .toArray(new CompletableFuture<?>[pendingLeadershipQueries.size()])).get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
                         if (leadershipResponse.isLeader()) {
                             log.info("Leader for remote cluster, node={}", leadershipResponse.getEndpoint());
@@ -127,7 +128,7 @@ public class VerifyLeaderState implements CommunicationState {
                     if (leadershipVerified) {
                         // A new leader has been found, start negotiation, to determine log replication
                         // continuation or start point
-                        fsm.input(new CommunicationEvent(CommunicationEvent.CommunicationEventType.LEADER_FOUND, leader));
+                        fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
                         break;
                     }
                 } catch (Exception ex) {

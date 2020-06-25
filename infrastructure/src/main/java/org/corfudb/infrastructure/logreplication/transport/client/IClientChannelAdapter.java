@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.runtime.Messages.CorfuMessage;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 
 import javax.annotation.Nonnull;
 import java.util.Optional;
@@ -118,7 +118,9 @@ public abstract class IClientChannelAdapter {
      *
      * @param t
      */
-    public void onError(Throwable t) {}
+    public void onError(Throwable t) {
+        getRouter().onError(t);
+    }
 
     /**
      * Retrieve remote leader.

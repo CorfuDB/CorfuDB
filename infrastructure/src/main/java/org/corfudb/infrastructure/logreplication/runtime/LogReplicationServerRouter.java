@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication.runtime.fsm;
+package org.corfudb.infrastructure.logreplication.runtime;
 
 import com.google.common.collect.ImmutableList;
 import io.netty.channel.ChannelHandlerContext;

@@ -545,7 +545,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
                 // System.out.println("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
 
-                System.out.println("REPLICATION STOP");
+                System.out.println("REPLICATION STOPPING");
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
             }
         }
