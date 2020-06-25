@@ -82,8 +82,8 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         writerRuntime = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect();
 
         UUID uuid = UUID.randomUUID();
-        LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(), PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(readerRuntime, 0, uuid, uuid);
+        LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(), PRIMARY_SITE_ID.toString(), REMOTE_SITE_ID.toString());
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(readerRuntime, 0, uuid.toString());
         logEntryReader = new StreamsLogEntryReader(readerRuntime, config);
         logEntryWriter = new LogEntryWriter(writerRuntime, config, logReplicationMetadataManager);
     }
@@ -105,8 +105,8 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         verifyData("after writing log entry at dst", dstTables, hashMap);
     }
 
-    void readMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+    private void readMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
+        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID.toString(), REMOTE_SITE_ID.toString());
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
@@ -117,26 +117,6 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
                 break;
             }
         }
-    }
-
-    void writeMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        UUID uuid = UUID.randomUUID();
-        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, uuid, uuid);
-        StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
-
-        writer.reset(msgQ.get(0).getMetadata().getTopologyConfigId(), msgQ.get(0).getMetadata().getSnapshotTimestamp());
-
-        for (LogReplicationEntry msg : msgQ) {
-            writer.apply(msg);
-        }
-        Long seq = writer.getLogReplicationMetadataManager().getLastSnapSeqNum() + 1;
-
-        //for (CorfuTable<Long, Long> corfuTable : shadowTables.values()) {
-        //    System.out.print("\nCorfuTable " + corfuTable.size() + " values " + corfuTable.values());
-        //}
-
-        writer.applyShadowStreams(seq);
     }
 
     @Test

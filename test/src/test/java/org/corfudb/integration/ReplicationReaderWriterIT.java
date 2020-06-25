@@ -13,6 +13,7 @@ import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -50,8 +51,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     static private final int NUM_KEYS = 10;
     static private final int NUM_STREAMS = 2;
     static public final int NUM_TRANSACTIONS = 100;
-    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
-    static final UUID REMOTE_SITE_ID = UUID.randomUUID();
+    static final String PRIMARY_SITE_ID = "Cluster-Paris";
+    static final String REMOTE_SITE_ID = "Cluster-London";
 
 
     Process server1;
@@ -266,7 +267,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         for (int i = 0; i < NUM_TRANSACTIONS; i++) {
-            org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry message = reader.read(PRIMARY_SITE_ID);
+            LogReplicationEntry message = reader.read(UUID.randomUUID());
 
             if (message == null) {
                 System.out.println("**********data message is null");
@@ -286,7 +287,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeLogEntryMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
@@ -340,7 +341,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
             cnt++;
-            SnapshotReadMessage snapshotReadMessage = reader.read(PRIMARY_SITE_ID);
+            SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
             for (org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data : snapshotReadMessage.getMessages()) {
                 msgQ.add(data);
                 //System.out.println("generate msg " + cnt);
@@ -354,7 +355,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeSnapLogMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
 
@@ -615,7 +616,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public void testPersistentTable() throws IOException {
         setupEnv();
         try {
-            LogReplicationMetadataManager meta = new LogReplicationMetadataManager(writerRuntime, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+            LogReplicationMetadataManager meta = new LogReplicationMetadataManager(writerRuntime, 0, PRIMARY_SITE_ID);
             meta.getLastProcessedLogTimestamp();
         } catch (Exception e) {
             e.getStackTrace();

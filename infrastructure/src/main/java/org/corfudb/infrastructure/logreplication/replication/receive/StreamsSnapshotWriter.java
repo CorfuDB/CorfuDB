@@ -84,7 +84,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         if (siteConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart ||
                 (persitSeqNum + 1)!= recvSeq) {
             log.warn("Skip current topologyConfigId " + siteConfigID + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + recvSeq +
-                    " persistedMetadata " + logReplicationMetadataManager.getSiteConfigID() + " startSnapshot " + logReplicationMetadataManager.getLastSnapStartTimestamp() +
+                    " persistedMetadata " + logReplicationMetadataManager.getTopologyConfigId() + " startSnapshot " + logReplicationMetadataManager.getLastSnapStartTimestamp() +
                     " lastSnapSeqNum " + logReplicationMetadataManager.getLastSnapSeqNum());
             return;
         }
@@ -150,7 +150,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
         if (siteConfigID != persistConfigID || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
             log.warn("Skip current topologyConfigId " + siteConfigID + " srcGlobalSnapshot " + srcGlobalSnapshot + " currentSeqNum " + currentSeqNum +
-                    " persistedMetadata " + logReplicationMetadataManager.getSiteConfigID() + " startSnapshot " + logReplicationMetadataManager.getLastSnapStartTimestamp() +
+                    " persistedMetadata " + logReplicationMetadataManager.getTopologyConfigId() + " startSnapshot " + logReplicationMetadataManager.getLastSnapStartTimestamp() +
                     " lastSnapSeqNum " + logReplicationMetadataManager.getLastSnapSeqNum());
             return;
         }
@@ -169,7 +169,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             log.warn("Caught an exception ", e);
             throw e;
         }
-        log.debug("Process the entries {}  and set sequence number {} ", smrEntries, currentSeqNum);
+        log.debug("Process the entries {} and set sequence number {}", smrEntries, currentSeqNum);
     }
 
     @Override

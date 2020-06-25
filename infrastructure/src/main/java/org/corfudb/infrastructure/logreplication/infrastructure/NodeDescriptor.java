@@ -67,7 +67,7 @@ public class NodeDescriptor {
 
     @Override
     public String toString() {
-        return String.format("Role Type: %s, %s, %s", roleType, getEndpoint(), leader);
+        return String.format("Role Type: %s, %s", roleType, getEndpoint());
     }
 
 }

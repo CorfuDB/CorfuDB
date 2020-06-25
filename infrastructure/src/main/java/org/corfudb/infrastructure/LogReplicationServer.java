@@ -98,7 +98,7 @@ public class LogReplicationServer extends AbstractServer {
         if (isLeader(msg, r)) {
             LogReplicationMetadataManager metadata = sinkManager.getLogReplicationMetadataManager();
             LogReplicationNegotiationResponse response = new LogReplicationNegotiationResponse(
-                    metadata.getSiteConfigID(),
+                    metadata.getTopologyConfigId(),
                     metadata.getVersion(),
                     metadata.getLastSnapStartTimestamp(),
                     metadata.getLastSnapTransferDoneTimestamp(),

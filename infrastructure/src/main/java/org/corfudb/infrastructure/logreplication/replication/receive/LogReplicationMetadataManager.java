@@ -13,6 +13,9 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
+
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -21,43 +24,45 @@ import java.util.UUID;
  */
 @Slf4j
 public class LogReplicationMetadataManager {
+
     private static final String namespace = "CORFU_SYSTEM";
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
-    String metadataTableName;
 
     private CorfuStore corfuStore;
 
-    Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable;
+    private String metadataTableName;
 
-    CorfuRuntime runtime;
+    private Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable;
 
-    public LogReplicationMetadataManager(CorfuRuntime rt, long siteConfigID, UUID primary, UUID dst) {
+    private CorfuRuntime runtime;
+
+    public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
         this.runtime = rt;
         this.corfuStore = new CorfuStore(runtime);
-        metadataTableName = getPersistedWriterMetadataTableName(primary, dst);
+        metadataTableName = getPersistedWriterMetadataTableName(localClusterId);
         try {
             metadataTable = this.corfuStore.openTable(namespace,
-                    metadataTableName,
-                    LogReplicationMetadataKey.class,
-                    LogReplicationMetadataVal.class,
-                    null,
-                    TableOptions.builder().build());
+                            metadataTableName,
+                            LogReplicationMetadataKey.class,
+                            LogReplicationMetadataVal.class,
+                            null,
+                            TableOptions.builder().build());
         } catch (Exception e) {
             log.error("Caught an exception while opening the table namespace={}, name={}", namespace, metadataTableName);
             throw new ReplicationWriterException(e);
         }
-        setupSiteConfigID(siteConfigID);
+        setupTopologyConfigId(topologyConfigId);
     }
 
-    CorfuStoreMetadata.Timestamp getTimestamp() {
+    public CorfuStoreMetadata.Timestamp getTimestamp() {
         return corfuStore.getTimestamp();
     }
 
-    TxBuilder getTxBuilder() {
+    public TxBuilder getTxBuilder() {
         return corfuStore.tx(namespace);
     }
 
-    String queryString(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
+    private String queryString(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         CorfuRecord record;
         if (timestamp == null) {
@@ -80,7 +85,7 @@ public class LogReplicationMetadataManager {
         return val;
     }
 
-    long query(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
+    public long query(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
         long val = -1;
         String str = queryString(timestamp, key);
         if (str != null) {
@@ -89,7 +94,7 @@ public class LogReplicationMetadataManager {
         return val;
     }
 
-    public long getSiteConfigID() {
+    public long getTopologyConfigId() {
         return query(null, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
     }
 
@@ -116,24 +121,24 @@ public class LogReplicationMetadataManager {
         return query(null, LogReplicationMetadataType.LAST_LOG_PROCESSED);
     }
 
-    void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, long val) {
+    public void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, long val) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(Long.toString(val)).build();
         txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
-    void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, String val) {
+    private void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, String val) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(val).build();
         txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
-    public void setupSiteConfigID(long siteConfigID) {
+    public void setupTopologyConfigId(long siteConfigID) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
 
         if (siteConfigID <= persistSiteConfigID) {
-            log.warn("Skip setupSiteConfigID. the current topologyConfigId " + siteConfigID + " is not larger than the persistSiteConfigID " + persistSiteConfigID);
+            log.warn("Skip setupTopologyConfigId. the current topologyConfigId " + siteConfigID + " is not larger than the persistSiteConfigID " + persistSiteConfigID);
             return;
         }
 
@@ -148,7 +153,7 @@ public class LogReplicationMetadataManager {
          }
 
         txBuilder.commit(timestamp);
-        log.info("Update topologyConfigId, new metadata {}", getMetadata());
+        log.info("Update topologyConfigId, new metadata {}", this);
     }
 
     public void updateVersion(String version) {
@@ -226,7 +231,7 @@ public class LogReplicationMetadataManager {
         log.debug("Commit. Set snapshotStart topologyConfigId " + siteConfigID + " ts " + ts +
                 " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
 
-        return (ts == getLastSnapStartTimestamp() && siteConfigID == getSiteConfigID());
+        return (ts == getLastSnapStartTimestamp() && siteConfigID == getTopologyConfigId());
     }
 
 
@@ -242,7 +247,7 @@ public class LogReplicationMetadataManager {
         log.debug("setLastSnapTransferDone snapshotStart topologyConfigId " + siteConfigID + " ts " + ts +
                 " persisteSiteConfigID " + persisteSiteConfigID + " persistSnapStart " + persistSnapStart);
 
-        // It means the cluster config has changed, ingore the update operation.
+        // It means the cluster config has changed, ignore the update operation.
         if (siteConfigID != persisteSiteConfigID || ts <= persisteSiteConfigID) {
             log.warn("The metadata is older than the presisted one. Set snapshotStart topologyConfigId " + siteConfigID + " ts " + ts +
                     " persisteSiteConfigID " + persisteSiteConfigID + " persistSnapStart " + persistSnapStart);
@@ -274,7 +279,7 @@ public class LogReplicationMetadataManager {
 
         if (siteConfigID != persistSiteConfigID || ts != persistSnapStart || ts != persistSnapTranferDone) {
             log.warn("topologyConfigId " + siteConfigID + " != " + " persist " + persistSiteConfigID +  " ts " + ts +
-                    " != " + "persistSnapTranferDone " + persistSnapTranferDone);
+                    " != " + "persistSnapTransferDone " + persistSnapTranferDone);
             return;
         }
 
@@ -297,9 +302,10 @@ public class LogReplicationMetadataManager {
         return;
     }
 
-    public String getMetadata() {
+    @Override
+    public String toString() {
         String s = new String();
-        s.concat(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID.getVal() + " " + getSiteConfigID() +" ");
+        s.concat(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID.getVal() + " " + getTopologyConfigId() +" ");
         s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED.getVal() + " " + getLastSnapStartTimestamp() +" ");
         s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
         s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");
@@ -309,8 +315,12 @@ public class LogReplicationMetadataManager {
         return s;
     }
 
-    public static String getPersistedWriterMetadataTableName(UUID primarySite, UUID dst) {
-        return TABLE_PREFIX_NAME + primarySite.toString() + "-to-" + dst.toString();
+    public static String getPersistedWriterMetadataTableName(String localClusterId) {
+        return TABLE_PREFIX_NAME + localClusterId;
+    }
+
+    public long getLogHead() {
+        return runtime.getAddressSpaceView().getTrimMark().getSequence();
     }
 
     public enum LogReplicationMetadataType {

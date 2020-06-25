@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication.runtime.fsm;
+package org.corfudb.infrastructure.logreplication.runtime;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -7,11 +7,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -30,19 +28,15 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
 
 /**
  * This Client Router is used when a custom (client-defined) transport layer is specified for
@@ -51,8 +45,6 @@ import java.util.function.Consumer;
  */
 @Slf4j
 public class LogReplicationClientRouter implements IClientRouter {
-
-    private static final int LEADERSHIP_RETRIES = 5;
 
     @Getter
     private LogReplicationRuntimeParameters parameters;
@@ -114,35 +106,30 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     private String remoteClusterId;
 
-    @Getter
-    private Optional<String> remoteLeaderEndpoint = Optional.empty();
+    /**
+     * Runtime FSM, to insert connectivity events
+     */
+    private CorfuLogReplicationRuntime runtimeFSM;
 
-    private Map<String, NodeDescriptor> connectedNodes = new ConcurrentHashMap<>();
-
-    private Map<String, NodeDescriptor> disconnectedNodes = new ConcurrentHashMap<>();
-
-    private static final int DEFAULT_TIMEOUT = 5000;
-
-    private ExecutorService executorService;
-
-    private Consumer<LogReplicationNegotiationResponse> negotiationCallback;
-
-    public LogReplicationClientRouter(ClusterDescriptor remoteClusterDescriptor,
-                                      LogReplicationRuntimeParameters parameters,
-                                      Consumer<LogReplicationNegotiationResponse> negotiationCallback) {
-        this.remoteClusterDescriptor = remoteClusterDescriptor;
+    /**
+     * Log Replication Client Constructor
+     *
+     * @param parameters runtime parameters (including connection settings)
+     * @param runtimeFSM runtime state machine, insert connection related events
+     */
+    public LogReplicationClientRouter(LogReplicationRuntimeParameters parameters,
+                                      CorfuLogReplicationRuntime runtimeFSM) {
+        this.remoteClusterDescriptor = parameters.getRemoteClusterDescriptor();
         this.remoteClusterId = remoteClusterDescriptor.getClusterId();
         this.parameters = parameters;
         this.timeoutResponse = parameters.getRequestTimeout().toMillis();
-        this.negotiationCallback = negotiationCallback;
+        this.runtimeFSM = runtimeFSM;
 
         this.handlerMap = new ConcurrentHashMap<>();
         this.clientList = new ArrayList<>();
         this.requestID = new AtomicLong();
         this.outstandingRequests = new ConcurrentHashMap<>();
         this.connectionFuture = new CompletableFuture<>();
-        // Thread pool for this router to handle business logic from channel callbacks
-        this.executorService = Executors.newSingleThreadExecutor();
     }
 
     // ------------------- IClientRouter Interface ----------------------
@@ -202,9 +189,15 @@ public class LogReplicationClientRouter implements IClientRouter {
                         return cf;
                     }
 
-                    String remoteLeader = remoteLeaderEndpoint.orElseThrow(() -> new ChannelAdapterException(
-                            String.format("Leader not found to remote cluster %s", remoteClusterDescriptor.getClusterId())));
-                    endpoint = remoteLeader;
+                    // Get Remote Leader
+                    if(runtimeFSM.getLeader().isPresent()) {
+                        endpoint = runtimeFSM.getLeader().get();
+                    } else {
+                        log.error("Leader not found to remote cluster {}", remoteClusterId);
+                        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                        throw new ChannelAdapterException(
+                                String.format("Leader not found to remote cluster %s", remoteClusterDescriptor.getClusterId()));
+                    }
                 }
 
                 // In the case the message is intended for a specific endpoint, we do not
@@ -251,11 +244,14 @@ public class LogReplicationClientRouter implements IClientRouter {
     public void sendMessage(CorfuMsg message) {
         // Get the next request ID.
         message.setRequestID(requestID.getAndIncrement());
-        if(remoteLeaderEndpoint.isPresent()) {
-            String remoteLeader = remoteLeaderEndpoint.get();
-            // Write this message out on the serverAdapter.
+        // Get Remote Leader
+        if(runtimeFSM.getLeader().isPresent()) {
+            String remoteLeader = runtimeFSM.getLeader().get();
             channelAdapter.send(remoteLeader, CorfuMessageConverter.toProtoBuf(message));
             log.trace("Sent one-way message: {}", message);
+        } else {
+            log.error("Leader not found to remote cluster {}, dropping {}", remoteClusterId, message.getMsgType());
+            runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
         }
     }
 
@@ -334,9 +330,7 @@ public class LogReplicationClientRouter implements IClientRouter {
 
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (corfuMsg.getMsgType() == CorfuMsgType.LOG_REPLICATION_LEADERSHIP_LOSS) {
-                log.warn("Leadership loss reported by remote node {}", remoteLeaderEndpoint);
-                remoteLeaderEndpoint = Optional.empty();
-                verifyLeadership();
+                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
                 return;
             }
 
@@ -395,112 +389,6 @@ public class LogReplicationClientRouter implements IClientRouter {
     }
 
     /**
-     * Verify who is the leader node on the remote cluster by sending leadership request to all nodes.
-     * <p>
-     * If no leader is found, the verification will be attempted for LEADERSHIP_RETRIES times.
-     */
-    public synchronized void verifyLeadership() {
-        executorService.submit(() -> {
-            boolean leadershipVerified = false;
-
-            Map<String, CompletableFuture<LogReplicationQueryLeaderShipResponse>> pendingLeadershipQueries = new HashMap<>();
-
-            // Verify leadership on remote cluster, only if no leader is currently selected.
-            if (!remoteLeaderEndpoint.isPresent()  || remoteLeaderEndpoint.get().length() == 0) {
-
-                for (int i = 0; i < LEADERSHIP_RETRIES; i++) {
-
-                    log.info("Verify leadership on remote cluster {}, retry={}", remoteClusterDescriptor.getClusterId(), i);
-
-                    try {
-
-                        for (NodeDescriptor node : connectedNodes.values()) {
-                            log.debug("Verify leadership status for node {}", node.getEndpoint());
-                            // Check Leadership
-                            CompletableFuture<LogReplicationQueryLeaderShipResponse> leadershipRequestCf =
-                                    sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP).setEpoch(0), node.getEndpoint());
-                            pendingLeadershipQueries.put(node.getEndpoint(), leadershipRequestCf);
-                        }
-
-                        // TODO: Anny should we block or wait for this to complete async...
-                        // Block until all leadership requests are completed, or a leader is discovered.
-                        while (!leadershipVerified || pendingLeadershipQueries.size() != 0) {
-                            LogReplicationQueryLeaderShipResponse leadershipResponse = (LogReplicationQueryLeaderShipResponse) CompletableFuture.anyOf(pendingLeadershipQueries.values()
-                                    .toArray(new CompletableFuture<?>[pendingLeadershipQueries.size()])).get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-
-                            if (leadershipResponse.isLeader()) {
-                                log.info("Leader for remote cluster id={}, node={}", remoteClusterDescriptor.getClusterId(),
-                                        leadershipResponse.getEndpoint());
-                                remoteLeaderEndpoint = Optional.of(leadershipResponse.getEndpoint());
-                                updateDescriptor(leadershipResponse.getEndpoint());
-                                leadershipVerified = true;
-                                // Remove all CF, based on the assumption that one leader response is the expectation.
-                                pendingLeadershipQueries.clear();
-                                break;
-                            } else {
-                                // Remove CF for completed request
-                                pendingLeadershipQueries.remove(leadershipResponse.getEndpoint());
-                            }
-                        }
-
-                        if (leadershipVerified) {
-                            // A new leader has been found, start negotiation, to determine log replication
-                            // continuation or start point
-                            startNegotiation();
-                            break;
-                        }
-                    } catch (Exception ex) {
-                        log.warn("Exception caught while verifying remote leader on cluster {}, retry={}", remoteClusterDescriptor.getClusterId(), i, ex);
-                    }
-                }
-            }
-        });
-    }
-
-    /**
-     * Start Log Replication Negotiation.
-     *
-     * In this stage the active cluster negotiates with the standby cluster to determine
-     * the log replication start point. This can be to continue log entry sync (delta) from an earlier point
-     * (as data is still available) or to start from a snapshot sync (full).
-     *
-     */
-    private void startNegotiation() {
-        executorService.submit( () -> {
-            try {
-                String remoteLeader = remoteLeaderEndpoint.get();
-                CompletableFuture<LogReplicationNegotiationResponse> cf = sendMessageAndGetCompletable(
-                        new CorfuMsg(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST).setEpoch(0), remoteLeader);
-                LogReplicationNegotiationResponse response = cf.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
-                
-                // Notify of negotiation result
-                negotiationCallback.accept(response);
-
-                // Negotiation to leader node completed, unblock channel.
-                connectionFuture.complete(null);
-            } catch (Exception e) {
-               log.error("Exception during negotiation", e);
-               // If the cause of exception is leadership loss.
-               startNegotiation();
-            }
-        });
-    }
-
-
-    /**
-     * Update leader endpoint
-     **/
-    private void updateDescriptor(String leaderEndpoint) {
-        remoteClusterDescriptor.getNodesDescriptors().forEach(node -> {
-            if (node.getEndpoint().equals(leaderEndpoint)) {
-                node.setLeader(true);
-            } else {
-                node.setLeader(false);
-            }
-        });
-    }
-
-    /**
      * Verify Message is of valid Log Replication type.
      */
     private boolean isValidMessage(CorfuMsg message) {
@@ -516,48 +404,29 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public synchronized void onConnectionUp(String endpoint) {
         log.info("Connection established to remote endpoint {}", endpoint);
-        remoteClusterDescriptor.getNodesDescriptors().forEach(node -> {
-            if (node.getEndpoint().equals(endpoint)) {
-                log.debug("Add {} as a connected endpoint", endpoint);
-                connectedNodes.put(endpoint, node);
-            }
-        });
-
-        verifyLeadership();
+        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_UP, endpoint));
     }
 
     /**
      * Connection Down Callback.
      *
-     * @param endpoint endpoint of the remote node to which connection was established.
+     * @param endpoint endpoint of the remote node to which connection came down.
      */
     public synchronized void onConnectionDown(String endpoint) {
         log.info("Connection lost to remote endpoint {} on cluster {}", endpoint, remoteClusterId);
-        remoteClusterDescriptor.getNodesDescriptors().forEach(node -> {
-            if (node.getEndpoint().equals(endpoint)) {
-                log.debug("Remove {} as a connected endpoint", endpoint);
-                connectedNodes.remove(endpoint);
-                disconnectedNodes.put(endpoint, node);
-            }
-        });
-
-        // If the node for which connection went down is the current leader, reset remote leader
-        if (remoteLeaderEndpoint.isPresent() && remoteLeaderEndpoint.get().equals(endpoint)) {
-            resetLeader();
-        }
-
+        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN));
         // Attempt to reconnect to this endpoint
         channelAdapter.connectAsync(endpoint);
     }
 
-    private void resetLeader() {
-        // To reset current leadership
-        // (1) Clear current leader endpoint
-        // (2) Remove the current completion future, forcing clients to wait for reconnection to new leader.
-        // (3) Re-trigger leadership verification
+    /**
+     * Channel Adapter On Error Callback
+     */
+    public synchronized void onError(Throwable t) {
+        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ERROR, t));
+    }
 
-        remoteLeaderEndpoint = Optional.empty();
-        connectionFuture = new CompletableFuture<>();
-        verifyLeadership();
+    public Optional<String> getRemoteLeaderEndpoint() {
+        return runtimeFSM.getLeader();
     }
 }
