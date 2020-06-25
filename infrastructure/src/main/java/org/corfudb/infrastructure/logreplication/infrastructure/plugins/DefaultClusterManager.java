@@ -23,7 +23,7 @@ import java.util.UUID;
 import static java.lang.Thread.sleep;
 
 @Slf4j
-public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
+public class DefaultClusterManager extends CorfuReplicationSiteManagerBaseAdapter {
     public static long epoch = 0;
     public static final int changeInterval = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";

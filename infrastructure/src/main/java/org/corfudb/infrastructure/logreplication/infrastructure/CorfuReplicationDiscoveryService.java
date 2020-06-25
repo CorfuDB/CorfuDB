@@ -107,7 +107,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.nodeId = serverContext.getNodeId();
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.pluginFilePath = serverContext.getPluginConfigFilePath();
-        this.topologyDescriptor = new TopologyDescriptor(clusterManager.fetchTopology());
+        this.topologyDescriptor = new TopologyDescriptor(clusterManager.queryTopologyConfig());
         this.localNodeInfo = topologyDescriptor.getNodeInfo(localEndpoint);
         this.logReplicationMetadataManager = serverNode.getLogReplicationServer().getSinkManager().getLogReplicationMetadataManager();
 
@@ -251,7 +251,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             return;
         }
 
-        TopologyDescriptor newConfig = new TopologyDescriptor(clusterManager.fetchTopology());
+        TopologyDescriptor newConfig = new TopologyDescriptor(clusterManager.queryTopologyConfig());
         if (newConfig.getTopologyConfigId() == getReplicationManager().getTopologyDescriptor().getTopologyConfigId()) {
             if (localNodeInfo.getRoleType() == ClusterRole.STANDBY) {
                 return;

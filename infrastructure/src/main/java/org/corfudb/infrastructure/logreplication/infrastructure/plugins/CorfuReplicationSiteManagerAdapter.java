@@ -5,47 +5,26 @@ import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
-public abstract class CorfuReplicationSiteManagerAdapter {
-    @Getter
-    CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
+public interface CorfuReplicationSiteManagerAdapter {
 
-    @Getter
-    TopologyConfigurationMsg topologyConfig;
+    void setCorfuReplicationDiscoveryService(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
 
-    public void setCorfuReplicationDiscoveryService(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
-        this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;
-        start();
-    }
+    void setLocalEndpoint(String endpoint);
 
-    public synchronized TopologyConfigurationMsg fetchTopology() {
-        topologyConfig = queryTopologyConfig();
-        return topologyConfig;
-    }
+    // This is the currentTopology cached at the local node.
+    public TopologyConfigurationMsg getTopologyConfig();
 
-    /**
-     * Will be called when the cluster change and a new configuration is sent over
-     *
-     * @param newTopologyConfigMsg
-     */
-    public synchronized void updateTopologyConfig(TopologyConfigurationMsg newTopologyConfigMsg) {
-        if (newTopologyConfigMsg.getTopologyConfigID() > topologyConfig.getTopologyConfigID()) {
-            topologyConfig = newTopologyConfigMsg;
-            corfuReplicationDiscoveryService.updateSiteConfig(topologyConfig);
-        }
-    }
+    // This will talk to the real Site Manager and get the most current topology.
+    TopologyConfigurationMsg queryTopologyConfig();
 
-    public void prepareSiteRoleChange() {
-        corfuReplicationDiscoveryService.prepareSiteRoleChange();
-    }
+    // This is called when get a notification of site config change.
+    void updateTopologyConfig(TopologyConfigurationMsg newSiteConfigMsg);
 
-    public int queryReplicationStatus() {
-        return corfuReplicationDiscoveryService.queryReplicationStatus();
-    }
+    void start();
 
-    //TODO: handle the case that queryTopologyConfig return an exception.
-    public abstract TopologyConfigurationMsg queryTopologyConfig();
+    void shutdown();
 
-    public abstract void start();
+    void prepareSiteRoleChange();
 
-    public abstract void shutdown();
+    int queryReplicationStatus();
 }
