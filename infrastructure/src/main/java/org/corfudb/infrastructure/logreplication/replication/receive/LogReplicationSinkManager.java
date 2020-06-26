@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -15,9 +14,11 @@ import org.corfudb.runtime.view.Address;
 import org.immutables.value.internal.$guava$.annotations.$VisibleForTesting;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -27,8 +28,7 @@ import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAP
 /**
  * This class represents the Log Replication Manager at the destination.
  * It is the entry point for log replication at the receiver.
- *
- * */
+ */
 @Slf4j
 public class LogReplicationSinkManager implements DataReceiver {
     /*
@@ -85,11 +85,14 @@ public class LogReplicationSinkManager implements DataReceiver {
     @Getter
     private ObservableValue rxMessageCount = new ObservableValue(rxMessageCounter);
 
+
+    private String configFilePath;
+
     /**
      * Constructor Sink Manager
      *
      * @param localCorfuEndpoint endpoint for local corfu server
-     * @param config log replication configuration
+     * @param config             log replication configuration
      * @param metadataManager
      * @param context
      */
@@ -97,7 +100,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                                      LogReplicationMetadataManager metadataManager,
                                      ServerContext context) {
         this.logReplicationMetadataManager = metadataManager;
-        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
+        this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .trustStore((String) context.getServerConfig().get("--truststore"))
                 .tsPasswordFile((String) context.getServerConfig().get("--truststore-password-file"))
                 .keyStore((String) context.getServerConfig().get("--keystore"))
@@ -113,20 +116,33 @@ public class LogReplicationSinkManager implements DataReceiver {
          */
         this.rxState = RxState.LOG_ENTRY_SYNC;
         this.config = config;
+        this.configFilePath = context.getPluginConfigFilePath();
         init();
+    }
+
+    private Optional<String> getConfigIfPresent() {
+        try (FileInputStream fis = new FileInputStream(this.configFilePath)) {
+            Properties props = new Properties();
+            props.load(fis);
+            return Optional.ofNullable(
+                    props.getProperty("topology_manager_adapter_resource_config_path"));
+        } catch (IOException ioe) {
+            log.error("Original config is not present: {}", this.configFilePath);
+        }
+        return Optional.empty();
     }
 
     /**
      * Constructor Sink Manager
      *
      * @param localCorfuEndpoint endpoint for local corfu server
-     * @param config log replication configuration
+     * @param config             log replication configuration
      */
     @VisibleForTesting
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
                                      LogReplicationMetadataManager metadataManager) {
         this.logReplicationMetadataManager = metadataManager;
-        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
+        this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
 
         /*
@@ -160,7 +176,9 @@ public class LogReplicationSinkManager implements DataReceiver {
      * If the configFile doesn't exist, use the default values.
      */
     private void readConfig() {
-        File configFile = new File(config_file);
+        String configFilePath = getConfigIfPresent().orElse(config_file);
+        log.info("Using this config file path: {}.", configFilePath);
+        File configFile = new File(configFilePath);
         try {
             FileReader reader = new FileReader(configFile);
             Properties props = new Properties();
@@ -192,9 +210,9 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         log.debug("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
 
-         // Ignore messages that have different topologyConfigId.
-         // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
-         // If there is a siteConfig change, the discovery service will detect it and reset the state.
+        // Ignore messages that have different topologyConfigId.
+        // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
+        // If there is a siteConfig change, the discovery service will detect it and reset the state.
         if (message.getMetadata().getTopologyConfigId() != siteConfigID) {
             return null;
         }
@@ -222,7 +240,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
             // Invalid message and drop it.
             log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
-                        message.getMetadata());
+                    message.getMetadata());
 
             return null;
         }
@@ -239,6 +257,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * as it trigger a transition and reset the state.
      * If it is requesting a new snapshot with higher timestamp, transition to SNAPSHOT_SYNC state,
      * otherwise ignore the message.
+     *
      * @param entry
      */
     private void processSnapshotStart(LogReplicationEntry entry) {
@@ -309,6 +328,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     /**
      * Process SNAPSHOT transfer messages
+     *
      * @param message
      */
     private void applySnapshotSync(LogReplicationEntry message) {
@@ -328,6 +348,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     /**
      * While processing an inorder message, the buffer will callback and process the message
+     *
      * @param message
      */
     public void processMessage(LogReplicationEntry message) {
@@ -363,6 +384,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * 1. update the metadata store with the most recent topologyConfigId
      * 2. reset snapshotWriter and logEntryWriter state
      * 3. reset buffer logEntryBuffer state.
+     *
      * @param active
      * @param siteConfigID
      */

@@ -1,9 +1,11 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
-
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
+import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.NodeConfigurationMsg;
 
 import java.util.ArrayList;
@@ -13,6 +15,9 @@ import java.util.UUID;
 /**
  * This class describes a Cluster or Site in terms of its Log Replication Nodes
  */
+@AllArgsConstructor
+@ToString
+@Slf4j
 public class ClusterDescriptor {
 
     private static int CORFU_PORT = 9000;
@@ -61,11 +66,21 @@ public class ClusterDescriptor {
         nodesDescriptors = new ArrayList<>();
     }
 
+    public ClusterDescriptor(String siteId, ClusterRole roleType, int corfuPort,
+                             List<NodeDescriptor> nodeDescriptors) {
+        this.clusterId = siteId;
+        this.role = roleType;
+        this.corfuPort = corfuPort;
+        this.nodesDescriptors = nodeDescriptors;
+    }
+
     public ClusterConfigurationMsg convertToMessage() {
         ArrayList<NodeConfigurationMsg> nodeInfoMsgs = new ArrayList<>();
         for (NodeDescriptor nodeInfo : nodesDescriptors) {
             nodeInfoMsgs.add(nodeInfo.convertToMessage());
         }
+
+        log.info("Node descriptors: {}", nodesDescriptors);
 
         ClusterConfigurationMsg clusterMsg = ClusterConfigurationMsg.newBuilder()
                 .setId(clusterId)
@@ -73,6 +88,7 @@ public class ClusterDescriptor {
                 .setCorfuPort(corfuPort)
                 .addAllNodeInfo(nodeInfoMsgs)
                 .build();
+
         return clusterMsg;
     }
 
@@ -89,7 +105,7 @@ public class ClusterDescriptor {
      */
     public NodeDescriptor getNode(String endpoint) {
         for (NodeDescriptor node : nodesDescriptors) {
-            if(node.getEndpoint().equals(endpoint)) {
+            if (node.getEndpoint().equals(endpoint)) {
                 return node;
             }
         }

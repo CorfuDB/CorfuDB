@@ -1,15 +1,15 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -19,8 +19,12 @@ import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.utils.lock.LockClient;
+import org.corfudb.utils.lock.LockConfig;
 import org.corfudb.utils.lock.LockListener;
 
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -114,6 +118,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private LogReplicationContext replicationContext;
 
+
+    private LockClient lockClient;
+    private final LockConfig lockConfig;
+
     /**
      * Constructor Discovery Service
      *
@@ -128,7 +136,37 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.localHost =  NodeLocator.parseString(serverContext.getLocalEndpoint()).getHost();
         this.pluginFilePath = serverContext.getPluginConfigFilePath();
+        this.lockConfig = createLockConfig(pluginFilePath);
         this.discoveryCallback = discoveryCallback;
+    }
+
+    private LockConfig createLockConfig(String pluginFilePath) {
+        try (InputStream input = new FileInputStream(pluginFilePath)) {
+            Properties prop = new Properties();
+            prop.load(input);
+            String lockGroup = prop.getProperty("lock_group");
+            String lockName = prop.getProperty("lock_name");
+            int lockLeaseDurationSeconds = Integer.parseInt(prop.getProperty("lock_lease_duration_seconds"));
+            int lockMonitorDurationSeconds = Integer.parseInt(prop.getProperty("lock_monitor_duration_seconds"));
+            int lockDurationBetweenLeaseChecksSeconds = Integer.parseInt(prop.getProperty("lock_duration_between_lease_checks_seconds"));
+            int lockDurationBetweenLeaseRenewalsSeconds = Integer.parseInt(prop.getProperty("lock_duration_between_lease_renewals_seconds"));
+            int lockMaxTimeListenerNotificationSeconds = Integer.parseInt(prop.getProperty("lock_max_time_listener_notification_seconds"));
+            LockConfig config = LockConfig.builder()
+                    .lockGroup(lockGroup)
+                    .lockName(lockName)
+                    .lockLeaseDurationInSeconds(lockLeaseDurationSeconds)
+                    .lockMonitorDurationInSeconds(lockMonitorDurationSeconds)
+                    .lockDurationBetweenLeaseChecksSeconds(lockDurationBetweenLeaseChecksSeconds)
+                    .lockDurationBetweenLeaseRenewalsSeconds(lockDurationBetweenLeaseRenewalsSeconds)
+                    .lockMaxTimeListenerNotificationSeconds(lockMaxTimeListenerNotificationSeconds)
+                    .build();
+            log.info("Using lock config: {}", config);
+            return config;
+        } catch (Exception e) {
+            LockConfig config = LockConfig.builder().build();
+            log.warn("Using default lock config: {}. Encountered exception: ", config, e);
+            return config;
+        }
     }
 
     public void run() {
@@ -299,11 +337,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    LockClient lock = new LockClient(nodeId, getCorfuRuntime());
+                    this.lockClient = new LockClient(nodeId, lockConfig, getCorfuRuntime());
                     // Callback on lock acquisition or revoke
                     LockListener logReplicationLockListener = new LogReplicationLockListener(this);
                     // Register Interest on the shared Log Replication Lock
-                    lock.registerInterest(LOCK_GROUP, LOCK_NAME, logReplicationLockListener);
+                    lockClient.registerInterest(logReplicationLockListener);
                 } catch (Exception e) {
                     log.error("Error while attempting to register interest on log replication lock {}:{}", LOCK_GROUP, LOCK_NAME, e);
                     throw new RetryNeededException();
@@ -316,6 +354,16 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
     }
 
+    @VisibleForTesting
+    public void deregisterToLogReplicationLock() {
+        lockClient.deregisterInterest();
+    }
+
+    @VisibleForTesting
+    public void forceAcquireLogReplicationLock() { lockClient.forceAcquire();}
+
+    @VisibleForTesting
+    public void resumeInterestToLockReplicationLock() {lockClient.resumeInterest();}
     /**
      * This method is only called on the leader node and it triggers the start of log replication
      *

@@ -33,7 +33,7 @@ public class NoLeaseState extends LockState {
      */
     @Override
     public Optional<LockState> processEvent(LockEvent event) throws IllegalTransitionException {
-        log.debug("Lock: {} lock event:{} in state:{}", lock.getLockId(), event, getType());
+        log.info("Lock: {} lock event:{} in state:{} for id: {}", lock.getLockId(), event, getType(), lockStore.getClientId());
         switch (event) {
             case LEASE_ACQUIRED: {
                 // transition to has lease state
@@ -43,6 +43,10 @@ public class NoLeaseState extends LockState {
                 // can happen only if this event arrived late. Lease had already expired.
                 log.warn("Lock: {} renewed event arrived late!", lock.getLockId());
                 return Optional.empty();
+            }
+            case FORCE_LEASE_ACQUIRED: {
+                forceAcquire();
+                return Optional.of(lock.getStates().get(LockStateType.HAS_LEASE));
             }
             case LEASE_REVOKED: {
                 //lock client revoked the lease on this lock, should try to acquire lease.
@@ -96,6 +100,16 @@ public class NoLeaseState extends LockState {
         } catch (Exception e) {
             log.error("Lock: {} could not acquire lease {}", lock.getLockId(), e);
         }
+    }
+
+    private void forceAcquire() {
+        try {
+            lockStore.forceAcquire(lock.getLockId());
+        }
+        catch (Exception e) {
+            log.error("Lock: {} could not force-acquire lease {}", lock.getLockId(), e);
+        }
+
     }
 
 }

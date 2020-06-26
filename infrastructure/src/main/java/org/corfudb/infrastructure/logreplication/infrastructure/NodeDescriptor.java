@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
@@ -11,6 +12,7 @@ import java.util.UUID;
 
 
 @Slf4j
+@ToString
 public class NodeDescriptor {
 
     @Setter
