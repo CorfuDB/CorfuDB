@@ -23,7 +23,7 @@ import java.util.UUID;
 import static java.lang.Thread.sleep;
 
 @Slf4j
-public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
+public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter {
     public static long epoch = 0;
     public static final int changeInterval = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
@@ -69,9 +69,9 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
         List<String> standbyIpAddresses = new ArrayList<>();
         List<String> primaryNodeIds = new ArrayList<>();
         List<String> standbyNodeIds = new ArrayList<>();
-        String primarySiteName;
-        String primaryCorfuPort;
-        String primaryLogReplicationPort;
+        String activeClusterId;
+        String activeCorfuPort;
+        String activeLogReplicationPort;
 
         String standbySiteName;
         String standbyCorfuPort;
@@ -85,9 +85,9 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
 
             Set<String> names = props.stringPropertyNames();
 
-            primarySiteName = props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME);
-            primaryCorfuPort = props.getProperty(PRIMARY_SITE_CORFU_PORT);
-            primaryLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
+            activeClusterId = props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME);
+            activeCorfuPort = props.getProperty(PRIMARY_SITE_CORFU_PORT);
+            activeLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
                 String nodeName = PRIMARY_SITE_NODE + i;
                 if (!names.contains(nodeName)) {
@@ -114,9 +114,9 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
             reader.close();
         } catch (FileNotFoundException e) {
             log.warn("Site Config File {} does not exist.  Using default configs", config_file);
-            primarySiteName = DefaultClusterConfig.getActiveClusterId();
-            primaryCorfuPort = DefaultClusterConfig.getActiveCorfuPort();
-            primaryLogReplicationPort = DefaultClusterConfig.getActiveLogReplicationPort();
+            activeClusterId = DefaultClusterConfig.getActiveClusterId();
+            activeCorfuPort = DefaultClusterConfig.getActiveCorfuPort();
+            activeLogReplicationPort = DefaultClusterConfig.getActiveLogReplicationPort();
             primaryNodeNames.addAll(DefaultClusterConfig.getActiveNodeNames());
             primaryIpAddresses.addAll(DefaultClusterConfig.getActiveIpAddresses());
             primaryNodeIds.addAll(DefaultClusterConfig.getActiveNodesUuid());
@@ -129,23 +129,23 @@ public class DefaultClusterManager extends CorfuReplicationSiteManagerAdapter {
             standbyNodeIds.addAll(DefaultClusterConfig.getStandbyNodesUuid());
         }
 
-        primarySite = new ClusterDescriptor(primarySiteName, ClusterRole.ACTIVE);
+        primarySite = new ClusterDescriptor(activeClusterId, ClusterRole.ACTIVE, Integer.parseInt(activeCorfuPort));
 
         for (int i = 0; i < primaryNodeNames.size(); i++) {
             log.info("Primary Site Name {}, IpAddress {}", primaryNodeNames.get(i), primaryIpAddresses.get(i));
             NodeDescriptor nodeInfo = new NodeDescriptor(primaryIpAddresses.get(i),
-                    primaryLogReplicationPort, ClusterRole.ACTIVE, primaryCorfuPort, PRIMARY_SITE_NAME, UUID.fromString(primaryNodeIds.get(i)));
+                    activeLogReplicationPort, ClusterRole.ACTIVE, PRIMARY_SITE_NAME, UUID.fromString(primaryNodeIds.get(i)));
             primarySite.getNodesDescriptors().add(nodeInfo);
         }
 
         // Setup backup cluster information
         Map<String, ClusterDescriptor> standbySites = new HashMap<>();
-        standbySites.put(STANDBY_SITE_NAME, new ClusterDescriptor(standbySiteName, ClusterRole.STANDBY));
+        standbySites.put(STANDBY_SITE_NAME, new ClusterDescriptor(standbySiteName, ClusterRole.STANDBY, Integer.parseInt(standbyCorfuPort)));
 
         for (int i = 0; i < standbyNodeNames.size(); i++) {
             log.info("Standby Site Name {}, IpAddress {}", standbyNodeNames.get(i), standbyIpAddresses.get(i));
             NodeDescriptor nodeInfo = new NodeDescriptor(standbyIpAddresses.get(i),
-                    standbyLogReplicationPort, ClusterRole.STANDBY, standbyCorfuPort, STANDBY_SITE_NAME, UUID.fromString(standbyNodeIds.get(i)));
+                    standbyLogReplicationPort, ClusterRole.STANDBY, STANDBY_SITE_NAME, UUID.fromString(standbyNodeIds.get(i)));
             standbySites.get(STANDBY_SITE_NAME).getNodesDescriptors().add(nodeInfo);
         }
 

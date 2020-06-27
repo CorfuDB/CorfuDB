@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure.logreplication.utils;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ILogReplicationConfigAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationStreamNameFetcher;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Query;
@@ -31,16 +31,16 @@ public class LogReplicationStreamNameTableManager {
     private static final String LOG_REPLICATION_STREAMS_NAME_TABLE = "LogReplicationStreams";
     private static final String LOG_REPLICATION_PLUGIN_VERSION_TABLE = "LogReplicationPluginVersion";
 
-    private LogReplicationStreamNameFetcher logReplicationStreamNameFetcher;
+    private ILogReplicationConfigAdapter ILogReplicationConfigAdapter;
 
     private CorfuRuntime corfuRuntime;
 
     private String pluginConfigFilePath;
 
-    public LogReplicationStreamNameTableManager(String corfuPort, String pluginConfigFilePath) {
+    public LogReplicationStreamNameTableManager(CorfuRuntime runtime, String pluginConfigFilePath) {
         this.pluginConfigFilePath = pluginConfigFilePath;
-        // Create Corfu Table with Names of Tables to be replicated
-        connectToCorfuRuntime(corfuPort);
+        this.corfuRuntime = runtime;
+
         initStreamNameFetcherPlugin();
     }
 
@@ -56,13 +56,13 @@ public class LogReplicationStreamNameTableManager {
                 // delete the tables and recreate them
                 deleteExistingStreamNameAndVersionTables();
                 createStreamNameAndVersionTables(
-                    logReplicationStreamNameFetcher.fetchStreamsToReplicate());
+                    ILogReplicationConfigAdapter.fetchStreamsToReplicate());
             }
         } else {
             // If any 1 of the 2 tables does not exist, delete and recreate them both as they may have been corrupted.
             deleteExistingStreamNameAndVersionTables();
             createStreamNameAndVersionTables(
-                logReplicationStreamNameFetcher.fetchStreamsToReplicate());
+                ILogReplicationConfigAdapter.fetchStreamsToReplicate());
         }
         return readStreamsToReplicateFromTable();
     }
@@ -80,19 +80,12 @@ public class LogReplicationStreamNameTableManager {
         return false;
     }
 
-    private void connectToCorfuRuntime(String corfuPort) {
-        String corfuEndpoint = "localhost" + corfuPort;
-        corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString(corfuEndpoint);
-        corfuRuntime.connect();
-    }
-
     private void initStreamNameFetcherPlugin() {
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
         File jar = new File(config.getStreamFetcherPluginJARPath());
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class plugin = Class.forName(config.getStreamFetcherClassCanonicalName(), true, child);
-            logReplicationStreamNameFetcher = (LogReplicationStreamNameFetcher) plugin.getDeclaredConstructor()
+            ILogReplicationConfigAdapter = (ILogReplicationConfigAdapter) plugin.getDeclaredConstructor()
                     .newInstance();
         } catch (Exception e) {
             log.error("Fatal error: Failed to get Stream Fetcher Plugin", e);
@@ -132,7 +125,7 @@ public class LogReplicationStreamNameTableManager {
         LogReplicationStreams.VersionString versionString = LogReplicationStreams.VersionString.newBuilder().setName("VERSION").build();
         Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
         LogReplicationStreams.Version version = (LogReplicationStreams.Version) q.getRecord(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString).getPayload();
-        return (Objects.equals(version.getVersion(), logReplicationStreamNameFetcher.getVersion()));
+        return (Objects.equals(version.getVersion(), ILogReplicationConfigAdapter.getVersion()));
     }
 
     private void deleteExistingStreamNameAndVersionTables() {
@@ -157,7 +150,7 @@ public class LogReplicationStreamNameTableManager {
 
             // Populate the plugin version in the version table
             LogReplicationStreams.VersionString versionString = LogReplicationStreams.VersionString.newBuilder().setName("VERSION").build();
-            LogReplicationStreams.Version version = LogReplicationStreams.Version.newBuilder().setVersion(logReplicationStreamNameFetcher.getVersion()).build();
+            LogReplicationStreams.Version version = LogReplicationStreams.Version.newBuilder().setVersion(ILogReplicationConfigAdapter.getVersion()).build();
             CommonTypes.Uuid uuid = CommonTypes.Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
             tx.create(LOG_REPLICATION_PLUGIN_VERSION_TABLE, versionString, version, uuid);
 

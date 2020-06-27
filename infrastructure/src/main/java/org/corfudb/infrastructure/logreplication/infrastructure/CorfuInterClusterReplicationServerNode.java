@@ -47,11 +47,12 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      * @param logReplicationConfig Basic Config for Log Replication
      */
     public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
-                                                  @Nonnull LogReplicationConfig logReplicationConfig) {
+                                                  @Nonnull LogReplicationConfig logReplicationConfig,
+                                                  @Nonnull LogReplicationServer replicationServer) {
         this(serverContext,
                 ImmutableMap.<Class, AbstractServer>builder()
                         .put(BaseServer.class, new BaseServer(serverContext))
-                        .put(LogReplicationServer.class, new LogReplicationServer(serverContext, logReplicationConfig))
+                        .put(LogReplicationServer.class, replicationServer)
                         .build()
         );
         this.logReplicationConfig = logReplicationConfig;
@@ -61,7 +62,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      * Corfu Server initialization.
      *
      * @param serverContext Initialized Server Context.
-     //* @param serverMap     Server Map with all components.
+     * @param serverMap     Server Map with all components.
      */
     public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
                                                   @Nonnull Map<Class, AbstractServer> serverMap) {

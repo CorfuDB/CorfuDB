@@ -2,6 +2,13 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Log Replication Runtime Unrecoverable State.
+ *
+ * We reach this state if an unrecoverable error occurred and log replication cannot be triggered or continued.
+ *
+ * @author amartinezman
+ */
 @Slf4j
 public class UnrecoverableState implements LogReplicationRuntimeState {
 
@@ -27,7 +34,7 @@ public class UnrecoverableState implements LogReplicationRuntimeState {
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
         // TODO: any specific action once determined there is an unrecoverable error?
-        // shutdown connections?, notify cluster manager?
+        //  shutdown connections?, notify cluster manager?
     }
 
     /**

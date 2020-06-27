@@ -29,7 +29,7 @@ public class LogReplicationPluginConfig {
 
     // Stream Fetcher
     public static final String DEFAULT_STREAM_FETCHER_JAR_PATH = "/target/infrastructure-0.3.0-SNAPSHOT.jar";
-    public static final String DEFAULT_STREAM_FETCHER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultStreamFetcherPlugin";
+    public static final String DEFAULT_STREAM_FETCHER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultLogReplicationConfigAdapter";
 
     // Topology Manager
     public static final String DEFAULT_SITE_MANAGER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager";

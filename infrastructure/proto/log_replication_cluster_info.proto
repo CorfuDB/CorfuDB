@@ -16,6 +16,7 @@ message ClusterConfigurationMsg {
   ClusterRole role = 2;
   string id = 3;
   repeated NodeConfigurationMsg node_info = 4;
+  uint32 corfu_port = 5;
 }
 
 // Node configuration metadata
@@ -24,7 +25,6 @@ message NodeConfigurationMsg {
   string address = 2;
   int32 port = 3;
   string node_id = 4;
-  int32 corfu_port = 5;
 }
 
 enum ClusterRole {

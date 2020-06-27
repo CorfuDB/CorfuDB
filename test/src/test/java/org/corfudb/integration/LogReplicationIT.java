@@ -148,8 +148,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
-    CorfuTable<String, Long> writerMetaDataTable;
-    LogReplicationMetadataManager logReplicationMetadataManager;
+    private LogReplicationMetadataManager logReplicationMetadataManager;
 
     /**
      * Setup Test Environment
@@ -202,14 +201,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, ACTIVE_CLUSTER_ID.toString());
-        writerMetaDataTable = dstTestRuntime.getObjectsView()
-                .build()
-                .setStreamName(LogReplicationMetadataManager.getPersistedWriterMetadataTableName(ACTIVE_CLUSTER_ID.toString()))
-                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
-                })
-                .setSerializer(Serializers.JSON)
-                .open();
+        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, ACTIVE_CLUSTER_ID);
     }
 
     private void cleanEnv() {
@@ -1218,7 +1210,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, ACTIVE_CLUSTER_ID, REMOTE_CLUSTER_ID);
 
         // Data Sender
-        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel());
+        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel(), logReplicationMetadataManager);
 
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(readerRuntime, sourceDataSender, config);

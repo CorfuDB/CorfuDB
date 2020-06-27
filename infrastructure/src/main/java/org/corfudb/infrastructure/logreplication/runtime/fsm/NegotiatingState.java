@@ -74,7 +74,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             case REMOTE_LEADER_NOT_FOUND:
                 return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
             case LOCAL_LEADER_LOSS:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPING);
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             case ERROR:
                 ((UnrecoverableState)fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE)).setThrowableCause(event.getT().getCause());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE);

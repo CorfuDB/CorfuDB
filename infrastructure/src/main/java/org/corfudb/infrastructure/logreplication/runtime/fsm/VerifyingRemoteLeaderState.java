@@ -64,7 +64,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                 fsm.updateConnectedEndpoints(event.getEndpoint());
                 return this;
             case LOCAL_LEADER_LOSS:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPING);
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             default: {
                 log.warn("Unexpected communication event {} when in init state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());

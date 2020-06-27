@@ -5,7 +5,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
-public abstract class CorfuReplicationSiteManagerAdapter {
+public abstract class CorfuReplicationClusterManagerAdapter {
     @Getter
     CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
 

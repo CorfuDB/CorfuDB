@@ -32,7 +32,7 @@ public class WaitingForConnectionsState implements LogReplicationRuntimeState {
                 fsm.updateConnectedEndpoints(event.getEndpoint());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
             case LOCAL_LEADER_LOSS:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPING);
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             default: {
                 log.warn("Unexpected communication event {} when in init state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());

@@ -4,6 +4,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -19,6 +20,7 @@ import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class represents the Log Replication Server, which is
@@ -37,21 +39,26 @@ public class LogReplicationServer extends AbstractServer {
     private final ExecutorService executor;
 
     @Getter
+    private final LogReplicationMetadataManager metadataManager;
+
+    @Getter
     private final LogReplicationSinkManager sinkManager;
+
+    private volatile AtomicBoolean isLeader = new AtomicBoolean(false);
+
+    private volatile AtomicBoolean isActive = new AtomicBoolean(false);
 
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
-    public LogReplicationServer(@Nonnull ServerContext context, LogReplicationConfig logReplicationConfig) {
+    public LogReplicationServer(@Nonnull ServerContext context, @Nonnull  LogReplicationConfig logReplicationConfig,
+                                @Nonnull  LogReplicationMetadataManager metadataManager, String corfuEndpoint) {
         this.serverContext = context;
+        this.metadataManager = metadataManager;
+        this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig, metadataManager);
+
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
-
-        // TODO (hack): where can we obtain the local corfu endpoint? cluster manager? or can we always assume port is 9000?
-        String corfuPort = serverContext.getLocalEndpoint().equals("localhost:9020") ? ":9001" : ":9000";
-        String corfuEndpoint = serverContext.getNodeLocator().getHost() + corfuPort;
-        log.info("Initialize Sink Manager with CorfuRuntime to {}", corfuEndpoint);
-        this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig);
     }
 
     /* ************ Override Methods ************ */
@@ -117,7 +124,7 @@ public class LogReplicationServer extends AbstractServer {
     private void handleLogReplicationQueryLeadership(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Log Replication Query Leadership Request received by Server.");
         LogReplicationQueryLeaderShipResponse resp = new LogReplicationQueryLeaderShipResponse(0,
-                getSinkManager().isLeader(), serverContext.getLocalEndpoint());
+                isLeader.get(), serverContext.getLocalEndpoint());
         r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE.payloadMsg(resp));
     }
 
@@ -129,19 +136,29 @@ public class LogReplicationServer extends AbstractServer {
      * @return true, if leader node.
      *         false, otherwise.
      */
-    private boolean isLeader(CorfuMsg msg, IServerRouter r) {
+    private synchronized boolean isLeader(CorfuMsg msg, IServerRouter r) {
         // If the current cluster has switched to the active role (no longer the receiver) or it is no longer the leader,
         // skip message processing (drop received message) and nack on leadership (loss of leadership)
         // This will re-trigger leadership discovery on the sender.
-        boolean lostLeadership = sinkManager.isActive() || !sinkManager.isLeader();
+        boolean lostLeadership = isActive.get() || !isLeader.get();
 
         if (lostLeadership) {
-            log.warn("This node has changed, active={}, leader={}. Dropping message type={}, id={}", sinkManager.isActive(),
-                    sinkManager.isLeader(), msg.getMsgType());
+            log.warn("This node has changed, active={}, leader={}. Dropping message type={}, id={}", isActive.get(),
+                    isLeader.get(), msg.getMsgType());
             LogReplicationLeadershipLoss payload = new LogReplicationLeadershipLoss(serverContext.getLocalEndpoint());
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_LEADERSHIP_LOSS.payloadMsg(payload));
         }
 
         return !lostLeadership;
+    }
+
+    /* ************ Public Methods ************ */
+
+    public synchronized void setLeadership(boolean leader) {
+        isLeader.set(leader);
+    }
+
+    public synchronized void setActive(boolean active) {
+        isActive.set(active);
     }
 }

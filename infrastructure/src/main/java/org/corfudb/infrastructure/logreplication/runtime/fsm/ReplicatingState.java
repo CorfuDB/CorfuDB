@@ -50,7 +50,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
             case NEGOTIATION_COMPLETE:
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case LOCAL_LEADER_LOSS:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPING);
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             default: {
                 log.warn("Unexpected communication event {} when in init state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
@@ -83,12 +83,9 @@ public class ReplicatingState implements LogReplicationRuntimeState {
 
     @Override
     public void onExit(LogReplicationRuntimeState to) {
-
-    }
-
-    @Override
-    public void clear() {
-
+        if (to.getType().equals(LogReplicationRuntimeStateType.STOPPED)) {
+            replicationSourceManager.shutdown();
+        }
     }
 
     /**

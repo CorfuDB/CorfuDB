@@ -30,9 +30,9 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
 
     private CompletableFuture<Boolean> serverCompletable;
 
-    public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter adapter) {
-        super(serverContext, adapter);
-        this.service = new GRPCLogReplicationServerHandler(adapter);
+    public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter router) {
+        super(serverContext, router);
+        this.service = new GRPCLogReplicationServerHandler(router);
         this.server = ServerBuilder.forPort(getPort()).addService(service).build();
     }
 

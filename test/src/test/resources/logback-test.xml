@@ -30,7 +30,7 @@
             <pattern>%d %-5level - %msg%n %ex{short}</pattern>
         </encoder>
     </appender>
-
+z
     <!-- Control logging levels for individual components here. -->
     <logger name="org.corfudb.runtime.object" level="INFO"/>
     <logger name="org.corfudb.runtime.clients" level="INFO"/>
