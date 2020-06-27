@@ -60,19 +60,16 @@ public class CorfuReplicationManager {
                             LogReplicationConfig logReplicationConfig,
                             NodeDescriptor localNodeDescriptor,
                             LogReplicationMetadataManager metadataManager,
-                            String pluginFilePath) {
+                            String pluginFilePath, CorfuRuntime corfuRuntime) {
         this.topologyDescriptor = topologyDescriptor;
         this.logReplicationConfig = logReplicationConfig;
         this.metadataManager = metadataManager;
         this.pluginFilePath = pluginFilePath;
+        this.corfuRuntime = corfuRuntime;
 
         this.localNodeDescriptor = localNodeDescriptor;
         this.prepareSiteRoleChangeStreamTail = Address.NON_ADDRESS;
         this.totalNumEntriesToSend = 0;
-
-        corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
-                .parseConfigurationString(topologyDescriptor.getActiveCluster().getNodesDescriptors().get(0).getCorfuEndpoint());
-        corfuRuntime.connect();
     }
 
     /**
@@ -139,18 +136,24 @@ public class CorfuReplicationManager {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    // TODO: It's cleaner to make LogReplicationConfig agnostic of cluster information (shared across
+                    // TODO(Gabriela) : It's cleaner to make LogReplicationConfig agnostic of cluster information (shared across
                     //  all clusters) so it would be better to push down the remote cluster id or info as a separate object
                     //  this requires to change signatures down the pipe. TBD.
+                    String localCorfuEndpoint = localNodeDescriptor.getIpAddress() + ":" + topologyDescriptor.getActiveCluster().getCorfuPort();
 
                     LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
-                            .localCorfuEndpoint(localNodeDescriptor.getCorfuEndpoint())
+                            .localCorfuEndpoint(localCorfuEndpoint)
                             .remoteClusterDescriptor(remoteCluster)
                             .localClusterId(localNodeDescriptor.getClusterId())
                             .replicationConfig(new LogReplicationConfig(logReplicationConfig.getStreamsToReplicate(),
                                     localNodeDescriptor.getClusterId(), remoteCluster.clusterId))
                             .pluginFilePath(pluginFilePath)
                             .topologyConfigId(topologyDescriptor.getTopologyConfigId())
+                            .keyStore(corfuRuntime.getParameters().getKeyStore())
+                            .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
+                            .ksPasswordFile(corfuRuntime.getParameters().getKsPasswordFile())
+                            .trustStore(corfuRuntime.getParameters().getTrustStore())
+                            .tsPasswordFile(corfuRuntime.getParameters().getTsPasswordFile())
                             .build();
                     CorfuLogReplicationRuntime replicationRuntime = new CorfuLogReplicationRuntime(parameters, metadataManager);
                     replicationRuntime.start();

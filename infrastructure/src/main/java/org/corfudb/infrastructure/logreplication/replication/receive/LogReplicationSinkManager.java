@@ -2,10 +2,10 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
@@ -60,20 +60,6 @@ public class LogReplicationSinkManager implements DataReceiver {
     private LogReplicationMetadataManager logReplicationMetadataManager;
     private RxState rxState;
 
-    @Getter
-    @Setter
-    boolean leader;
-
-    /*
-     * The role type is of active or standby. When log replication server is up, it will has a
-     * SinkManager by default even though it has role type active. When the role type is active (sender),
-     * the sink manager should not process any messages it receives. When there is a site flip, the discovery service
-     * will update the role type accordingly.
-     */
-    @Getter
-    @Setter
-    private boolean active = false;
-
     private LogReplicationConfig config;
 
     /*
@@ -104,8 +90,42 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * @param localCorfuEndpoint endpoint for local corfu server
      * @param config log replication configuration
+     * @param metadataManager
+     * @param context
      */
-    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config) {
+    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
+                                     LogReplicationMetadataManager metadataManager,
+                                     ServerContext context) {
+        this.logReplicationMetadataManager = metadataManager;
+        this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .trustStore((String) context.getServerConfig().get("--truststore"))
+                .tsPasswordFile((String) context.getServerConfig().get("--truststore-password-file"))
+                .keyStore((String) context.getServerConfig().get("--keystore"))
+                .ksPasswordFile((String) context.getServerConfig().get("--keystore-password-file"))
+                .tlsEnabled((Boolean) context.getServerConfig().get("--enable-tls"))
+                .build())
+                .parseConfigurationString(localCorfuEndpoint).connect();
+
+        /*
+         * When the server is up, it will be at LOG_ENTRY_SYNC state by default.
+         * The sender will query receiver's status and decide what type of replication to start with.
+         * It will transit to SNAPSHOT_SYNC state if it received a SNAPSHOT_START message from the sender.
+         */
+        this.rxState = RxState.LOG_ENTRY_SYNC;
+        this.config = config;
+        init();
+    }
+
+    /**
+     * Constructor Sink Manager
+     *
+     * @param localCorfuEndpoint endpoint for local corfu server
+     * @param config log replication configuration
+     */
+    @VisibleForTesting
+    public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
+                                     LogReplicationMetadataManager metadataManager) {
+        this.logReplicationMetadataManager = metadataManager;
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
 
@@ -123,11 +143,6 @@ public class LogReplicationSinkManager implements DataReceiver {
      * Init variables.
      */
     private void init() {
-        // TODO: the config does not have this node's actual cluster id, it is actually empty,
-        //   it should obtain it from the DiscoveryService
-
-        logReplicationMetadataManager = new LogReplicationMetadataManager(runtime, 0,
-                config.getLocalClusterId());
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
@@ -174,15 +189,6 @@ public class LogReplicationSinkManager implements DataReceiver {
     public LogReplicationEntry receive(LogReplicationEntry message) {
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
-
-        /*
-         * If the role type is active(sender role type) or it is not the leader, skip processing the message.
-         * Without any Ack, the sender will treat it as a slow receiver and redo site discovery and send messages
-         * to the correct node.
-         */
-        if (active || !leader) {
-            return null;
-        }
 
         log.debug("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
 
@@ -360,8 +366,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param active
      * @param siteConfigID
      */
-    public void updateSiteConfigID(boolean active, long siteConfigID) {
-        this.active = active;
+    public void updateTopologyConfigId(boolean active, long siteConfigID) {
         this.siteConfigID = siteConfigID;
 
         logReplicationMetadataManager.setupTopologyConfigId(siteConfigID);

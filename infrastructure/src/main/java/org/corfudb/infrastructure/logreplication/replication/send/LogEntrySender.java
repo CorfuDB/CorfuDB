@@ -102,6 +102,7 @@ public class LogEntrySender {
              * Read and Send Log Entries
              */
             try {
+                // TODO (Xiaoqin Ma): read batch -> optimization
                 message = logEntryReader.read(logEntrySyncEventId);
 
                 if (message != null) {

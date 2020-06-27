@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
@@ -32,8 +33,6 @@ public class SourceForwardingDataSender implements DataSender {
     // Destination DataControl
     private DefaultDataControl destinationDataControl;
 
-    private ExecutorService channelExecutorWorkers;
-
     private int errorCount = 0;
 
     @VisibleForTesting
@@ -56,15 +55,13 @@ public class SourceForwardingDataSender implements DataSender {
     @Getter
     private ObservableValue errors = new ObservableValue(errorCount);
 
-    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, int ifDropMsg) {
+    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, int ifDropMsg, LogReplicationMetadataManager metadataManager) {
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(destinationEndpoint)
                 .connect();
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(false, 0));
-        this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0), config);
-        destinationLogReplicationManager.setLeader(true);
-        this.channelExecutorWorkers = Executors.newSingleThreadExecutor();
+        this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0), config, metadataManager);
         this.ifDropMsg = ifDropMsg;
     }
 
@@ -83,7 +80,6 @@ public class SourceForwardingDataSender implements DataSender {
         final CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
 
         // Emulate Channel by directly accepting from the destination, whatever is sent by the source manager
-        // channelExecutorWorkers.execute(() -> destinationLogReplicationManager.receive(message));
         LogReplicationEntry ack = destinationLogReplicationManager.receive(message);
         if (ack != null) {
             cf.complete(ack);

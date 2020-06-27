@@ -5,6 +5,6 @@ public enum LogReplicationRuntimeStateType {
     VERIFYING_REMOTE_LEADER,
     NEGOTIATING,
     REPLICATING,
-    STOPPING,
+    STOPPED,
     UNRECOVERABLE
 }

@@ -127,8 +127,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @return
      */
     private LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
+        // TODO (Xiaoqin Ma): maybe not number based but size based (consider the case of large entries)
+        //  maximize payload (default 4MB for GRPC case)
         List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
-        org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
+        LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
         log.info("Successfully pass stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);
         return txMsg;
     }
@@ -172,11 +174,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
         }
 
         if (!currentStreamInfo.iterator.hasNext()) {
-            log.debug("Snapshot logreader finished reading stream {}", currentStreamInfo.uuid);
+            log.debug("Snapshot log reader finished reading stream {}", currentStreamInfo.uuid);
             currentStreamInfo = null;
 
             if (streamsToSend.isEmpty()) {
-                log.info("Snapshot logreader finished reading all streams {}", streams);
+                log.info("Snapshot log reader finished reading all streams {}", streams);
                 endSnapshotSync = true;
             }
         }

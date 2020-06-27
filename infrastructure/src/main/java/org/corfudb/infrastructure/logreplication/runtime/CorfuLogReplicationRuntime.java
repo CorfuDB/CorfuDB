@@ -9,7 +9,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeStateType;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppingState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppedState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionException;
@@ -34,7 +34,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * all states in which the leader node on the active cluster can be.
  *
  *
- *                                                      R-LEADER_LOSS
+ *                                                       R-LEADER_LOSS
  *                                             +-------------------------------+
  *                              ON_CONNECTION  |                               |    ON_CONNECTION_DOWN
  *                                    UP       |       ON_CONNECTION_DOWN      |       (NON_LEADER)
@@ -42,10 +42,10 @@ import java.util.concurrent.LinkedBlockingQueue;
  *                                    |    |   |   +-----------------------+   |        +-----+
  *                                    |    |   |   |                       |   |        |     |
  * +---------------+  ON_CONNECTION  ++----v---v---v--+                  +-+---+--------+-+   |
- * |               |       UP        |                |  R-REMOTE_LEADER_FOUND  |                <---+
+ * |               |       UP        |                |  R-LEADER_FOUND  |                <---+
  * |    WAITING    +---------------->+    VERIFYING   +------------------>                +---+
- * |      FOR      |                 |     REMOTE     |                  |   NEGOTIATING  |   | NEGOTIATION_FAILED
- * |  CONNECTIONS  +<----------------+     LEADER     |                  |                <---+
+ * |      FOR      |                 |     REMOTE     |                  |   NEGOTIATING  |   |  NEGOTIATION_FAILED
+ * |  CONNECTIONS  +<----------------+     LEADER     |                  |                <---+       (ALARM)
  * |               |  ON_CONNECTION  |                +<-----------+     |                +----+
  * +---------------+      DOWN       +-^----+---^----++            |     +-------+-----^--+    |
  *                       (ALL)         |    |   |    |             |             |     |       |
@@ -53,7 +53,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *                                     +----+   +----+             |             |  ON_CONNECTION_UP
  *                              ON_CONNECTION     R-LEADER_NOT     |             |    (NON-LEADER)
  *                                  DOWN              FOUND        |             |
- *                                (NOT ALL)                        |     NEGOTIATION_COMPLETE
+ *                                (NOT ALL)                        |     NEGOTIATE_COMPLETE
  *                                                                 |             |
  *                                                           ON_CONNECTION       |   ON_CONNECTION_UP
  *                                                               DOWN            |     (NON-LEADER)
@@ -62,8 +62,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  *                                                                 |     +-------v------+-+   |
  *            +---------------+      ALL STATES                    +-----+                <---+
  *            |               |                                          |                |
- *            |   STOPPING    <---- L-LEADER_LOSS                        |  REPLICATING   |
- *            |               |                                          |                |
+ *            |   STOPPED     <---- L-LEADER_LOSS                        |  REPLICATING   |
+ *            |               |                     SITE FLIP <-----     |                |
  *            |               |                                          |                +----+
  *            +---------------+                                          +--------------^-+    |
  *                                                                                      |      |
@@ -76,8 +76,6 @@ import java.util.concurrent.LinkedBlockingQueue;
  *            +---------------+
  *
  *
- *
- *
  * States:
  * ------
  *
@@ -85,7 +83,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * - VERIFYING_REMOTE_LEADER     :: verifying the leader endpoint on remote cluster (querying all connected nodes)
  * - NEGOTIATING                 :: negotiating against the leader endpoint
  * - REPLICATING                 :: replicating data to remote cluster through the leader endpoint
- * - STOPPING                    :: stop state machine, no error, just lost leadership so replication stops from this node
+ * - STOPPED                     :: stop state machine, no error, just lost leadership so replication stops from this node
  * - UNRECOVERABLE_STATE         :: error state, unrecoverable error reported by replication, transport or cluster manager, despite
  *                                  being the leader node.
  *
@@ -101,14 +99,15 @@ import java.util.concurrent.LinkedBlockingQueue;
  * - LOCAL_LEADER_LOSS          :: local node looses leadership
  * - NEGOTIATION_COMPLETE,      :: negotiation succeeded and completed
  * - NEGOTIATION_FAILED,        :: negotiation failed
- * - STOPPING                   :: stop log replication server (fatal state)
+ * - STOPPED                    :: stop log replication server (fatal state)
  *
  * @author amartinezman
- *
  *
  */
 @Slf4j
 public class CorfuLogReplicationRuntime {
+
+    // TODO(Gabriela): add site_flip (cluster_role_flip) event... probably we need a new state called finishing_ongoing_replication... and go to to stopped...
 
     public static final int DEFAULT_TIMEOUT = 5000;
 
@@ -153,8 +152,7 @@ public class CorfuLogReplicationRuntime {
         this.metadataManager = metadataManager;
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
-        this.sourceManager = new LogReplicationSourceManager(parameters.getLocalCorfuEndpoint(),
-                new LogReplicationClient(router, remoteClusterId), parameters.getReplicationConfig());
+        this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, remoteClusterId));
         this.communicationFSMWorkers = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build());
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
@@ -187,7 +185,7 @@ public class CorfuLogReplicationRuntime {
         states.put(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER, new VerifyingRemoteLeaderState(this, communicationFSMWorkers, router));
         states.put(LogReplicationRuntimeStateType.NEGOTIATING, new NegotiatingState(this, communicationFSMWorkers, router, metadataManager));
         states.put(LogReplicationRuntimeStateType.REPLICATING, new ReplicatingState(this, sourceManager));
-        states.put(LogReplicationRuntimeStateType.STOPPING, new StoppingState(sourceManager));
+        states.put(LogReplicationRuntimeStateType.STOPPED, new StoppedState(sourceManager));
         states.put(LogReplicationRuntimeStateType.UNRECOVERABLE, new UnrecoverableState());
     }
 
@@ -200,7 +198,7 @@ public class CorfuLogReplicationRuntime {
      */
     public synchronized void input(LogReplicationRuntimeEvent event) {
         try {
-            if (state.getType().equals(LogReplicationRuntimeStateType.STOPPING)) {
+            if (state.getType().equals(LogReplicationRuntimeStateType.STOPPED)) {
                 // Not accepting events, in stopped state
                 return;
             }
@@ -217,7 +215,7 @@ public class CorfuLogReplicationRuntime {
      */
     private void consume() {
         try {
-            if (state.getType() == LogReplicationRuntimeStateType.STOPPING) {
+            if (state.getType() == LogReplicationRuntimeStateType.STOPPED) {
                 log.info("Log Replication Communication State Machine has been stopped. No more events will be processed.");
                 return;
             }
@@ -261,11 +259,11 @@ public class CorfuLogReplicationRuntime {
         connectedEndpoints.remove(endpoint);
     }
 
-    public synchronized void setLeaderEndpoint(String leader) {
+    public synchronized void setRemoteLeaderEndpoint(String leader) {
         leaderEndpoint = Optional.ofNullable(leader);
     }
 
-    public synchronized Optional<String> getLeader() {
+    public synchronized Optional<String> getRemoteLeader() {
         return leaderEndpoint;
     }
 

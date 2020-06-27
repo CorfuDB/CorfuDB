@@ -14,10 +14,6 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
 
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
 /**
  * The table persisted at the replication writer side.
  * It records the logreader cluster's snapshot timestamp  and last log entry's timestamp, it has received and processed.

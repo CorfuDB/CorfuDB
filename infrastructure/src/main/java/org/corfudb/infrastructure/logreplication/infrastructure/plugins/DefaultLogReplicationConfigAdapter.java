@@ -1,15 +1,18 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationStreamNameFetcher;
-
 import java.util.HashMap;
 import java.util.Map;
 
-public class DefaultStreamFetcherPlugin implements LogReplicationStreamNameFetcher {
+/**
+ * Default testing implementation of a Log Replication Config Provider
+ *
+ * This implementation retrieves a fixed set of tables, which are used for testing purposes.
+ */
+public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfigAdapter {
 
     private Map<String, String> streamsNamespaceMap;
 
-    public DefaultStreamFetcherPlugin() {
+    public DefaultLogReplicationConfigAdapter() {
         streamsNamespaceMap = new HashMap<>();
         streamsNamespaceMap.put("Table001", "testNamespace");
         streamsNamespaceMap.put("Table002", "testNamespace");

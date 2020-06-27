@@ -5,11 +5,10 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationSiteManagerAdapter;
-import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -22,8 +21,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
@@ -45,24 +43,30 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * that each option must be preceded with a space.
      */
     private static final String USAGE =
-            "Log Replication Server, the server for the Log Replication.\n"
+            "Corfu Server, the server for the Corfu Infrastructure.\n"
                     + "\n"
                     + "Usage:\n"
-                    + "\tlog_replication_server [-a <address>|-q <interface-name>] "
+                    + "\tlog_replication_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
-                    + "[--base-server-threads=<base_server_threads>] "
+                    + "[--plugin=<plugin-config-file-path>]"
+                    + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
+                    + "[--log-size-quota-percentage=<max_log_size_percentage>]"
+                    + "[--logunit-threads=<logunit_threads>] [--management-server-threads=<management_server_threads>]"
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
                     + "[-b] [-g -o <username_file> -j <password_file>] "
-                    + "[-i <channel-implementation>] "
-                    + "[-z <tls-protocols>]] [-H <seconds>] "
-                    + "[--plugin=<plugin-config-file-path>] "
-                    + "[-T <threads>] [-B <size>] "
-                    + "[--metrics] [--metrics-port <metrics_port>] "
-                    + "[-P <prefix>] [-R <retention>] [--agent] <port> \n"
+                    + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
+                    + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
+                    + "[--metrics] [--metrics-port <metrics_port>]"
+                    + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
                     + "\n"
                     + "Options:\n"
+                    + " -l <path>, --log-path=<path>                                             "
+                    + "              Set the path to the storage file for the log unit.\n        "
                     + " -s, --single                                                             "
-                    + "              Deploy a single-node Log Replication.\n"
+                    + "              Deploy a single-node configuration.\n"
+                    + " -I <cluster-id>, --cluster-id=<cluster-id>"
+                    + "              For a single node configuration the cluster id to use in UUID,"
+                    + "              base64 format, or auto to randomly generate [default: auto].\n"
                     + " -T <threads>, --Threads=<threads>                                        "
                     + "              Number of corfu server worker threads, or 0 to use 2x the "
                     + "              number of available processors [default: 0].\n"
@@ -81,7 +85,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[default: nio].\n"
                     + " -m, --memory                                                             "
                     + "              Run the unit in-memory (non-persistent).\n"
-                    + "                                                                          "
                     + "              Data will be lost when the server exits!\n"
                     + " -c <ratio>, --cache-heap-ratio=<ratio>                                   "
                     + "              The ratio of jvm max heap size we will use for the the "
@@ -93,17 +96,15 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "              If there is no log, then this will be the size of the log unit"
                     + "\n                                                                        "
                     + "                evicted entries will be auto-trimmed. [default: 0.5].\n"
-                    + " --plugin=<plugin-config-file-path>                                       "
-                    + "             Path to Plugin Config Path.\n                                "
                     + " -H <seconds>, --HandshakeTimeout=<seconds>                               "
                     + "              Handshake timeout in seconds [default: 10].\n               "
                     + "                                                                          "
-                    + "              from the log. [default: -1].\n    "
-                    + " -B <size> --batch-size=<size>                                            "
-                    + "              The read/write batch size used for data transfer operations [default: 100].\n"
+                    + "              from the log. [default: -1].\n                              "
                     + "                                                                          "
                     + " -k <seqcache>, --sequencer-cache-size=<seqcache>                         "
                     + "               The size of the sequencer's cache. [default: 250000].\n    "
+                    + " -B <size> --batch-size=<size>                                            "
+                    + "              The read/write batch size used for data transfer operations [default: 100].\n"
                     + " -R <retention>, --metadata-retention=<retention>                         "
                     + "              Maximum number of system reconfigurations (i.e. layouts)    "
                     + "retained for debugging purposes [default: 1000].\n"
@@ -183,14 +184,16 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
     // If set to true - triggers a reset of the server by wiping off all the data.
     private volatile boolean cleanupServer = false;
+
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
+    // Getter for testing
     @Getter
-    private CorfuReplicationSiteManagerAdapter siteManagerAdapter;
+    private CorfuReplicationClusterManagerAdapter clusterManagerAdapter;
 
     @Getter
-    CorfuReplicationDiscoveryService replicationDiscoveryService;
+    private CorfuReplicationDiscoveryService replicationDiscoveryService;
 
     String[] args;
 
@@ -246,10 +249,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         configureLogger(opts);
 
         log.info("Started with arguments: {}", opts);
-        String pluginConfigFilePath = opts.get("--plugin") != null ? (String) opts.get("--plugin") :
-                ServerContext.PLUGIN_CONFIG_FILE_PATH;
 
-        this.siteManagerAdapter = constructSiteManagerAdapter(pluginConfigFilePath);
+        final ServerContext serverContext = new ServerContext(opts);
 
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
@@ -271,46 +272,27 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         shutdownThread.setName("ShutdownThread");
         Runtime.getRuntime().addShutdownHook(shutdownThread);
 
-        // Manages the lifecycle of the Corfu Server.
+        // Manages the lifecycle of the Corfu Log Replication Server.
         while (!shutdownServer) {
-            final ServerContext serverContext = new ServerContext(opts);
             try {
-                String corfuPort = serverContext.getLocalEndpoint()
-                    .equals("localhost:9020") ? ":9001" : ":9000";
+                CompletableFuture<LogReplicationContext> discoveryServiceCallback = startDiscoveryService(serverContext);
 
-                LogReplicationStreamNameTableManager replicationStreamNameTableManager =
-                    new LogReplicationStreamNameTableManager(corfuPort, pluginConfigFilePath);
+                log.info("Wait for Discovery Service to provide a view of the topology...");
 
-                // TODO pankti: Check if version does not match.  If if does not, create an event for site discovery to
-                // do a snapshot sync.
-                boolean upgraded = replicationStreamNameTableManager
-                    .isUpgraded();
+                // Block until the replication context is provided by the Discovery service
+                LogReplicationContext context = discoveryServiceCallback.get();
 
-                // Initialize the LogReplicationConfig with site ids and tables to replicate
-                Set<String> streamsToReplicate =
-                    replicationStreamNameTableManager.getStreamsToReplicate();
+                activeServer = new CorfuInterClusterReplicationServerNode(serverContext, context);
 
-                // Start LogReplicationDiscovery Service, responsible for
-                // acquiring lock, retrieving Site Manager Info and processing this info
-                // so this node is initialized as Source (sender) or Sink (receiver)
-                activeServer = new CorfuInterClusterReplicationServerNode(serverContext,  new LogReplicationConfig(streamsToReplicate));
-
-                replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext, activeServer, siteManagerAdapter);
-
-                Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService);
-                replicationDiscoveryThread.start();
-
-                // Start Corfu Replication Server Node
                 activeServer.startAndListen();
-
-                if (upgraded) {
-                    replicationDiscoveryService.putEvent(
-                        new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
-                }
             } catch (Throwable th) {
                 if (!test) {
                     log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
                     System.exit(EXIT_ERROR_CODE);
+                } else {
+                    // In the case of tests running this server on a dedicated thread, force cleanup... so
+                    // resources are freed and ports shutdown.
+                    cleanShutdown();
                 }
             }
 
@@ -324,6 +306,31 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         }
 
         log.info("main: Server exiting due to shutdown");
+    }
+
+    /**
+     * Start Corfu Log Replication Discovery Service
+     *
+     * @param serverContext server context (server information)
+     * @return completable future for discovered topology
+     */
+    private CompletableFuture<LogReplicationContext> startDiscoveryService(ServerContext serverContext) {
+
+        log.info("Start Discovery Service.");
+        CompletableFuture<LogReplicationContext> discoveryServiceCallback = new CompletableFuture<>();
+
+        this.clusterManagerAdapter = buildClusterManagerAdapter(serverContext.getPluginConfigFilePath());
+
+        // Start LogReplicationDiscovery Service, responsible for
+        // acquiring lock, retrieving Site Manager Info and processing this info
+        // so this node is initialized as Source (sender) or Sink (receiver)
+        replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext,
+                clusterManagerAdapter, discoveryServiceCallback);
+
+        Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService);
+        replicationDiscoveryThread.start();
+
+        return discoveryServiceCallback;
     }
 
     /**
@@ -364,7 +371,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         shutdownServer = true;
         activeServer.close();
         replicationDiscoveryService.shutdown();
-        siteManagerAdapter.shutdown();
+        clusterManagerAdapter.shutdown();
     }
 
     /**
@@ -387,7 +394,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     @SuppressWarnings("checkstyle:printLine")
     private static void println(Object line) {
         System.out.println(line.toString());
-        // log.info(line.toString());
+        log.info(line.toString());
     }
 
     /**
@@ -400,21 +407,26 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             println("");
             println("------------------------------------");
             println("Initializing LOG REPLICATION SERVER");
-            println("VERSION (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
+            println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
             final int port = Integer.parseInt((String) opts.get("<port>"));
             println("Serving on port " + port);
             println("------------------------------------");
             println("");
     }
 
-    private CorfuReplicationSiteManagerAdapter constructSiteManagerAdapter(String pluginConfigFilePath) {
+    /**
+     * Retrieve Cluster Manager Adapter, i.e., the adapter to external provider of the topology.
+     *
+     * @return cluster manager adapter instance
+     */
+    private CorfuReplicationClusterManagerAdapter buildClusterManagerAdapter(String pluginConfigFilePath) {
 
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
         File jar = new File(config.getTopologyManagerAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
-            return (CorfuReplicationSiteManagerAdapter) adapter.getDeclaredConstructor().newInstance();
+            return (CorfuReplicationClusterManagerAdapter) adapter.getDeclaredConstructor().newInstance();
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);

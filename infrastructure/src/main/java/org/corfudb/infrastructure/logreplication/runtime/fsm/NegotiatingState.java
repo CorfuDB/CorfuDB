@@ -74,7 +74,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
             case REMOTE_LEADER_NOT_FOUND:
                 return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
             case LOCAL_LEADER_LOSS:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPING);
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             case ERROR:
                 ((UnrecoverableState)fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE)).setThrowableCause(event.getT().getCause());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.UNRECOVERABLE);
@@ -88,6 +88,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
         // Start Negotiation (check if ongoing negotiation is in progress)
+        // TODO(Gabriela) remove, single thread...
         if(!inProgress.get()) {
             // Start Negotiation
             worker.submit(this::negotiate);
@@ -96,8 +97,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private void negotiate() {
         try {
-            if(fsm.getLeader().isPresent()) {
-                String remoteLeader = fsm.getLeader().get();
+            if(fsm.getRemoteLeader().isPresent()) {
+                String remoteLeader = fsm.getRemoteLeader().get();
                 CompletableFuture<LogReplicationNegotiationResponse> cf = router.sendMessageAndGetCompletable(
                         new CorfuMsg(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST).setEpoch(0), remoteLeader);
                 LogReplicationNegotiationResponse response = cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
@@ -107,7 +108,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 processNegotiationResponse(response);
 
                 // Negotiation to leader node completed, unblock channel in the router.
-                router.getConnectionFuture().complete(null);
+                router.getRemoteLeaderConnectionFuture().complete(null);
 
                 // Negotiation completed
                 inProgress.set(false);
@@ -174,10 +175,6 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                     metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigId());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
-
-        /*
-         * Now the active and standby have the same version and same configID.
-         */
 
         /*
          * Get the current log head.
@@ -275,6 +272,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
             return;
         }
+
+        // TODO(Future): consider continue snapshot sync from a remaining point (insert new event in LogReplicationFSM) -> efficiency
 
         /*
          * For other scenarios, the standby site is in a non-recognizable state, trigger a snapshot full sync.

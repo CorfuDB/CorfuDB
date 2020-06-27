@@ -1,11 +1,8 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
@@ -21,12 +18,6 @@ import java.util.Map;
  */
 @Slf4j
 public class TopologyDescriptor {
-
-    final static String DEFAULT_CORFU_PORT = "9000";
-
-    @Setter
-    @Getter
-    private static String corfuPort = DEFAULT_CORFU_PORT;
 
     // Represents a state of the topology configuration (a topology epoch)
     @Getter
@@ -88,7 +79,7 @@ public class TopologyDescriptor {
         NodeDescriptor nodeInfo = getNodeInfo(sites, endpoint);
 
         if (nodeInfo == null) {
-            log.warn("No Site has node with IP {} ", endpoint);
+            log.warn("No Cluster has node with IP {} ", endpoint);
         }
 
         return nodeInfo;
@@ -113,5 +104,32 @@ public class TopologyDescriptor {
 
     public void removeStandbySite(String siteId) {
         standbyClusters.remove(siteId);
+    }
+
+    /**
+     * Retrieve Cluster Descriptor to which a given endpoint belongs to.
+     *
+     * @param endpoint
+     * @return cluster descriptor to which endpoint belongs to.
+     */
+    public ClusterDescriptor getClusterDescriptor(String endpoint) {
+        List<ClusterDescriptor> clusters = new ArrayList<>();
+        clusters.add(activeCluster);
+        clusters.addAll(standbyClusters.values());
+
+        for(ClusterDescriptor cluster : clusters) {
+            for (NodeDescriptor node : cluster.getNodesDescriptors()) {
+                if (node.getEndpoint().equals(endpoint)) {
+                    return cluster;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Topology[%s] :: Active Cluster=%s :: Standby Clusters=%s", topologyConfigId, activeCluster, standbyClusters);
     }
 }

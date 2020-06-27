@@ -25,13 +25,13 @@ public class LogReplicationLockListener implements LockListener {
     @Override
     public void lockAcquired(LockDataTypes.LockId lockId) {
         log.debug("Lock acquired id={}", lockId);
-        discoveryService.putEvent(new DiscoveryServiceEvent(ACQUIRE_LOCK));
+        discoveryService.input(new DiscoveryServiceEvent(ACQUIRE_LOCK));
     }
 
     @Override
     public void lockRevoked(LockDataTypes.LockId lockId) {
         log.debug("Lock revoked id={}", lockId);
-        discoveryService.putEvent(new DiscoveryServiceEvent(RELEASE_LOCK));
+        discoveryService.input(new DiscoveryServiceEvent(RELEASE_LOCK));
     }
 
 }

@@ -14,6 +14,7 @@ import java.util.Set;
 @Data
 public class LogReplicationConfig {
 
+    // TODO(Gabriela): remove
     // TODO: It's cleaner to make LogReplicationConfig agnostic of cluster information (common across all clusters) .
 
     /*

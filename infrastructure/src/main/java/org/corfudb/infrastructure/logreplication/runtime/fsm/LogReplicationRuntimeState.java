@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
-import java.util.UUID;
-
 public interface LogReplicationRuntimeState {
 
     /**

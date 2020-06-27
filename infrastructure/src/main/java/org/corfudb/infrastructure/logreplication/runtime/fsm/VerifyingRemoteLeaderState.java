@@ -64,7 +64,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                 fsm.updateConnectedEndpoints(event.getEndpoint());
                 return this;
             case LOCAL_LEADER_LOSS:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPING);
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             default: {
                 log.warn("Unexpected communication event {} when in init state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
@@ -82,7 +82,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
     /**
      * Verify who is the leader node on the remote cluster by sending leadership request to all nodes.
-     * <p>
+     *
      * If no leader is found, the verification will be attempted for LEADERSHIP_RETRIES times.
      */
     public synchronized void verifyLeadership() {
@@ -92,10 +92,10 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
         Map<String, CompletableFuture<LogReplicationQueryLeaderShipResponse>> pendingLeadershipQueries = new HashMap<>();
 
         // Verify leadership on remote cluster, only if no leader is currently selected.
-        if (!fsm.getLeader().isPresent()) {
+        if (!fsm.getRemoteLeader().isPresent()) {
 
             for (int i = 0; i < LEADERSHIP_RETRIES; i++) {
-                // TODO: Do not re-attempt pending...
+                // TODO (Gabriela) Do not re-attempt pending...
                 log.info("Verify leadership on remote cluster, attempt={}", i);
 
                 try {
@@ -116,7 +116,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                         if (leadershipResponse.isLeader()) {
                             log.info("Leader for remote cluster, node={}", leadershipResponse.getEndpoint());
                             leader = leadershipResponse.getEndpoint();
-                            fsm.setLeaderEndpoint(leader);
+                            fsm.setRemoteLeaderEndpoint(leader);
                             leadershipVerified = true;
                             // Remove all CF, based on the assumption that one leader response is the expectation.
                             pendingLeadershipQueries.clear();

@@ -475,6 +475,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String trustStorePassword = null;
         private String compressionCodec = null;
         private String pluginConfigFilePath = null;
+        private String logPath = null;
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -484,6 +485,12 @@ public class AbstractIT extends AbstractCorfuTest {
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
             command.append("-a ").append(host);
+
+            if (logPath != null) {
+                command.append(" -l ").append(logPath);
+            } else {
+                command.append(" -m");
+            }
 
             if (tlsEnabled) {
                 command.append(" -e");

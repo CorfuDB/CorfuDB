@@ -70,7 +70,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      * to the remote node.
      */
     @Getter
-    volatile CompletableFuture<Void> connectionFuture;
+    volatile CompletableFuture<Void> remoteLeaderConnectionFuture;
 
     /**
      * The current request ID.
@@ -129,7 +129,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         this.clientList = new ArrayList<>();
         this.requestID = new AtomicLong();
         this.outstandingRequests = new ConcurrentHashMap<>();
-        this.connectionFuture = new CompletableFuture<>();
+        this.remoteLeaderConnectionFuture = new CompletableFuture<>();
     }
 
     // ------------------- IClientRouter Interface ----------------------
@@ -177,7 +177,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                     // Because in Log Replication, messages are sent to the leader node, the connection future
                     // represents a connection to the leader.
                     try {
-                        connectionFuture
+                        remoteLeaderConnectionFuture
                                 .get(getParameters().getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
                         throw new UnrecoverableCorfuInterruptedError(e);
@@ -190,8 +190,8 @@ public class LogReplicationClientRouter implements IClientRouter {
                     }
 
                     // Get Remote Leader
-                    if(runtimeFSM.getLeader().isPresent()) {
-                        endpoint = runtimeFSM.getLeader().get();
+                    if(runtimeFSM.getRemoteLeader().isPresent()) {
+                        endpoint = runtimeFSM.getRemoteLeader().get();
                     } else {
                         log.error("Leader not found to remote cluster {}", remoteClusterId);
                         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
@@ -245,8 +245,8 @@ public class LogReplicationClientRouter implements IClientRouter {
         // Get the next request ID.
         message.setRequestID(requestID.getAndIncrement());
         // Get Remote Leader
-        if(runtimeFSM.getLeader().isPresent()) {
-            String remoteLeader = runtimeFSM.getLeader().get();
+        if(runtimeFSM.getRemoteLeader().isPresent()) {
+            String remoteLeader = runtimeFSM.getRemoteLeader().get();
             channelAdapter.send(remoteLeader, CorfuMessageConverter.toProtoBuf(message));
             log.trace("Sent one-way message: {}", message);
         } else {
@@ -284,8 +284,8 @@ public class LogReplicationClientRouter implements IClientRouter {
         log.debug("stop: Shutting down router for {}", remoteClusterId);
         shutdown = true;
         channelAdapter.stop();
-        connectionFuture = new CompletableFuture<>();
-        connectionFuture.completeExceptionally(new NetworkException("Router stopped", remoteClusterId));
+        remoteLeaderConnectionFuture = new CompletableFuture<>();
+        remoteLeaderConnectionFuture.completeExceptionally(new NetworkException("Router stopped", remoteClusterId));
     }
 
     @Override
@@ -380,7 +380,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             Class adapterType = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
             channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(String.class, ClusterDescriptor.class, LogReplicationClientRouter.class)
                     .newInstance(parameters.getLocalClusterId(), remoteClusterDescriptor, this);
-            // When connection is established to the remote leader node, the connectionFuture will be completed.
+            // When connection is established to the remote leader node, the remoteLeaderConnectionFuture will be completed.
             channelAdapter.connectAsync();
         } catch (Exception e) {
             log.error("Fatal error: Failed to initialize transport adapter {}", config.getTransportClientClassCanonicalName(), e);
@@ -427,6 +427,6 @@ public class LogReplicationClientRouter implements IClientRouter {
     }
 
     public Optional<String> getRemoteLeaderEndpoint() {
-        return runtimeFSM.getLeader();
+        return runtimeFSM.getRemoteLeader();
     }
 }

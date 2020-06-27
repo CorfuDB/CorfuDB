@@ -34,7 +34,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 fsm.updateDisconnectedEndpoints(endpointDown);
 
                 // If the leader is the node that become unavailable, verify new leader and attempt to reconnect.
-                if (fsm.getLeader().isPresent() && fsm.getLeader().get().equals(endpointDown)) {
+                if (fsm.getRemoteLeader().isPresent() && fsm.getRemoteLeader().get().equals(endpointDown)) {
                     // If remaining connections verify leadership on connected endpoints, otherwise, return to init
                     // state, until a connection is available.
                     return fsm.getConnectedEndpoints().size() == 0 ? fsm.getStates().get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY) :
@@ -50,7 +50,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
             case NEGOTIATION_COMPLETE:
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case LOCAL_LEADER_LOSS:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPING);
+                return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             default: {
                 log.warn("Unexpected communication event {} when in init state.", event.getType());
                 throw new IllegalTransitionException(event.getType(), getType());
@@ -83,12 +83,9 @@ public class ReplicatingState implements LogReplicationRuntimeState {
 
     @Override
     public void onExit(LogReplicationRuntimeState to) {
-
-    }
-
-    @Override
-    public void clear() {
-
+        if (to.getType().equals(LogReplicationRuntimeStateType.STOPPED)) {
+            replicationSourceManager.shutdown();
+        }
     }
 
     /**

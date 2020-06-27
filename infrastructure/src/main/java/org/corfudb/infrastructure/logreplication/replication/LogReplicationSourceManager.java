@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
@@ -72,9 +73,14 @@ public class LogReplicationSourceManager implements DataReceiver {
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
     }
 
-    public LogReplicationSourceManager(String localEndpoint, LogReplicationClient client, LogReplicationConfig config) {
-        this(CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder().build()).parseConfigurationString(localEndpoint).connect(),
-                client, config);
+    public LogReplicationSourceManager(LogReplicationRuntimeParameters params, LogReplicationClient client) {
+        this(CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
+                .trustStore(params.getTrustStore())
+                .tsPasswordFile(params.getTsPasswordFile())
+                .keyStore(params.getKeyStore())
+                .ksPasswordFile(params.getKsPasswordFile())
+                .tlsEnabled(params.isTlsEnabled()).build())
+        .parseConfigurationString(params.getLocalCorfuEndpoint()).connect(), client, params.getReplicationConfig());
     }
 
     /**
