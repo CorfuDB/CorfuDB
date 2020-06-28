@@ -4,7 +4,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationSiteManagerAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 
@@ -61,7 +61,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Adapter for cluster discovery service
      */
     @Getter
-    private CorfuReplicationSiteManagerAdapter clusterManager;
+    private CorfuReplicationClusterManagerAdapter clusterManager;
 
     /**
      * Current node's endpoint
@@ -100,7 +100,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @param clusterManager
      */
     public CorfuReplicationDiscoveryService(ServerContext serverContext, CorfuInterClusterReplicationServerNode serverNode,
-                                            CorfuReplicationSiteManagerAdapter clusterManager) {
+                                            CorfuReplicationClusterManagerAdapter clusterManager) {
         this.replicationServerNode = serverNode;
         this.clusterManager = clusterManager;
         this.clusterManager.setCorfuReplicationDiscoveryService(this);

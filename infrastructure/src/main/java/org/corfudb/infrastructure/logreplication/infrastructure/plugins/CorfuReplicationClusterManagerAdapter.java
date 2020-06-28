@@ -11,7 +11,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
  *
  */
 
-public interface CorfuReplicationSiteManagerAdapter {
+public interface CorfuReplicationClusterManagerAdapter {
 
     /**
      *   Set the corfuReplicationDiscoveryServiceMember

@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationSiteManagerAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
@@ -187,7 +187,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     private static final int EXIT_ERROR_CODE = 100;
 
     @Getter
-    private CorfuReplicationSiteManagerAdapter siteManagerAdapter;
+    private CorfuReplicationClusterManagerAdapter siteManagerAdapter;
 
     @Getter
     CorfuReplicationDiscoveryService replicationDiscoveryService;
@@ -411,14 +411,14 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             println("");
     }
 
-    private CorfuReplicationSiteManagerAdapter constructSiteManagerAdapter(String pluginConfigFilePath) {
+    private CorfuReplicationClusterManagerAdapter constructSiteManagerAdapter(String pluginConfigFilePath) {
 
         LogReplicationPluginConfig config = new LogReplicationPluginConfig(pluginConfigFilePath);
         File jar = new File(config.getTopologyManagerAdapterJARPath());
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
-            return (CorfuReplicationSiteManagerAdapter) adapter.getDeclaredConstructor().newInstance();
+            return (CorfuReplicationClusterManagerAdapter) adapter.getDeclaredConstructor().newInstance();
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);

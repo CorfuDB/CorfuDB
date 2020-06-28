@@ -12,7 +12,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
  *
  */
 @Slf4j
-public abstract class CorfuReplicationSiteManagerBaseAdapter implements CorfuReplicationSiteManagerAdapter {
+public abstract class CorfuReplicationClusterManagerBaseAdapter implements CorfuReplicationClusterManagerAdapter {
     @Getter
     CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
 
