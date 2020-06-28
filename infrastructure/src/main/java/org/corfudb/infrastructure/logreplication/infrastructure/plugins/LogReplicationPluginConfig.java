@@ -32,7 +32,7 @@ public class LogReplicationPluginConfig {
     public static final String DEFAULT_STREAM_FETCHER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultLogReplicationConfigAdapter";
 
     // Topology Manager
-    public static final String DEFAULT_SITE_MANAGER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager";
+    public static final String DEFAULT_CLUSTER_MANAGER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager";
 
     private String transportAdapterJARPath;
     private String transportServerClassCanonicalName;
@@ -68,7 +68,7 @@ public class LogReplicationPluginConfig {
             this.streamFetcherClassCanonicalName = DEFAULT_STREAM_FETCHER_CLASSNAME;
 
             this.topologyManagerAdapterJARPath = getParentDir() + DEFAULT_JAR_PATH;
-            this.topologyManagerAdapterName = DEFAULT_SITE_MANAGER_CLASSNAME;
+            this.topologyManagerAdapterName = DEFAULT_CLUSTER_MANAGER_CLASSNAME;
         }
 
         log.debug("Log Replication Plugins :: {} ", this);
