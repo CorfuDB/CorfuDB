@@ -4,7 +4,7 @@ import lombok.Getter;
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo.SiteConfigurationMsg;
 
 
-public class CorfuReplicationSiteManagerImpl implements CorfuReplicationSiteManagerAdapter {
+public class CorfuReplicationClusterManagerImpl implements CorfuReplicationClusterManagerAdapter {
     @Getter
     CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
 

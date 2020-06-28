@@ -20,7 +20,7 @@ import java.util.Set;
 import static java.lang.Thread.sleep;
 
 @Slf4j
-public class DefaultSiteManager extends CorfuReplicationSiteManagerImpl {
+public class DefaultClusterManager extends CorfuReplicationClusterManagerImpl {
     public static long epoch = 0;
     public static final int changeInterval = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
@@ -199,9 +199,9 @@ public class DefaultSiteManager extends CorfuReplicationSiteManagerImpl {
      */
     public static class SiteManagerCallback implements Runnable {
         public boolean siteFlip = false;
-        DefaultSiteManager siteManager;
+        DefaultClusterManager siteManager;
 
-        SiteManagerCallback(DefaultSiteManager siteManagerAdapter) {
+        SiteManagerCallback(DefaultClusterManager siteManagerAdapter) {
             this.siteManager = siteManagerAdapter;
         }
 

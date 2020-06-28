@@ -1140,7 +1140,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             blockUntilExpectedAckType.acquire();
             while (logReplicationMetadataAccessor.getLastProcessedLogTimestamp(null) !=
                     logReplicationMetadataAccessor.getLastSnapStartTimestamp(null)) {
-                sleep(1000);
+                sleep(WAIT_STATE_CHANGE);
                 log.info("metadata {}", logReplicationMetadataAccessor.getLogReplicationStatus());
             }
         }

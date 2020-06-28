@@ -2,7 +2,7 @@ package org.corfudb.logreplication.infrastructure;
 
 import org.corfudb.logreplication.proto.LogReplicationSiteInfo;
 
-public interface CorfuReplicationSiteManagerAdapter {
+public interface CorfuReplicationClusterManagerAdapter {
 
     public void setCorfuReplicationDiscoveryService(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
 
