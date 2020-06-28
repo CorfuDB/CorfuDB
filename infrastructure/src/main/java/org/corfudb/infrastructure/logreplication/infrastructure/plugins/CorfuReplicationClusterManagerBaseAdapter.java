@@ -38,12 +38,12 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
     public synchronized void updateTopologyConfig(TopologyConfigurationMsg newTopologyConfigMsg) {
         if (newTopologyConfigMsg.getTopologyConfigID() > topologyConfig.getTopologyConfigID()) {
             topologyConfig = newTopologyConfigMsg;
-            corfuReplicationDiscoveryService.updateSiteConfig(topologyConfig);
+            corfuReplicationDiscoveryService.updateTopology(topologyConfig);
         }
     }
 
     public void prepareSiteRoleChange() {
-        corfuReplicationDiscoveryService.prepareSiteRoleChange();
+        corfuReplicationDiscoveryService.prepareClusterRoleChange();
     }
 
     public int queryReplicationStatus() {
