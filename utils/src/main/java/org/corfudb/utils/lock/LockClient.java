@@ -18,6 +18,7 @@ import org.corfudb.utils.lock.LockDataTypes.LockId;
 import org.corfudb.utils.lock.persistence.LockStore;
 import org.corfudb.utils.lock.states.LockEvent;
 
+import javax.print.attribute.standard.SheetCollate;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.concurrent.*;
@@ -48,9 +49,16 @@ public class LockClient {
     // single threaded scheduler to monitor locks
     private final ScheduledExecutorService lockMonitorScheduler;
 
+    // single threaded scheduler for lock listener.
+    private final ExecutorService lockListenerExecutor;
+
+    // single threaded scheduler to process tasks;
+    private final ScheduledExecutorService taskScheduler;
+
+
     // duration between monitoring runs
     @Setter
-    private static int DurationBetweenLockMonitorRuns = 60;
+    private static int DurationBetweenLockMonitorRuns = 10;
 
     // The context contains objects that are shared across the locks in this client.
     private final ClientContext clientContext;
@@ -60,6 +68,9 @@ public class LockClient {
 
     @Getter
     private UUID clientId;
+
+    private Lock lock;
+
 
     /**
      * Constructor
@@ -73,7 +84,7 @@ public class LockClient {
     //TODO need to determine if the application should provide a clientId or should it be internally generated.
     public LockClient(UUID clientId, CorfuRuntime corfuRuntime) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
 
-        ScheduledExecutorService taskScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        this.taskScheduler = Executors.newScheduledThreadPool(1, (r) ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(r);
             t.setName("LockTaskThread");
@@ -81,7 +92,7 @@ public class LockClient {
             return t;
         });
 
-        ExecutorService lockListenerExecutor = Executors.newFixedThreadPool(1, (r) ->
+        this.lockListenerExecutor = Executors.newFixedThreadPool(1, (r) ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(r);
             t.setName("LockListenerThread");
@@ -119,13 +130,31 @@ public class LockClient {
                 .setLockName(lockName)
                 .build();
 
-        Lock lock = locks.computeIfAbsent(
+        lock = locks.computeIfAbsent(
                 lockId,
                 (key) -> new Lock(lockId, lockListener, clientContext));
 
         // Initialize the lease
         lock.input(LockEvent.LEASE_REVOKED);
 
+        monitorLocks();
+    }
+
+    /**
+     * Enforce a transition to NoLeaseState and stop monitoring.
+     **/
+    public void suspendInterest() {
+        log.info("LockClient {} suspendInterest.", clientId);
+        stopMonitorLocks();
+        lock.input(LockEvent.LEASE_REVOKED);
+    }
+
+    /**
+     * Resume the interest inserting an LEASE_REVOIKED event and start monitoring.
+     **/
+    public void resumeInterest() {
+        log.info("LockClient {} resumeInterest.", clientId);
+        lock.input(LockEvent.LEASE_REVOKED);
         monitorLocks();
     }
 
@@ -154,6 +183,30 @@ public class LockClient {
         ));
     }
 
+
+    /**
+     * Stop monitoring the locks.
+     */
+    private void stopMonitorLocks() {
+        synchronized (lockMonitorFuture) {
+            if (lockMonitorFuture.isPresent() && !lockMonitorFuture.get().isDone()) {
+                boolean cancelled = lockMonitorFuture.get().cancel(false);
+                if (!cancelled) {
+                    log.error("Lock: Could not cancel the future for lease renewal!!!", lock.getLockId());
+                }
+            }
+            log.warn("Lock: canceled the future for monitor locks!!!", lock.getLockId());
+        }
+    }
+
+
+    public void stop() {
+        lock.input(LockEvent.UNRECOVERABLE_ERROR);
+        taskScheduler.shutdownNow();
+        lockListenerExecutor.shutdownNow();
+        stopMonitorLocks();
+    }
+
     /**
      * Context is used to provide access to common values and resources needed by objects implementing
      * the Lock functionality.
@@ -173,6 +226,4 @@ public class LockClient {
             this.lockListenerExecutor = lockListenerExecutor;
         }
     }
-
-
 }
