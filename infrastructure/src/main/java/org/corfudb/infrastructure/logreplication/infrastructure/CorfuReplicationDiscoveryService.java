@@ -170,7 +170,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private void startDiscovery() throws LogReplicationDiscoveryServiceException {
 
         try {
-            log.info("Connect to Cluster Manager adapter.");
+            log.info("Connecting to Cluster Manager adapter...");
 
             this.clusterManagerAdapter.connect(this);
 
@@ -248,10 +248,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         localClusterDescriptor = topology.getClusterDescriptor(localEndpoint);
         if (localClusterDescriptor != null) {
             localNodeDescriptor = localClusterDescriptor.getNode(localEndpoint);
-            return true;
         }
 
-        return false;
+        return localClusterDescriptor != null && localNodeDescriptor != null;
     }
 
     /**

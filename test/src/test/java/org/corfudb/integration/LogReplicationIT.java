@@ -4,7 +4,10 @@ import com.google.common.reflect.TypeToken;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
@@ -62,6 +65,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     static final String ACTIVE_CLUSTER_ID = UUID.randomUUID().toString();
     static final String REMOTE_CLUSTER_ID = UUID.randomUUID().toString();
+    static final int CORFU_PORT = 9000;
     static final String TABLE_PREFIX = "test";
 
     static private final int NUM_KEYS = 4;
@@ -1207,13 +1211,16 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                                             Set<WAIT> waitConditions) throws InterruptedException {
         // Config
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, ACTIVE_CLUSTER_ID, REMOTE_CLUSTER_ID);
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel(), logReplicationMetadataManager);
 
         // Source Manager
-        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(readerRuntime, sourceDataSender, config);
+        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(readerRuntime, sourceDataSender,
+                LogReplicationRuntimeParameters.builder()
+                        .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID, LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT))
+                        .replicationConfig(config).build());
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)

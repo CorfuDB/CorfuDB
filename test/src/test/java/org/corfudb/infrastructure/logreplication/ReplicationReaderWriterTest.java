@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication;
 
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
@@ -49,8 +48,6 @@ import static org.corfudb.integration.ReplicationReaderWriterIT.writeLogEntryMsg
 
 public class ReplicationReaderWriterTest extends AbstractViewTest {
     static private final int START_VAL = 1;
-    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
-    static final UUID REMOTE_SITE_ID = UUID.randomUUID();
     static final int NUM_KEYS = 4;
 
     CorfuRuntime srcDataRuntime = null;
@@ -82,7 +79,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         writerRuntime = getNewRuntime(getDefaultNode()).setTransactionLogging(true).connect();
 
         UUID uuid = UUID.randomUUID();
-        LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet(), PRIMARY_SITE_ID.toString(), REMOTE_SITE_ID.toString());
+        LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet());
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(readerRuntime, 0, uuid.toString());
         logEntryReader = new StreamsLogEntryReader(readerRuntime, config);
         logEntryWriter = new LogEntryWriter(writerRuntime, config, logReplicationMetadataManager);
@@ -106,7 +103,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
     }
 
     private void readMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID.toString(), REMOTE_SITE_ID.toString());
+        LogReplicationConfig config = new LogReplicationConfig(streams);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());

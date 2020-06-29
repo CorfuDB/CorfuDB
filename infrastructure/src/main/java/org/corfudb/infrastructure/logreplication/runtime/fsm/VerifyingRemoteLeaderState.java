@@ -23,8 +23,6 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
-    private static final int LEADERSHIP_RETRIES = 5;
-
     private CorfuLogReplicationRuntime fsm;
 
     private ExecutorService worker;
@@ -86,7 +84,6 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
      * If no leader is found, the verification will be attempted for LEADERSHIP_RETRIES times.
      */
     public synchronized void verifyLeadership() {
-        boolean leadershipVerified = false;
         String leader = "";
 
         Map<String, CompletableFuture<LogReplicationQueryLeaderShipResponse>> pendingLeadershipQueries = new HashMap<>();
@@ -94,9 +91,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
         // Verify leadership on remote cluster, only if no leader is currently selected.
         if (!fsm.getRemoteLeader().isPresent()) {
 
-            for (int i = 0; i < LEADERSHIP_RETRIES; i++) {
-                // TODO (Gabriela) Do not re-attempt pending...
-                log.info("Verify leadership on remote cluster, attempt={}", i);
+                log.debug("Verify leader on remote cluster {}", fsm.getRemoteClusterId());
 
                 try {
                     for (String node : fsm.getConnectedEndpoints()) {
@@ -107,9 +102,8 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                         pendingLeadershipQueries.put(node, leadershipRequestCf);
                     }
 
-                    // TODO: Anny should we block or wait for this to complete async...
                     // Block until all leadership requests are completed, or a leader is discovered.
-                    while (!leadershipVerified || pendingLeadershipQueries.size() != 0) {
+                    while (pendingLeadershipQueries.size() != 0) {
                         LogReplicationQueryLeaderShipResponse leadershipResponse = (LogReplicationQueryLeaderShipResponse) CompletableFuture.anyOf(pendingLeadershipQueries.values()
                                 .toArray(new CompletableFuture<?>[pendingLeadershipQueries.size()])).get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
@@ -117,26 +111,22 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                             log.info("Leader for remote cluster, node={}", leadershipResponse.getEndpoint());
                             leader = leadershipResponse.getEndpoint();
                             fsm.setRemoteLeaderEndpoint(leader);
-                            leadershipVerified = true;
                             // Remove all CF, based on the assumption that one leader response is the expectation.
                             pendingLeadershipQueries.clear();
+
+                            // A new leader has been found, start negotiation, to determine log replication
+                            // continuation or start point
+                            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
                             break;
                         } else {
                             // Remove CF for completed request
                             pendingLeadershipQueries.remove(leadershipResponse.getEndpoint());
                         }
                     }
-
-                    if (leadershipVerified) {
-                        // A new leader has been found, start negotiation, to determine log replication
-                        // continuation or start point
-                        fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
-                        break;
-                    }
                 } catch (Exception ex) {
-                    log.warn("Exception caught while verifying remote leader. Retry={}", i, ex);
+                    log.warn("Exception caught while verifying remote leader.", ex);
+                    fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND, leader));
                 }
-            }
         }
     }
 }

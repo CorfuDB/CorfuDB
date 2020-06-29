@@ -145,8 +145,7 @@ public class CorfuReplicationManager {
                             .localCorfuEndpoint(localCorfuEndpoint)
                             .remoteClusterDescriptor(remoteCluster)
                             .localClusterId(localNodeDescriptor.getClusterId())
-                            .replicationConfig(new LogReplicationConfig(logReplicationConfig.getStreamsToReplicate(),
-                                    localNodeDescriptor.getClusterId(), remoteCluster.clusterId))
+                            .replicationConfig(new LogReplicationConfig(logReplicationConfig.getStreamsToReplicate()))
                             .pluginFilePath(pluginFilePath)
                             .topologyConfigId(topologyDescriptor.getTopologyConfigId())
                             .keyStore(corfuRuntime.getParameters().getKeyStore())

@@ -52,8 +52,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     static private final int NUM_STREAMS = 2;
     static public final int NUM_TRANSACTIONS = 100;
     static final String PRIMARY_SITE_ID = "Cluster-Paris";
-    static final String REMOTE_SITE_ID = "Cluster-London";
-
 
     Process server1;
     Process server2;
@@ -262,7 +260,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void readLogEntryMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) throws
             TrimmedException {
-        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        LogReplicationConfig config = new LogReplicationConfig(streams);
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
@@ -286,7 +284,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeLogEntryMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadataManager);
 
@@ -334,7 +332,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void readSnapLogMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        LogReplicationConfig config = new LogReplicationConfig(streams);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
         int cnt = 0;
 
@@ -354,7 +352,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void writeSnapLogMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        LogReplicationConfig config = new LogReplicationConfig(streams);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 

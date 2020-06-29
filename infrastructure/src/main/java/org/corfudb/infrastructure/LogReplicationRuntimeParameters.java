@@ -36,7 +36,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
     // Log Replication Configuration (streams to replicate)
     private LogReplicationConfig replicationConfig;
 
-    // Plugin File Path (file with plugin configurations - absolute paths of JAR and canonical name of  classes)
+    // Plugin File Path (file with plugin configurations - absolute paths of JAR and canonical name of classes)
     private String pluginFilePath;
 
     // Topology Configuration Identifier (configuration epoch)
@@ -47,33 +47,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
     }
 
     public static class LogReplicationRuntimeParametersBuilder extends RuntimeParametersBuilder {
-        /*boolean tlsEnabled = false;
-        String keyStore;
-        String ksPasswordFile;
-        String trustStore;
-        String tsPasswordFile;
-        boolean saslPlainTextEnabled = false;
-        String usernameFile;
-        String passwordFile;
-        int handshakeTimeout = 10;
-        Duration requestTimeout = Duration.ofSeconds(5);
-        int idleConnectionTimeout = 7;
-        int keepAlivePeriod = 2;
-        Duration connectionTimeout = Duration.ofMillis(500);
-        Duration connectionRetryRate = Duration.ofSeconds(1);
-        UUID clientId = UUID.randomUUID();
-        ChannelImplementation socketType = ChannelImplementation.NIO;
-        EventLoopGroup nettyEventLoop;
-        String nettyEventLoopThreadFormat = "netty-%d";
-        int nettyEventLoopThreads = 0;
-        boolean shutdownNettyEventLoop = true;
-        Map<ChannelOption, Object> customNettyChannelOptions;
-        Thread.UncaughtExceptionHandler uncaughtExceptionHandler;
-        List<MsgHandlingFilter> nettyClientInboundMsgFilters = null;
-        volatile Runnable systemDownHandler = () -> {
-        };
-        volatile Runnable beforeRpcHandler = () -> {
-        };*/
+
         private String localCorfuEndpoint;
         private String localClusterId;
         private ClusterDescriptor remoteClusterDescriptor;

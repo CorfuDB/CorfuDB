@@ -4,6 +4,8 @@ import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.InSnapshotSyncState;
@@ -55,8 +57,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final String TEST_STREAM_NAME = "StreamA";
     private static final int BATCH_SIZE = 2;
     private static final int WAIT_TIME = 100;
-    static final String ACTIVE_CLUSTER_ID = "Cluster-London-168290";
-    static final String STANDBY_CLUSTER_ID = "Cluster-Paris-836492";
+    private static final int CORFU_PORT = 9000;
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -443,8 +444,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
             case STREAMS:
                 // Default implementation used for Log Replication (stream-based)
-                LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME),
-                        ACTIVE_CLUSTER_ID, STANDBY_CLUSTER_ID);
+                LogReplicationConfig logReplicationConfig = new LogReplicationConfig(Collections.singleton(TEST_STREAM_NAME));
                 snapshotReader = new StreamsSnapshotReader(getNewRuntime(getDefaultNode()).connect(),
                         logReplicationConfig);
                 dataSender = new TestDataSender();
@@ -454,7 +454,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET, ACTIVE_CLUSTER_ID, STANDBY_CLUSTER_ID),
+                new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET), new ClusterDescriptor("Cluster-Local",
+                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);

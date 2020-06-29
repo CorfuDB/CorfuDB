@@ -84,7 +84,7 @@ public class ServerContext implements AutoCloseable {
     private static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
 
     // Corfu Replication Server
-    public static final String PLUGIN_CONFIG_FILE_PATH = "/config/corfu/corfu_plugin_config.properties";
+    public static final String PLUGIN_CONFIG_FILE_PATH = "../resources/corfu_plugin_config.properties";
 
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";

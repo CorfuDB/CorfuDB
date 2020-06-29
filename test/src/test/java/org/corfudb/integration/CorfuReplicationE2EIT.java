@@ -22,6 +22,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class CorfuReplicationE2EIT extends AbstractIT {
 
     private String pluginConfigFilePath;
+
+    // Note: this flag is kept for debugging purposes only.
+    // Log Replication Server should run as a process as the unexpected termination of it
+    // (for instance the completion of a test) causes SYSTEM_EXIT(ERROR_CODE).
+    // If flipped to debug (easily access logs within the IDE, flip back before pushing upstream).
     private static boolean runProcess = true;
 
     public CorfuReplicationE2EIT(String plugin) {

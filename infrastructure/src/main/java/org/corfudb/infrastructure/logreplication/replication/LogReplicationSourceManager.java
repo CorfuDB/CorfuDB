@@ -51,6 +51,16 @@ public class LogReplicationSourceManager implements DataReceiver {
     @VisibleForTesting
     private final LogReplicationFSM logReplicationFSM;
 
+    /*
+     * Log Replication Runtime Parameters
+     */
+    private final LogReplicationRuntimeParameters parameters;
+
+    /*
+     * Log Replication Configuration
+     */
+    private final LogReplicationConfig config;
+
     @VisibleForTesting
     private int countACKs = 0;
 
@@ -63,13 +73,13 @@ public class LogReplicationSourceManager implements DataReceiver {
      * @param runtime Corfu Runtime
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
-     * @param config Log Replication Configuration
+     * @param params Log Replication Parameters
      */
     public LogReplicationSourceManager(CorfuRuntime runtime,
                                        DataSender dataSender,
-                                       LogReplicationConfig config) {
+                                       LogReplicationRuntimeParameters params) {
 
-        this(runtime, dataSender, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
+        this(runtime, dataSender, params, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
     }
 
@@ -80,17 +90,18 @@ public class LogReplicationSourceManager implements DataReceiver {
                 .keyStore(params.getKeyStore())
                 .ksPasswordFile(params.getKsPasswordFile())
                 .tlsEnabled(params.isTlsEnabled()).build())
-        .parseConfigurationString(params.getLocalCorfuEndpoint()).connect(), client, params.getReplicationConfig());
+        .parseConfigurationString(params.getLocalCorfuEndpoint()).connect(), client, params);
     }
 
     /**
      * Constructor LogReplicationSourceManager
      *
      * @param runtime Corfu Runtime
-     * @param config Log Replication Configuration
+     * @param client Log replication client
+     * @param params Log Replication parameters
      */
-    public LogReplicationSourceManager(CorfuRuntime runtime, LogReplicationClient client, LogReplicationConfig config) {
-        this(runtime, new CorfuDataSender(client), config);
+    public LogReplicationSourceManager(CorfuRuntime runtime, LogReplicationClient client, LogReplicationRuntimeParameters params) {
+        this(runtime, new CorfuDataSender(client), params);
     }
 
     /**
@@ -100,14 +111,14 @@ public class LogReplicationSourceManager implements DataReceiver {
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
      * @param readProcessor implementation for reads processor (data transformation)
-     * @param config Log Replication Configuration
+     * @param params Log Replication Parameters
      */
     public LogReplicationSourceManager(CorfuRuntime runtime,
                                        DataSender dataSender,
                                        ReadProcessor readProcessor,
-                                       LogReplicationConfig config) {
+                                       LogReplicationRuntimeParameters params) {
         // Default to single dedicated thread for state machine workers (perform state tasks)
-        this(runtime, dataSender, readProcessor, config, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
+        this(runtime, dataSender, readProcessor, params, Executors.newFixedThreadPool(DEFAULT_FSM_WORKER_THREADS, new
                 ThreadFactoryBuilder().setNameFormat("state-machine-worker").build()));
     }
 
@@ -119,14 +130,14 @@ public class LogReplicationSourceManager implements DataReceiver {
      * @param runtime corfu runtime
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
-     * @param config Log Replication Configuration
+     * @param params Log Replication Parameters
      * @param logReplicationFSMWorkers worker thread pool (state tasks)
      */
     public LogReplicationSourceManager(CorfuRuntime runtime,
                                        DataSender dataSender,
-                                       LogReplicationConfig config,
+                                       LogReplicationRuntimeParameters params,
                                        ExecutorService logReplicationFSMWorkers) {
-        this(runtime, dataSender, new DefaultReadProcessor(runtime), config, logReplicationFSMWorkers);
+        this(runtime, dataSender, new DefaultReadProcessor(runtime), params, logReplicationFSMWorkers);
     }
 
     /**
@@ -138,14 +149,17 @@ public class LogReplicationSourceManager implements DataReceiver {
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
      * @param readProcessor implementation for reads processor (transformation)
-     * @param config Log Replication Configuration
+     * @param params Log Replication Parameters
      * @param logReplicationFSMWorkers worker thread pool (state tasks)
      */
     public LogReplicationSourceManager(CorfuRuntime runtime,
                                        DataSender dataSender,
                                        ReadProcessor readProcessor,
-                                       LogReplicationConfig config,
+                                       LogReplicationRuntimeParameters params,
                                        ExecutorService logReplicationFSMWorkers) {
+
+        this.parameters = params;
+        this.config = parameters.getReplicationConfig();
         if (config.getStreamsToReplicate() == null || config.getStreamsToReplicate().isEmpty()) {
             // Avoid FSM being initialized if there are no streams to replicate
             throw new IllegalArgumentException("Invalid Log Replication: Streams to replicate is EMPTY");
@@ -157,8 +171,8 @@ public class LogReplicationSourceManager implements DataReceiver {
         this.runtime = CorfuRuntime.fromParameters(runtime.getParameters());
         this.runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
 
-        this.logReplicationFSM = new LogReplicationFSM(this.runtime, config, dataSender, readProcessor,
-                logReplicationFSMWorkers);
+        this.logReplicationFSM = new LogReplicationFSM(this.runtime, config, params.getRemoteClusterDescriptor(),
+                dataSender, readProcessor, logReplicationFSMWorkers);
     }
 
     /**

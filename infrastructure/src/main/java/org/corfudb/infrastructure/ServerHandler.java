@@ -7,7 +7,6 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.runtime.Messages.CorfuMessageType;
 
 /**
  * Created by mwei on 8/8/16.

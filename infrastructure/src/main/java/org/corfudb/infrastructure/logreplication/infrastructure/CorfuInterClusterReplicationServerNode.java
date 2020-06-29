@@ -78,6 +78,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      */
     public void startAndListen() {
         try {
+            log.info("Starting server transport adapter...");
             router.getServerAdapter().start().get();
         } catch (Exception e) {
             throw new UnrecoverableCorfuError(e);

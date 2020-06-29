@@ -26,14 +26,13 @@ public class ClusterDescriptor {
     @Getter
     List<NodeDescriptor> nodesDescriptors;
 
-    // Port on which Corfu DB runs on this cluster
     @Getter
-    int corfuPort;
+    private int corfuPort;    // Port on which Corfu DB runs on this cluster
 
     public ClusterDescriptor(ClusterConfigurationMsg clusterConfig) {
         this.clusterId = clusterConfig.getId();
         this.role = clusterConfig.getRole();
-        this.corfuPort = clusterConfig.getCorfuPort();
+        this.corfuPort = clusterConfig.getCorfuPort() != 0 ? clusterConfig.getCorfuPort() : CORFU_PORT;
         this.nodesDescriptors = new ArrayList<>();
         for (NodeConfigurationMsg nodeConfig : clusterConfig.getNodeInfoList()) {
             NodeDescriptor newNode = new NodeDescriptor(nodeConfig.getAddress(),
@@ -79,9 +78,15 @@ public class ClusterDescriptor {
 
     @Override
     public String toString() {
-        return String.format("Cluster[%s] - CorfuPort[%s] --- Nodes[%s]:  %s", getClusterId(), corfuPort, nodesDescriptors.size(), nodesDescriptors);
+        return String.format("Cluster[%s]:: role=%s, CorfuPort=%s, Nodes[%s]:  %s", getClusterId(), role, corfuPort, nodesDescriptors.size(), nodesDescriptors);
     }
 
+    /**
+     * Get descriptor for a specific endpoint
+     *
+     * @param endpoint node's endpoint
+     * @return endpoint's node descriptor or null if it does not belong to this cluster.
+     */
     public NodeDescriptor getNode(String endpoint) {
         for (NodeDescriptor node : nodesDescriptors) {
             if(node.getEndpoint().equals(endpoint)) {

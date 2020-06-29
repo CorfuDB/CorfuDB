@@ -142,6 +142,8 @@ public class CorfuLogReplicationRuntime {
     private final LogReplicationSourceManager sourceManager;
     private volatile Set<String> connectedEndpoints = ConcurrentHashMap.newKeySet();
     private volatile Optional<String> leaderEndpoint = Optional.empty();
+
+    @Getter
     public final String remoteClusterId;
 
     /**
@@ -168,6 +170,7 @@ public class CorfuLogReplicationRuntime {
      * Start Log Replication Communication FSM
      */
     public void start() {
+        log.info("Start Log Replication Runtime to remote {}", remoteClusterId);
         // Start Consumer Thread for this state machine (dedicated thread for event consumption)
         communicationFSMConsumer.submit(this::consume);
         router.connect();

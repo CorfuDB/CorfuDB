@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
@@ -169,6 +170,11 @@ public class LogReplicationFSM {
     private SnapshotSender snapshotSender;
 
     /**
+     * Remote Cluster Descriptor to which this FSM drives the log replication
+     */
+    private final ClusterDescriptor remoteCluster;
+
+    /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
      * @param runtime Corfu Runtime
@@ -178,11 +184,11 @@ public class LogReplicationFSM {
      * @param readProcessor read processor for data transformation
      * @param workers FSM executor service for state tasks
      */
-    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, DataSender dataSender,
+    public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, ClusterDescriptor remoteCluster, DataSender dataSender,
                              ReadProcessor readProcessor, ExecutorService workers) {
         // Use stream-based readers for snapshot and log entry sync reads
         this(runtime, new StreamsSnapshotReader(runtime, config), dataSender,
-                new StreamsLogEntryReader(runtime, config), readProcessor, config, workers);
+                new StreamsLogEntryReader(runtime, config), readProcessor, config, remoteCluster, workers);
 
     }
 
@@ -200,10 +206,11 @@ public class LogReplicationFSM {
     @VisibleForTesting
     public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                              LogEntryReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
-                             ExecutorService workers) {
+                             ClusterDescriptor remoteCluster, ExecutorService workers) {
 
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
+        this.remoteCluster = remoteCluster;
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
@@ -221,7 +228,7 @@ public class LogReplicationFSM {
         logReplicationFSMConsumer.submit(this::consume);
 
         log.info("Log Replication FSM initialized, streams to replicate {} to remote cluster {}",
-                config.getStreamsToReplicate(), config.getRemoteClusterId());
+                config.getStreamsToReplicate(), remoteCluster.getClusterId());
     }
 
     /**

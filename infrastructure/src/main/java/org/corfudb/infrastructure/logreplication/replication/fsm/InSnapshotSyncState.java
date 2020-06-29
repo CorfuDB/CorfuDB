@@ -17,12 +17,12 @@ import java.util.concurrent.Future;
 @Slf4j
 public class InSnapshotSyncState implements LogReplicationState {
 
-    /*
+    /**
      * Log Replication Finite State Machine Instance
      */
     private final LogReplicationFSM fsm;
 
-    /*
+    /**
      Uniquely identifies the event that caused the transition to this state.
      This identifier is hold in order to send it back to the application through the DataSender
      callback, so it can be correlated to the process that triggered the request.
@@ -33,15 +33,15 @@ public class InSnapshotSyncState implements LogReplicationState {
      */
     private UUID transitionEventId;
 
-    /*
-     Read and send a snapshot of the data-store.
+    /**
+     * Read and send a snapshot of the data-store.
      */
     @Getter
     @VisibleForTesting
     private SnapshotSender snapshotSender;
 
-    /*
-     A future on the send, in case we need to cancel the ongoing snapshot sync.
+    /**
+     * A future on the send, in case we need to cancel the ongoing snapshot sync.
      */
     private Future<?> transmitFuture;
 
@@ -82,7 +82,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                  batch of updates for the current snapshot sync.
                  */
                 if (event.getMetadata().getRequestId() == transitionEventId) {
-                    log.debug("Continuation of snapshot sync for {}", event.getEventID());
+                    log.debug("InSnapshotSync[{}] :: Continuation of snapshot sync for {}", this, event.getEventID());
                     return this;
                 } else {
                     log.warn("Unexpected snapshot sync continue event {} when in snapshot sync state {}.",

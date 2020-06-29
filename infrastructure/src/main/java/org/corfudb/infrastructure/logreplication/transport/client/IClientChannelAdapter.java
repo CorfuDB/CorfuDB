@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.transport.client;
 
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.runtime.Messages.CorfuMessage;
@@ -19,7 +18,6 @@ import java.util.Optional;
  *
  * @author annym 05/15/2020
  */
-@Slf4j
 public abstract class IClientChannelAdapter {
 
     @Getter

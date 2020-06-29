@@ -4,7 +4,6 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -44,9 +43,9 @@ public class LogReplicationServer extends AbstractServer {
     @Getter
     private final LogReplicationSinkManager sinkManager;
 
-    private volatile AtomicBoolean isLeader = new AtomicBoolean(false);
+    private final AtomicBoolean isLeader = new AtomicBoolean(false);
 
-    private volatile AtomicBoolean isActive = new AtomicBoolean(false);
+    private final AtomicBoolean isActive = new AtomicBoolean(false);
 
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
@@ -83,7 +82,7 @@ public class LogReplicationServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_ENTRY)
     private void handleLogReplicationEntry(CorfuPayloadMsg<LogReplicationEntry> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.info("Log Replication Entry received by Server.");
+        log.trace("Log Replication Entry received by Server.");
 
         if (isLeader(msg, r)) {
             // Forward the received message to the Sink Manager for apply
@@ -116,8 +115,6 @@ public class LogReplicationServer extends AbstractServer {
         } else {
             log.warn("Dropping negotiation request as this node is not the leader.");
         }
-
-
     }
 
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP)

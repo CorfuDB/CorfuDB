@@ -37,6 +37,7 @@ public class LogReplicationPluginConfig {
     private String transportAdapterJARPath;
     private String transportServerClassCanonicalName;
     private String transportClientClassCanonicalName;
+
     private String streamFetcherPluginJARPath;
     private String streamFetcherClassCanonicalName;
 
@@ -70,7 +71,7 @@ public class LogReplicationPluginConfig {
             this.topologyManagerAdapterName = DEFAULT_SITE_MANAGER_CLASSNAME;
         }
 
-        log.info("Config " + this);
+        log.debug("Log Replication Plugins :: {} ", this);
     }
 
     private static String getParentDir() {

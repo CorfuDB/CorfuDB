@@ -17,9 +17,6 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -43,7 +40,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * that each option must be preceded with a space.
      */
     private static final String USAGE =
-            "Corfu Server, the server for the Corfu Infrastructure.\n"
+            "Corfu Log Replication Server, the server for replication across clusters.\n"
                     + "\n"
                     + "Usage:\n"
                     + "\tlog_replication_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
@@ -195,17 +192,9 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     @Getter
     private CorfuReplicationDiscoveryService replicationDiscoveryService;
 
-    String[] args;
-
-    private static boolean test;
+    private final String[] args;
 
     public static void main(String[] args) {
-        // For testing purposes, inspect for test flag and remove.
-        // This flag is required to avoid forcefully shutting down the server
-        // in the event of an InterruptedException which can be part of a test workflow, once the logic
-        // is executed (executorService.shutdownNow()).
-        args = checkIfTest(args);
-
         CorfuInterClusterReplicationServer corfuReplicationServer = new CorfuInterClusterReplicationServer(args);
         corfuReplicationServer.run();
     }
@@ -219,24 +208,9 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         try {
             this.startServer();
         } catch (Throwable err) {
-            if(!test) {
-                log.error("Exit. Unrecoverable error", err);
-                throw err;
-            }
+            log.error("Exit. Unrecoverable error", err);
+            throw err;
         }
-    }
-
-    /**
-     * Set a flag if this server is run from a testing environment,
-     * so we can avoid triggering SYSTEM_EXIT when the test ends
-     * which will cause an error to be thrown.
-     */
-    private static String[] checkIfTest(String[] args) {
-        List<String> argsList = new ArrayList<>();
-        argsList.addAll(Arrays.asList(args));
-        test = argsList.contains("test");
-        argsList.remove("test");
-        return argsList.toArray(new String[0]);
     }
 
     private void startServer() {
@@ -250,8 +224,47 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
         log.info("Started with arguments: {}", opts);
 
-        final ServerContext serverContext = new ServerContext(opts);
+        ServerContext serverContext = getServerContext(opts);
 
+        // Register shutdown handler
+        Thread shutdownThread = new Thread(this::cleanShutdown);
+        shutdownThread.setName("ShutdownThread");
+        Runtime.getRuntime().addShutdownHook(shutdownThread);
+
+        // Manages the lifecycle of the Corfu Log Replication Server.
+        while (!shutdownServer) {
+            try {
+                CompletableFuture<LogReplicationContext> discoveryServiceCallback = startDiscoveryService(serverContext);
+
+                log.info("Wait for Discovery Service to provide a view of the topology...");
+
+                // Block until the replication context is provided by the Discovery service
+                LogReplicationContext context = discoveryServiceCallback.get();
+
+                log.info("Discovery Service completed ... topology={}, config={}, local_corfu={}", context.getTopology(),
+                        context.getConfig(), context.getLocalCorfuEndpoint());
+
+                activeServer = new CorfuInterClusterReplicationServerNode(serverContext, context);
+
+                activeServer.startAndListen();
+            } catch (Throwable th) {
+                log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
+                System.exit(EXIT_ERROR_CODE);
+            }
+
+            if (cleanupServer) {
+                cleanupServer = false;
+            }
+
+            if (!shutdownServer) {
+                log.info("main: Server restarting.");
+            }
+        }
+
+        log.info("main: Server exiting due to shutdown");
+    }
+
+    private ServerContext getServerContext(Map<String, Object> opts ) {
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
@@ -267,45 +280,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             opts.put("--bind-to-all-interfaces", false);
         }
 
-        // Register shutdown handler
-        Thread shutdownThread = new Thread(new CleanupRunnable(this));
-        shutdownThread.setName("ShutdownThread");
-        Runtime.getRuntime().addShutdownHook(shutdownThread);
-
-        // Manages the lifecycle of the Corfu Log Replication Server.
-        while (!shutdownServer) {
-            try {
-                CompletableFuture<LogReplicationContext> discoveryServiceCallback = startDiscoveryService(serverContext);
-
-                log.info("Wait for Discovery Service to provide a view of the topology...");
-
-                // Block until the replication context is provided by the Discovery service
-                LogReplicationContext context = discoveryServiceCallback.get();
-
-                activeServer = new CorfuInterClusterReplicationServerNode(serverContext, context);
-
-                activeServer.startAndListen();
-            } catch (Throwable th) {
-                if (!test) {
-                    log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
-                    System.exit(EXIT_ERROR_CODE);
-                } else {
-                    // In the case of tests running this server on a dedicated thread, force cleanup... so
-                    // resources are freed and ports shutdown.
-                    cleanShutdown();
-                }
-            }
-
-            if (cleanupServer) {
-                cleanupServer = false;
-            }
-
-            if (!shutdownServer) {
-                log.info("main: Server restarting.");
-            }
-        }
-
-        log.info("main: Server exiting due to shutdown");
+        return new ServerContext(opts);
     }
 
     /**
@@ -327,7 +302,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext,
                 clusterManagerAdapter, discoveryServiceCallback);
 
-        Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService);
+        Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService, "discovery-service");
         replicationDiscoveryThread.start();
 
         return discoveryServiceCallback;
@@ -341,26 +316,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * @param opts command line parameters
      * @throws JoranException logback exception
      */
-    private void configureLogger(Map<String, Object> opts) {
+    private static void configureLogger(Map<String, Object> opts) {
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
         root.setLevel(level);
-    }
-
-    /**
-     * Cleanly shuts down the server and restarts.
-     *
-     * @param resetData Resets and clears all data if True.
-     */
-    void restartServer(boolean resetData) {
-
-        if (resetData) {
-            cleanupServer = true;
-        }
-
-        log.info("RestartServer: Shutting down Log Replication server");
-        activeServer.close();
-        log.info("RestartServer: Starting Log Replication server");
     }
 
     /**
@@ -370,8 +329,9 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         log.info("CleanShutdown: Starting Cleanup.");
         shutdownServer = true;
         activeServer.close();
-        replicationDiscoveryService.shutdown();
-        clusterManagerAdapter.shutdown();
+        if (replicationDiscoveryService != null) {
+            replicationDiscoveryService.shutdown();
+        }
     }
 
     /**
@@ -431,16 +391,5 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);
         }
-    }
-
-    static class CleanupRunnable implements Runnable {
-            CorfuInterClusterReplicationServer server;
-            CleanupRunnable(CorfuInterClusterReplicationServer server) {
-                this.server = server;
-            }
-            @Override
-            public void run() {
-                server.cleanShutdown();
-            }
     }
 }

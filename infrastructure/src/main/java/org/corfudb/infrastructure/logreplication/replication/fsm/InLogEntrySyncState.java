@@ -14,22 +14,22 @@ import java.util.concurrent.Future;
 @Slf4j
 public class InLogEntrySyncState implements LogReplicationState {
 
-    /*
+    /**
      * Log Replication State Machine, used to insert internal events into the queue.
      */
     private final LogReplicationFSM fsm;
 
-    /*
+    /**
      * Log Entry Sender, used to read and send incremental updates.
      */
     private LogEntrySender logEntrySender;
 
-    /*
+    /**
      * A future on the log entry send, send call.
      */
     private Future<?> logEntrySyncFuture;
 
-    /*
+    /**
      * Unique Identifier of the event that caused the transition to this state,
      * i.e., current event/request being processed.
      */
