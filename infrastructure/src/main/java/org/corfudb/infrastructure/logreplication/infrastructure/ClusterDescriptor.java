@@ -36,8 +36,8 @@ public class ClusterDescriptor {
         this.nodesDescriptors = new ArrayList<>();
         for (NodeConfigurationMsg nodeConfig : clusterConfig.getNodeInfoList()) {
             NodeDescriptor newNode = new NodeDescriptor(nodeConfig.getAddress(),
-                    Integer.toString(nodeConfig.getPort()), clusterConfig.getRole(),
-                    clusterId, UUID.fromString(nodeConfig.getUuid()));
+                    Integer.toString(nodeConfig.getPort()), clusterId,
+                    UUID.fromString(nodeConfig.getUuid()));
             this.nodesDescriptors.add(newNode);
         }
     }
@@ -48,8 +48,8 @@ public class ClusterDescriptor {
         this.nodesDescriptors = new ArrayList<>();
         this.corfuPort = info.getCorfuPort();
         for (NodeDescriptor nodeInfo : info.nodesDescriptors) {
-            NodeDescriptor newNode = new NodeDescriptor(nodeInfo.getIpAddress(), nodeInfo.getPort(),
-                    roleType, info.clusterId, nodeInfo.getNodeId());
+            NodeDescriptor newNode = new NodeDescriptor(nodeInfo.getIpAddress(),
+                    nodeInfo.getPort(), info.clusterId, nodeInfo.getNodeId());
             this.nodesDescriptors.add(newNode);
         }
     }

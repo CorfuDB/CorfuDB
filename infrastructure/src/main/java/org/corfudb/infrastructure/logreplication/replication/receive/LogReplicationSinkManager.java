@@ -196,6 +196,8 @@ public class LogReplicationSinkManager implements DataReceiver {
          // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
          // If there is a siteConfig change, the discovery service will detect it and reset the state.
         if (message.getMetadata().getTopologyConfigId() != siteConfigID) {
+            log.trace("Sink manage with config id {} ignored msg id {}", siteConfigID,
+                    message.getMetadata().getTopologyConfigId());
             return null;
         }
 
@@ -363,10 +365,9 @@ public class LogReplicationSinkManager implements DataReceiver {
      * 1. update the metadata store with the most recent topologyConfigId
      * 2. reset snapshotWriter and logEntryWriter state
      * 3. reset buffer logEntryBuffer state.
-     * @param active
      * @param siteConfigID
      */
-    public void updateTopologyConfigId(boolean active, long siteConfigID) {
+    public void updateTopologyConfigId(long siteConfigID) {
         this.siteConfigID = siteConfigID;
 
         logReplicationMetadataManager.setupTopologyConfigId(siteConfigID);

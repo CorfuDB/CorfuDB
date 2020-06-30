@@ -173,6 +173,7 @@ public class LogReplicationSourceManager implements DataReceiver {
 
         this.logReplicationFSM = new LogReplicationFSM(this.runtime, config, params.getRemoteClusterDescriptor(),
                 dataSender, readProcessor, logReplicationFSMWorkers);
+        this.logReplicationFSM.setSiteConfigID(params.getTopologyConfigId());
     }
 
     /**

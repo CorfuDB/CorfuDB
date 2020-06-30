@@ -13,31 +13,20 @@ import java.util.UUID;
 @Slf4j
 public class NodeDescriptor {
 
-    @Setter
     @Getter
-    private ClusterRole roleType;
+    private final String ipAddress;
 
     @Getter
-    private String ipAddress;
+    private final String port;
 
     @Getter
-    private String port;
+    private final String clusterId;
 
     @Getter
-    @Setter
-    private boolean leader;
+    private final UUID nodeId;        // Connection Identifier (APH UUID in the case of NSX)
 
-    @Getter
-    private String clusterId;
-
-    @Getter
-    private UUID nodeId;        // Connection Identifier (APH UUID in the case of NSX)
-
-    public NodeDescriptor(String ipAddress, String port, ClusterRole roleType,
-                          String siteId, UUID nodeId) {
-        this.leader = false;
+    public NodeDescriptor(String ipAddress, String port, String siteId, UUID nodeId) {
         this.ipAddress = ipAddress;
-        this.roleType = roleType;
         this.port = port;
         this.clusterId = siteId;
         this.nodeId = nodeId;
@@ -57,7 +46,7 @@ public class NodeDescriptor {
 
     @Override
     public String toString() {
-        return String.format("Role Type: %s, %s", roleType, getEndpoint());
+        return String.format("Node: %s, %s", nodeId, getEndpoint());
     }
 
 }

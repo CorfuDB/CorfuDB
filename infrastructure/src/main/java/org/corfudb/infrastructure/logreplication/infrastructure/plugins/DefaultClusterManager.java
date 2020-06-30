@@ -134,7 +134,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter
         for (int i = 0; i < primaryNodeNames.size(); i++) {
             log.info("Primary Site Name {}, IpAddress {}", primaryNodeNames.get(i), primaryIpAddresses.get(i));
             NodeDescriptor nodeInfo = new NodeDescriptor(primaryIpAddresses.get(i),
-                    activeLogReplicationPort, ClusterRole.ACTIVE, PRIMARY_SITE_NAME, UUID.fromString(primaryNodeIds.get(i)));
+                    activeLogReplicationPort, PRIMARY_SITE_NAME, UUID.fromString(primaryNodeIds.get(i)));
             primarySite.getNodesDescriptors().add(nodeInfo);
         }
 
@@ -145,7 +145,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter
         for (int i = 0; i < standbyNodeNames.size(); i++) {
             log.info("Standby Site Name {}, IpAddress {}", standbyNodeNames.get(i), standbyIpAddresses.get(i));
             NodeDescriptor nodeInfo = new NodeDescriptor(standbyIpAddresses.get(i),
-                    standbyLogReplicationPort, ClusterRole.STANDBY, STANDBY_SITE_NAME, UUID.fromString(standbyNodeIds.get(i)));
+                    standbyLogReplicationPort, STANDBY_SITE_NAME, UUID.fromString(standbyNodeIds.get(i)));
             standbySites.get(STANDBY_SITE_NAME).getNodesDescriptors().add(nodeInfo);
         }
 
