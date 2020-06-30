@@ -349,7 +349,7 @@ public class LogReplicationFSM {
         to.onEntry(from);
     }
 
-    public void setSiteConfigID(long siteConfigID) {
+    public void setTopologyConfigId(long siteConfigID) {
         this.siteConfigID = siteConfigID;
         snapshotReader.setSiteEpoch(siteConfigID);
         logEntryReader.setSiteConfigID(siteConfigID);
@@ -369,6 +369,6 @@ public class LogReplicationFSM {
 
         log.info("start the log replication with topologyConfigId {}", topologyConfigId);
         eventQueue.clear();
-        setSiteConfigID(topologyConfigId);
+        setTopologyConfigId(topologyConfigId);
     }
 }

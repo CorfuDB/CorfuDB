@@ -256,7 +256,7 @@ public class CorfuReplicationManager {
      * Query each standby site information according to the ack information to calculate the number of
      * msgs to be sent out.
      */
-    public void prepareSiteRoleChange() {
+    public void prepareClusterRoleChange() {
         prepareClusterRoleChangeLogTail = queryStreamTail();
         totalNumEntriesToSend = queryEntriesToSend(prepareClusterRoleChangeLogTail);
     }
@@ -274,7 +274,7 @@ public class CorfuReplicationManager {
          * If the tail has been moved, reset the base calculation
          */
         if (maxTail > prepareClusterRoleChangeLogTail) {
-            prepareSiteRoleChange();
+            prepareClusterRoleChange();
         }
 
         // TODO(Xiaoqin Ma/Nan): if the max stream tail moves, it calls prepareSiteRoleChange(), which

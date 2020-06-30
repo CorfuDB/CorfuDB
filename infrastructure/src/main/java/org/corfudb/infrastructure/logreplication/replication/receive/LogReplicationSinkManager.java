@@ -75,7 +75,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     /*
      * current topologyConfigId, used to drop out of date messages.
      */
-    private long siteConfigID = 0;
+    private long topologyConfigId = 0;
 
     @$VisibleForTesting
     private int rxMessageCounter = 0;
@@ -195,7 +195,9 @@ public class LogReplicationSinkManager implements DataReceiver {
          // Ignore messages that have different topologyConfigId.
          // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
          // If there is a siteConfig change, the discovery service will detect it and reset the state.
-        if (message.getMetadata().getTopologyConfigId() != siteConfigID) {
+        if (message.getMetadata().getTopologyConfigId() != topologyConfigId) {
+            log.trace("Sink manager with config id {} ignored msg id {}", topologyConfigId,
+                    message.getMetadata().getTopologyConfigId());
             return null;
         }
 
@@ -363,14 +365,13 @@ public class LogReplicationSinkManager implements DataReceiver {
      * 1. update the metadata store with the most recent topologyConfigId
      * 2. reset snapshotWriter and logEntryWriter state
      * 3. reset buffer logEntryBuffer state.
-     * @param active
-     * @param siteConfigID
+     * @param topologyConfigId
      */
-    public void updateTopologyConfigId(boolean active, long siteConfigID) {
-        this.siteConfigID = siteConfigID;
+    public void updateTopologyConfigId(long topologyConfigId) {
+        this.topologyConfigId = topologyConfigId;
 
-        logReplicationMetadataManager.setupTopologyConfigId(siteConfigID);
-        snapshotWriter.reset(siteConfigID, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp());
+        logReplicationMetadataManager.setupTopologyConfigId(topologyConfigId);
+        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp());
         logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
                 logReplicationMetadataManager.getLastProcessedLogTimestamp());
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
