@@ -62,7 +62,7 @@ public abstract class SenderBufferManager {
     long maxAckForLogEntrySync = Address.NON_ADDRESS;
 
     /*
-     * the max snapShotSeqNum has ACKed. Used by snapshot sync.
+     * the max snapShotSeqNum used by snapshot sync.
      */
     private long maxAckedMsgSeqNum = Address.NON_ADDRESS;
 
@@ -164,13 +164,10 @@ public abstract class SenderBufferManager {
         int retry = 0;
         boolean result = false;
 
-        while (retry++ < maxRetry && result == false) {
-            try {
-                cf.get(timeoutTimer, TimeUnit.MILLISECONDS);
-                result = true;
-            } catch (Exception e) {
+        try {
+            cf.get(timeoutTimer, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
                 log.warn("Caught an exception", e);
-            }
         }
 
         if (result == false) {

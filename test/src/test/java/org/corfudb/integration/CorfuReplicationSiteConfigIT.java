@@ -197,12 +197,10 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
         }
     }
 
-    @Test
     public void runNetty() throws Exception {
         testLogReplicationEndToEnd(true, false);
     }
 
-    @Test
     public void runCustomRouter() throws Exception {
         testLogReplicationEndToEnd(false, false);
     }
@@ -366,6 +364,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                assertThat(mapA1.containsKey(String.valueOf(i))).isTrue();
             }
 
+            System.out.print("\nSiteSwitch Test Succeeds!");
         } finally {
             shutdown();
         }
