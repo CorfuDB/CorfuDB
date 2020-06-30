@@ -234,17 +234,14 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         // Manages the lifecycle of the Corfu Log Replication Server.
         while (!shutdownServer) {
             try {
-                CompletableFuture<LogReplicationContext> discoveryServiceCallback = startDiscoveryService(serverContext);
+                CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = startDiscoveryService(serverContext);
 
                 log.info("Wait for Discovery Service to provide a view of the topology...");
 
                 // Block until the replication context is provided by the Discovery service
-                LogReplicationContext context = discoveryServiceCallback.get();
+                activeServer = discoveryServiceCallback.get();
 
-                log.info("Discovery Service completed ... topology={}, config={}, local_corfu={}", context.getTopology(),
-                        context.getConfig(), context.getLocalCorfuEndpoint());
-
-                activeServer = new CorfuInterClusterReplicationServerNode(serverContext, context);
+                log.info("Discovery Service completed. Start Log Replication Service...");
 
                 activeServer.startAndListen();
             } catch (Throwable th) {
@@ -289,10 +286,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * @param serverContext server context (server information)
      * @return completable future for discovered topology
      */
-    private CompletableFuture<LogReplicationContext> startDiscoveryService(ServerContext serverContext) {
+    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) {
 
         log.info("Start Discovery Service.");
-        CompletableFuture<LogReplicationContext> discoveryServiceCallback = new CompletableFuture<>();
+        CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = new CompletableFuture<>();
 
         this.clusterManagerAdapter = buildClusterManagerAdapter(serverContext.getPluginConfigFilePath());
 

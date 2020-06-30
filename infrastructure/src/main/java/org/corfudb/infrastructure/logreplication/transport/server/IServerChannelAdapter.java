@@ -1,7 +1,9 @@
 package org.corfudb.infrastructure.logreplication.transport.server;
 
 import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
 
@@ -24,12 +26,12 @@ public abstract class IServerChannelAdapter {
     private final ServerContext serverContext;
 
     @Getter
-    private final int port;
+    @Setter
+    private IChannelContext channelContext;
 
     public IServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter adapter) {
         this.serverContext = serverContext;
         this.router = adapter;
-        this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
     }
 
     /**

@@ -5,6 +5,7 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
@@ -42,6 +43,9 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
     // Topology Configuration Identifier (configuration epoch)
     private long topologyConfigId;
 
+    // Log Replication Channel Context
+    private IChannelContext channelContext;
+
     public static LogReplicationRuntimeParametersBuilder builder() {
         return new LogReplicationRuntimeParametersBuilder();
     }
@@ -54,6 +58,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
         private String pluginFilePath;
         private long topologyConfigId;
         private LogReplicationConfig replicationConfig;
+        private IChannelContext channelContext;
         private int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
 
         private LogReplicationRuntimeParametersBuilder() {
@@ -86,6 +91,11 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
 
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder replicationConfig(LogReplicationConfig replicationConfig) {
             this.replicationConfig = replicationConfig;
+            return this;
+        }
+
+        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder channelContext(IChannelContext channelContext) {
+            this.channelContext = channelContext;
             return this;
         }
 

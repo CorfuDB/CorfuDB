@@ -117,7 +117,6 @@ public class ServerContext implements AutoCloseable {
      */
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
 
-
     @Getter
     private final Map<String, Object> serverConfig;
 

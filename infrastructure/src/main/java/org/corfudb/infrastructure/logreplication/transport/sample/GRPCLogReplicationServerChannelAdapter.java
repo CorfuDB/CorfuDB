@@ -23,6 +23,8 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
      */
     private final Server server;
 
+    private final int port;
+
     /*
      * GRPC Service Stub
      */
@@ -33,7 +35,8 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     public GRPCLogReplicationServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter router) {
         super(serverContext, router);
         this.service = new GRPCLogReplicationServerHandler(router);
-        this.server = ServerBuilder.forPort(getPort()).addService(service).build();
+        this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
+        this.server = ServerBuilder.forPort(port).addService(service).build();
     }
 
     @Override
@@ -47,9 +50,9 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
         try {
             serverCompletable = new CompletableFuture<>();
             server.start();
-            log.info("Server started, listening on " + this.getPort());
+            log.info("Server started, listening on {}", port);
         } catch (Exception e) {
-            log.error("Caught exception while starting server on port {}", getPort(), e);
+            log.error("Caught exception while starting server on port {}", port, e);
             serverCompletable.completeExceptionally(e);
         }
 

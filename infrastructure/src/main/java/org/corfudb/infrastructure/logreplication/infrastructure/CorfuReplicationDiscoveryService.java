@@ -98,13 +98,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
 
-    private CompletableFuture<LogReplicationContext> discoveryCallback;
+    private CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryCallback;
 
     private String pluginFilePath;
 
-    private LogReplicationConfig logReplicationConfig;
-
-    private LogReplicationServer logReplicationServer;
+    private CorfuInterClusterReplicationServerNode interClusterReplicationService;
 
     private boolean shouldRun = true;
 
@@ -114,6 +112,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private CorfuRuntime runtime;
 
+    private LogReplicationContext replicationContext;
+
     /**
      * Constructor Discovery Service
      *
@@ -121,7 +121,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @param discoveryCallback
      */
     public CorfuReplicationDiscoveryService(ServerContext serverContext, CorfuReplicationClusterManagerAdapter clusterManagerAdapter,
-                                            CompletableFuture<LogReplicationContext> discoveryCallback) {
+                                            CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryCallback) {
         this.clusterManagerAdapter = clusterManagerAdapter;
         this.nodeId = serverContext.getNodeId();
         this.serverContext = serverContext;
@@ -184,10 +184,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 log.info("Node[{}] belongs to cluster, descriptor={}", localEndpoint,
                         localClusterDescriptor);
 
-                LogReplicationContext context = buildLogReplicationContext();
+                buildLogReplicationContext();
 
                 // Unblock server initialization retrieving context: topology + configuration
-                discoveryCallback.complete(context);
+                discoveryCallback.complete(interClusterReplicationService);
 
                 registerToLogReplicationLock();
             } else {
@@ -207,18 +207,22 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Construct common log replication context.
      */
-    private LogReplicationContext buildLogReplicationContext() {
+    private void buildLogReplicationContext() {
         // Through LogReplicationConfigAdapter retrieve system-specific configurations (including streams to replicate)
-        logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
+        LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
+        this.logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
                 topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
 
-        logReplicationServer = new LogReplicationServer(serverContext, logReplicationConfig, logReplicationMetadataManager,
-                localCorfuEndpoint);
-        logReplicationServer.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
+        LogReplicationServer logReplicationServerHandler = new LogReplicationServer(serverContext, logReplicationConfig,
+                logReplicationMetadataManager, localCorfuEndpoint);
+        logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
 
-        return new LogReplicationContext(logReplicationConfig, topologyDescriptor, logReplicationServer, localCorfuEndpoint);
+        this.interClusterReplicationService = new CorfuInterClusterReplicationServerNode(serverContext,
+                logReplicationServerHandler, logReplicationConfig);
+
+        this.replicationContext = new LogReplicationContext(logReplicationConfig, topologyDescriptor,
+                localCorfuEndpoint, interClusterReplicationService.getRouter().getServerAdapter().getChannelContext());
     }
 
     /**
@@ -324,26 +328,29 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             return;
         }
 
-        boolean activeCluster = localNodeDescriptor.getRoleType() == ClusterRole.ACTIVE;
+        switch (localNodeDescriptor.getRoleType()) {
+            case ACTIVE:
+                log.info("Start as Source (sender/replicator) on node {}.", localNodeDescriptor);
+                // TODO(Gabriela): only one instance of CorfuReplicationManager
+                replicationManager = new CorfuReplicationManager(topologyDescriptor, replicationContext,
+                        localNodeDescriptor, logReplicationMetadataManager, pluginFilePath, getCorfuRuntime());
+                replicationManager.start();
+                break;
+            case STANDBY:
+                // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
+                log.info("Start as Sink (receiver) on node {} ", localNodeDescriptor);
+                break;
+            default:
+                log.error("Log Replication not started on this cluster. Leader node {} belongs to cluster with {} role.",
+                            localEndpoint, localNodeDescriptor.getRoleType());
+                break;
 
-        if (activeCluster) {
-            log.info("Start as Source (sender/replicator) on node {}.", localNodeDescriptor);
-            // TODO(Gabriela): only one instance of CorfuReplicationManager
-            replicationManager = new CorfuReplicationManager(topologyDescriptor, logReplicationConfig,
-                    localNodeDescriptor, logReplicationMetadataManager, pluginFilePath, getCorfuRuntime());
-            replicationManager.start();
-        } else if (localNodeDescriptor.getRoleType() == ClusterRole.STANDBY) {
-            // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
-            log.info("Start as Sink (receiver) on node {} ", localNodeDescriptor);
-        } else {
-            log.error("Log Replication not started on this cluster. Leader node {} belongs to cluster with {} role.",
-                    localEndpoint, localNodeDescriptor.getRoleType());
         }
     }
 
     private void updateTopologyConfigId(boolean active) {
         // Required only on topology changes
-        logReplicationServer.getSinkManager().updateTopologyConfigId(active, topologyDescriptor.getTopologyConfigId());
+        interClusterReplicationService.getLogReplicationServer().getSinkManager().updateTopologyConfigId(active, topologyDescriptor.getTopologyConfigId());
 
         log.debug("Persist new topologyConfigId {}, status={}", topologyDescriptor.getTopologyConfigId(),
                 localNodeDescriptor.getRoleType());
@@ -364,7 +371,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     public void processLockAcquire() {
         log.info("Process lock acquire event");
 
-        logReplicationServer.setLeadership(true);
+        interClusterReplicationService.getLogReplicationServer().setLeadership(true);
 
         // TODO(Gabriela): confirm that start does not affect ongoing replication if it is called again..
         if (!localNodeDescriptor.isLeader()) {
@@ -380,14 +387,15 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Set leadership metadata and stop log replication in the event of leadership loss
      */
     public void processLockRelease() {
-        logReplicationServer.setLeadership(false);
+        log.info("Process lock release event");
+
+        interClusterReplicationService.getLogReplicationServer().setLeadership(false);
 
         if (localNodeDescriptor.isLeader()) {
             stopLogReplication();
             localNodeDescriptor.setLeader(false);
         }
     }
-
 
     public void processSiteFlip(TopologyDescriptor newConfig) {
         // TODO(Nan): Check standby to active and active to standby...

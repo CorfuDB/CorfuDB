@@ -42,19 +42,19 @@ public class TopologyDescriptor {
         this.certs = topologyMessage.getCerts();
         standbyClusters = new HashMap<>();
         for (ClusterConfigurationMsg clusterConfig : topologyMessage.getClustersList()) {
-            ClusterDescriptor siteInfo = new ClusterDescriptor(clusterConfig);
+            ClusterDescriptor cluster = new ClusterDescriptor(clusterConfig);
             if (clusterConfig.getRole() == ClusterRole.ACTIVE) {
-                activeCluster = siteInfo;
+                activeCluster = cluster;
             } else if (clusterConfig.getRole() == ClusterRole.STANDBY) {
-                addStandbySite(siteInfo);
+                addStandbySite(cluster);
             }
         }
     }
 
-    public TopologyDescriptor(long siteConfigID, ClusterDescriptor primarySite, Map<String, ClusterDescriptor> standbySites) {
-        this.topologyConfigId = siteConfigID;
-        this.activeCluster = primarySite;
-        this.standbyClusters = standbySites;
+    public TopologyDescriptor(long topologyConfigId, ClusterDescriptor activeCluster, Map<String, ClusterDescriptor> standbyClusters) {
+        this.topologyConfigId = topologyConfigId;
+        this.activeCluster = activeCluster;
+        this.standbyClusters = standbyClusters;
     }
 
     public TopologyConfigurationMsg convertToMessage() {
@@ -70,32 +70,6 @@ public class TopologyDescriptor {
                 .addAllClusters(clustersConfigs).build();
 
         return topologyConfig;
-    }
-
-    public NodeDescriptor getNodeInfo(String endpoint) {
-        List<ClusterDescriptor> sites = new ArrayList<>(standbyClusters.values());
-
-        sites.add(activeCluster);
-        NodeDescriptor nodeInfo = getNodeInfo(sites, endpoint);
-
-        if (nodeInfo == null) {
-            log.warn("No Cluster has node with IP {} ", endpoint);
-        }
-
-        return nodeInfo;
-    }
-
-    private NodeDescriptor getNodeInfo(List<ClusterDescriptor> sitesInfo, String endpoint) {
-        for (ClusterDescriptor site : sitesInfo) {
-            for (NodeDescriptor nodeInfo : site.getNodesDescriptors()) {
-                if (nodeInfo.getEndpoint().equals(endpoint)) {
-                    return nodeInfo;
-                }
-            }
-        }
-
-        log.warn("There is no nodeInfo for ipAddress {} ", endpoint);
-        return null;
     }
 
     public void addStandbySite(ClusterDescriptor siteInfo) {

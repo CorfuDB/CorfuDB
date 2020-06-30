@@ -5,7 +5,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.runtime.CorfuRuntime;
@@ -35,7 +34,7 @@ public class CorfuReplicationManager {
     @Getter
     private volatile TopologyDescriptor topologyDescriptor;
 
-    private final LogReplicationConfig logReplicationConfig;
+    private final LogReplicationContext context;
 
     private final NodeDescriptor localNodeDescriptor;
 
@@ -52,17 +51,14 @@ public class CorfuReplicationManager {
 
     /**
      * Constructor
-     *
-     * @param topologyDescriptor description of active and standby cluster' of a given topology
-     * @param logReplicationConfig log replication configuration
      */
     public CorfuReplicationManager(TopologyDescriptor topologyDescriptor,
-                            LogReplicationConfig logReplicationConfig,
+                            LogReplicationContext context,
                             NodeDescriptor localNodeDescriptor,
                             LogReplicationMetadataManager metadataManager,
                             String pluginFilePath, CorfuRuntime corfuRuntime) {
         this.topologyDescriptor = topologyDescriptor;
-        this.logReplicationConfig = logReplicationConfig;
+        this.context = context;
         this.metadataManager = metadataManager;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
@@ -145,8 +141,9 @@ public class CorfuReplicationManager {
                             .localCorfuEndpoint(localCorfuEndpoint)
                             .remoteClusterDescriptor(remoteCluster)
                             .localClusterId(localNodeDescriptor.getClusterId())
-                            .replicationConfig(new LogReplicationConfig(logReplicationConfig.getStreamsToReplicate()))
+                            .replicationConfig(context.getConfig())
                             .pluginFilePath(pluginFilePath)
+                            .channelContext(context.getChannelContext())
                             .topologyConfigId(topologyDescriptor.getTopologyConfigId())
                             .keyStore(corfuRuntime.getParameters().getKeyStore())
                             .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
@@ -226,7 +223,7 @@ public class CorfuReplicationManager {
      * @return max tail of all relevant streams.
      */
     private long queryStreamTail() {
-        Set<String> streamsToReplicate = logReplicationConfig.getStreamsToReplicate();
+        Set<String> streamsToReplicate = context.getConfig().getStreamsToReplicate();
         long maxTail = Address.NON_ADDRESS;
         for (String s : streamsToReplicate) {
             UUID currentUUID = CorfuRuntime.getStreamID(s);

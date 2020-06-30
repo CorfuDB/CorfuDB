@@ -2,10 +2,11 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.Setter;
+
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
 public class DiscoveryServiceEvent {
-    DiscoveryServiceEventType type = null;
+    DiscoveryServiceEventType type;
 
     @Getter
     TopologyConfigurationMsg topologyConfig = null;
@@ -16,11 +17,6 @@ public class DiscoveryServiceEvent {
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
        this.type = type;
-    }
-
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, ClusterDescriptor siteInfo) {
-        new DiscoveryServiceEvent(type);
-        this.remoteSiteInfo = siteInfo;
     }
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {

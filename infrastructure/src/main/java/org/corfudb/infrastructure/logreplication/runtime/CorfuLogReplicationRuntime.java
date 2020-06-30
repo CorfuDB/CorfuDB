@@ -213,7 +213,7 @@ public class CorfuLogReplicationRuntime {
 
     /**
      * Consumer of the eventQueue.
-     * <p>
+     *
      * This method consumes the log replication events and does the state transition.
      */
     private void consume() {

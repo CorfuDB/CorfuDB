@@ -74,10 +74,10 @@ import java.util.concurrent.LinkedBlockingQueue;
 @Slf4j
 public class Lock {
 
-    // lease duration in 300 seconds
+    // lease duration in 60 seconds
     @Setter
     @VisibleForTesting
-    public static int leaseDuration = 300;
+    public static int leaseDuration = 60;
 
     // id of the lock
     @Getter

@@ -380,6 +380,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             Class adapterType = Class.forName(config.getTransportClientClassCanonicalName(), true, child);
             channelAdapter = (IClientChannelAdapter) adapterType.getDeclaredConstructor(String.class, ClusterDescriptor.class, LogReplicationClientRouter.class)
                     .newInstance(parameters.getLocalClusterId(), remoteClusterDescriptor, this);
+            channelAdapter.setChannelContext(parameters.getChannelContext());
             log.info("Connect asynchronously to remote cluster... ");
             // When connection is established to the remote leader node, the remoteLeaderConnectionFuture will be completed.
             channelAdapter.connectAsync();

@@ -37,8 +37,11 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
 
     private ChannelFuture bindFuture;
 
+    private final int port;
+
     public NettyLogReplicationServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter router) {
         super(serverContext, router);
+        this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
         this.nettyServerChannel = new CorfuNettyServerChannel(this);
     }
 
@@ -113,7 +116,7 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
                 getServerContext().getWorkerGroup(),
                 this::configureBootstrapOptions,
                 (String) getServerContext().getServerConfig().get("--address"),
-                getPort());
+                port);
 
         return bindFuture.syncUninterruptibly();
     }
