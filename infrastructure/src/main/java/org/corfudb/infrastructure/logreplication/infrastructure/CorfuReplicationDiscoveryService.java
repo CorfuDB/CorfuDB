@@ -510,6 +510,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         log.debug("Persist new topologyConfigId {}, cluster id={}, status={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
 
+        // Update replication manager
+        updateReplicationManagerTopology(newTopology);
+
         // Update sink manager
         interClusterReplicationService.getLogReplicationServer().getSinkManager()
                 .updateTopologyConfigId(topologyDescriptor.getTopologyConfigId());
@@ -578,15 +581,18 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         log.debug("Standby Cluster has been added or removed from topology={}", discoveredTopology);
 
         // We only need to process new standby's if your role is of an ACTIVE cluster
-        if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
-            return;
-        }
-
-        if (replicationManager != null && isLeader.get()) {
-            replicationManager.processStandbyChange(discoveredTopology);
+        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
+            if (replicationManager != null && isLeader.get()) {
+                replicationManager.processStandbyChange(discoveredTopology);
+            }
         }
 
         updateLocalTopology(discoveredTopology);
+        updateReplicationManagerTopology(discoveredTopology);
+        // Update topology config id in metadata manager
+        logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
+        log.debug("Persist new topologyConfigId {}, cluster id={}, status={}", topologyDescriptor.getTopologyConfigId(),
+                localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
     }
 
     /**
@@ -625,6 +631,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         // Update local node descriptor
         localNodeDescriptor = localClusterDescriptor.getNode(localEndpoint);
+    }
+
+    private void updateReplicationManagerTopology(TopologyDescriptor newConfig) {
+        if (replicationManager != null) {
+            replicationManager.updateRuntimeConfigId(newConfig);
+        }
     }
 
     /***

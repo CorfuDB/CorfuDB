@@ -4,6 +4,7 @@ import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
@@ -241,6 +242,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         for (UUID uuid : streamViewMap.keySet()) {
             seqNum = applyShadowStream(uuid, seqNum, snapshot);
         }
+        phase = Phase.TransferPhase;
     }
 
     /**
@@ -270,5 +272,5 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     enum Phase {
         TransferPhase,
         ApplyPhase
-    };
+    }
 }
