@@ -156,9 +156,9 @@ public class SnapshotSender {
             // Generate a special LogReplicationEntry with only metadata (used as start marker on receiver side
             // to complete snapshot sync and send the right ACK)
             try {
-                dataSenderBufferManager.sendWithBuffering(resendMsgsAndWaitAckForSnapshotEnd(snapshotSyncEventId));
-                snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
-                snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                dataSenderBufferManager.sendWithBuffering(getSnapshotStartMarker(snapshotSyncEventId));
+                snapshotSyncAck = dataSenderBufferManager.sendWithoutBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
+                //snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
                 snapshotSyncComplete(snapshotSyncEventId);
             } catch (Exception e) {
                 //todo: generate an event for discovery service
@@ -174,7 +174,7 @@ public class SnapshotSender {
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
-            dataSenderBufferManager.sendWithBuffering(resendMsgsAndWaitAckForSnapshotEnd(snapshotSyncEventId));
+            dataSenderBufferManager.sendWithBuffering(getSnapshotStartMarker(snapshotSyncEventId));
             startSnapshotSync = false;
             numMessages++;
         }
@@ -185,7 +185,7 @@ public class SnapshotSender {
         if (completed) {
             LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
             log.info("SnapshotSender sent out SNAPSHOT_END message {} " + endDataMessage.getMetadata());
-            snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
+            snapshotSyncAck = dataSenderBufferManager.sendWithoutBuffering(endDataMessage);
             numMessages++;
         }
 
@@ -199,7 +199,7 @@ public class SnapshotSender {
      * @param snapshotSyncEventId snapshot sync event identifier
      * @return snapshot sync start marker as LogReplicationEntry
      */
-    private LogReplicationEntry resendMsgsAndWaitAckForSnapshotEnd(UUID snapshotSyncEventId) {
+    private LogReplicationEntry getSnapshotStartMarker(UUID snapshotSyncEventId) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START, fsm.getSiteConfigID(),
                 snapshotSyncEventId, Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);

@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -24,7 +25,11 @@ import org.corfudb.utils.lock.LockListener;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+
+import static org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.INIT_DISCOVERY;
 
 /**
  * This class represents the Replication Discovery Service.
@@ -36,7 +41,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * - Log Replication Configuration (streams to replicate)
  */
 @Slf4j
-public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicationDiscoveryServiceAdapter {
+public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscoveryServiceAdapter {
 
     /**
      * Bookkeeping the topologyConfigId, version number and other log replication state information.
@@ -62,6 +67,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Getter
     private CorfuReplicationClusterManagerAdapter clusterManagerAdapter;
+
+
+    /**
+     *  Executor that process events in order in the event queue.
+     */
+    private ExecutorService executorService;
 
     /**
      * Defines the topology of the multi-cluster setting, which is discovered through the Cluster Manager
@@ -101,7 +112,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * A queue of events.
      */
-    private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
+    private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue;
 
     private CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryCallback;
 
@@ -109,7 +120,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private CorfuInterClusterReplicationServerNode interClusterReplicationService;
 
-    private boolean shouldRun = true;
+    private boolean shutdown;
 
     private ServerContext serverContext;
 
@@ -128,7 +139,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @param discoveryCallback
      */
     public CorfuReplicationDiscoveryService(ServerContext serverContext, CorfuReplicationClusterManagerAdapter clusterManagerAdapter,
-                                            CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryCallback) {
+                                            CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryCallback) throws InterruptedException {
+        this.executorService = Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("discovery-service-executor").build());
         this.clusterManagerAdapter = clusterManagerAdapter;
         this.nodeId = serverContext.getNodeId();
         this.serverContext = serverContext;
@@ -136,33 +149,26 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.localHost =  NodeLocator.parseString(serverContext.getLocalEndpoint()).getHost();
         this.pluginFilePath = serverContext.getPluginConfigFilePath();
         this.discoveryCallback = discoveryCallback;
+        this.eventQueue = new LinkedBlockingQueue<>();
+        this.shutdown = false;
+
+        // The INIT_DISCOVERY should be the first event to be processed for both ACTIVE and STANDBY sites.
+        this.eventQueue.put(new DiscoveryServiceEvent(INIT_DISCOVERY));
+        this.executorService.submit(this::run);
     }
 
-    public void run() {
-        try {
-            startDiscovery();
 
-            while (shouldRun) {
-                try {
-                    DiscoveryServiceEvent event = eventQueue.take();
-                    processEvent(event);
-                } catch (Exception e) {
-                    log.error("Caught an exception. Stop discovery service.", e);
-                    shouldRun = false;
-                    stopLogReplication();
-                    if (e instanceof InterruptedException) {
-                        Thread.interrupted();
-                    }
-                }
-            }
-        } catch (LogReplicationDiscoveryServiceException e) {
-            log.error("Exceptionally terminate Log Replication Discovery Service", e);
-            discoveryCallback.completeExceptionally(e);
-        } catch (Exception e) {
-            log.error("Unhandled exception caught during log replication service discovery", e);
-        } finally {
-            if (runtime != null) {
-                runtime.shutdown();
+    /**
+     * The executor thread will keep running at background and process events in eventQue
+     */
+    public void run() {
+        while (!shutdown) {
+            try {
+                DiscoveryServiceEvent event = eventQueue.take();
+                processEvent(event);
+            } catch (Exception | LogReplicationDiscoveryServiceException e) {
+                log.error("Caught an exception. Stop discovery service.", e);
+                shutdown();
             }
         }
     }
@@ -474,8 +480,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Process event
      */
-    public void processEvent(DiscoveryServiceEvent event) {
+    public void processEvent(DiscoveryServiceEvent event) throws LogReplicationDiscoveryServiceException {
         switch (event.type) {
+            case INIT_DISCOVERY:
+                startDiscovery();
             case ACQUIRE_LOCK:
                 processLockAcquire();
                 break;
@@ -537,6 +545,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     public void shutdown() {
+        log.warn("Shutdown discovery service");
+        shutdown = true;
+
         if (replicationManager != null) {
             replicationManager.stop();
         }
@@ -544,5 +555,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if(clusterManagerAdapter != null) {
             clusterManagerAdapter.shutdown();
         }
+
+        if (runtime != null) {
+            runtime.shutdown();
+        }
+
+        executorService.shutdownNow();
     }
 }

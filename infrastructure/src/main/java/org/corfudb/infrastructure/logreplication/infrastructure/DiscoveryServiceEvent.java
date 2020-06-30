@@ -25,6 +25,7 @@ public class DiscoveryServiceEvent {
     }
 
     public enum DiscoveryServiceEventType {
+        INIT_DISCOVERY,
         DISCOVERY_SITE,
         ACQUIRE_LOCK,
         RELEASE_LOCK,

@@ -197,6 +197,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
         }
     }
 
+    @Test
     public void runNetty() throws Exception {
         testLogReplicationEndToEnd(true, false);
     }

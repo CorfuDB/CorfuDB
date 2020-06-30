@@ -27,7 +27,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
     // Log Replication Server should run as a process as the unexpected termination of it
     // (for instance the completion of a test) causes SYSTEM_EXIT(ERROR_CODE).
     // If flipped to debug (easily access logs within the IDE, flip back before pushing upstream).
-    private static boolean runProcess = true;
+    private static boolean runProcess = false;
 
     public CorfuReplicationE2EIT(String plugin) {
         this.pluginConfigFilePath = plugin;
@@ -143,11 +143,16 @@ public class CorfuReplicationE2EIT extends AbstractIT {
                 standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath);
             } else {
                 executorService.submit(() -> {
-                    CorfuInterClusterReplicationServer.main(new String[]{"test", "-m", "--plugin=" + pluginConfigFilePath, "--address=" + "localhost", String.valueOf(activeReplicationServerPort)});
+                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=" + "localhost", String.valueOf(activeReplicationServerPort)});
                 });
 
+                /*serverA = new CorfuInterClusterReplicationServer(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=" + "localhost", String.valueOf(activeReplicationServerPort)});
+                Thread siteAThread = new Thread(serverA);
+                System.out.print("\nStart Corfu Log Replication Server on 9010");
+                siteAThread.start();*/
+
                 executorService.submit(() -> {
-                    CorfuInterClusterReplicationServer.main(new String[]{"test", "-m", "--plugin=" + pluginConfigFilePath, "--address=" + "localhost", String.valueOf(standbyReplicationServerPort)});
+                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=" + "localhost", String.valueOf(standbyReplicationServerPort)});
                 });
             }
 
