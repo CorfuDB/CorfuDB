@@ -292,7 +292,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * @param serverContext server context (server information)
      * @return completable future for discovered topology
      */
-    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) {
+    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) throws InterruptedException {
 
         log.info("Start Discovery Service.");
         CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = new CompletableFuture<>();
@@ -303,10 +303,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         // acquiring lock, retrieving Site Manager Info and processing this info
         // so this node is initialized as Source (sender) or Sink (receiver)
         replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext,
-                clusterManagerAdapter, discoveryServiceCallback);
-
-        Thread replicationDiscoveryThread = new Thread(replicationDiscoveryService, "discovery-service");
-        replicationDiscoveryThread.start();
+                clusterManagerAdapter, discoveryServiceCallback);;
 
         return discoveryServiceCallback;
     }
