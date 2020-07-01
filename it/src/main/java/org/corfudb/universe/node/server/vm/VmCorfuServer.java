@@ -223,7 +223,7 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
         try {
             executeCommand(processManager.stopCommand());
         } catch (Exception e) {
-            String err = String.format("Can't STOP corfu: %s. Process not found on vm: %s, ip: %s",
+            String err = String.format("Can't STOPPING corfu: %s. Process not found on vm: %s, ip: %s",
                     params.getName(), params.getVmName(), ipAddress
             );
             throw new NodeException(err, e);

@@ -218,7 +218,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
         addClient(new BaseHandler());
 
-
         // Initialize the channel
         shutdown = false;
         Bootstrap b = new Bootstrap();
