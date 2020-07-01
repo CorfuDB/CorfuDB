@@ -1,4 +1,4 @@
-option java_package = "org.corfudb.format";
+option java_package = "org.corfudb.infrastructure.log.format";
 
 enum DataType {
     DATA = 0;
