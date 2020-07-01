@@ -10,17 +10,72 @@ enum ProtocolVersion {
     v0 = 0;
 }
 
+enum MessageType {
+    PING = 0;
+
+    AUTHENTICATE = 1;
+
+    RESET = 2;
+
+    SEAL  = 3;
+
+    READ_LAYOUT  = 4;
+
+    PREPARE_LAYOUT  = 5;
+
+    PROPOSE_LAYOUT = 6;
+
+    COMMIT_LAYOUT = 7;
+
+    GET_TOKEN = 8;
+
+    COMMIT_TRANSACTION = 9;
+
+    BOOTSTRAP = 10;
+
+    QUERY_STREAM = 16;
+
+    READ_LOG = 17;
+
+    QUERY_LOG_METADATA = 18;
+
+    TRIM_LOG = 19;
+
+    COMPACT_LOG = 20;
+
+    FLASH = 21;
+
+    RESTART = 22;
+
+    QUERY_NODE = 23;
+
+    REPORT_FAILURE = 24;
+
+    HEAL_FAILURE = 25;
+
+    EXECUTE_WORKFLOW = 26;
+}
+
+message PingRequest {
+}
+
+message PongResponse {
+}
+
 message Header {
     ProtocolVersion version = 1;
     uint32 priority = 2;
+    MessageType type = 3;
     // epoch, client id?, cluster id ?
 }
 
 message Request {
     Header header = 1;
+    PingRequest pingRequest = 100;
 }
 
 message Response {
     Header header = 1;
+    PongResponse pongResponse = 100;
 }
 
