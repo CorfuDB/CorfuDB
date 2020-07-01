@@ -11,10 +11,12 @@ import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.corfudb.format.Types;
-import org.corfudb.format.Types.LogEntry;
-import org.corfudb.format.Types.LogHeader;
-import org.corfudb.format.Types.Metadata;
+import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
+import org.corfudb.infrastructure.log.LogFormat.DataRank;
+import org.corfudb.infrastructure.log.LogFormat.DataType;
+import org.corfudb.infrastructure.log.LogFormat.LogEntry;
+import org.corfudb.infrastructure.log.LogFormat.LogHeader;
+import org.corfudb.infrastructure.log.LogFormat.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.common.compression.Codec;
@@ -832,14 +834,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         ByteBuffer data = ByteBuffer.wrap(entry.getData() == null ? new byte[0] : entry.getData());
 
         LogEntry.Builder logEntryBuilder = LogEntry.newBuilder()
-                .setDataType(Types.DataType.forNumber(entry.getType().ordinal()))
+                .setDataType(DataType.forNumber(entry.getType().ordinal()))
                 .setCodecType(entry.getPayloadCodecType().getId())
                 .setData(ByteString.copyFrom(data))
                 .setGlobalAddress(address)
                 .addAllStreams(getStrUUID(entry.getStreams()))
                 .putAllBackpointers(getStrLongMap(entry.getBackpointerMap()));
 
-        Optional<Types.DataRank> rank = createProtobufsDataRank(entry);
+        Optional<DataRank> rank = createProtobufsDataRank(entry);
         rank.ifPresent(logEntryBuilder::setRank);
 
         if (entry.getClientId() != null && entry.getThreadId() != null) {
@@ -852,7 +854,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         if (entry.hasCheckpointMetadata()) {
             logEntryBuilder.setCheckpointEntryType(
-                    Types.CheckpointEntryType.forNumber(
+                    CheckpointEntryType.forNumber(
                             entry.getCheckpointType().ordinal()));
             logEntryBuilder.setCheckpointIdMostSignificant(
                     entry.getCheckpointId().getMostSignificantBits());
@@ -869,12 +871,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         return logEntryBuilder.build();
     }
 
-    private Optional<Types.DataRank> createProtobufsDataRank(IMetadata entry) {
+    private Optional<DataRank> createProtobufsDataRank(IMetadata entry) {
         IMetadata.DataRank rank = entry.getRank();
         if (rank == null) {
             return Optional.empty();
         }
-        Types.DataRank result = Types.DataRank.newBuilder()
+        DataRank result = DataRank.newBuilder()
                 .setRank(rank.getRank())
                 .setUuidLeastSignificant(rank.getUuid().getLeastSignificantBits())
                 .setUuidMostSignificant(rank.getUuid().getMostSignificantBits())
@@ -887,7 +889,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         if (!entity.hasRank()) {
             return null;
         }
-        Types.DataRank rank = entity.getRank();
+        DataRank rank = entity.getRank();
         return new IMetadata.DataRank(rank.getRank(),
                 new UUID(rank.getUuidMostSignificant(), rank.getUuidLeastSignificant()));
     }

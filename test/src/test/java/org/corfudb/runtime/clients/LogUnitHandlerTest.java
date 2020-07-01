@@ -6,12 +6,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.Condition;
-import org.corfudb.format.Types;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.log.LogFormat.Metadata;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -481,7 +481,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         serverRouter.reset();
         serverRouter.addServer(server2);
 
-        Types.Metadata metadata = Types.Metadata.parseFrom(metaDataBuf.array());
+        Metadata metadata = Metadata.parseFrom(metaDataBuf.array());
         final int fileOffset = Integer.BYTES + METADATA_SIZE + metadata.getLength() + 20;
         final int CORRUPT_BYTES = 0xFFFF;
         file.seek(fileOffset); // Skip file header
