@@ -67,12 +67,6 @@
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
-            <artifactId>log-replication</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.corfudb</groupId>
             <artifactId>utils</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

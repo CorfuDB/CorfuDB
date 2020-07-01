@@ -1,11 +1,11 @@
 package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
-import org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer;
-import org.corfudb.logreplication.infrastructure.CorfuReplicationDiscoveryService;
-import org.corfudb.logreplication.infrastructure.CorfuReplicationManager;
-import org.corfudb.logreplication.infrastructure.CrossSiteConfiguration;
-import org.corfudb.logreplication.infrastructure.DefaultSiteManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService;
+import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationManager;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
@@ -105,10 +105,10 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
             if (runProcess) {
                 // Start Log Replication Server on Active Site
-                activeReplicationServer = runReplicationServer(activeReplicationServerPort, useNetty);
+                activeReplicationServer = runReplicationServer(activeReplicationServerPort);
 
                 // Start Log Replication Server on Standby Site
-                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, useNetty);
+                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort);
             } else {
                 serverA = new CorfuInterClusterReplicationServer(new String[]{"9010"});
                 Thread siteAThread = new Thread(serverA);
@@ -237,7 +237,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
             //as data have been transfered over, the replication status should be 100% done.
             int replicationStatus = 0;
-            DefaultSiteManager siteManager = (DefaultSiteManager) serverA.getSiteManagerAdapter();
+            DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
             siteManager.prepareSiteRoleChange();
             replicationStatus = siteManager.queryReplicationStatus();
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
@@ -278,7 +278,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             testLogReplicationEndToEnd(false, false);
 
             int replicationStatus = 0;
-            DefaultSiteManager siteManager = (DefaultSiteManager) serverA.getSiteManagerAdapter();
+            DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
             siteManager.prepareSiteRoleChange();
             replicationStatus = siteManager.queryReplicationStatus();
 
@@ -286,8 +286,8 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             assertThat(replicationStatus).isEqualTo(CorfuReplicationManager.PERCENTAGE_BASE);
 
 
-            CrossSiteConfiguration crossSiteConfiguration = new CrossSiteConfiguration(serverA.getSiteManagerAdapter().getSiteConfigMsg());
-            String primary = crossSiteConfiguration.getPrimarySite().getSiteId();
+            TopologyDescriptor topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().getTopologyConfig());
+            String primary = topologyDescriptor.getActiveCluster().getClusterId();
             String currentPimary = primary;
 
             // Wait till site role change and new transfer done.
@@ -296,9 +296,9 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             System.out.print("\nbefore site switch mapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 
-            siteManager = (DefaultSiteManager) serverA.getSiteManagerAdapter();
+            siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
             siteManager.getSiteManagerCallback().siteFlip = true;
-            siteManager = (DefaultSiteManager) serverB.getSiteManagerAdapter();
+            siteManager = (DefaultClusterManager) serverB.getClusterManagerAdapter();
             siteManager.getSiteManagerCallback().siteFlip = true;
 
             CorfuReplicationDiscoveryService discoveryService = serverA.getReplicationDiscoveryService();
@@ -306,8 +306,8 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                 discoveryService.wait();
             }
 
-            crossSiteConfiguration = new CrossSiteConfiguration(serverA.getSiteManagerAdapter().getSiteConfigMsg());
-            currentPimary = crossSiteConfiguration.getPrimarySite().getSiteId();
+            topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().getTopologyConfig());
+            currentPimary = topologyDescriptor.getActiveCluster().getClusterId();
 
             assertThat(currentPimary).isNotEqualTo(primary);
             System.out.print("\nVerified Site Role Change primary " + currentPimary);
@@ -337,8 +337,10 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 
             replicationStatus = 0;
-            siteManager = (DefaultSiteManager)serverB.getSiteManagerAdapter();
+
+            siteManager = (DefaultClusterManager)serverB.getClusterManagerAdapter();
             sleep(sleepInterval);
+
             siteManager.prepareSiteRoleChange();
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
                 replicationStatus = siteManager.queryReplicationStatus();
