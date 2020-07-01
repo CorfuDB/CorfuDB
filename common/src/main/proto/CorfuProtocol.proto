@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package org.corfudb.common;
+
+option java_package = "org.corfudb.common.protocol.proto";
+option optimize_for = LITE_RUNTIME;
+
+
+enum ProtocolVersion {
+    v0 = 0;
+}
+
+message Header {
+    ProtocolVersion version = 1;
+    uint32 priority = 2;
+    // epoch, client id?, cluster id ?
+}
+
+message Request {
+    Header header = 1;
+}
+
+message Response {
+    Header header = 1;
+}
+
