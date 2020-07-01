@@ -56,17 +56,53 @@ enum MessageType {
     EXECUTE_WORKFLOW = 26;
 }
 
+enum ERROR {
+    OK = 0;
+
+    UNKNOWN = 1;
+
+    WRONG_EPOCH = 2;
+
+    NOT_READY = 3;
+
+    WRONG_CLUSTER = 4;
+
+    TRIMMED = 5;
+
+    OVERWRITE = 6;
+
+    IO = 7;
+
+    BOOTSTRAPPED = 8;
+
+    NOT_BOOTSTRAPPED = 9;
+}
+
+message ServerError {
+    ERROR code = 1;
+    string message = 2;
+}
+
 message PingRequest {
 }
 
-message PongResponse {
+message PingResponse {
+}
+
+
+
+message UUID {
+    int64 lsb = 1;
+    int64 msb = 2;
 }
 
 message Header {
     ProtocolVersion version = 1;
-    uint32 priority = 2;
-    MessageType type = 3;
-    // epoch, client id?, cluster id ?
+    int64 request_id = 2;
+    uint32 priority = 3;
+    MessageType type = 4;
+    int64 epoch = 5;
+    UUID cluster_id = 6;
 }
 
 message Request {
@@ -76,6 +112,7 @@ message Request {
 
 message Response {
     Header header = 1;
-    PongResponse pongResponse = 100;
+    ServerError error = 2;
+    PingResponse pingResponse = 100;
 }
 
