@@ -54,8 +54,8 @@ public class ClusterDescriptor {
         }
     }
 
-    public ClusterDescriptor(String siteId, ClusterRole roleType, int corfuPort) {
-        this.clusterId = siteId;
+    public ClusterDescriptor(String clusterId, ClusterRole roleType, int corfuPort) {
+        this.clusterId = clusterId;
         this.role = roleType;
         this.corfuPort = corfuPort;
         nodesDescriptors = new ArrayList<>();

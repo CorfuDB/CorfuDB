@@ -100,7 +100,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class LogReplicationFSM {
 
     @Getter
-    private long siteConfigID;
+    private long topologyConfigId;
 
     /**
      * Current state of the FSM.
@@ -349,10 +349,10 @@ public class LogReplicationFSM {
         to.onEntry(from);
     }
 
-    public void setTopologyConfigId(long siteConfigID) {
-        this.siteConfigID = siteConfigID;
-        snapshotReader.setSiteEpoch(siteConfigID);
-        logEntryReader.setSiteConfigID(siteConfigID);
+    public void setTopologyConfigId(long topologyConfigId) {
+        this.topologyConfigId = topologyConfigId;
+        snapshotReader.setTopologyConfigId(topologyConfigId);
+        logEntryReader.setTopologyConfigId(topologyConfigId);
     }
 
     /**

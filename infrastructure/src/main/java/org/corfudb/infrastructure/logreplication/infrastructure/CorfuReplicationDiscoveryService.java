@@ -411,30 +411,35 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     /**
-     * Process Cluster Role Change:
-     *   - Standby to Active, or
-     *   - Active to Standby
+     * Process Topology Config Change:
+     *   - Higher config id
+     *   - Potential cluster role change
      *
      * @param newTopology new discovered topology
      */
-    public void processClusterRoleChange(TopologyDescriptor newTopology) {
-        // stop ongoing replication, stopLogReplication() checks leadership and active
+    public void processTopologyConfigChange(TopologyDescriptor newTopology) {
+        // Stop ongoing replication, stopLogReplication() checks leadership and active
+        // We do not update topology until we successfully stop log replication
         stopLogReplication();
 
         //TODO pankti: read the configuration again and refresh the LogReplicationConfig object
 
-        // update topology, cluster, and node configs
+        // Update topology, cluster, and node configs
         updateLocalTopology(newTopology);
 
-        // update config id in metadata manager
+        // Update topology config id in metadata manager
+        logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
+        log.debug("Persist new topologyConfigId {}, cluster id={}, status={}", topologyDescriptor.getTopologyConfigId(),
+                localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
+
+        // Update sink manager
         interClusterReplicationService.getLogReplicationServer().getSinkManager()
                 .updateTopologyConfigId(topologyDescriptor.getTopologyConfigId());
-        log.debug("Persist new topologyConfigId {}, status={}", topologyDescriptor.getTopologyConfigId(),
-                localClusterDescriptor.getRole());
 
+        // Update replication server, in case there is a role change
         logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
 
-        // On Cluster Role Change, only if this node is the leader take action
+        // On Topology Config Change, only if this node is the leader take action
         if (isLeader) {
             onLeadershipAcquire();
         }
@@ -446,32 +451,39 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @param event discovery event
      */
     public void processTopologyChangeNotification(DiscoveryServiceEvent event) {
-        // Stale notification, skip
+        // Skip stale notification
         if (event.getTopologyConfig().getTopologyConfigID() < topologyDescriptor.getTopologyConfigId()) {
             log.debug("Stale Topology Change Notification, current={}, received={}",
                     topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig());
             return;
         }
 
-        TopologyDescriptor newConfig = new TopologyDescriptor(event.getTopologyConfig());
-
-        // Note: should not update topology here. Otherwise, below check is always true.
-        if (newConfig.getTopologyConfigId() == topologyDescriptor.getTopologyConfigId()) {
+        TopologyDescriptor newTopology = new TopologyDescriptor(event.getTopologyConfig());
+        // Process standby add/remove, which will not increment config id
+        // We won't stop ongoing replications in this case
+        if (newTopology.getTopologyConfigId() == topologyDescriptor.getTopologyConfigId()) {
+            log.debug("Processing a new topology with the same config id, previous topology" +
+                    " is {}, and new topology is {}", topologyDescriptor, newTopology);
             if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
                 return;
             }
 
-            // If the current node is active, compare with the current topologyConfig, see if there are additional or
-            // removed standbys
+            // If the current node is active, compare with the current topologyConfig, see if there
+            // are additional or removed standbys
             if (replicationManager != null && isLeader) {
-                replicationManager.processStandbyChange(newConfig);
+                replicationManager.processStandbyChange(newTopology);
             }
-        } else {
-            // TODO: Are we sure that when there is a topologyConfigId change it implies a role change
-            //  and not a new standby added??
-            processClusterRoleChange(newConfig);
+
+            // After processing standby change, update local topology
+            updateLocalTopology(newTopology);
+            return;
         }
 
+        // TODO: Are we sure that when there is a topologyConfigId change it implies a role change
+        //  and not a new standby added??
+
+        // New topology config with higher epoch
+        processTopologyConfigChange(newTopology);
     }
 
     private void updateLocalTopology(TopologyDescriptor newConfig) {
@@ -541,7 +553,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null) {
             replicationManager.prepareClusterRoleChange();
         } else {
-            log.warn("Illegal prepareSiteRoleChange when cluster{} with role {}",
+            log.warn("Illegal prepareClusterRoleChange when cluster{} with role {}",
                     localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
         }
     }
@@ -552,15 +564,20 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Override
     public int queryReplicationStatus() {
-        // TODO (maxi): address Nan's comments
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-            // If not leader, replication manager might be null
-            if (replicationManager != null) {
-                return replicationManager.queryReplicationStatus();
+            if (!isLeader) {
+                log.warn("Illegal queryReplicationStatus when node is not a leader " +
+                        "in an ACTIVE Cluster{} ", localClusterDescriptor.getClusterId());
+                return 0;
             }
-            log.warn("Illegal queryReplicationStatus when replication manager is null " +
-                    "in an ACTIVE Cluster{} ", localClusterDescriptor.getClusterId());
-            return 0;
+
+            if (replicationManager == null) {
+                log.warn("Illegal queryReplicationStatus when replication manager is null " +
+                        "in an ACTIVE Cluster{} ", localClusterDescriptor.getClusterId());
+                return 0;
+            }
+
+            return replicationManager.queryReplicationStatus();
         } else {
             log.warn("Illegal queryReplicationStatus when cluster{} with role {}",
                     localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());

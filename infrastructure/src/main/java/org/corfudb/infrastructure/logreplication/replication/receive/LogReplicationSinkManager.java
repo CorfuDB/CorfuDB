@@ -362,15 +362,13 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     /**
      * When there is a site role type flip, the Sink Manager needs do the followings:
-     * 1. update the metadata store with the most recent topologyConfigId
-     * 2. reset snapshotWriter and logEntryWriter state
-     * 3. reset buffer logEntryBuffer state.
+     * 1. reset snapshotWriter and logEntryWriter state
+     * 2. reset buffer logEntryBuffer state.
      * @param topologyConfigId
      */
     public void updateTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
 
-        logReplicationMetadataManager.setupTopologyConfigId(topologyConfigId);
         snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp());
         logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
                 logReplicationMetadataManager.getLastProcessedLogTimestamp());
