@@ -18,4 +18,5 @@ public class IllegalTransitionException extends Exception {
     public IllegalTransitionException(LockEvent event, LockStateType stateType) {
         super(String.format("Illegal transition for event %s while in state %s", event, stateType));
     }
+
 }

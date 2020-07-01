@@ -11,9 +11,9 @@ import java.util.UUID;
 @Slf4j
 public class LogReplicationEntryMetadata {
     /*
-     * Used to keep track of the site config history.
+     * Used to keep track of the cluster config history.
      */
-    private long siteConfigID;
+    private long topologyConfigId;
 
     /*
      * Used to determine the type of the metadata:
@@ -48,7 +48,7 @@ public class LogReplicationEntryMetadata {
 
     public LogReplicationEntryMetadata(LogReplicationEntryMetadata inputMetadata) {
         this.messageMetadataType = inputMetadata.messageMetadataType;
-        this.siteConfigID = inputMetadata.siteConfigID;
+        this.topologyConfigId = inputMetadata.topologyConfigId;
         this.syncRequestId = inputMetadata.syncRequestId;
         this.snapshotTimestamp = inputMetadata.snapshotTimestamp;
         this.snapshotSyncSeqNum = inputMetadata.snapshotSyncSeqNum;
@@ -65,9 +65,9 @@ public class LogReplicationEntryMetadata {
     public LogReplicationEntryMetadata() { }
 
     // Constructor for log entry ACK
-    public LogReplicationEntryMetadata(MessageType type, long siteConfigID, UUID syncRequestId, long entryTimeStamp, long snapshotTimestamp) {
+    public LogReplicationEntryMetadata(MessageType type, long topologyConfigId, UUID syncRequestId, long entryTimeStamp, long snapshotTimestamp) {
         this.messageMetadataType = type;
-        this.siteConfigID = siteConfigID;
+        this.topologyConfigId = topologyConfigId;
         this.syncRequestId = syncRequestId;
         this.timestamp = entryTimeStamp;
         this.snapshotTimestamp = snapshotTimestamp;
@@ -82,7 +82,7 @@ public class LogReplicationEntryMetadata {
     public static LogReplicationEntryMetadata fromProto(Messages.LogReplicationEntryMetadata proto) {
         // Parse protoBuf Message
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata();
-        metadata.setSiteConfigID(proto.getSiteConfigID());
+        metadata.setTopologyConfigId(proto.getSiteConfigID());
         metadata.setMessageMetadataType(getType(proto.getType()));
         metadata.setSyncRequestId(new UUID(proto.getSyncRequestId().getMsb(), proto.getSyncRequestId().getLsb()));
         metadata.setTimestamp(proto.getTimestamp());

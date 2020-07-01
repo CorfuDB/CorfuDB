@@ -270,7 +270,7 @@ public class ServerRestartIT extends AbstractIT {
                     MAX_LIMIT_KEY_RANGE_PRE_SHUTDOWN, nested, rand)).isTrue();
         }
 
-        // ShutDown (STOP) CORFU Server
+        // ShutDown (STOPPING) CORFU Server
         assertThat(shutdownCorfuServer(corfuServerProcess)).isTrue();
 
         // Schedule offline transactions, first one should be stuck and will eventually succeed

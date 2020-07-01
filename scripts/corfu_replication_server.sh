@@ -19,7 +19,7 @@ DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
 if ls "${DIR}"/../target/*.jar > /dev/null 2>&1; then
   # echo "Running from development source"
-  CLASSPATH=("${DIR}"/../log-replication/target/log-replication-*-shaded.jar)
+  CLASSPATH=("${DIR}"/../infrastructure/target/infrastructure-*-shaded.jar)
 else
   CLASSPATH=("${CORFUDB_PREFIX}"/share/corfu/lib/*.jar)
 fi
@@ -47,4 +47,4 @@ else
       byteman=""
 fi
 
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.logreplication.infrastructure.CorfuInterClusterReplicationServer $*
+"$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer $*

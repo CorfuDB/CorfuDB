@@ -14,7 +14,6 @@ import io.netty.buffer.Unpooled;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
 import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.exceptions.SerializerException;
@@ -103,7 +102,7 @@ public interface ICorfuPayload<T> {
                     })
                     .put(LogReplicationEntryMetadata.class, buffer -> {
                         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata();
-                        metadata.setSiteConfigID(buffer.readLong());
+                        metadata.setTopologyConfigId(buffer.readLong());
                         metadata.setMessageMetadataType(MessageType.fromValue(buffer.readInt()));
                         metadata.setTimestamp(buffer.readLong());
                         metadata.setPreviousTimestamp(buffer.readLong());
@@ -408,7 +407,7 @@ public interface ICorfuPayload<T> {
             }
         } else if (payload instanceof LogReplicationEntryMetadata) {
             LogReplicationEntryMetadata metadata = (LogReplicationEntryMetadata) payload;
-            buffer.writeLong(metadata.getSiteConfigID());
+            buffer.writeLong(metadata.getTopologyConfigId());
             buffer.writeInt(metadata.getMessageMetadataType().getVal());
             buffer.writeLong(metadata.getTimestamp());
             buffer.writeLong(metadata.getPreviousTimestamp());

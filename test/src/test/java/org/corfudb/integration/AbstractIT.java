@@ -301,11 +301,18 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
-    public static Process runReplicationServer(int port, boolean netty) throws IOException {
+    public static Process runReplicationServer(int port) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
-                .setNettyTransport(netty)
+                .runServer();
+    }
+
+    public static Process runReplicationServer(int port, String pluginConfigFilePath) throws IOException {
+        return new CorfuReplicationServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(port)
+                .setPluginConfigFilePath(pluginConfigFilePath)
                 .runServer();
     }
 
@@ -492,14 +499,14 @@ public class AbstractIT extends AbstractCorfuTest {
         private int port = DEFAULT_LOG_REPLICATION_PORT;
 
         private boolean tlsEnabled = false;
-        private boolean nettyTransport = true;
         private String keyStore = null;
         private String keyStorePassword = null;
         private String logLevel = "INFO";
         private String trustStore = null;
         private String trustStorePassword = null;
         private String compressionCodec = null;
-
+        private String pluginConfigFilePath = null;
+        private String logPath = null;
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -510,8 +517,10 @@ public class AbstractIT extends AbstractCorfuTest {
             StringBuilder command = new StringBuilder();
             command.append("-a ").append(host);
 
-            if (!nettyTransport) {
-                command.append(" --custom-transport");
+            if (logPath != null) {
+                command.append(" -l ").append(logPath);
+            } else {
+                command.append(" -m");
             }
 
             if (tlsEnabled) {
@@ -529,6 +538,11 @@ public class AbstractIT extends AbstractCorfuTest {
                     command.append(" -w ").append(trustStorePassword);
                 }
             }
+
+            if(pluginConfigFilePath != null) {
+                command.append(" --plugin=").append(pluginConfigFilePath);
+            }
+
             command.append(" -d ").append(logLevel).append(" ")
                     .append(port);
             return command.toString();

@@ -25,7 +25,7 @@ message TableDescriptors {
     map<string, google.protobuf.FileDescriptorProto> fileDescriptors = 1;
 }
 
-// Metadata.F
+// Metadata.
 message TableMetadata {
     TableName table_name = 1;
 
