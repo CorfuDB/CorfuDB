@@ -8,7 +8,7 @@ import org.corfudb.runtime.Messages;
 @Data
 public class LogReplicationNegotiationResponse implements ICorfuPayload<LogReplicationNegotiationResponse> {
 
-    private long siteConfigID;
+    private long topologyConfigId;
     private String version;
     private long snapshotStart;
     private long snapshotTransferred;
@@ -16,7 +16,7 @@ public class LogReplicationNegotiationResponse implements ICorfuPayload<LogRepli
     private long lastLogProcessed;
 
     public LogReplicationNegotiationResponse(ByteBuf buf) {
-        siteConfigID = ICorfuPayload.fromBuffer(buf, Long.class);
+        topologyConfigId = ICorfuPayload.fromBuffer(buf, Long.class);
         version = ICorfuPayload.fromBuffer(buf, String.class);
         snapshotStart = ICorfuPayload.fromBuffer(buf, Long.class);
         snapshotTransferred = ICorfuPayload.fromBuffer(buf, Long.class);
@@ -24,8 +24,8 @@ public class LogReplicationNegotiationResponse implements ICorfuPayload<LogRepli
         lastLogProcessed = ICorfuPayload.fromBuffer(buf, Long.class);
     }
 
-    public LogReplicationNegotiationResponse(long siteConfigID, String version, long snapshotStart, long lastTransferDone, long snapshotAppliedDone, long lastLogProcessed) {
-        this.siteConfigID = siteConfigID;
+    public LogReplicationNegotiationResponse(long topologyConfigId, String version, long snapshotStart, long lastTransferDone, long snapshotAppliedDone, long lastLogProcessed) {
+        this.topologyConfigId = topologyConfigId;
         this.version = version;
         this.snapshotStart = snapshotStart;
         this.snapshotTransferred = lastTransferDone;
@@ -44,7 +44,7 @@ public class LogReplicationNegotiationResponse implements ICorfuPayload<LogRepli
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, siteConfigID);
+        ICorfuPayload.serialize(buf, topologyConfigId);
         ICorfuPayload.serialize(buf, version);
         ICorfuPayload.serialize(buf, snapshotStart);
         ICorfuPayload.serialize(buf, snapshotTransferred);

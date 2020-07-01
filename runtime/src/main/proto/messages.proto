@@ -34,6 +34,7 @@ message CorfuMessage {
 // - LogReplicationEntry
 // - LogReplicationNegotiationResponse
 // - LogReplicationQueryLeadershipResponse
+// - LogReplicationLeadershipLoss
 
 message LogReplicationEntry {
     LogReplicationEntryMetadata metadata = 1;
@@ -49,9 +50,14 @@ message LogReplicationNegotiationResponse {
     uint64 lastLogEntryTimestamp = 6;
 }
 
+message LogReplicationLeadershipLoss {
+    string endpoint = 1;
+}
+
 message LogReplicationQueryLeadershipResponse {
     int64 epoch = 1;
     bool isLeader = 2;
+    string endpoint = 3;
 }
 
 message LogReplicationEntryMetadata {
@@ -89,4 +95,5 @@ enum CorfuMessageType {
     LOG_REPLICATION_NEGOTIATION_RESPONSE = 2;
     LOG_REPLICATION_QUERY_LEADERSHIP = 3;
     LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE = 4;
+    LOG_REPLICATION_LEADERSHIP_LOSS = 5;
 }

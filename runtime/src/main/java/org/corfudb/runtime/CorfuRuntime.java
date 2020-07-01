@@ -4,7 +4,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
@@ -416,7 +415,6 @@ public class CorfuRuntime {
         super.shutdownNettyEventLoop(shutdownNettyEventLoop);
         return this;
     }
-
     public CorfuRuntimeParametersBuilder customNettyChannelOptions(Map<ChannelOption, Object> customNettyChannelOptions) {
         super.customNettyChannelOptions(customNettyChannelOptions);
         return this;
