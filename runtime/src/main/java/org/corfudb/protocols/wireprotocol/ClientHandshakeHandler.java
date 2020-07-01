@@ -7,6 +7,7 @@ import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.Messages;
 
 import java.util.LinkedList;
 import java.util.Queue;
@@ -150,7 +151,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx)
         throws Exception {
-        log.info("channelActive: Outgoing connection established to: {}", ctx.channel().remoteAddress());
+        log.info("channelActive: Outgoing connection established to: {} from id={}", ctx.channel().remoteAddress(), ctx.channel().localAddress());
 
         // Write the handshake & add a timeout listener.
         CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE

@@ -169,7 +169,7 @@ public class ProcessCorfuServer extends AbstractCorfuServer<CorfuServerParams, U
         try {
             executeCommand(Optional.empty(), processManager.stopCommand());
         } catch (Exception e) {
-            String err = String.format("Can't STOP corfu: %s. Process not found", params.getName());
+            String err = String.format("Can't STOPPING corfu: %s. Process not found", params.getName());
             throw new NodeException(err, e);
         }
     }

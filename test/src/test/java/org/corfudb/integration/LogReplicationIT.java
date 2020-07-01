@@ -4,14 +4,16 @@ import com.google.common.reflect.TypeToken;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.receive.LogReplicationMetadataManager;
-import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
-import org.corfudb.logreplication.LogReplicationSourceManager;
-import org.corfudb.logreplication.fsm.LogReplicationEvent;
-import org.corfudb.logreplication.fsm.LogReplicationFSM;
-import org.corfudb.logreplication.fsm.LogReplicationStateType;
-import org.corfudb.logreplication.fsm.ObservableAckMsg;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
+import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -30,6 +32,7 @@ import java.util.Observable;
 import java.util.Observer;
 import java.util.Set;
 import java.util.UUID;
+
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
@@ -41,8 +44,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 
 /**
- * Start two servers, one as the src, the other as the dst.
- * Copy snapshot data rom src to dst
+ * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
+ * i.e., the ability to transfer a full view (snapshot) or incremental view of the datastore
+ * from a source to a destination. In these tests we disregard communication channels between
+ * clusters (sites) or CorfuLogReplicationServer.
+ *
+ * We emulate the channel by implementing a test data plane which directly forwards the data
+ * to the SinkManager. Overall, these tests bring up two CorfuServers (datastore components),
+ * one performing as the active and the other as the standby. We write different patterns of data
+ * on the source (transactional and non transactional, as well as polluted and non-polluted transactions, i.e.,
+ * transactions containing federated and non-federated streams) and verify that complete data
+ * reaches the destination after initiating log replication.
  */
 @Slf4j
 public class LogReplicationIT extends AbstractIT implements Observer {
@@ -51,8 +63,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static final int WRITER_PORT = DEFAULT_PORT + 1;
     static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
 
-    static final UUID PRIMARY_SITE_ID = UUID.randomUUID();
-    static final UUID REMOTE_SITE_ID = UUID.randomUUID();
+    static final String ACTIVE_CLUSTER_ID = UUID.randomUUID().toString();
+    static final String REMOTE_CLUSTER_ID = UUID.randomUUID().toString();
+    static final int CORFU_PORT = 9000;
     static final String TABLE_PREFIX = "test";
 
     static private final int NUM_KEYS = 4;
@@ -71,9 +84,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static private final int DELETE_PACE = 4;
 
     static private TestConfig testConfig = new TestConfig();
-
-    // Data Control Test Config (default) no message drop
-    private DefaultDataControlConfig defaultDataControlConfig = new DefaultDataControlConfig(false, 0);
 
     Process sourceServer;
     Process destinationServer;
@@ -142,8 +152,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
-    CorfuTable<String, Long> writerMetaDataTable;
-    LogReplicationMetadataManager logReplicationMetadataManager;
+    private LogReplicationMetadataManager logReplicationMetadataManager;
 
     /**
      * Setup Test Environment
@@ -196,14 +205,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, PRIMARY_SITE_ID, REMOTE_SITE_ID);
-        writerMetaDataTable = dstTestRuntime.getObjectsView()
-                .build()
-                .setStreamName(LogReplicationMetadataManager.getPersistedWriterMetadataTableName(PRIMARY_SITE_ID, REMOTE_SITE_ID))
-                .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {
-                })
-                .setSerializer(Serializers.JSON)
-                .open();
+        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, ACTIVE_CLUSTER_ID);
     }
 
     private void cleanEnv() {
@@ -336,7 +338,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     /* ***************************** LOG REPLICATION IT TESTS ***************************** */
 
     /**
-     * This test attempts to perform a snapshot sync through the Log Replication Manager.
+     * This test attempts to perform a snapshot sync and log entry sync through the Log Replication Manager.
      * We emulate the channel between source and destination by directly handling the received data
      * to the other side.
      */
@@ -400,7 +402,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private final String t2 = TABLE_PREFIX + 2;
 
     /**
-     * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T1 and T2 are replicated.
+     * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T0 and T1 are replicated.
      * We write following this pattern:
      *
      * - Write transactions across T0 and T1.
@@ -433,7 +435,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
-     * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T1 and T2 are replicated,
+     * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T0 and T1 are replicated,
      * however, transactions are written across the 3 tables. This scenario should fail as invalid tables are
      * crossing transactional boundaries.
      *
@@ -509,7 +511,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 .setSerializer(Serializers.PRIMITIVE)
                 .open();
 
-        // Generate some dump data to enfore an empty snapshot transfer
+        // Generate some dump data to enforce an empty snapshot transfer
         for (long i = 0; i < NUM_KEYS; i++) {
             dumpDataTable.put(i, i);
         }
@@ -637,6 +639,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Start Log Entry Sync
         expectedAckMessages = NUM_KEYS * WRITE_CYCLES;
         testConfig.clear();
+
         startLogEntrySync(crossTables);
 
         // Verify Data on Destination site
@@ -649,6 +652,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
 
+    /**
+     * Test Log Entry (delta) Sync for the case where messages are dropped at the destination
+     * for a fixed number of times. This will test messages being resent and further applied.
+     */
     @Test
     public void testLogEntrySyncValidCrossTablesWithDropMsg() throws Exception {
         // Write data in transaction to t0 and t1
@@ -666,6 +673,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
+
         // Because t2 is not specified as a replicated table, we should not see it on the destination
         srcDataForVerification.get(t2).clear();
 
@@ -1203,13 +1211,16 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                                             Set<WAIT> waitConditions) throws InterruptedException {
         // Config
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, PRIMARY_SITE_ID, REMOTE_SITE_ID);
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate);
 
         // Data Sender
-        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel());
+        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel(), logReplicationMetadataManager);
 
         // Source Manager
-        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(readerRuntime, sourceDataSender, config);
+        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(readerRuntime, sourceDataSender,
+                LogReplicationRuntimeParameters.builder()
+                        .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID, LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT))
+                        .replicationConfig(config).build());
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
