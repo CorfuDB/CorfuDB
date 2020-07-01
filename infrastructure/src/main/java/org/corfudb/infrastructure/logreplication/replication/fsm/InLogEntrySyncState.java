@@ -80,7 +80,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 // of multi-cluster replication sharing a common thread pool, continuation allows to send another
                 // batch of updates for the current snapshot sync.
                 if (event.getMetadata().getRequestId() == transitionEventId) {
-                    log.debug("Continuation of log entry sync for {}", event.getEventID());
+                    log.trace("Continuation of log entry sync for {}", event.getEventID());
                     return this;
                 } else {
                     log.warn("Unexpected log entry sync continue event {} when in log entry sync state {}.",

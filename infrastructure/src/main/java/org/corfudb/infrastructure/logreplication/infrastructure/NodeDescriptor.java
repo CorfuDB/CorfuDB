@@ -9,7 +9,9 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 
 import java.util.UUID;
 
-
+/**
+ * This class represents a Log Replication Node
+ */
 @Slf4j
 public class NodeDescriptor {
 
@@ -18,14 +20,10 @@ public class NodeDescriptor {
     private ClusterRole roleType;
 
     @Getter
-    private String ipAddress;
+    private String host;
 
     @Getter
     private String port;
-
-    @Getter
-    @Setter
-    private boolean leader;
 
     @Getter
     private String clusterId;
@@ -33,10 +31,9 @@ public class NodeDescriptor {
     @Getter
     private UUID nodeId;        // Connection Identifier (APH UUID in the case of NSX)
 
-    public NodeDescriptor(String ipAddress, String port, ClusterRole roleType,
+    public NodeDescriptor(String host, String port, ClusterRole roleType,
                           String siteId, UUID nodeId) {
-        this.leader = false;
-        this.ipAddress = ipAddress;
+        this.host = host;
         this.roleType = roleType;
         this.port = port;
         this.clusterId = siteId;
@@ -45,14 +42,14 @@ public class NodeDescriptor {
 
     public NodeConfigurationMsg convertToMessage() {
         NodeConfigurationMsg nodeConfig = NodeConfigurationMsg.newBuilder()
-                .setAddress(ipAddress)
+                .setAddress(host)
                 .setPort(Integer.parseInt(port))
                 .setUuid(nodeId.toString()).build();
         return nodeConfig;
     }
 
     public String getEndpoint() {
-        return ipAddress + ":" + port;
+        return host + ":" + port;
     }
 
     @Override

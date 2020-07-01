@@ -111,6 +111,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                             log.info("Leader for remote cluster, node={}", leadershipResponse.getEndpoint());
                             leader = leadershipResponse.getEndpoint();
                             fsm.setRemoteLeaderEndpoint(leader);
+
                             // Remove all CF, based on the assumption that one leader response is the expectation.
                             pendingLeadershipQueries.clear();
 
@@ -119,6 +120,8 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
                             break;
                         } else {
+                            log.debug("Leader is not ");
+
                             // Remove CF for completed request
                             pendingLeadershipQueries.remove(leadershipResponse.getEndpoint());
                         }

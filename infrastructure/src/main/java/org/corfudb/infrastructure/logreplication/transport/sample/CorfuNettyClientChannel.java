@@ -219,7 +219,7 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<CorfuMe
         }
         log.info("Connect Async {}", node.getEndpoint());
         // Use the bootstrap to create a new channel.
-        ChannelFuture f = bootstrap.connect(node.getIpAddress(), Integer.valueOf(node.getPort()));
+        ChannelFuture f = bootstrap.connect(node.getHost(), Integer.valueOf(node.getPort()));
         f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));
     }
 

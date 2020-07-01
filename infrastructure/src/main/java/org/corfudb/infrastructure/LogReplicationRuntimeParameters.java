@@ -262,6 +262,7 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setRemoteClusterDescriptor(remoteClusterDescriptor);
             runtimeParameters.setTopologyConfigId(topologyConfigId);
             runtimeParameters.setPluginFilePath(pluginFilePath);
+            runtimeParameters.setChannelContext(channelContext);
             runtimeParameters.setReplicationConfig(replicationConfig);
             return runtimeParameters;
         }

@@ -1,5 +1,12 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
+/**
+ * An interface for log replication runtime state classes.
+ *
+ * All log replication runtime states implement this interface.
+ *
+ * @author amartinezman
+ */
 public interface LogReplicationRuntimeState {
 
     /**

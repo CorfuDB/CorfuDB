@@ -42,7 +42,6 @@ public class LogReplicationTest {
 //                .keyStore("/config/cluster-manager/cluster-manager/private/keystore.jks")
 //                .ksPasswordFile("/config/cluster-manager/cluster-manager/private/keystore.password")
 //                .tlsEnabled(true)
-                .layoutServers(Arrays.asList(NodeLocator.parseString(endpoint)))
                 .build();
 
         runtime = CorfuRuntime.fromParameters(params)

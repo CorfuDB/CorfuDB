@@ -48,7 +48,7 @@ public class ClusterDescriptor {
         this.nodesDescriptors = new ArrayList<>();
         this.corfuPort = info.getCorfuPort();
         for (NodeDescriptor nodeInfo : info.nodesDescriptors) {
-            NodeDescriptor newNode = new NodeDescriptor(nodeInfo.getIpAddress(), nodeInfo.getPort(),
+            NodeDescriptor newNode = new NodeDescriptor(nodeInfo.getHost(), nodeInfo.getPort(),
                     roleType, info.clusterId, nodeInfo.getNodeId());
             this.nodesDescriptors.add(newNode);
         }

@@ -7,7 +7,13 @@ import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRunt
 
 import java.util.UUID;
 
-
+/**
+ * Log Replication Runtime Replicating State.
+ *
+ * During this state, data logs are being replicated across clusters,
+ *
+ * @author amartinezman
+ */
 @Slf4j
 public class ReplicatingState implements LogReplicationRuntimeState {
 
@@ -42,11 +48,11 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 }
 
                 // If a non-leader node loses connectivity, reconnect async and continue.
-                return this;
+                return null;
             case ON_CONNECTION_UP:
                 // Some node got connected, update connected endpoints
                 fsm.updateConnectedEndpoints(event.getEndpoint());
-                return this;
+                return null;
             case NEGOTIATION_COMPLETE:
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case LOCAL_LEADER_LOSS:

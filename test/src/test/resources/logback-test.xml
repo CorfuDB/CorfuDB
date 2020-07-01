@@ -43,7 +43,6 @@ z
         <!--<appender-ref ref="MetricsRollingFile" />-->
     </logger>
 
-
     <!--<root level="DEBUG">-->
         <!--&lt;!&ndash;<appender-ref ref="FILE" />&ndash;&gt;-->
         <!--<appender-ref ref="STDOUT" />-->

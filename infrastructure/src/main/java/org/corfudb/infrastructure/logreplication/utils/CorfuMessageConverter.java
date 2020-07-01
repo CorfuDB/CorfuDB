@@ -1,4 +1,4 @@
-package org.corfudb.utils.common;
+package org.corfudb.infrastructure.logreplication.utils;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
@@ -16,6 +16,7 @@ import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.Messages.LogReplicationEntryMetadata;
 import org.corfudb.runtime.Messages.CorfuMessageType;
+import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
 import java.util.UUID;
 

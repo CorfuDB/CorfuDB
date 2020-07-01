@@ -3,8 +3,6 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 import lombok.Data;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 
-import java.util.UUID;
-
 /**
  * This class represents a Log Replication Runtime Event, i.e., an action which
  * triggers a valid transition in the Log Replication Runtime FSM.

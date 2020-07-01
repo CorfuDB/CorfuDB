@@ -29,9 +29,6 @@ public class TopologyDescriptor {
     @Getter
     private Map<String, ClusterDescriptor> standbyClusters;
 
-    @Getter
-    private String certs;
-
     /**
      * Constructor.
      *
@@ -39,8 +36,7 @@ public class TopologyDescriptor {
      */
     public TopologyDescriptor(TopologyConfigurationMsg topologyMessage) {
         this.topologyConfigId = topologyMessage.getTopologyConfigID();
-        this.certs = topologyMessage.getCerts();
-        standbyClusters = new HashMap<>();
+        this.standbyClusters = new HashMap<>();
         for (ClusterConfigurationMsg clusterConfig : topologyMessage.getClustersList()) {
             ClusterDescriptor cluster = new ClusterDescriptor(clusterConfig);
             if (clusterConfig.getRole() == ClusterRole.ACTIVE) {

@@ -143,11 +143,11 @@ public class CorfuReplicationE2EIT extends AbstractIT {
                 standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath);
             } else {
                 executorService.submit(() -> {
-                    CorfuInterClusterReplicationServer.main(new String[]{"test", "-m", "--plugin=" + pluginConfigFilePath, "--address=" + "localhost", String.valueOf(activeReplicationServerPort)});
+                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=localhost", String.valueOf(activeReplicationServerPort)});
                 });
 
                 executorService.submit(() -> {
-                    CorfuInterClusterReplicationServer.main(new String[]{"test", "-m", "--plugin=" + pluginConfigFilePath, "--address=" + "localhost", String.valueOf(standbyReplicationServerPort)});
+                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=localhost", String.valueOf(standbyReplicationServerPort)});
                 });
             }
 

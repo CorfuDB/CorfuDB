@@ -95,7 +95,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *
  *
  */
-// TODO(Gabriela): insert new state to comply with SNAPSHOT_WAIT_COMPLETE event
+// TODO(Anny): insert new state to comply with SNAPSHOT_WAIT_COMPLETE event
 @Slf4j
 public class LogReplicationFSM {
 

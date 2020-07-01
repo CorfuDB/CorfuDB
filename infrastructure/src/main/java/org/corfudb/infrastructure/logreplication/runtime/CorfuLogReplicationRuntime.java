@@ -107,7 +107,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 @Slf4j
 public class CorfuLogReplicationRuntime {
 
-    // TODO(Gabriela): add site_flip (cluster_role_flip) event... probably we need a new state called finishing_ongoing_replication... and go to to stopped...
+    // TODO(Anny): add cluster_role_flip event... probably we need a new state called finishing_ongoing_replication...
+    //   and go to stopped...
 
     public static final int DEFAULT_TIMEOUT = 5000;
 
@@ -228,8 +229,10 @@ public class CorfuLogReplicationRuntime {
 
             try {
                 LogReplicationRuntimeState newState = state.processEvent(event);
-                transition(state, newState);
-                state = newState;
+                if (newState != null) {
+                    transition(state, newState);
+                    state = newState;
+                }
             } catch (IllegalTransitionException illegalState) {
                 log.error("Illegal log replication event {} when in state {}", event.getType(), state.getType());
             }
@@ -292,7 +295,6 @@ public class CorfuLogReplicationRuntime {
      * Stop Log Replication, regardless of current state.
      */
     public void stop() {
-        log.info("Local leadership lost. Log Replication will immediately stop.");
         input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.LOCAL_LEADER_LOSS));
     }
 }

@@ -30,7 +30,7 @@ public abstract class CorfuReplicationClusterManagerAdapter {
     public synchronized void updateTopologyConfig(TopologyConfigurationMsg newTopologyConfigMsg) {
         if (newTopologyConfigMsg.getTopologyConfigID() > topologyConfig.getTopologyConfigID()) {
             topologyConfig = newTopologyConfigMsg;
-            corfuReplicationDiscoveryService.updateSiteConfig(topologyConfig);
+            corfuReplicationDiscoveryService.updateTopology(topologyConfig);
         }
     }
 

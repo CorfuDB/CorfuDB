@@ -103,6 +103,9 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isLeader(msg, r)) {
             LogReplicationMetadataManager metadata = sinkManager.getLogReplicationMetadataManager();
+
+            // TODO (Xiaoqin Ma): That's 6 independent DB calls per one LOG_REPLICATION_NEGOTIATION_REQUEST.
+            //  Can we do just one? Also, It does not look like we handle failures if one of them fails, for example.
             LogReplicationNegotiationResponse response = new LogReplicationNegotiationResponse(
                     metadata.getTopologyConfigId(),
                     metadata.getVersion(),
@@ -141,7 +144,7 @@ public class LogReplicationServer extends AbstractServer {
 
         if (lostLeadership) {
             log.warn("This node has changed, active={}, leader={}. Dropping message type={}, id={}", isActive.get(),
-                    isLeader.get(), msg.getMsgType());
+                    isLeader.get(), msg.getMsgType(), msg.getRequestID());
             LogReplicationLeadershipLoss payload = new LogReplicationLeadershipLoss(serverContext.getLocalEndpoint());
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_LEADERSHIP_LOSS.payloadMsg(payload));
         }

@@ -18,6 +18,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Log Replication Runtime Negotiating State.
+ *
+ * During this state, replication is being negotiated between source and sink leaders
+ * in an effort to determine the starting point of the log replication.
+ *
+ * @author amartinezman
+ */
 @Slf4j
 public class NegotiatingState implements LogReplicationRuntimeState {
 
@@ -60,12 +68,12 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 } else {
                     // Router will attempt reconnection of non-leader endpoint
-                    return this;
+                    return null;
                 }
             case ON_CONNECTION_UP:
                 // Some node got connected, update connected endpoints
                 fsm.updateConnectedEndpoints(event.getEndpoint());
-                return this;
+                return null;
             case NEGOTIATION_COMPLETE:
                 ((ReplicatingState)fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING)).setReplicationEvent(event.getNegotiationResult());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);

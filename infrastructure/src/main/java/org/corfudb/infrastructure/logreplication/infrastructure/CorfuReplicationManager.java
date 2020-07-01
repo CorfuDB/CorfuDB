@@ -32,7 +32,7 @@ public class CorfuReplicationManager {
 
     @Setter
     @Getter
-    private volatile TopologyDescriptor topologyDescriptor;
+    private TopologyDescriptor topology;
 
     private final LogReplicationContext context;
 
@@ -41,7 +41,7 @@ public class CorfuReplicationManager {
     private final CorfuRuntime corfuRuntime;
 
     // TODO (Xiaoqin Ma): can you please add a description on this variable's meaning
-    private long prepareSiteRoleChangeStreamTail;
+    private long prepareClusterRoleChangeLogTail;
 
     private long totalNumEntriesToSend;
 
@@ -52,19 +52,16 @@ public class CorfuReplicationManager {
     /**
      * Constructor
      */
-    public CorfuReplicationManager(TopologyDescriptor topologyDescriptor,
-                            LogReplicationContext context,
-                            NodeDescriptor localNodeDescriptor,
-                            LogReplicationMetadataManager metadataManager,
-                            String pluginFilePath, CorfuRuntime corfuRuntime) {
-        this.topologyDescriptor = topologyDescriptor;
+    public CorfuReplicationManager(LogReplicationContext context, NodeDescriptor localNodeDescriptor,
+                                   LogReplicationMetadataManager metadataManager, String pluginFilePath,
+                                   CorfuRuntime corfuRuntime) {
         this.context = context;
         this.metadataManager = metadataManager;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
 
         this.localNodeDescriptor = localNodeDescriptor;
-        this.prepareSiteRoleChangeStreamTail = Address.NON_ADDRESS;
+        this.prepareClusterRoleChangeLogTail = Address.NON_ADDRESS;
         this.totalNumEntriesToSend = 0;
     }
 
@@ -73,15 +70,11 @@ public class CorfuReplicationManager {
      * each standby cluster, to further start log replication.
      */
     public void start() {
-        for (ClusterDescriptor remoteCluster : topologyDescriptor.getStandbyClusters().values()) {
+        for (ClusterDescriptor remoteCluster : topology.getStandbyClusters().values()) {
             try {
                 startLogReplicationRuntime(remoteCluster);
             } catch (Exception e) {
                 log.error("Failed to start log replication runtime for remote cluster {}", remoteCluster.getClusterId());
-
-                // Remove cluster from the list of standby's, as the cluster discovery process will receive
-                // change notification when this site becomes stable/available again.
-                topologyDescriptor.getStandbyClusters().remove(remoteCluster.getClusterId());
             }
         }
     }
@@ -90,9 +83,17 @@ public class CorfuReplicationManager {
      * Stop log replication for all the standby sites
      */
     public void stop() {
-        for(String clusterId : topologyDescriptor.getStandbyClusters().keySet()) {
-            stopLogReplicationRuntime(clusterId);
-        }
+
+        runtimeToRemoteCluster.values().forEach(runtime -> {
+            try {
+                log.info("Stop log replication runtime to remote cluster id={}", runtime.getRemoteClusterId());
+                runtime.stop();
+            } catch (Exception e) {
+                log.warn("Failed to stop log replication runtime to remote cluster id={}", runtime.getRemoteClusterId());
+            }
+        });
+
+        runtimeToRemoteCluster.clear();
     }
 
     /**
@@ -132,19 +133,14 @@ public class CorfuReplicationManager {
         try {
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    // TODO(Gabriela) : It's cleaner to make LogReplicationConfig agnostic of cluster information (shared across
-                    //  all clusters) so it would be better to push down the remote cluster id or info as a separate object
-                    //  this requires to change signatures down the pipe. TBD.
-                    String localCorfuEndpoint = localNodeDescriptor.getIpAddress() + ":" + topologyDescriptor.getActiveCluster().getCorfuPort();
-
                     LogReplicationRuntimeParameters parameters = LogReplicationRuntimeParameters.builder()
-                            .localCorfuEndpoint(localCorfuEndpoint)
+                            .localCorfuEndpoint(context.getLocalCorfuEndpoint())
                             .remoteClusterDescriptor(remoteCluster)
                             .localClusterId(localNodeDescriptor.getClusterId())
                             .replicationConfig(context.getConfig())
                             .pluginFilePath(pluginFilePath)
                             .channelContext(context.getChannelContext())
-                            .topologyConfigId(topologyDescriptor.getTopologyConfigId())
+                            .topologyConfigId(topology.getTopologyConfigId())
                             .keyStore(corfuRuntime.getParameters().getKeyStore())
                             .tlsEnabled(corfuRuntime.getParameters().isTlsEnabled())
                             .ksPasswordFile(corfuRuntime.getParameters().getKsPasswordFile())
@@ -187,14 +183,14 @@ public class CorfuReplicationManager {
      * @param newConfig has the same topologyConfigId as the current config
      */
     public void processStandbyChange(TopologyDescriptor newConfig) {
-        if (newConfig.getTopologyConfigId() != topologyDescriptor.getTopologyConfigId()) {
+        if (newConfig.getTopologyConfigId() != topology.getTopologyConfigId()) {
             log.error("Detected changes in the topology. The new topology descriptor {} doesn't have the same " +
-                    "siteConfigId as the current one {}", newConfig, topologyDescriptor);
+                    "siteConfigId as the current one {}", newConfig, topology);
             return;
         }
 
         Map<String, ClusterDescriptor> newStandbys = newConfig.getStandbyClusters();
-        Map<String, ClusterDescriptor> currentStandbys = topologyDescriptor.getStandbyClusters();
+        Map<String, ClusterDescriptor> currentStandbys = topology.getStandbyClusters();
         newStandbys.keySet().retainAll(currentStandbys.keySet());
         Set<String> standbysToRemove = currentStandbys.keySet();
         standbysToRemove.removeAll(newStandbys.keySet());
@@ -204,14 +200,14 @@ public class CorfuReplicationManager {
          */
         for (String siteID : standbysToRemove) {
             stopLogReplicationRuntime(siteID);
-            topologyDescriptor.removeStandbySite(siteID);
+            topology.removeStandbySite(siteID);
         }
 
         //Start the standbys that are in the new config but not in the current config
         for (String clusterId : newConfig.getStandbyClusters().keySet()) {
             if (runtimeToRemoteCluster.get(clusterId) == null) {
                 ClusterDescriptor clusterInfo = newConfig.getStandbyClusters().get(clusterId);
-                topologyDescriptor.addStandbySite(clusterInfo);
+                topology.addStandbySite(clusterInfo);
                 startLogReplicationRuntime(clusterInfo);
             }
         }
@@ -225,9 +221,9 @@ public class CorfuReplicationManager {
     private long queryStreamTail() {
         Set<String> streamsToReplicate = context.getConfig().getStreamsToReplicate();
         long maxTail = Address.NON_ADDRESS;
+        Map<UUID, Long> tailMap = corfuRuntime.getAddressSpaceView().getAllTails().getStreamTails();
         for (String s : streamsToReplicate) {
             UUID currentUUID = CorfuRuntime.getStreamID(s);
-            Map<UUID, Long> tailMap = corfuRuntime.getAddressSpaceView().getAllTails().getStreamTails();
             Long currentTail = tailMap.get(currentUUID);
             if (currentTail != null) {
                 maxTail = Math.max(maxTail, currentTail);
@@ -242,6 +238,10 @@ public class CorfuReplicationManager {
      * @param timestamp
      */
     private long queryEntriesToSend(long timestamp) {
+        // TODO(Xiaoqin Ma / Nan) : is not exactly how many entries we need to send?
+        //  Because we only transfer some streams, and getNumEntriesToSend returns (maxStreamTail - ackedTimeStamp),
+        //  which will count other log entries. Besides, for loop will amplify totalNumEntries multiple times.
+
         int totalNumEntries = 0;
 
         for (CorfuLogReplicationRuntime runtime: runtimeToRemoteCluster.values()) {
@@ -257,8 +257,8 @@ public class CorfuReplicationManager {
      * msgs to be sent out.
      */
     public void prepareSiteRoleChange() {
-        prepareSiteRoleChangeStreamTail = queryStreamTail();
-        totalNumEntriesToSend = queryEntriesToSend(prepareSiteRoleChangeStreamTail);
+        prepareClusterRoleChangeLogTail = queryStreamTail();
+        totalNumEntriesToSend = queryEntriesToSend(prepareClusterRoleChangeLogTail);
     }
 
     /**
@@ -273,11 +273,15 @@ public class CorfuReplicationManager {
         /*
          * If the tail has been moved, reset the base calculation
          */
-        if (maxTail > prepareSiteRoleChangeStreamTail) {
+        if (maxTail > prepareClusterRoleChangeLogTail) {
             prepareSiteRoleChange();
         }
 
-        long currentNumEntriesToSend = queryEntriesToSend(prepareSiteRoleChangeStreamTail);
+        // TODO(Xiaoqin Ma/Nan): if the max stream tail moves, it calls prepareSiteRoleChange(), which
+        //  call queryStreamTail() one more time, and will update totalNumEntriesToSend.
+        //  Then it call queryEntriesToSend() again, will get a pretty close result as currentNumEntriesToSend.
+        //  So percent calculation will always return a 0.
+        long currentNumEntriesToSend = queryEntriesToSend(prepareClusterRoleChangeLogTail);
         log.debug("maxTail {} totalNumEntriesToSend  {}  currentNumEntriesToSend {}", maxTail, totalNumEntriesToSend, currentNumEntriesToSend);
 
         if (totalNumEntriesToSend == 0 || currentNumEntriesToSend == 0)

@@ -18,7 +18,7 @@ import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
-import org.corfudb.utils.common.CorfuMessageConverter;
+import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverter;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
 import java.io.File;

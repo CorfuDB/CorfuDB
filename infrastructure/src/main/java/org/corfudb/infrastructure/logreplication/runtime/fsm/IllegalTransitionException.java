@@ -1,5 +1,4 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm;
-;
 
 /**
  * This class indicates an invalid transition has been detected,

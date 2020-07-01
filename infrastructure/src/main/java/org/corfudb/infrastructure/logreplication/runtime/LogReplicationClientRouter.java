@@ -20,7 +20,7 @@ import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapter
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
-import org.corfudb.utils.common.CorfuMessageConverter;
+import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverter;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
 import java.io.File;
@@ -299,7 +299,7 @@ public class LogReplicationClientRouter implements IClientRouter {
     public String getHost() {
         String host = "";
         // For logging purposes return all remote cluster nodes host in a concatenated form
-        remoteClusterDescriptor.getNodesDescriptors().forEach(node -> host.concat(node.getIpAddress() + ":"));
+        remoteClusterDescriptor.getNodesDescriptors().forEach(node -> host.concat(node.getHost() + ":"));
         return host;
     }
 

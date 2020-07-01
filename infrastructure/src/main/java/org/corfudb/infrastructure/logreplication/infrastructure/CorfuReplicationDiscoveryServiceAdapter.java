@@ -8,7 +8,7 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      *
      * @param topologyConfiguration
      */
-    void updateSiteConfig(LogReplicationClusterInfo.TopologyConfigurationMsg topologyConfiguration);
+    void updateTopology(LogReplicationClusterInfo.TopologyConfigurationMsg topologyConfiguration);
 
     /**
      *
