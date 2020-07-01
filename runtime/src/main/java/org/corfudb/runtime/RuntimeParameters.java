@@ -36,7 +36,7 @@ public class RuntimeParameters {
          */
         String keyStore;
 
-        /**
+        /*
          * A file containing the password for the key store.
          */
         String ksPasswordFile;
