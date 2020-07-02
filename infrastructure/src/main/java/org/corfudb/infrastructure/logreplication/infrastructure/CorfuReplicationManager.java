@@ -185,7 +185,7 @@ public class CorfuReplicationManager {
     public void processStandbyChange(TopologyDescriptor newConfig) {
         if (newConfig.getTopologyConfigId() != topology.getTopologyConfigId()) {
             log.error("Detected changes in the topology. The new topology descriptor {} doesn't have the same " +
-                    "siteConfigId as the current one {}", newConfig, topology);
+                    "topologyConfigId as the current one {}", newConfig, topology);
             return;
         }
 
@@ -198,16 +198,16 @@ public class CorfuReplicationManager {
         /*
          * Remove standbys that are not in the new config
          */
-        for (String siteID : standbysToRemove) {
-            stopLogReplicationRuntime(siteID);
-            topology.removeStandbySite(siteID);
+        for (String clusterId : standbysToRemove) {
+            stopLogReplicationRuntime(clusterId);
+            topology.removeStandbyCluster(clusterId);
         }
 
         //Start the standbys that are in the new config but not in the current config
         for (String clusterId : newConfig.getStandbyClusters().keySet()) {
             if (runtimeToRemoteCluster.get(clusterId) == null) {
                 ClusterDescriptor clusterInfo = newConfig.getStandbyClusters().get(clusterId);
-                topology.addStandbySite(clusterInfo);
+                topology.addStandbyCluster(clusterInfo);
                 startLogReplicationRuntime(clusterInfo);
             }
         }
@@ -256,7 +256,7 @@ public class CorfuReplicationManager {
      * Query each standby site information according to the ack information to calculate the number of
      * msgs to be sent out.
      */
-    public void prepareSiteRoleChange() {
+    public void prepareClusterRoleChange() {
         prepareClusterRoleChangeLogTail = queryStreamTail();
         totalNumEntriesToSend = queryEntriesToSend(prepareClusterRoleChangeLogTail);
     }
@@ -274,7 +274,7 @@ public class CorfuReplicationManager {
          * If the tail has been moved, reset the base calculation
          */
         if (maxTail > prepareClusterRoleChangeLogTail) {
-            prepareSiteRoleChange();
+            prepareClusterRoleChange();
         }
 
         // TODO(Xiaoqin Ma/Nan): if the max stream tail moves, it calls prepareSiteRoleChange(), which
