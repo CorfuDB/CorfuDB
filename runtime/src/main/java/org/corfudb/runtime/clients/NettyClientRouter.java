@@ -319,7 +319,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
             // Exceptionally complete all requests that were waiting for a completion.
             outstandingRequests.forEach((reqId, reqCompletableFuture) -> {
                 reqCompletableFuture.completeExceptionally(
-                        new NetworkException("Disconnected", node));
+                        new NetworkException("PeerUnavailable", node));
             // And also remove them.
             outstandingRequests.remove(reqId);
             });

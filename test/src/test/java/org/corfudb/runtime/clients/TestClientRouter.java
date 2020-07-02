@@ -178,8 +178,8 @@ public class TestClientRouter implements IClientRouter {
                                                                  @NonNull CorfuMsg message) {
         // Simulate a "disconnected endpoint"
         if (!connected) {
-            log.trace("Disconnected endpoint " + host + ":" + port);
-            throw new NetworkException("Disconnected endpoint", NodeLocator.builder()
+            log.trace("PeerUnavailable endpoint " + host + ":" + port);
+            throw new NetworkException("PeerUnavailable endpoint", NodeLocator.builder()
                                                                     .host(host)
                                                                     .port(port).build());
         }

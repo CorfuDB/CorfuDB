@@ -16,11 +16,11 @@ public class CorfuExceptions extends Exception {
         super();
     }
 
-    public static class Disconnected extends CorfuExceptions {
+    public static class PeerUnavailable extends CorfuExceptions {
 
         final InetSocketAddress address;
 
-        public Disconnected(InetSocketAddress address) {
+        public PeerUnavailable(InetSocketAddress address) {
             super();
             this.address = address;
         }

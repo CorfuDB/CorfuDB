@@ -6,7 +6,7 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
-import org.corfudb.common.protocol.CorfuExceptions.Disconnected;
+import org.corfudb.common.protocol.CorfuExceptions.PeerUnavailable;
 
 import java.net.InetSocketAddress;
 import java.util.Map;
@@ -50,6 +50,8 @@ public abstract class ClientHandler extends ResponseHandler {
         return idGenerator.incrementAndGet();
     }
 
+    //TODO(Maithem) Add keep-alive logic here
+
     private void checkRequestTimeout() {
         while (!requestTimeoutQueue.isEmpty()) {
             RequestTime request = requestTimeoutQueue.peek();
@@ -60,7 +62,7 @@ public abstract class ClientHandler extends ResponseHandler {
             request = requestTimeoutQueue.poll();
             CompletableFuture<Response> requestFuture = pendingRequests.remove(request.requestId);
             if (requestFuture != null && !requestFuture.isDone()) {
-                requestFuture.completeExceptionally(new Disconnected(remoteAddress));
+                requestFuture.completeExceptionally(new PeerUnavailable(remoteAddress));
             } else {
                 // request is already completed successfully.
             }
@@ -77,9 +79,9 @@ public abstract class ClientHandler extends ResponseHandler {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         super.channelInactive(ctx);
-        log.info("[{}] Disconnected", remoteAddress);
+        log.info("[{}] PeerUnavailable", remoteAddress);
 
-        Disconnected exception = new Disconnected(remoteAddress);
+        PeerUnavailable exception = new PeerUnavailable(remoteAddress);
 
         pendingRequests.forEach((requestId, resultCf) -> resultCf.completeExceptionally(exception));
         pendingRequests.clear();
