@@ -106,7 +106,7 @@ public abstract class AbstractView {
      * This function will retry the given function indefinitely,
      * invalidating the view if there was a exception contacting the endpoint.
      *
-     * There is a flag to set if we want the caller to handle Runtime Exceptions. For some
+     * There is a flag to set if we want the caller to handle Runtime CorfuExceptions. For some
      * special cases (like writes), we need to do a bit more work upon a Runtime Exception than just retry.
      *
      * @param function             The function to execute.
