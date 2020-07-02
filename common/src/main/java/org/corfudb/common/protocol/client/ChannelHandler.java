@@ -46,6 +46,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 @NoArgsConstructor
 public abstract class ChannelHandler extends ResponseHandler {
 
+    //TODO(Maithem): what if the consuming client is using a different protobuf lib version?
+
     protected InetSocketAddress remoteAddress;
 
     protected EventLoopGroup eventLoopGroup;
