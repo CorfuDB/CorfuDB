@@ -1,4 +1,4 @@
-package org.corfudb.util;
+package org.corfudb.common.util;
 
 import com.google.common.io.BaseEncoding;
 

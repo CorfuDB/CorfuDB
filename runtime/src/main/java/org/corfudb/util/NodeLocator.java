@@ -7,6 +7,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Singular;
+import org.corfudb.common.util.UuidUtils;
 
 import java.io.Serializable;
 import java.net.URI;

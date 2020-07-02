@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 
@@ -28,6 +29,11 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
 
             if (log.isDebugEnabled()) {
                 log.debug("Response {} pi {} from {}", header.getType(), ctx.channel().remoteAddress());
+            }
+
+            if (response.hasError()) {
+                handleServerError(response);
+                return;
             }
 
             // throw exceptions here?
@@ -129,6 +135,7 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
+    protected abstract void handleServerError(Response error);
     protected abstract void handlePing(Response response);
     protected abstract void handleRestart(Response response);
     protected abstract void handleAuthenticate(Response response);

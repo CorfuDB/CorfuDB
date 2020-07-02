@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.UUID;
+
+import org.corfudb.common.util.UuidUtils;
 import org.junit.Test;
 
 public class UuidUtilsTest {

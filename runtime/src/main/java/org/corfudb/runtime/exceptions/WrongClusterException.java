@@ -3,7 +3,7 @@ package org.corfudb.runtime.exceptions;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import lombok.Getter;
-import org.corfudb.util.UuidUtils;
+import org.corfudb.common.util.UuidUtils;
 
 public class WrongClusterException extends RuntimeException {
 

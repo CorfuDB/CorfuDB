@@ -44,7 +44,7 @@ import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
-import org.corfudb.util.UuidUtils;
+import org.corfudb.common.util.UuidUtils;
 import org.corfudb.util.Version;
 
 import javax.annotation.Nonnull;

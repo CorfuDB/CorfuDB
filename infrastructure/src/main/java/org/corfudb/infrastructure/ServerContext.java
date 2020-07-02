@@ -23,7 +23,7 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.util.UuidUtils;
+import org.corfudb.common.util.UuidUtils;
 
 import javax.annotation.Nonnull;
 import java.io.File;
