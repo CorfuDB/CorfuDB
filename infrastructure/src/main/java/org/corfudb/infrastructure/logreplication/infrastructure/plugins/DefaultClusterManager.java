@@ -27,21 +27,21 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter
     public static long epoch = 0;
     public static final int changeInterval = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
-    private static final String DEFAULT_PRIMARY_SITE_NAME = "primary_site";
-    private static final String DEFAULT_STANDBY_SITE_NAME = "standby_site";
+    private static final String DEFAULT_ACTIVE_CLUSTER_NAME = "primary_site";
+    private static final String DEFAULT_STANDBY_CLUSTER_NAME = "standby_site";
     private static final int NUM_NODES_PER_CLUSTER = 3;
 
-    private static final String PRIMARY_SITE_NAME = "primary_site";
-    private static final String STANDBY_SITE_NAME = "standby_site";
-    private static final String PRIMARY_SITE_CORFU_PORT = "primary_site_corfu_portnumber";
-    private static final String STANDBY_SITE_CORFU_PORT = "standby_site_corfu_portnumber";
-    private static final String LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM = "primary_site_portnumber";
+    private static final String ACTIVE_CLUSTER_NAME = "primary_site";
+    private static final String STANDBY_CLUSTER_NAME = "standby_site";
+    private static final String ACTIVE_CLUSTER_CORFU_PORT = "primary_site_corfu_portnumber";
+    private static final String STANDBY_CLUSTER_CORFU_PORT = "standby_site_corfu_portnumber";
+    private static final String LOG_REPLICATION_SERVICE_ACTIVE_PORT_NUM = "primary_site_portnumber";
     private static final String LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM = "standby_site_portnumber";
-    private static final String PRIMARY_SITE_NODEID = "primary_site_node_id";
-    private static final String STANDBY_SITE_NODEID = "standby_site_node_id";
+    private static final String ACTIVE_CLUSTER_NODEID = "primary_site_node_id";
+    private static final String STANDBY_CLUSTER_NODEID = "standby_site_node_id";
 
-    private static final String PRIMARY_SITE_NODE = "primary_site_node";
-    private static final String STANDBY_SITE_NODE = "standby_site_node";
+    private static final String ACTIVE_CLUSTER_NODE = "primary_site_node";
+    private static final String STANDBY_CLUSTER_NODE = "standby_site_node";
     private boolean ifShutdown = false;
 
     @Getter
@@ -85,11 +85,11 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter
 
             Set<String> names = props.stringPropertyNames();
 
-            activeClusterId = props.getProperty(PRIMARY_SITE_NAME, DEFAULT_PRIMARY_SITE_NAME);
-            activeCorfuPort = props.getProperty(PRIMARY_SITE_CORFU_PORT);
-            activeLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_PRIMARY_PORT_NUM);
+            activeClusterId = props.getProperty(ACTIVE_CLUSTER_NAME, DEFAULT_ACTIVE_CLUSTER_NAME);
+            activeCorfuPort = props.getProperty(ACTIVE_CLUSTER_CORFU_PORT);
+            activeLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_ACTIVE_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
-                String nodeName = PRIMARY_SITE_NODE + i;
+                String nodeName = ACTIVE_CLUSTER_NODE + i;
                 if (!names.contains(nodeName)) {
                     continue;
                 }
@@ -98,11 +98,11 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter
             }
             // TODO: add reading of node id (which is the APH node uuid)
 
-            standbySiteName = props.getProperty(STANDBY_SITE_NAME, DEFAULT_STANDBY_SITE_NAME);
-            standbyCorfuPort = props.getProperty(STANDBY_SITE_CORFU_PORT);
+            standbySiteName = props.getProperty(STANDBY_CLUSTER_NAME, DEFAULT_STANDBY_CLUSTER_NAME);
+            standbyCorfuPort = props.getProperty(STANDBY_CLUSTER_CORFU_PORT);
             standbyLogReplicationPort = props.getProperty(LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM);
             for (int i = 0; i < NUM_NODES_PER_CLUSTER; i++) {
-                String nodeName = STANDBY_SITE_NODE + i;
+                String nodeName = STANDBY_CLUSTER_NODE + i;
                 if (!names.contains(nodeName)) {
                     continue;
                 }
@@ -134,19 +134,19 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter
         for (int i = 0; i < primaryNodeNames.size(); i++) {
             log.info("Primary Site Name {}, IpAddress {}", primaryNodeNames.get(i), primaryIpAddresses.get(i));
             NodeDescriptor nodeInfo = new NodeDescriptor(primaryIpAddresses.get(i),
-                    activeLogReplicationPort, ClusterRole.ACTIVE, PRIMARY_SITE_NAME, UUID.fromString(primaryNodeIds.get(i)));
+                    activeLogReplicationPort, ACTIVE_CLUSTER_NAME, UUID.fromString(primaryNodeIds.get(i)));
             primarySite.getNodesDescriptors().add(nodeInfo);
         }
 
         // Setup backup cluster information
         Map<String, ClusterDescriptor> standbySites = new HashMap<>();
-        standbySites.put(STANDBY_SITE_NAME, new ClusterDescriptor(standbySiteName, ClusterRole.STANDBY, Integer.parseInt(standbyCorfuPort)));
+        standbySites.put(STANDBY_CLUSTER_NAME, new ClusterDescriptor(standbySiteName, ClusterRole.STANDBY, Integer.parseInt(standbyCorfuPort)));
 
         for (int i = 0; i < standbyNodeNames.size(); i++) {
             log.info("Standby Site Name {}, IpAddress {}", standbyNodeNames.get(i), standbyIpAddresses.get(i));
             NodeDescriptor nodeInfo = new NodeDescriptor(standbyIpAddresses.get(i),
-                    standbyLogReplicationPort, ClusterRole.STANDBY, STANDBY_SITE_NAME, UUID.fromString(standbyNodeIds.get(i)));
-            standbySites.get(STANDBY_SITE_NAME).getNodesDescriptors().add(nodeInfo);
+                    standbyLogReplicationPort, STANDBY_CLUSTER_NAME, UUID.fromString(standbyNodeIds.get(i)));
+            standbySites.get(STANDBY_CLUSTER_NAME).getNodesDescriptors().add(nodeInfo);
         }
 
         log.info("Primary Site Info {}; Backup Site Info {}", primarySite, standbySites);
