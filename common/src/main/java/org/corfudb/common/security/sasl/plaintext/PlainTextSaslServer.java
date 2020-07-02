@@ -1,4 +1,4 @@
-package org.corfudb.security.sasl.plaintext;
+package org.corfudb.common.security.sasl.plaintext;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;

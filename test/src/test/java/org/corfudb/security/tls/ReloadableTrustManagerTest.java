@@ -7,6 +7,7 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import org.apache.xerces.impl.dv.util.Base64;
+import org.corfudb.common.security.tls.ReloadableTrustManager;
 import org.junit.Test;
 import static org.junit.Assert.fail;
 

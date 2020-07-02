@@ -1,4 +1,4 @@
-package org.corfudb.comm;
+package org.corfudb.common;
 
 import io.netty.channel.Channel;
 import io.netty.channel.DefaultEventLoopGroup;
@@ -29,15 +29,15 @@ public enum ChannelImplementation {
      *  fallback to NIO).
      */
     AUTO(Epoll.isAvailable() ? EpollSocketChannel.class :
-        KQueue.isAvailable() ? KQueueSocketChannel.class :
-            NioSocketChannel.class,
-        Epoll.isAvailable() ? EpollServerSocketChannel.class :
-            KQueue.isAvailable() ? KQueueServerSocketChannel.class :
-                NioServerSocketChannel.class,
-        (numThreads, factory) ->
-            Epoll.isAvailable() ? new EpollEventLoopGroup(numThreads, factory) :
-                KQueue.isAvailable() ? new KQueueEventLoopGroup(numThreads, factory) :
-                    new NioEventLoopGroup(numThreads, factory)),
+            KQueue.isAvailable() ? KQueueSocketChannel.class :
+                    NioSocketChannel.class,
+            Epoll.isAvailable() ? EpollServerSocketChannel.class :
+                    KQueue.isAvailable() ? KQueueServerSocketChannel.class :
+                            NioServerSocketChannel.class,
+            (numThreads, factory) ->
+                    Epoll.isAvailable() ? new EpollEventLoopGroup(numThreads, factory) :
+                            KQueue.isAvailable() ? new KQueueEventLoopGroup(numThreads, factory) :
+                                    new NioEventLoopGroup(numThreads, factory)),
     NIO(NioSocketChannel.class, NioServerSocketChannel.class, NioEventLoopGroup::new),
     EPOLL(EpollSocketChannel.class, EpollServerSocketChannel.class, EpollEventLoopGroup::new),
     KQUEUE(KQueueSocketChannel.class, KQueueServerSocketChannel.class, KQueueEventLoopGroup::new),

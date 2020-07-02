@@ -1,4 +1,4 @@
-package org.corfudb.security.sasl.plaintext;
+package org.corfudb.common.security.sasl.plaintext;
 
 import javax.security.auth.callback.Callback;
 import javax.security.auth.callback.CallbackHandler;

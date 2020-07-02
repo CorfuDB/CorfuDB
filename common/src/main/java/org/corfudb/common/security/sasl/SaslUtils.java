@@ -1,6 +1,6 @@
-package org.corfudb.security.sasl;
+package org.corfudb.common.security.sasl;
 
-import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
+import org.corfudb.common.security.sasl.plaintext.PlainTextSaslNettyClient;
 
 import javax.security.sasl.SaslException;
 import java.nio.file.Files;

@@ -1,4 +1,4 @@
-package org.corfudb.security.tls;
+package org.corfudb.common.security.tls;
 
 import java.security.KeyStore;
 import java.security.KeyStoreException;

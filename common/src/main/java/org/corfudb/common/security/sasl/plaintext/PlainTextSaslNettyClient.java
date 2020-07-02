@@ -1,4 +1,4 @@
-package org.corfudb.security.sasl.plaintext;
+package org.corfudb.common.security.sasl.plaintext;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelDuplexHandler;

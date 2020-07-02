@@ -1,9 +1,9 @@
 package org.corfudb.common.protocol.client;
 
-import io.netty.channel.AbstractChannel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import org.corfudb.common.ChannelImplementation;
 
 import java.util.UUID;
 
@@ -16,14 +16,16 @@ import java.util.UUID;
 @AllArgsConstructor
 public class ClientConfig {
     private final long requestTimeoutInMs;
-    private final long connectTimeoutInMs;
+    private final int connectTimeoutInMs;
     private final int idleConnectionTimeoutInMs;
     private final long connectRetryInMs;
     private final String keyStore;
     private final String KeyStorePasswordFile;
     private final String trustStore;
     private final String trustStorePasswordFile;
-    private final AbstractChannel socketType;
+    private final String saslUernameFile;
+    private final String saslPasswordFile;
+    private final ChannelImplementation socketType;
     private final boolean tcpNoDelay;
     private final boolean soReuseAddress;
     private final int keepAlivePeriodInMs;

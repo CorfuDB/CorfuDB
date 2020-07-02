@@ -1,4 +1,4 @@
-package org.corfudb.security.tls;
+package org.corfudb.common.security.tls;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;

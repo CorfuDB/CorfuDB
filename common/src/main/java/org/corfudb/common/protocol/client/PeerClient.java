@@ -28,7 +28,7 @@ public class PeerClient extends ChannelHandler {
     final UUID clusterId = null;
 
     public PeerClient(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, ClientConfig config) {
-        super(remoteAddress, eventLoopGroup, config.getRequestTimeoutInMs());
+        super(remoteAddress, eventLoopGroup, config);
     }
 
     private Header getHeader(MessageType type) {

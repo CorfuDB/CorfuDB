@@ -13,7 +13,7 @@ import lombok.Singular;
 import lombok.ToString;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.common.ChannelImplementation;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;

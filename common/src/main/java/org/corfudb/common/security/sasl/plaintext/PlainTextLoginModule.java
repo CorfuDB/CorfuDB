@@ -1,4 +1,4 @@
-package org.corfudb.security.sasl.plaintext;
+package org.corfudb.common.security.sasl.plaintext;
 
 import java.io.IOException;
 import java.util.Map;

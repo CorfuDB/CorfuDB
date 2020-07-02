@@ -2,6 +2,8 @@ package org.corfudb.security.tls;
 
 import java.security.KeyStore;
 import javax.net.ssl.SSLException;
+
+import org.corfudb.common.security.tls.TlsUtils;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

@@ -1,4 +1,4 @@
-package org.corfudb.security.tls;
+package org.corfudb.common.security.tls;
 
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
 import java.security.InvalidAlgorithmParameterException;

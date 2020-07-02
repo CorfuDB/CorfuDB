@@ -1,9 +1,7 @@
-package org.corfudb.security.sasl.plaintext;
+package org.corfudb.common.security.sasl.plaintext;
 
 import java.security.Provider;
 import java.security.Security;
-
-import org.corfudb.security.sasl.plaintext.PlainTextSaslServer.PlainTextSaslServerFactory;
 
 /**
  * Created by sneginhal on 01/27/2017.
@@ -18,7 +16,7 @@ public class PlainTextSaslServerProvider extends Provider {
         super("PlainTextSaslServerProvider", 1.0,
                 "Plain Text Sasl Server Provider for CorfuDB");
         super.put("SaslServerFactory." + PlainTextSaslServer.MECHANISM,
-                PlainTextSaslServerFactory.class.getName());
+                PlainTextSaslServer.PlainTextSaslServerFactory.class.getName());
     }
 
     public static void initialize() {

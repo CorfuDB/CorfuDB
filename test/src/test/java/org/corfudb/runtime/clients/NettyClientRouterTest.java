@@ -2,7 +2,7 @@ package org.corfudb.runtime.clients;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
-import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.common.ChannelImplementation;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.NodeLocator;
 import org.junit.Test;
