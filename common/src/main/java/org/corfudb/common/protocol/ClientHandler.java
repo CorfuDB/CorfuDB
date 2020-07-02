@@ -1,11 +1,16 @@
 package org.corfudb.common.protocol;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoopGroup;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ProtocolVersion;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.common.protocol.CorfuExceptions.PeerUnavailable;
@@ -34,7 +39,7 @@ public abstract class ClientHandler extends ResponseHandler {
 
     private final ConcurrentLinkedQueue<RequestTime> requestTimeoutQueue = new ConcurrentLinkedQueue<>();
 
-    protected final Map<Long, CompletableFuture<Response>> pendingRequests = new ConcurrentHashMap<>();
+    protected final Map<Long, CompletableFuture> pendingRequests = new ConcurrentHashMap<>();
 
     private final long requestTimeoutInMs;
 
@@ -50,6 +55,10 @@ public abstract class ClientHandler extends ResponseHandler {
 
     protected long getRequestId() {
         return idGenerator.incrementAndGet();
+    }
+
+    protected ProtocolVersion getProtocolVersion() {
+        return null;
     }
 
     //TODO(Maithem) Add keep-alive logic here
@@ -71,6 +80,19 @@ public abstract class ClientHandler extends ResponseHandler {
         }
     }
 
+    protected <T> CompletableFuture<T> sendRequest(Request request) {
+        Header header = request.getHeader();
+        CompletableFuture<T> retVal = new CompletableFuture<>();
+        pendingRequests.put(header.getRequestId(), retVal);
+        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+        // TODO(Maithem): remove allocation
+        outBuf.writeBytes(request.toByteArray());
+        // TODO(Maithem): Handle pipeline errors
+        channel.writeAndFlush(outBuf);
+        requestTimeoutQueue.add(new RequestTime(System.currentTimeMillis(), header.getRequestId()));
+        return retVal;
+    }
+
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         super.channelActive(ctx);
@@ -81,7 +103,7 @@ public abstract class ClientHandler extends ResponseHandler {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         super.channelInactive(ctx);
-        log.info("[{}] PeerUnavailable", remoteAddress);
+        log.info("[{}] Disconnected", remoteAddress);
 
         PeerUnavailable exception = new PeerUnavailable(remoteAddress);
 
@@ -137,6 +159,7 @@ public abstract class ClientHandler extends ResponseHandler {
     }
 
     @Data
+    @AllArgsConstructor
     class RequestTime {
         long creationTimeMs;
         long requestId;
