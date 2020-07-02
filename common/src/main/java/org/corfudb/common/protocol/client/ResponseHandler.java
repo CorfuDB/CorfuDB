@@ -5,8 +5,6 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.protocol.API;
-import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 
@@ -22,14 +20,6 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;
-
-        // Temporary -- If message is not a new Protobuf message, forward the message.
-        if(msgBuf.getByte(msgBuf.readerIndex()) != API.PROTO_CORFU_MSG_MARK) {
-            ctx.fireChannelRead(msg);
-            return;
-        }
-
-        msgBuf.readByte();
         ByteBufInputStream msgInputStream = new ByteBufInputStream(msgBuf);
 
         try {
@@ -40,7 +30,7 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
                 log.debug("Response {} pi {} from {}", header.getType(), ctx.channel().remoteAddress());
             }
 
-            if (response.getError().getCode()!= CorfuProtocol.ERROR.OK) {
+            if (response.hasError()) {
                 // propagate error to the client and return right away
                 handleServerError(response);
                 return;
@@ -56,10 +46,6 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
                 case RESTART:
                     checkArgument(response.hasRestartResponse());
                     handleRestart(response);
-                    break;
-                case RESET:
-                    checkArgument(response.hasResetResponse());
-                    handleReset(response);
                     break;
                 case AUTHENTICATE:
                     checkArgument(response.hasAuthenticateResponse());
@@ -152,7 +138,6 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
     protected abstract void handleServerError(Response error);
     protected abstract void handlePing(Response response);
     protected abstract void handleRestart(Response response);
-    protected abstract void handleReset(Response response);
     protected abstract void handleAuthenticate(Response response);
     protected abstract void handleSeal(Response response);
     protected abstract void handleGetLayout(Response response);
