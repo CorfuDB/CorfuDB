@@ -4,7 +4,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.timeout.IdleStateHandler;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +20,8 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.common.protocol.CorfuExceptions.PeerUnavailable;
 
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLException;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -43,16 +50,60 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     protected final Map<Long, CompletableFuture> pendingRequests = new ConcurrentHashMap<>();
 
-    private final long requestTimeoutInMs;
-
     private ScheduledFuture<?> timeoutTask;
 
     protected final AtomicLong idGenerator = new AtomicLong();
 
-    public ChannelHandler(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, long requestTimeoutInMs) {
+    private final ClientConfig config;
+
+    private SslContext sslContext;
+
+    public ChannelHandler(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, ClientConfig clientConfig) {
         this.remoteAddress = remoteAddress;
         this.eventLoopGroup = eventLoopGroup;
-        this.requestTimeoutInMs = requestTimeoutInMs;
+        this.config = clientConfig;
+
+        if (this.config.isEnableTls()) {
+            try {
+                sslContext = SslContextConstructor.constructSslContext(false,
+                        config.getKeyStore(),
+                        config.getKeyStorePasswordFile(),
+                        config.getTrustStore(),
+                        config.getTrustStorePasswordFile());
+            } catch (SSLException e) {
+                throw new UnrecoverableCorfuError(e);
+            }
+        }
+    }
+
+    private ChannelInitializer getChannelInitializer() {
+        return new ChannelInitializer() {
+            @Override
+            protected void initChannel(@Nonnull Channel ch) throws Exception {
+                ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
+                        config.getKeepAlivePeriodInMs(), 0));
+                if (config.isEnableTls()) {
+                    ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
+                }
+                ch.pipeline().addLast(new LengthFieldPrepender(4));
+                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
+                        0, 4, 0,
+                        4));
+                if (config.isEnableSasl()) {
+                    PlainTextSaslNettyClient saslNettyClient =
+                            SaslUtils.enableSaslPlainText(config.getUsernameFile(),
+                                    parameters.getPasswordFile());
+                    ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
+                }
+                ch.pipeline().addLast(new NettyCorfuMessageDecoder());
+                ch.pipeline().addLast(new NettyCorfuMessageEncoder());
+                ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
+                        node.getNodeId(), parameters.getHandshakeTimeout()));
+
+
+                ch.pipeline().addLast(ChannelHandler.this);
+            }
+        };
     }
 
     protected long generateRequestId() {

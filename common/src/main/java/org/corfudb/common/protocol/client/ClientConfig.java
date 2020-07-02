@@ -17,6 +17,7 @@ import java.util.UUID;
 public class ClientConfig {
     private final long requestTimeoutInMs;
     private final long connectTimeoutInMs;
+    private final int idleConnectionTimeoutInMs;
     private final long connectRetryInMs;
     private final String keyStore;
     private final String KeyStorePasswordFile;
@@ -25,7 +26,7 @@ public class ClientConfig {
     private final AbstractChannel socketType;
     private final boolean tcpNoDelay;
     private final boolean soReuseAddress;
-    private final long keepAlivePeriodInMs;
+    private final int keepAlivePeriodInMs;
     private final boolean enableTls;
     private final boolean enableSasl;
     private final UUID clientId;
