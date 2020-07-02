@@ -18,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class CorfuReplicationSiteConfigIT extends AbstractIT {
     final static int MAX_RETRY = 10;
     final static long sleepInterval = 10000;
+    private final String pluginConfigFilePath = "src/test/resources/transport/nettyConfig.properties";
 
     CorfuInterClusterReplicationServer serverA;
     CorfuInterClusterReplicationServer serverB;
@@ -110,12 +111,12 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                 // Start Log Replication Server on Standby Site
                 standbyReplicationServer = runReplicationServer(standbyReplicationServerPort);
             } else {
-                serverA = new CorfuInterClusterReplicationServer(new String[]{"9010"});
+                serverA = new CorfuInterClusterReplicationServer(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=" + "localhost", String.valueOf(activeReplicationServerPort)});
                 Thread siteAThread = new Thread(serverA);
                 System.out.print("\nStart Corfu Log Replication Server on 9010");
                 siteAThread.start();
 
-                serverB = new CorfuInterClusterReplicationServer(new String[]{"9020"});
+                serverB = new CorfuInterClusterReplicationServer(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=" + "localhost", String.valueOf(standbyReplicationServerPort)});
                 Thread siteBThread = new Thread(serverB);
                 System.out.print("\nStart Corfu Log Replication Server on 9020");
                 siteBThread.start();
