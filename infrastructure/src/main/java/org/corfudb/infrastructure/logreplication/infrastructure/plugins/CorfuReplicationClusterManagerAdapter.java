@@ -13,9 +13,11 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 public interface CorfuReplicationClusterManagerAdapter {
 
     /**
-     *   Set the corfuReplicationDiscoveryServiceMember
+     *   Register the discovery service and start the cluster manager callback service.
+     *   Implementation of this function should call register(), register this ClusterManager at the upper
+     *   layer to get the callback for topology change.
      */
-     void setCorfuReplicationDiscoveryService(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
+     void start(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
 
      /**
      * Set the localEndpoint
@@ -31,8 +33,8 @@ public interface CorfuReplicationClusterManagerAdapter {
     // This is called when get a notification of cluster config change.
     void updateTopologyConfig(TopologyConfigurationMsg newClusterConfigMsg);
 
-    // Start the ClusterManager service
-    void start();
+    // the register at the upper layer to get cluster topology information
+    void register();
 
     // Stop the ClusterManger service
     void shutdown();

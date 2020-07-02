@@ -49,7 +49,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
     Thread thread = new Thread(siteManagerCallback);
 
-    public void start() {
+    public void register() {
         siteManagerCallback = new SiteManagerCallback(this);
         thread = new Thread(siteManagerCallback);
         thread.start();

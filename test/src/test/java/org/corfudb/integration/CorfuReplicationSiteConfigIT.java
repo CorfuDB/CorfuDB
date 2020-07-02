@@ -239,7 +239,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             //as data have been transfered over, the replication status should be 100% done.
             int replicationStatus = 0;
             DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareClusterRoleChange();
             replicationStatus = siteManager.queryReplicationStatus();
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
                 replicationStatus = siteManager.queryReplicationStatus();
@@ -258,7 +258,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             }
 
             replicationStatus = 0;
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareClusterRoleChange();
             int retry = 0;
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE && retry++ < MAX_RETRY) {
                 replicationStatus = siteManager.queryReplicationStatus();
@@ -280,7 +280,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
             int replicationStatus = 0;
             DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareClusterRoleChange();
             replicationStatus = siteManager.queryReplicationStatus();
 
             System.out.print("\nreplication percentage done " + replicationStatus);
@@ -342,7 +342,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             siteManager = (DefaultClusterManager)serverB.getClusterManagerAdapter();
             sleep(sleepInterval);
 
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareClusterRoleChange();
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
                 replicationStatus = siteManager.queryReplicationStatus();
                 System.out.print("\nreplication percentage done " + replicationStatus);
