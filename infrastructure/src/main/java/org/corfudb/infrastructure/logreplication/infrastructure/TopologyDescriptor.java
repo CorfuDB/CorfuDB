@@ -42,7 +42,7 @@ public class TopologyDescriptor {
             if (clusterConfig.getRole() == ClusterRole.ACTIVE) {
                 activeCluster = cluster;
             } else if (clusterConfig.getRole() == ClusterRole.STANDBY) {
-                addStandbySite(cluster);
+                addStandbyCluster(cluster);
             }
         }
     }
@@ -68,12 +68,12 @@ public class TopologyDescriptor {
         return topologyConfig;
     }
 
-    public void addStandbySite(ClusterDescriptor siteInfo) {
-        standbyClusters.put(siteInfo.getClusterId(), siteInfo);
+    public void addStandbyCluster(ClusterDescriptor cluster) {
+        standbyClusters.put(cluster.getClusterId(), cluster);
     }
 
-    public void removeStandbySite(String siteId) {
-        standbyClusters.remove(siteId);
+    public void removeStandbyCluster(String clusterId) {
+        standbyClusters.remove(clusterId);
     }
 
     /**

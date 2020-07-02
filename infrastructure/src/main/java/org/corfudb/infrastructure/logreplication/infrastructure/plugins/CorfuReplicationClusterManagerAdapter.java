@@ -35,7 +35,7 @@ public abstract class CorfuReplicationClusterManagerAdapter {
     }
 
     public void prepareSiteRoleChange() {
-        corfuReplicationDiscoveryService.prepareSiteRoleChange();
+        corfuReplicationDiscoveryService.prepareClusterRoleChange();
     }
 
     public int queryReplicationStatus() {
