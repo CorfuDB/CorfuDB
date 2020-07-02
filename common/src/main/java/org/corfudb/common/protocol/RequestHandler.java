@@ -27,7 +27,7 @@ public abstract class RequestHandler extends ChannelInboundHandlerAdapter {
             Header  header = request.getHeader();
 
             if (log.isDebugEnabled()) {
-                log.debug("Received {} pi {} from {}", header.getType(), ctx.channel().remoteAddress());
+                log.debug("Request {} pi {} from {}", header.getType(), ctx.channel().remoteAddress());
             }
 
             // drop messages with bad header verification?
@@ -124,7 +124,6 @@ public abstract class RequestHandler extends ChannelInboundHandlerAdapter {
                     log.error("Unknown message {}", request);
                     throw new UnsupportedOperationException();
             }
-
         } finally {
             msgInputStream.close();
             msgBuf.release();
