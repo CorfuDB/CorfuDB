@@ -17,16 +17,21 @@ import io.netty.channel.local.LocalServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+
 import java.util.concurrent.ThreadFactory;
 import javax.annotation.Nonnull;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
-/** An enum representing channel implementation types available to the client. */
+/**
+ * An enum representing channel implementation types available to the client.
+ */
 @AllArgsConstructor
 public enum ChannelImplementation {
-    /** Automatically select best channel type (EPOLL/KQUEUE if available, otherwise
-     *  fallback to NIO).
+    /**
+     * Automatically select best channel type (EPOLL/KQUEUE if available, otherwise
+     * fallback to NIO).
      */
     AUTO(Epoll.isAvailable() ? EpollSocketChannel.class :
             KQueue.isAvailable() ? KQueueSocketChannel.class :
@@ -41,8 +46,7 @@ public enum ChannelImplementation {
     NIO(NioSocketChannel.class, NioServerSocketChannel.class, NioEventLoopGroup::new),
     EPOLL(EpollSocketChannel.class, EpollServerSocketChannel.class, EpollEventLoopGroup::new),
     KQUEUE(KQueueSocketChannel.class, KQueueServerSocketChannel.class, KQueueEventLoopGroup::new),
-    LOCAL(LocalChannel.class, LocalServerChannel.class, DefaultEventLoopGroup::new)
-    ;
+    LOCAL(LocalChannel.class, LocalServerChannel.class, DefaultEventLoopGroup::new);
 
     /**
      * The {@link Channel} class used by this implementation.

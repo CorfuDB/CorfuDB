@@ -11,7 +11,6 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
-import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleStateHandler;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -22,13 +21,10 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.common.protocol.CorfuExceptions.PeerUnavailable;
-import org.corfudb.common.security.sasl.SaslUtils;
-import org.corfudb.common.security.sasl.plaintext.PlainTextSaslNettyClient;
-import org.corfudb.common.security.tls.SslContextConstructor;
 
 import javax.annotation.Nonnull;
-import javax.net.ssl.SSLException;
 import java.net.InetSocketAddress;
+import java.sql.Time;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,6 +32,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
@@ -46,11 +43,21 @@ import static com.google.common.base.Preconditions.checkArgument;
 @Slf4j
 public abstract class ChannelHandler extends ResponseHandler {
 
+    //TODO(Maithem): what if the consuming client is using a different protobuf lib version?
+
     protected final InetSocketAddress remoteAddress;
 
     protected final EventLoopGroup eventLoopGroup;
 
-    protected volatile Channel channel;
+    private volatile Channel channel;
+
+    private volatile CompletableFuture<Channel> channelCf = new CompletableFuture<>();
+
+    enum ChannelHandlerState {
+        DISCONNECTED, CONNECTING, CONNECTED, CLOSED
+    }
+
+    volatile ChannelHandlerState state = ChannelHandlerState.DISCONNECTED;
 
     private final ConcurrentLinkedQueue<RequestTime> requestTimeoutQueue = new ConcurrentLinkedQueue<>();
 
@@ -62,41 +69,104 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     private final ClientConfig config;
 
-    private SslContext sslContext;
+    final ReentrantReadWriteLock requestLock = new ReentrantReadWriteLock();
 
     public ChannelHandler(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, ClientConfig clientConfig) {
         this.remoteAddress = remoteAddress;
         this.eventLoopGroup = eventLoopGroup;
         this.config = clientConfig;
 
-        if (this.config.isEnableTls()) {
-            // Use optional here
-            try {
-                sslContext = SslContextConstructor.constructSslContext(false,
-                        config.getKeyStore(),
-                        config.getKeyStorePasswordFile(),
-                        config.getTrustStore(),
-                        config.getTrustStorePasswordFile());
-            } catch (SSLException e) {
-                // TODO(Maithem) replace with an appropriate exception
-                //throw new UnrecoverableCorfuError(e);
-                throw new RuntimeException(e);
-            }
-        }
+        //TODO(Maithem): Set pooled allocator
+        Bootstrap bootstrap = new Bootstrap();
+        bootstrap.group(eventLoopGroup);
+        bootstrap.channel(config.getSocketType().getChannelClass());
+        bootstrap.option(ChannelOption.TCP_NODELAY, config.isTcpNoDelay());
+        bootstrap.option(ChannelOption.SO_REUSEADDR, config.isSoReuseAddress());
+        bootstrap.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.getConnectTimeoutInMs());
+        bootstrap.handler(getChannelInitializer());
 
-        // On rpcs? dont connect right away
-        connect(eventLoopGroup);
+        connect(bootstrap);
     }
 
-    private void connect(EventLoopGroup eventLoopGroup) {
-        //TODO(Maithem): Set pooled allocator
-        Bootstrap b = new Bootstrap();
-        b.group(eventLoopGroup);
-        b.channel(config.getSocketType().getChannelClass());
-        b.option(ChannelOption.TCP_NODELAY, config.isTcpNoDelay());
-        b.option(ChannelOption.SO_REUSEADDR, config.isSoReuseAddress());
-        b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, config.getConnectTimeoutInMs());
-        b.handler(getChannelInitializer());
+    private synchronized void connect(Bootstrap bootstrap) {
+        checkArgument(state == ChannelHandlerState.DISCONNECTED);
+        state = ChannelHandlerState.CONNECTING;
+        bootstrap.connect(remoteAddress).addListener((ChannelFuture res) -> {
+            synchronized (this) {
+                if (res.isSuccess()) {
+                    // Can this leak? dont change without lock?
+                    this.channel = res.channel();
+                    this.channel.closeFuture().addListener(r -> disconnect());
+                    state = ChannelHandlerState.CONNECTED;
+                    // TODO(Maithem) Complete handshake here
+                    this.channelCf.complete(this.channel);
+                } else {
+                    disconnect();
+                }
+            }
+        });
+    }
+
+    private void errorOutAllPendingRequests() {
+        for (long requestId : pendingRequests.keySet()) {
+            CompletableFuture requestFuture = pendingRequests.remove(requestId);
+            if (requestFuture != null && !requestFuture.isDone()) {
+                requestFuture.completeExceptionally(new PeerUnavailable(remoteAddress));
+            } else {
+                // request is already completed successfully.
+            }
+        }
+    }
+
+    private synchronized void disconnect() {
+        checkArgument(this.state == ChannelHandlerState.CONNECTED ||
+                this.state == ChannelHandlerState.CONNECTING);
+
+        errorOutAllPendingRequests();
+        this.state = ChannelHandlerState.DISCONNECTED;
+
+        if (!channelCf.isDone() && !channelCf.isCompletedExceptionally()) {
+            // throw shutdown exception instead ?
+            channelCf.completeExceptionally(new PeerUnavailable(remoteAddress));
+        }
+        // TODO(Maithem): need to get rid of this future, because clients waiting on this future
+        // need to block till at least 1 connection retry, just fail right away ? queue ops ?
+        this.channelCf = new CompletableFuture<>();
+        // Ideally this should be exponential time off on each retry
+        this.eventLoopGroup.schedule(() -> {
+            log.debug("Retrying to connect to {} in {} ms", remoteAddress, config.getConnectRetryInMs());
+            connect(null);
+        }, config.getConnectRetryInMs(), TimeUnit.MILLISECONDS);
+    }
+
+    public synchronized void close() {
+        requestLock.writeLock().lock();
+        try {
+            if (state == ChannelHandlerState.CLOSED) {
+                // nothing to do
+                return;
+            }
+
+            state = ChannelHandlerState.CLOSED;
+            errorOutAllPendingRequests();
+            CompletableFuture cf = channelCf;
+            if (!cf.isDone() && !cf.isCompletedExceptionally()) {
+                // throw shutdown exception instead ?
+                cf.completeExceptionally(new PeerUnavailable(remoteAddress));
+            }
+
+            Channel currentChannel = channel;
+            if (currentChannel != null) {
+                // TODO(Maithem): will this end up calling channelInactive? need to cancel timer task
+                currentChannel.close().addListener(res -> {
+                    if (!res.isSuccess()) {
+                        log.warn("Failed to close channel for {}", res.cause());
+                    }
+                });
+            }
+        } finally {
+            requestLock.writeLock().unlock();
+        }
     }
 
 
@@ -106,29 +176,21 @@ public abstract class ChannelHandler extends ResponseHandler {
             protected void initChannel(@Nonnull Channel ch) throws Exception {
                 ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
                         config.getKeepAlivePeriodInMs(), 0));
-                if (config.isEnableTls()) {
-                    ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
-                }
+
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
                         0, 4, 0,
                         4));
-                if (config.isEnableSasl()) {
-                    PlainTextSaslNettyClient saslNettyClient =
-                            SaslUtils.enableSaslPlainText(config.getSaslUernameFile(),
-                                    config.getSaslPasswordFile());
-                    ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
-                }
 
                 /**
-                ch.pipeline().addLast(new NettyCorfuMessageDecoder());
-                ch.pipeline().addLast(new NettyCorfuMessageEncoder());
+                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
+                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
                  **/
 
                 /**
                  * //TODO(Maithem): need to implement new handshake logic without netty pipelines
-                ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
-                        node.getNodeId(), parameters.getHandshakeTimeout()));
+                 ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
+                 node.getNodeId(), parameters.getHandshakeTimeout()));
                  **/
 
                 ch.pipeline().addLast(ChannelHandler.this);
@@ -160,17 +222,22 @@ public abstract class ChannelHandler extends ResponseHandler {
     }
 
     protected <T> CompletableFuture<T> sendRequest(Request request) {
-        checkArgument(request.hasHeader());
-        Header header = request.getHeader();
-        CompletableFuture<T> retVal = new CompletableFuture<>();
-        pendingRequests.put(header.getRequestId(), retVal);
-        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        // TODO(Maithem): remove allocation
-        outBuf.writeBytes(request.toByteArray());
-        // TODO(Maithem): Handle pipeline errors
-        channel.writeAndFlush(outBuf);
-        requestTimeoutQueue.add(new RequestTime(System.currentTimeMillis(), header.getRequestId()));
-        return retVal;
+        requestLock.readLock().lock();
+        try {
+            checkArgument(request.hasHeader());
+            Header header = request.getHeader();
+            CompletableFuture<T> retVal = new CompletableFuture<>();
+            pendingRequests.put(header.getRequestId(), retVal);
+            ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+            // TODO(Maithem): remove allocation
+            outBuf.writeBytes(request.toByteArray());
+            // TODO(Maithem): Handle pipeline errors
+            channel.writeAndFlush(outBuf);
+            requestTimeoutQueue.add(new RequestTime(System.currentTimeMillis(), header.getRequestId()));
+            return retVal;
+        } finally {
+            requestLock.readLock().unlock();
+        }
     }
 
     @Override
