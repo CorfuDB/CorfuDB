@@ -35,7 +35,6 @@ public class LogReplicationServer extends AbstractServer {
 
     private final ServerContext serverContext;
 
-    //Used for receiving and applying messages.
     private final ExecutorService executor;
 
     @Getter

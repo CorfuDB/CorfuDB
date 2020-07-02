@@ -25,7 +25,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_TRANSFER_END;
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
 
 /**
@@ -66,7 +66,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     @Getter
     @Setter
-    boolean leader;
+    boolean leader = false;
 
     // The executor is used to execute the applying phase for full snapshot sync.
     private final ExecutorService applySnapshotExecutor;
@@ -214,6 +214,16 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     @Override
     public LogReplicationEntry receive(LogReplicationEntry message) {
+        if (active) {
+            log.warn("It is a node at the active site and skip processing the message");
+            return null;
+        }
+
+        if (!leader) {
+            log.warn("It is a non-leader node at the standby site and will skip processing the message");
+            return null;
+        }
+
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
 
@@ -238,9 +248,9 @@ public class LogReplicationSinkManager implements DataReceiver {
             // send the SNAPSHOT_END message again, but the receiver has already transited to
             // the LOG_ENTRY_SYNC state.
             // Reply the SNAPSHOT_ACK again and let sender do the proper transition.
-            if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_TRANSFER_END) {
+            if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
                 LogReplicationEntryMetadata metadata = snapshotSinkBufferManager.makeAckMessage(message);
-                if (metadata.getMessageMetadataType() == SNAPSHOT_TRANSFER_END) {
+                if (metadata.getMessageMetadataType() == SNAPSHOT_END) {
                     log.warn("Sink Manager in state {} and received message {}. Resending the ACK for SNAPSHOT_END.", rxState,
                             message.getMetadata());
                     return new LogReplicationEntry(metadata, new byte[0]);
@@ -355,7 +365,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 snapshotWriter.apply(message);
                 return;
 
-            case SNAPSHOT_TRANSFER_END:
+            case SNAPSHOT_END:
                 // Set the metadata
                 snapshotWriter.setSnapshotTransferDone(message);
 
@@ -399,7 +409,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private boolean receivedValidMessage(LogReplicationEntry message) {
         return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE
-                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_TRANSFER_END)
+                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END)
                 || rxState == RxState.LOG_ENTRY_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
 
@@ -413,6 +423,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     public void updateTopologyConfigId(boolean active, long siteConfigID) {
         this.siteConfigID = siteConfigID;
+        this.active = active;
 
         logReplicationMetadataManager.setupTopologyConfigId(siteConfigID);
         snapshotWriter.reset(siteConfigID, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp());

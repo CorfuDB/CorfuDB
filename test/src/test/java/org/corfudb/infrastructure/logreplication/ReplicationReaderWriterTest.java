@@ -129,10 +129,6 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
             writer.apply(msg);
         }
 
-        //for (CorfuTable<Long, Long> corfuTable : shadowTables.values()) {
-        //    System.out.print("\nCorfuTable " + corfuTable.size() + " values " + corfuTable.values());
-        //}
-
         writer.applyShadowStreams();
     }
 

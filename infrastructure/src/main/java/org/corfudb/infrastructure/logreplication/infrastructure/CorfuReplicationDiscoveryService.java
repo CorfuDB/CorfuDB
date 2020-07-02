@@ -340,6 +340,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * as source (sender/producer) or sink (receiver).
      */
     private void onLeadershipAcquire() {
+
         switch (localNodeDescriptor.getRoleType()) {
             case ACTIVE:
                 log.info("Start as Source (sender/replicator)");
@@ -397,6 +398,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     public void processLockAcquire() {
         log.debug("Process lock acquire event");
         isLeader = true;
+        interClusterReplicationService.getLogReplicationServer().getSinkManager().setLeader(true);
         onLeadershipAcquire();
     }
 
@@ -408,6 +410,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     public void processLockRelease() {
         log.debug("Process lock release event");
         isLeader = false;
+        interClusterReplicationService.getLogReplicationServer().getSinkManager().setLeader(false);
         stopLogReplication();
     }
 
