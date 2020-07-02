@@ -1,9 +1,14 @@
 package org.corfudb.common.protocol;
 
 import io.netty.channel.EventLoopGroup;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 
 import java.net.InetSocketAddress;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Created by Maithem on 7/1/20.
@@ -11,13 +16,31 @@ import java.net.InetSocketAddress;
 
 public class PeerClient extends ClientHandler {
 
+    // set epoch
+    // client id
+    // cluster id
+
+    final Priority priority = Priority.NORMAL;
+
+    volatile long epoch = -1;
+
+    final UUID clusterId = null;
+
     public PeerClient(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, long requestTimeoutInMs) {
         super(remoteAddress, eventLoopGroup, requestTimeoutInMs);
+    }
 
+    private Header getHeader(MessageType type) {
+        return API.newHeader(getProtocolVersion(), getRequestId(), priority, type, epoch, clusterId);
+    }
+
+    public CompletableFuture<Void> ping() {
+        Header header = getHeader(MessageType.PING);
+        return sendRequest(API.newPingRequest(header));
     }
 
     protected void handlePing(Response response) {
-
+        completeRequest(response.getHeader().getRequestId(), null);
     }
 
     protected void handleRestart(Response response) {

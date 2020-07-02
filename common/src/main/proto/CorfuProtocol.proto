@@ -254,10 +254,15 @@ message UUID {
     int64 msb = 2;
 }
 
+enum Priority {
+    NORMAL = 0;
+    HIGH = 1;
+}
+
 message Header {
     ProtocolVersion version = 1;
     int64 request_id = 2;
-    uint32 priority = 3;
+    Priority priority = 3;
     MessageType type = 4;
     int64 epoch = 5;
     UUID cluster_id = 6;
