@@ -1,6 +1,7 @@
-package org.corfudb.common.protocol;
+package org.corfudb.common.protocol.client;
 
 import io.netty.channel.EventLoopGroup;
+import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
@@ -14,7 +15,7 @@ import java.util.concurrent.CompletableFuture;
  * Created by Maithem on 7/1/20.
  */
 
-public class PeerClient extends ClientHandler {
+public class PeerClient extends ChannelHandler {
 
     // set epoch
     // client id
@@ -26,12 +27,12 @@ public class PeerClient extends ClientHandler {
 
     final UUID clusterId = null;
 
-    public PeerClient(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, long requestTimeoutInMs) {
-        super(remoteAddress, eventLoopGroup, requestTimeoutInMs);
+    public PeerClient(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, ClientConfig config) {
+        super(remoteAddress, eventLoopGroup, config.getRequestTimeoutInMs());
     }
 
     private Header getHeader(MessageType type) {
-        return API.newHeader(getProtocolVersion(), getRequestId(), priority, type, epoch, clusterId);
+        return API.newHeader(generateRequestId(), priority, type, epoch, clusterId);
     }
 
     public CompletableFuture<Void> ping() {
@@ -121,5 +122,15 @@ public class PeerClient extends ClientHandler {
 
     protected void handleExecuteWorkFlow(Response response) {
 
+    }
+
+    public void close() {
+        // TODO(Maithem): implement all these
+        // stop accepting requests (error new requests)
+        // error out existing requests
+        // close channel
+        // update stats
+        // change client state
+        // add a close lock
     }
 }

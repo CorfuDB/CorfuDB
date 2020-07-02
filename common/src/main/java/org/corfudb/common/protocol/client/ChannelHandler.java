@@ -1,4 +1,4 @@
-package org.corfudb.common.protocol;
+package org.corfudb.common.protocol.client;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -8,8 +8,8 @@ import io.netty.channel.EventLoopGroup;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.CorfuExceptions;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.common.protocol.proto.CorfuProtocol.ProtocolVersion;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
@@ -24,12 +24,14 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 /**
  * Created by Maithem on 7/1/20.
  */
 
 @Slf4j
-public abstract class ClientHandler extends ResponseHandler {
+public abstract class ChannelHandler extends ResponseHandler {
 
     protected final InetSocketAddress remoteAddress;
 
@@ -47,18 +49,14 @@ public abstract class ClientHandler extends ResponseHandler {
 
     protected final AtomicLong idGenerator = new AtomicLong();
 
-    public ClientHandler(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, long requestTimeoutInMs) {
+    public ChannelHandler(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, long requestTimeoutInMs) {
         this.remoteAddress = remoteAddress;
         this.eventLoopGroup = eventLoopGroup;
         this.requestTimeoutInMs = requestTimeoutInMs;
     }
 
-    protected long getRequestId() {
+    protected long generateRequestId() {
         return idGenerator.incrementAndGet();
-    }
-
-    protected ProtocolVersion getProtocolVersion() {
-        return null;
     }
 
     //TODO(Maithem) Add keep-alive logic here
@@ -81,6 +79,7 @@ public abstract class ClientHandler extends ResponseHandler {
     }
 
     protected <T> CompletableFuture<T> sendRequest(Request request) {
+        checkArgument(request.hasHeader());
         Header header = request.getHeader();
         CompletableFuture<T> retVal = new CompletableFuture<>();
         pendingRequests.put(header.getRequestId(), retVal);

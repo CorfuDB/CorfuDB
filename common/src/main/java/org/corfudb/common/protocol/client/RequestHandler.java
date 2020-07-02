@@ -1,4 +1,4 @@
-package org.corfudb.common.protocol;
+package org.corfudb.common.protocol.client;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;

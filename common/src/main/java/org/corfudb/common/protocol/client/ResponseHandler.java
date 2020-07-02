@@ -1,11 +1,10 @@
-package org.corfudb.common.protocol;
+package org.corfudb.common.protocol.client;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 
@@ -32,6 +31,7 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
             }
 
             if (response.hasError()) {
+                // propagate error to the client and return right away
                 handleServerError(response);
                 return;
             }

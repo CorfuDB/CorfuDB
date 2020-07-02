@@ -17,6 +17,8 @@ import java.util.UUID;
 
 public class API {
 
+    public static final ProtocolVersion CURRENT_VERSION = ProtocolVersion.v0;
+
     private static CorfuProtocol.UUID getUUID(UUID uuid) {
         return CorfuProtocol.UUID.newBuilder()
                 .setLsb(uuid.getLeastSignificantBits())
@@ -24,11 +26,11 @@ public class API {
                 .build();
     }
 
-    public static Header newHeader(ProtocolVersion version, long requestId,
+    public static Header newHeader(long requestId,
                                    Priority priority, MessageType type,
                                    long epoch, UUID clusterId) {
         return Header.newBuilder()
-                .setVersion(version)
+                .setVersion(CURRENT_VERSION)
                 .setRequestId(requestId)
                 .setPriority(priority)
                 .setType(type)
@@ -40,6 +42,7 @@ public class API {
     public static Request newPingRequest(Header header) {
         PingRequest pingRequest = PingRequest.getDefaultInstance();
         return Request.newBuilder()
+                .setHeader(header)
                 .setPingRequest(pingRequest)
                 .build();
     }
