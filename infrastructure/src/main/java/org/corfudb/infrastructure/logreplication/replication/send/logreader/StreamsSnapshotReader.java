@@ -48,7 +48,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
 
 
     @Setter
-    private long siteEpoch;
+    private long topologyConfigId;
 
     /**
      * Init runtime and streams to read
@@ -90,7 +90,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         OpaqueEntry.serialize(buf, opaqueEntry);
 
         org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry txMsg = new org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry
-                (MessageType.SNAPSHOT_MESSAGE, siteEpoch, snapshotRequestId, currentMsgTs,
+                (MessageType.SNAPSHOT_MESSAGE, topologyConfigId, snapshotRequestId, currentMsgTs,
                 preMsgTs, snapshotTimestamp, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
@@ -219,8 +219,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
     }
 
     @Override
-    public void setSiteEpoch(long siteEpoch) {
-        this.siteEpoch = siteEpoch;
+    public void setTopologyConfigId(long topologyConfigId) {
+        this.topologyConfigId = topologyConfigId;
     }
 
 }
