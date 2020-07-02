@@ -46,6 +46,10 @@ public abstract class ClientHandler extends ResponseHandler {
         this.requestTimeoutInMs = requestTimeoutInMs;
     }
 
+    protected long getRequestId() {
+        return idGenerator.incrementAndGet();
+    }
+
     private void checkRequestTimeout() {
         while (!requestTimeoutQueue.isEmpty()) {
             RequestTime request = requestTimeoutQueue.peek();
