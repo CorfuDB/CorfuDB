@@ -23,7 +23,7 @@ public class TestLogEntryReader implements LogEntryReader {
     }
 
     @Override
-    public void setSiteConfigID(long siteConfigID) {
+    public void setTopologyConfigId(long siteConfigID) {
 
     }
 }

@@ -21,7 +21,7 @@ public class EmptySnapshotReader implements SnapshotReader {
     }
 
     @Override
-    public void setSiteEpoch(long siteEpoch) {
+    public void setTopologyConfigId(long topologyConfigId) {
 
     }
 }

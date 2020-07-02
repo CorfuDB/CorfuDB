@@ -44,7 +44,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     // the sequence number of the message based on the globalBaseSnapshot
     private long sequence;
 
-    private long siteConfigID;
+    private long topologyConfigId;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
@@ -63,7 +63,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, entry);
         currentMsgTs = entry.getVersion();
-        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, siteConfigID,logEntryRequestId,
+        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, topologyConfigId,logEntryRequestId,
                 currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
@@ -190,7 +190,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     }
 
     @Override
-    public void setSiteConfigID(long siteConfigID) {
-        this.siteConfigID = siteConfigID;
+    public void setTopologyConfigId(long topologyConfigId) {
+        this.topologyConfigId = topologyConfigId;
     }
 }

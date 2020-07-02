@@ -29,5 +29,5 @@ public interface SnapshotReader {
      */
     void reset(long snapshotTimestamp);
 
-    void setSiteEpoch(long siteEpoch);
+    void setTopologyConfigId(long topologyConfigId);
 }
