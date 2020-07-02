@@ -5,7 +5,9 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.common.protocol.CorfuExceptions.PeerUnavailable;
 
 import java.net.InetSocketAddress;
@@ -94,6 +96,44 @@ public abstract class ClientHandler extends ResponseHandler {
             log.debug("[{}] failed to complete request {}", remoteAddress, requestId);
         }
         cf.complete(result);
+    }
+
+    @Override
+    protected void handleServerError(Response response) {
+        Header header = response.getHeader();
+        CompletableFuture cf = pendingRequests.remove(response.getHeader().getRequestId());
+        if (cf == null || cf.isDone()) {
+            log.debug("[{}] failed to complete request {}", remoteAddress, header.getRequestId());
+        }
+
+        ServerError serverError = response.getError();
+
+        if (log.isDebugEnabled()) {
+            log.debug("");
+        }
+
+        // TODO(Maithem): what happens if we complete if its already completed
+        cf.completeExceptionally(getCorfuException(serverError));
+    }
+
+    CorfuExceptions getCorfuException(ServerError serverError) {
+        switch (serverError.getCode()) {
+            case OK:
+                throw new IllegalStateException("No error code!");
+            case TRIMMED:
+            case NOT_READY:
+            case OVERWRITE:
+            case WRONG_EPOCH:
+            case BOOTSTRAPPED:
+            case WRONG_CLUSTER:
+            case NOT_BOOTSTRAPPED:
+            case IO:
+            case UNRECOGNIZED:
+            case UNKNOWN:
+            default:
+                return new CorfuExceptions(serverError.getMessage());
+
+        }
     }
 
     @Data
