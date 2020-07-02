@@ -376,11 +376,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private void stopLogReplication() {
         switch(localClusterDescriptor.getRole()) {
             case ACTIVE:
-                log.info("This cluster has lost leadership. Stopping lof replication, according to role {}", localClusterDescriptor.getRole());
+                log.info("This cluster has lost leadership. Stopping log replication, according to role {}", localClusterDescriptor.getRole());
                 replicationManager.stop();
                 break;
             case STANDBY:
-                log.info("This cluster has lost leadership. Stopping lof replication, according to role {}", localClusterDescriptor.getRole());
+                log.info("This cluster has lost leadership. Stopping log replication, according to role {}", localClusterDescriptor.getRole());
                 // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
                 interClusterReplicationService.getLogReplicationServer().setLeadership(false);
                 break;
@@ -448,6 +448,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Process a topology change as provided by the Cluster Manager
      *
+     * Note: We are assuming that topology configId change implies a role change.
+     *       The number of standby clusters change would not bump config id.
+     *
      * @param event discovery event
      */
     public void processTopologyChangeNotification(DiscoveryServiceEvent event) {
@@ -478,9 +481,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             updateLocalTopology(newTopology);
             return;
         }
-
-        // TODO: Are we sure that when there is a topologyConfigId change it implies a role change
-        //  and not a new standby added??
 
         // New topology config with higher epoch
         processTopologyConfigChange(newTopology);
@@ -544,12 +544,14 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     /**
-     * Query the current all replication stream log tail and remeber the max
+     * Query all replicated stream log tails and remember the max
      * and query each standbySite information according to the ackInformation decide all manay total
      * msg needs to send out.
      */
     @Override
     public void prepareClusterRoleChange() {
+        //TODO  It does not restrict ClusterRole change from standby -> active or active->standby however,
+        // our underlying only process one type. Maybe it's the naming? or revising the actual functionality?
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null) {
             replicationManager.prepareClusterRoleChange();
         } else {
@@ -559,11 +561,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     /**
-     * Query the current all replication stream log tail and calculate the number of messages to be sent.
-     * If the max tail has changed, give 0%.
+     * Query all replicated stream log tails and calculate the number of messages to be sent.
+     * If the max tail has changed, return 0%.
      */
     @Override
     public int queryReplicationStatus() {
+        //TODO make sure caller should query all nodes in the cluster and pick the max of these 3 values
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             if (!isLeader) {
                 log.warn("Illegal queryReplicationStatus when node is not a leader " +
