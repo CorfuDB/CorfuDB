@@ -288,7 +288,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
 
             TopologyDescriptor topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().getTopologyConfig());
-            String primary = topologyDescriptor.getActiveCluster().getClusterId();
+            String primary = topologyDescriptor.getActiveClusters().keySet().iterator().next();
             String currentPimary = primary;
 
             // Wait till site role change and new transfer done.
@@ -298,9 +298,9 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 
             siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
-            siteManager.getSiteManagerCallback().siteFlip = true;
+            siteManager.getSiteManagerCallback().clusterRoleChange = true;
             siteManager = (DefaultClusterManager) serverB.getClusterManagerAdapter();
-            siteManager.getSiteManagerCallback().siteFlip = true;
+            siteManager.getSiteManagerCallback().clusterRoleChange = true;
 
             CorfuReplicationDiscoveryService discoveryService = serverA.getReplicationDiscoveryService();
             synchronized (discoveryService) {
@@ -308,7 +308,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             }
 
             topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().getTopologyConfig());
-            currentPimary = topologyDescriptor.getActiveCluster().getClusterId();
+            currentPimary = topologyDescriptor.getActiveClusters().keySet().iterator().next();
 
             assertThat(currentPimary).isNotEqualTo(primary);
             System.out.print("\nVerified Site Role Change primary " + currentPimary);
