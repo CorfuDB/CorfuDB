@@ -43,7 +43,7 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
     }
 
     public void prepareClusterRoleChange() {
-        corfuReplicationDiscoveryService.prepareClusterRoleChange();
+        corfuReplicationDiscoveryService.prepareToBecomeStandby();
     }
 
     public int queryReplicationStatus() {
