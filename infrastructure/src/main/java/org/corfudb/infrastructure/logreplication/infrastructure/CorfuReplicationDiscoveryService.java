@@ -549,13 +549,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * msg needs to send out.
      */
     @Override
-    public void prepareClusterRoleChange() {
+    public void prepareToBecomeStandby() {
         //TODO  It does not restrict ClusterRole change from standby -> active or active->standby however,
         // our underlying only process one type. Maybe it's the naming? or revising the actual functionality?
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null) {
             replicationManager.prepareClusterRoleChange();
         } else {
-            log.warn("Illegal prepareClusterRoleChange when cluster{} with role {}",
+            log.warn("Illegal prepareToBecomeStandby when cluster{} with role {}",
                     localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
         }
     }
