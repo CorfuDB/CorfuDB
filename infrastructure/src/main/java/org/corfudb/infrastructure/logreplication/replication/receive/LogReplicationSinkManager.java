@@ -19,7 +19,6 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.Properties;
-import java.util.UUID;
 
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
@@ -61,11 +60,6 @@ public class LogReplicationSinkManager implements DataReceiver {
     private RxState rxState;
 
     private LogReplicationConfig config;
-
-    /*
-     * The last or current snapshot request id.
-     */
-    private UUID snapshotRequestId = new UUID(0L, 0L);
 
     /*
      * the current baseSnapshot
@@ -190,13 +184,13 @@ public class LogReplicationSinkManager implements DataReceiver {
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
 
-        log.debug("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
+        log.info("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
 
          // Ignore messages that have different topologyConfigId.
          // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
          // If there is a siteConfig change, the discovery service will detect it and reset the state.
         if (message.getMetadata().getTopologyConfigId() != topologyConfigId) {
-            log.trace("Sink manager with config id {} ignored msg id {}", topologyConfigId,
+            log.warn("***** Sink manager with config id {} ignored msg id {}", topologyConfigId,
                     message.getMetadata().getTopologyConfigId());
             return null;
         }
@@ -276,9 +270,6 @@ public class LogReplicationSinkManager implements DataReceiver {
          * Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
          */
         snapshotWriter.reset(siteConfigID, timestamp);
-
-        // Retrieve snapshot request ID to be used for ACK of snapshot sync complete.
-        snapshotRequestId = entry.getMetadata().getSyncRequestId();
 
         // Update lastTransferDone with the new snapshot transfer timestamp.
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();

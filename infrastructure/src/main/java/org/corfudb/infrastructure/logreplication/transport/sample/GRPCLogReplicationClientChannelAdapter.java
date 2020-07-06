@@ -144,7 +144,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         }
     }
 
-    private void replicate(String endpoint, CorfuMessage msg) {
+    private synchronized void replicate(String endpoint, CorfuMessage msg) {
         if(requestObserver == null) {
             responseObserver = new StreamObserver<CorfuMessage>() {
                 @Override

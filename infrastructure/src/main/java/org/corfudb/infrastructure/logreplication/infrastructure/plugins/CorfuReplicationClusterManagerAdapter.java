@@ -7,10 +7,10 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 
 public abstract class CorfuReplicationClusterManagerAdapter {
     @Getter
-    CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
+    private CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
 
     @Getter
-    TopologyConfigurationMsg topologyConfig;
+    public TopologyConfigurationMsg topologyConfig;
 
     public void connect(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
         this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;

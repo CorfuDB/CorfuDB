@@ -55,6 +55,7 @@ public class LogReplicationServer extends AbstractServer {
         this.serverContext = context;
         this.metadataManager = metadataManager;
         this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig, metadataManager, serverContext);
+        this.sinkManager.updateTopologyConfigId(metadataManager.getTopologyConfigId());
 
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
@@ -82,7 +83,7 @@ public class LogReplicationServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_ENTRY)
     private void handleLogReplicationEntry(CorfuPayloadMsg<LogReplicationEntry> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("Log Replication Entry received by Server.");
+        log.info("Log Replication Entry received by Server.");
 
         if (isLeader(msg, r)) {
             // Forward the received message to the Sink Manager for apply
@@ -94,6 +95,8 @@ public class LogReplicationServer extends AbstractServer {
                 log.info("Sending ACK {} on {} to Client ", ack.getMetadata(), ts);
                 r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_ENTRY.payloadMsg(ack));
             }
+        } else {
+            log.warn("Dropping log entry request as this node is not the leader.");
         }
     }
 
@@ -113,7 +116,7 @@ public class LogReplicationServer extends AbstractServer {
                     metadata.getLastSnapTransferDoneTimestamp(),
                     metadata.getLastSrcBaseSnapshotTimestamp(),
                     metadata.getLastProcessedLogTimestamp());
-            log.info("Send Negotiation response");
+            log.info("Send Negotiation response {}", response);
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE.payloadMsg(response));
         } else {
             log.warn("Dropping negotiation request as this node is not the leader.");

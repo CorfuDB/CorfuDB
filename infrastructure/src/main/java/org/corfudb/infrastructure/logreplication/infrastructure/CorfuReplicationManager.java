@@ -271,7 +271,7 @@ public class CorfuReplicationManager {
         long maxTail = queryStreamTail();
 
         /*
-         * If the tail has been moved, reset the base calculation
+         * If the tail has moved, reset the base calculation
          */
         if (maxTail > prepareClusterRoleChangeLogTail) {
             prepareClusterRoleChange();

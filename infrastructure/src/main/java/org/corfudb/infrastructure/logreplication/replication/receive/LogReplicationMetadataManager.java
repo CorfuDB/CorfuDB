@@ -149,7 +149,7 @@ public class LogReplicationMetadataManager {
          }
 
         txBuilder.commit(timestamp);
-        log.info("Update topologyConfigId, new metadata {}", this);
+        log.info("##### Update topologyConfigId, new metadata {}", this);
     }
 
     public void updateVersion(String version) {

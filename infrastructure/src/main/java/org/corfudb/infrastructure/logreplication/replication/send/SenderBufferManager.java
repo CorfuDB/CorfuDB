@@ -121,7 +121,7 @@ public abstract class SenderBufferManager {
             reader.close();
 
         } catch (Exception e) {
-            log.warn("The config file is not available {} , will use the default vaules for config.", e.getCause());
+            log.warn("The config file is not available {} , will use the default values for config.", e.getCause());
 
         } finally {
             log.info("Sender Buffer config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",

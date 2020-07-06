@@ -30,7 +30,7 @@ import java.util.stream.Stream;
 @Slf4j
 @NotThreadSafe
 /**
- *  Default snapshot logreader implementation
+ *  Default snapshot log reader implementation
  *
  *  This implementation provides reads at the stream level (no coalesced state).
  *  It generates TxMessages which will be transmitted by the DataSender (provided by the application).
@@ -45,7 +45,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private long currentMsgTs;
     private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
-
 
     @Setter
     private long topologyConfigId;
@@ -89,8 +88,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, opaqueEntry);
 
-        org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry txMsg = new org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry
-                (MessageType.SNAPSHOT_MESSAGE, topologyConfigId, snapshotRequestId, currentMsgTs,
+        LogReplicationEntry txMsg = new LogReplicationEntry(MessageType.SNAPSHOT_MESSAGE, topologyConfigId, snapshotRequestId, currentMsgTs,
                 preMsgTs, snapshotTimestamp, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
@@ -114,7 +112,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 list.addAll(entry.getEntries().get(stream.uuid));
             }
         } catch (TrimmedException e) {
-            log.error("Catch an TrimmedException exception ", e);
+            log.error("Caught a TrimmedException exception ", e);
             throw e;
         }
         return list;

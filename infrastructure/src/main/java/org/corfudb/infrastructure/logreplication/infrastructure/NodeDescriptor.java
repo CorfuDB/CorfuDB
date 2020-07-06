@@ -50,5 +50,4 @@ public class NodeDescriptor {
     public String toString() {
         return String.format("Node: %s, %s", nodeId, getEndpoint());
     }
-
 }

@@ -92,7 +92,7 @@ public class LogReplicationServerRouter implements IServerRouter {
         outMsg.copyBaseFields(inMsg);
         try {
             serverAdapter.send(CorfuMessageConverter.toProtoBuf(outMsg));
-            log.trace("Sent response: {}", outMsg);
+            log.info("Sent response: {}", outMsg);
         } catch (IllegalArgumentException e) {
             log.warn("Illegal response type. Ignoring message.", e);
         }

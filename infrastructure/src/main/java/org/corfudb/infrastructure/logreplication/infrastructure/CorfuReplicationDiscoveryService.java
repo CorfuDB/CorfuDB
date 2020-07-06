@@ -215,6 +215,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 log.info("Fetch topology from Cluster Manager...");
                 TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.fetchTopology();
                 topologyDescriptor = new TopologyDescriptor(topologyMessage);
+                log.info("******* Cluster Manager Adapter topology retrieved on discovery {}", topologyDescriptor);
                 return;
             } catch (Exception e) {
                 String message = "Caught exception while fetching topology. Log Replication cannot start.";
@@ -232,6 +233,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private void buildLogReplicationContext() {
         // Through LogReplicationConfigAdapter retrieve system-specific configurations (including streams to replicate)
         LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
+
+       log.info("########## MetadataManager set topology config id to :: {}", topologyDescriptor.getTopologyConfigId());
 
         this.logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
                 topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
@@ -511,6 +514,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Process discovery event
      */
     public void processEvent(DiscoveryServiceEvent event) {
+        log.info("**** Process Event {}", event.type);
         switch (event.type) {
             case ACQUIRE_LOCK:
                 processLockAcquire();
@@ -555,7 +559,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null) {
             replicationManager.prepareClusterRoleChange();
         } else {
-            log.warn("Illegal prepareClusterRoleChange when cluster{} with role {}",
+            log.warn("Illegal prepareClusterRoleChange when cluster {} with role {}",
                     localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
         }
     }

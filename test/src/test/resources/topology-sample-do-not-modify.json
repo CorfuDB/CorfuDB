@@ -1,0 +1,35 @@
+{
+  "standbyClusters": {
+    "53ebf8ba-d567-405a-8678-d2c80f938f6c": {
+      "nodesDescriptors": [
+        {
+          "endpoint": "localhost:9020",
+          "port": "9020",
+          "host": "localhost",
+          "clusterId": "53ebf8ba-d567-405a-8678-d2c80f938f6c",
+          "nodeId": "a1d09cc0-f5a3-490f-89d9-37ef82a2051c"
+        }
+      ],
+      "corfuPort": 9001,
+      "role": "STANDBY",
+      "clusterId": "53ebf8ba-d567-405a-8678-d2c80f938f6c"
+    }
+  },
+  "topologyConfigId": 0,
+  "activeClusters": {
+    "0eddfe21-d5c6-403f-adbc-9fb7ebe23da0": {
+      "nodesDescriptors": [
+        {
+          "endpoint": "localhost:9010",
+          "port": "9010",
+          "host": "localhost",
+          "clusterId": "0eddfe21-d5c6-403f-adbc-9fb7ebe23da0",
+          "nodeId": "76002778-bbf7-44b8-af2e-78d4e6a6ae42"
+        }
+      ],
+      "corfuPort": 9000,
+      "role": "ACTIVE",
+      "clusterId": "0eddfe21-d5c6-403f-adbc-9fb7ebe23da0"
+    }
+  }
+}

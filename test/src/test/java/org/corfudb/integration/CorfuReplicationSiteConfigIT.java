@@ -288,11 +288,12 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
 
             TopologyDescriptor topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().getTopologyConfig());
-            String primary = topologyDescriptor.getActiveClusters().keySet().iterator().next();
-            String currentPimary = primary;
+
+            String active = topologyDescriptor.getActiveClusters().keySet().iterator().next();
+            String currentActive = active;
 
             // Wait till site role change and new transfer done.
-            assertThat(currentPimary).isEqualTo(primary);
+            assertThat(currentActive).isEqualTo(active);
 
             System.out.print("\nbefore site switch mapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
@@ -308,10 +309,11 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             }
 
             topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().getTopologyConfig());
-            currentPimary = topologyDescriptor.getActiveClusters().keySet().iterator().next();
 
-            assertThat(currentPimary).isNotEqualTo(primary);
-            System.out.print("\nVerified Site Role Change primary " + currentPimary);
+            currentActive = topologyDescriptor.getActiveClusters().keySet().iterator().next();
+
+            assertThat(currentActive).isNotEqualTo(active);
+            System.out.print("\nVerified Site Role Change primary " + currentActive);
             System.out.print("\nmapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 

@@ -100,7 +100,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
 
                 if (!replicationStreamObserverMap.containsKey(uuid)) {
                     log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.", msg.getRequestID(), msg.getType().name());
-                    log.info("Stream observers in map: {}", replicationStreamObserverMap.keySet());
+                    log.debug("Stream observers in map: {}", replicationStreamObserverMap.keySet());
                     return;
                 }
 
@@ -113,7 +113,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                 replicationStreamObserverMap.remove(uuid);
 
             } catch (Exception e) {
-                log.error("");
+                log.error("Caught exception while sending response {}", e);
             }
 
         } else {

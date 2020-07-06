@@ -40,7 +40,7 @@ import java.util.concurrent.TimeUnit;
 public class SnapshotSender {
 
     // TODO (probably move to a configuration file)
-    public static final int SNAPSHOT_BATCH_SIZE = 5;
+    public static final int SNAPSHOT_BATCH_SIZE = 10;
     public static final int DEFAULT_TIMEOUT = 5000;
 
     private CorfuRuntime runtime;
@@ -200,6 +200,7 @@ public class SnapshotSender {
      * @return snapshot sync start marker as LogReplicationEntry
      */
     private LogReplicationEntry resendMsgsAndWaitAckForSnapshotEnd(UUID snapshotSyncEventId) {
+        log.warn("****** Send log replication entry with topologyConfigId = {}", fsm.getTopologyConfigId());
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START, fsm.getTopologyConfigId(),
                 snapshotSyncEventId, Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);

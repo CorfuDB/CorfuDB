@@ -2,9 +2,11 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
 
+import lombok.Setter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.NodeConfigurationMsg;
+import org.json.simple.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,6 +76,10 @@ public class ClusterDescriptor {
                 .addAllNodeInfo(nodeInfoMsgs)
                 .build();
         return clusterMsg;
+    }
+
+    public void addNode(NodeDescriptor node) {
+        this.nodesDescriptors.add(node);
     }
 
     @Override
