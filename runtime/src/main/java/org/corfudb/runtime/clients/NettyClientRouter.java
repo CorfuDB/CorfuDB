@@ -16,6 +16,10 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.codec.protobuf.ProtobufDecoder;
+import io.netty.handler.codec.protobuf.ProtobufEncoder;
+import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
+import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -40,6 +44,9 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.common.protocol.UniversalMsgDecoder;
+import org.corfudb.common.protocol.UniversalMsgEncoder;
+import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler.ClientHandshakeEvent;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -222,7 +229,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         b.group(eventLoopGroup);
         b.channel(parameters.getSocketType().getChannelClass());
         parameters.getNettyChannelOptions().forEach(b::option);
-        b.handler(getChannelInitializer());
+        b.handler(getChannelInitializerWithProtobuf()); // Temporary
         b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) timeoutConnect);
 
         // Asynchronously connect, retrying until shut down.
@@ -292,6 +299,50 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
                 ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
                     node.getNodeId(), parameters.getHandshakeTimeout()));
+
+                // If parameters include message filters, add corresponding filter handler
+                if (parameters.getNettyClientInboundMsgFilters() != null) {
+                    final InboundMsgFilterHandler inboundMsgFilterHandler =
+                            new InboundMsgFilterHandler(parameters.getNettyClientInboundMsgFilters());
+                    ch.pipeline().addLast(inboundMsgFilterHandler);
+                }
+                ch.pipeline().addLast(NettyClientRouter.this);
+            }
+        };
+    }
+
+    private ChannelInitializer getChannelInitializerWithProtobuf() {
+        return new ChannelInitializer() {
+            @Override
+            protected void initChannel(@Nonnull Channel ch) throws Exception {
+                ch.pipeline().addLast(new IdleStateHandler(parameters.getIdleConnectionTimeout(),
+                        parameters.getKeepAlivePeriod(), 0));
+                if (parameters.isTlsEnabled()) {
+                    ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
+                }
+                ch.pipeline().addLast(new LengthFieldPrepender(4));
+                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
+                        0, 4, 0,
+                        4));
+                if (parameters.isSaslPlainTextEnabled()) {
+                    PlainTextSaslNettyClient saslNettyClient =
+                            SaslUtils.enableSaslPlainText(parameters.getUsernameFile(),
+                                    parameters.getPasswordFile());
+                    ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
+                }
+
+                // Encapsulate messages in UniversalMsg -- Temporary
+                ch.pipeline().addLast(new ProtobufVarint32FrameDecoder());
+                ch.pipeline().addLast(new ProtobufDecoder(CorfuProtocol.UniversalMsg.getDefaultInstance()));
+                ch.pipeline().addLast(new ProtobufVarint32LengthFieldPrepender());
+                ch.pipeline().addLast(new ProtobufEncoder());
+                ch.pipeline().addLast(new UniversalMsgDecoder());
+                ch.pipeline().addLast(new UniversalMsgEncoder());
+
+                ch.pipeline().addLast(new NettyCorfuMessageDecoder());
+                ch.pipeline().addLast(new NettyCorfuMessageEncoder());
+                ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
+                        node.getNodeId(), parameters.getHandshakeTimeout()));
 
                 // If parameters include message filters, add corresponding filter handler
                 if (parameters.getNettyClientInboundMsgFilters() != null) {

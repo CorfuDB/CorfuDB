@@ -296,3 +296,16 @@ message Response {
     }
 }
 
+/* Legacy corfu message serialized in bytes -- Temporary */
+message LegacyCorfuMsg {
+    bytes payload = 1;
+}
+
+/* Universal wrapper message type -- Temporary */
+message UniversalMsg {
+    oneof payload {
+        Request msgRequest = 1;
+        Response msgResponse = 2;
+        LegacyCorfuMsg legacyCorfuMsg = 3;
+    }
+}
