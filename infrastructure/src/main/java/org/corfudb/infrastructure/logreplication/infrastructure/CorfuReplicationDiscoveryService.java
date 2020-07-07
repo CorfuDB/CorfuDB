@@ -211,9 +211,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             try {
                 // Connect to Cluster Manager and Retrieve Topology Info
                 log.info("Connecting to Cluster Manager adapter...");
-                clusterManagerAdapter.start(this);
+                clusterManagerAdapter.register(this);
                 log.info("Fetch topology from Cluster Manager...");
-                TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.queryTopologyConfig();
+                TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.queryTopologyConfig(false);
                 topologyDescriptor = new TopologyDescriptor(topologyMessage);
                 return;
             } catch (Exception e) {

@@ -21,9 +21,9 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
 
     String localEndpoint;
 
-    public void start(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
+    public void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
         this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;
-        register();
+        start();
     }
 
     public void setLocalEndpoint(String endpoint) {
@@ -42,7 +42,7 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
         }
     }
 
-    public void prepareClusterRoleChange() {
+    public void prepareToBecomeStandby() {
         corfuReplicationDiscoveryService.prepareToBecomeStandby();
     }
 

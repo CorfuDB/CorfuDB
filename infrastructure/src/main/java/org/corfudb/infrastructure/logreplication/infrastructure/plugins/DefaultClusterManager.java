@@ -49,7 +49,9 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
     Thread thread = new Thread(siteManagerCallback);
 
-    public void register() {
+
+
+    public void start() {
         siteManagerCallback = new SiteManagerCallback(this);
         thread = new Thread(siteManagerCallback);
         thread.start();
@@ -168,9 +170,10 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         return clusterConfigurationMsg;
     }
 
+
     @Override
-    public TopologyConfigurationMsg queryTopologyConfig() {
-        if (topologyConfig == null) {
+    public TopologyConfigurationMsg queryTopologyConfig(boolean useCached) {
+        if (topologyConfig == null || !useCached) {
             topologyConfig = constructTopologyConfigMsg();
         }
 
@@ -221,7 +224,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                 try {
                     sleep(changeInterval);
                     if (siteFlip) {
-                        TopologyDescriptor newConfig = changePrimary(siteManager.getTopologyConfig());
+                        TopologyDescriptor newConfig = changePrimary(siteManager.queryTopologyConfig(true));
                         siteManager.updateTopologyConfig(newConfig.convertToMessage());
                         log.warn("change the cluster config");
                         siteFlip = false;
