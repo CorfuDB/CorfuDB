@@ -39,7 +39,7 @@ public interface CorfuReplicationClusterManagerAdapter {
     // start to talk to the upper layer to get cluster topology information
     void start();
 
-    // Stop the ClusterManger service
+    // Stop the ClusterManager service
     void shutdown();
 
 
