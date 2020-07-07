@@ -1,12 +1,10 @@
 package org.corfudb.infrastructure.log;
 
-import com.codahale.metrics.Timer;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 
 import java.time.Duration;
 import java.util.concurrent.Executors;
@@ -22,17 +20,11 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class StreamLogCompaction {
-    static final String STREAM_COMPACT_METRIC = CorfuComponent.INFRA_STREAM_OPS + "compaction";
-
     private final ThreadFactory threadFactory = new ThreadFactoryBuilder()
             .setDaemon(true)
             .setNameFormat("LogUnit-Maintenance-%d")
             .build();
 
-    /**
-     * A timer that collect metrics about log compaction
-     */
-    private final Timer compactionTimer = ServerContext.getMetrics().timer(STREAM_COMPACT_METRIC);
 
     /**
      * A scheduler, which is used to schedule periodic stream log compaction for garbage collection.
@@ -46,7 +38,7 @@ public class StreamLogCompaction {
         this.shutdownTimer = shutdownTimer;
         Runnable task = () -> {
             log.debug("Start log compaction.");
-            try (Timer.Context context = MetricsUtils.getConditionalContext(compactionTimer)){
+            try {
                 streamLog.compact();
             } catch (Exception ex) {
                 log.error("Can't compact stream log.", ex);

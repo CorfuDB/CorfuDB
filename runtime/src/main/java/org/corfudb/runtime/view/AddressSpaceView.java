@@ -1,7 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -35,7 +33,6 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
 
@@ -63,7 +60,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AddressSpaceView extends AbstractView {
 
-    private final static long CACHE_KEY_SIZE = MetricsUtils.sizeOf.deepSizeOf(0L);
     private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
 
     /**
@@ -87,13 +83,9 @@ public class AddressSpaceView extends AbstractView {
 
         final boolean cacheDisabled = runtime.getParameters().isCacheDisabled();
         final long maxCacheEntries = runtime.getParameters().getMaxCacheEntries();
+        // TODO(Maithem): Deprecate
         final long maxCacheWeight = runtime.getParameters().getMaxCacheWeight();
         final int concurrencyLevel = runtime.getParameters().getCacheConcurrencyLevel();
-
-        if (maxCacheWeight != 0) {
-            cacheBuilder.maximumWeight(maxCacheWeight);
-            cacheBuilder.weigher((k, v) -> (int) (CACHE_KEY_SIZE + MetricsUtils.sizeOf.deepSizeOf(v)));
-        }
 
         if (cacheDisabled) {
             cacheBuilder.maximumSize(0); // Do not allocate memory when cache is disabled.
@@ -113,15 +105,6 @@ public class AddressSpaceView extends AbstractView {
                 .removalListener(this::handleEviction)
                 .recordStats()
                 .build();
-
-        MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
-                this.hashCode());
-        metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::size);
-        metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
-        metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
-        metrics.register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
-        metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
     }
 
     private void handleEviction(RemovalNotification<Long, ILogData> notification) {

@@ -243,7 +243,6 @@ public class CorfuServer {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             try {
-                setupMetrics(opts);
                 activeServer = new CorfuServerNode(serverContext);
                 activeServer.startAndListen();
             } catch (Throwable th) {
@@ -404,16 +403,5 @@ public class CorfuServer {
 
         println("Serving on port " + port);
         println("Data location: " + dataLocation);
-    }
-
-    /**
-     * Generate metrics server config and start server.
-     *
-     * @param opts Command line parameters.
-     */
-    private static void setupMetrics(Map<String, Object> opts) {
-        PrometheusMetricsServer.Config config = PrometheusMetricsServer.Config.parse(opts);
-        MetricsServer server = new PrometheusMetricsServer(config, ServerContext.getMetrics());
-        server.start();
     }
 }

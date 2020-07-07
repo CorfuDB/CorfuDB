@@ -13,7 +13,6 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -126,8 +125,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
      * and is optionally backed by an additional optimistic update stream.
      *
-     * @param newObjectFn       A function passed to instantiate a new instance of this object.
-     * @param smrStream         Stream View backing this object.
+     * @param newObjectFn A function passed to instantiate a new instance of this object.
+     * @param smrStream   Stream View backing this object.
      */
     public VersionLockedObject(Supplier<T> newObjectFn,
                                StreamViewSMRAdapter smrStream,
@@ -155,7 +154,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     public void gc(long trimMark) {
         long ts = 0;
 
-        try (Timer.Context vloGcDuration = VloMetricsHelper.getVloGcContext()) {
+        try {
             ts = lock.writeLock();
             pendingUpcalls.removeIf(e -> e < trimMark);
             upcallResults.entrySet().removeIf(e -> e.getKey() < trimMark);
@@ -206,7 +205,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         // meets the conditions for direct access.
         long ts = lock.tryOptimisticRead();
         if (ts != 0) {
-            try (Timer.Context optimistReadDuration = VloMetricsHelper.getOptimisticReadContext()) {
+            try {
                 if (directAccessCheckFunction.apply(this)) {
                     log.trace("Access [{}] Direct (optimistic-read) access at {}",
                             this, getVersionUnsafe());
@@ -234,7 +233,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         // Next, we just upgrade to a full write lock if the optimistic
         // read fails, since it means that the state of the object was
         // updated.
-        try (Timer.Context updateObjectReadDuration = VloMetricsHelper.getUpdatedObjectReadContext()) {
+        try {
             // Attempt an upgrade
             ts = lock.tryConvertToWriteLock(ts);
             // Upgrade failed, try conversion again
@@ -269,7 +268,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     public <R> R update(Function<VersionLockedObject<T>, R> updateFunction) {
         long ts = 0;
 
-        try (Timer.Context updateDuration = VloMetricsHelper.getVloUpdateContext()) {
+        try {
             ts = lock.writeLock();
             log.trace("Update[{}] (writelock)", this);
             return updateFunction.apply(this);
@@ -323,9 +322,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @see VersionLockedObject#syncObjectUnsafeInner
      */
     public void syncObjectUnsafe(long timestamp) {
-        try (Timer.Context updateDuration = VloMetricsHelper.getVloSyncContext()) {
-            syncObjectUnsafeInner(timestamp);
-        }
+        syncObjectUnsafeInner(timestamp);
     }
 
     /**
@@ -366,8 +363,9 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         }
     }
 
-    /** Set the correct optimistic stream for this transaction (if not already).
-     *
+    /**
+     * Set the correct optimistic stream for this transaction (if not already).
+     * <p>
      * If the Optimistic stream doesn't reflect the current transaction context,
      * we create the correct WriteSetSMRStream and pick the latest context as the
      * current context.
@@ -709,7 +707,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         }
     }
 
-    /** Apply an SMREntry to the version object, while
+    /**
+     * Apply an SMREntry to the version object, while
      * doing bookkeeping for the underlying stream.
      *
      * @param entry smr entry
@@ -722,40 +721,5 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     @VisibleForTesting
     public ISMRStream getSmrStream() {
         return smrStream;
-    }
-
-    /**
-     * This class includes the metrics registry and the timer names used within VersionLockedObject
-     * methods
-     */
-    private static class VloMetricsHelper {
-        private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-        private static final String VLO_OPTIMISTIC_READ = CorfuComponent.OBJECT.toString() +
-                "vlo.optimistic-read";
-        private static final String VLO_UPDATED_OBJECT_READ = CorfuComponent.OBJECT.toString() +
-                "vlo.updated-object-read";
-        private static final String VLO_UPDATE = CorfuComponent.OBJECT.toString() + "vlo.update";
-        private static final String VLO_SYNC = CorfuComponent.OBJECT.toString() + "vlo.sync";
-        private static final String VLO_GC = CorfuComponent.OBJECT.toString() + "vlo.gc";
-
-        private static Timer.Context getVloSyncContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_SYNC));
-        }
-
-        private static Timer.Context getOptimisticReadContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_OPTIMISTIC_READ));
-        }
-
-        private  static Timer.Context getUpdatedObjectReadContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATED_OBJECT_READ));
-        }
-
-        private  static Timer.Context getVloUpdateContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATE));
-        }
-
-        private  static Timer.Context getVloGcContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_GC));
-        }
     }
 }

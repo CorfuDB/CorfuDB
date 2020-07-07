@@ -1,8 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
@@ -57,19 +54,6 @@ public class LogUnitClient extends AbstractClient {
         return getRouter().getPort();
     }
 
-    @Getter
-    MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-
-    private Timer.Context getTimerContext(String opName) {
-        final String timerName = String.format("%s%s:%s-%s",
-                CorfuComponent.LOG_UNIT_CLIENT.toString(),
-                getHost(),
-                getPort().toString(),
-                opName);
-        Timer t = getMetricRegistry().timer(timerName);
-        return t.time();
-    }
-
     /**
      * Asynchronously write to the logging unit.
      *
@@ -83,18 +67,13 @@ public class LogUnitClient extends AbstractClient {
                                             IMetadata.DataRank rank,
                                             Object writeObject,
                                             Map<UUID, Long> backpointerMap) {
-        Timer.Context context = getTimerContext("writeObject");
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
         WriteRequest wr = new WriteRequest(DataType.DATA, payload);
         wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
         wr.setGlobalAddress(address);
-        CompletableFuture<Boolean> cf = sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        return sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));
     }
 
     /**
@@ -145,19 +124,13 @@ public class LogUnitClient extends AbstractClient {
     /**
      * Asynchronously read from the logging unit.
      *
-     * @param address the address to read from.
+     * @param address   the address to read from.
      * @param cacheable whether the read result should be cached on log unit server.
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> read(long address, boolean cacheable) {
-        Timer.Context context = getTimerContext("read");
-        CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
-                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address, cacheable)));
+        return sendMessageWithFuture(CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address, cacheable)));
 
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
     }
 
 
@@ -169,7 +142,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> readAll(List<Long> addresses) {
-       return readAll(addresses, false);
+        return readAll(addresses, false);
     }
 
     /**
@@ -180,13 +153,8 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> readAll(List<Long> addresses, boolean cacheable) {
-        Timer.Context context = getTimerContext("readAll");
-        CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
+        return sendMessageWithFuture(
                 CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(addresses, cacheable)));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
     }
 
     /**

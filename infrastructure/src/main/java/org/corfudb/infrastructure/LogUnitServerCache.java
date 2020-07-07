@@ -10,8 +10,6 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 
-import static org.corfudb.util.MetricsUtils.sizeOf;
-
 /**
  * LogUnit server cache.
  * <p>
@@ -44,11 +42,9 @@ public class LogUnitServerCache {
     private int getLogDataTotalSize(ILogData logData) {
         if (logData.getStreams().size() > MAX_STREAM_THRESHOLD) {
             log.warn("Number of streams in this data is higher that threshold {}." +
-                "This may impact the server performance", MAX_STREAM_THRESHOLD);
+                    "This may impact the server performance", MAX_STREAM_THRESHOLD);
         }
-        return logData.getSizeEstimate() +
-            (int)(sizeOf.deepSizeOf(logData.getMetadataMap())) +
-            KEY_SIZE;
+        return logData.getSizeEstimate() + KEY_SIZE;
     }
 
     /**

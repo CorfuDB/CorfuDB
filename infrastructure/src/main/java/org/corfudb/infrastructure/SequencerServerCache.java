@@ -4,7 +4,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.MetricsUtils;
+import org.ehcache.sizeof.SizeOf;
 
 import java.util.Comparator;
 import java.util.HashMap;
@@ -15,7 +15,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 /**
  * Sequencer server cache.
  * Contains transaction conflict-resolution data structures.
- *
+ * <p>
  * The cache map maps conflict keys (stream id + key) to versions (long), illustrated below:
  * Conflict Key | ck1 | ck2 | ck3 | ck4
  * Version | v1 | v1 | v2 | v3
@@ -25,16 +25,19 @@ import javax.annotation.concurrent.NotThreadSafe;
  * this eviction policy is FIFO on the version number. The simple FIFO approach in Caffein etc doesn't work here,
  * as it may evict ck1, but not ck2. Notice that we also can't evict ck3 before the keys for v1,
  * that's because it will create holes in the resolution window and can lead to incorrect resolutions.
- *
+ * <p>
  * We use priority queue as a sliding window on the versions, where a version can map to multiple keys,
  * so we also need to maintain the beginning of the window which is the maxConflictWildcard variable.
- *
+ * <p>
  * SequencerServerCache achieves consistency by using single threaded cache. It's done by following code:
  * `.executor(Runnable::run)`
  */
 @NotThreadSafe
 @Slf4j
 public class SequencerServerCache {
+
+    private static final SizeOf sizeOf = SizeOf.newInstance();
+
     /**
      * TX conflict-resolution information:
      * a cache of recent conflict keys and their latest global-log position.
@@ -83,7 +86,7 @@ public class SequencerServerCache {
         this.cacheSize = cacheSize;
         conflictKeys = new HashMap();
         cacheEntries = new PriorityQueue(cacheSize, Comparator.comparingLong
-                (a -> ((ConflictTxStream)a).txVersion));
+                (a -> ((ConflictTxStream) a).txVersion));
         maxConflictWildcard = maxConflictNewSequencer;
         this.maxConflictNewSequencer = maxConflictNewSequencer;
     }
@@ -111,6 +114,7 @@ public class SequencerServerCache {
 
     /**
      * Invalidate the records with the minAddress. It could be one or multiple records
+     *
      * @return the number of entries has been invalidated and removed from the cache.
      */
     private int invalidateSmallestTxVersion() {
@@ -160,13 +164,14 @@ public class SequencerServerCache {
     /**
      * The memory space used by the entries and also the space used by
      * priority queue and hashmap to store the pointers
+     *
      * @return the memory space used in bytes:
      */
     public long byteSize() {
         log.debug("the cache has {} entries,  the object size used {}, calculated by beepSize {}",
                 size(), CONFLICTTXSTREAM_OBJ_SIZE,
-                cacheEntries.isEmpty() ? 0 : MetricsUtils.sizeOf.deepSizeOf(cacheEntries.peek()));
-        return size()*(ENTRY_OVERHEAD + CONFLICTTXSTREAM_OBJ_SIZE);
+                cacheEntries.isEmpty() ? 0 : sizeOf.deepSizeOf(cacheEntries.peek()));
+        return size() * (ENTRY_OVERHEAD + CONFLICTTXSTREAM_OBJ_SIZE);
     }
 
     /*

@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
@@ -29,7 +28,6 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
@@ -106,7 +104,7 @@ public class SequencerServer extends AbstractServer {
 
     /**
      * Per streams map and their corresponding address space (an address space is defined by the stream's addresses
-     *  and its latest trim mark)
+     * and its latest trim mark)
      */
     private Map<UUID, StreamAddressSpace> streamsAddressMap = new HashMap<>();
 
@@ -171,7 +169,7 @@ public class SequencerServer extends AbstractServer {
 
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
-        if (getState() != ServerState.READY){
+        if (getState() != ServerState.READY) {
             return false;
         }
 
@@ -197,7 +195,7 @@ public class SequencerServer extends AbstractServer {
     /**
      * Checks if an epoch is within a consecutive closed range
      * [{@link this#epochRangeLowerBound}, {@link this#sequencerEpoch}].
-     *
+     * <p>
      * This sequencer serves as the primary sequencer for all the
      * consecutive epochs in this range.
      *
@@ -345,7 +343,7 @@ public class SequencerServer extends AbstractServer {
             cache.invalidateUpTo(trimMark);
 
             // Remove trimmed addresses from each address map and set new trim mark
-            for(StreamAddressSpace streamAddressSpace : streamsAddressMap.values()) {
+            for (StreamAddressSpace streamAddressSpace : streamsAddressMap.values()) {
                 streamAddressSpace.trim(trimMark);
             }
         }
@@ -360,7 +358,7 @@ public class SequencerServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER)
     public void resetServer(CorfuPayloadMsg<SequencerRecoveryMsg> msg,
-                                         ChannelHandlerContext ctx, IServerRouter r) {
+                            ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Reset sequencer server.");
         final Map<UUID, StreamAddressSpace> addressSpaceMap = msg.getPayload().getStreamsAddressMap();
         final long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
@@ -409,7 +407,7 @@ public class SequencerServer extends AbstractServer {
             streamTailToGlobalTailMap = new HashMap<>();
 
             // Set tail for every stream
-            for(Map.Entry<UUID, StreamAddressSpace> streamAddressSpace : addressSpaceMap.entrySet()) {
+            for (Map.Entry<UUID, StreamAddressSpace> streamAddressSpace : addressSpaceMap.entrySet()) {
                 Long streamTail = streamAddressSpace.getValue().getTail();
                 log.trace("On Sequencer reset, tail for stream {} set to {}", streamAddressSpace.getKey(), streamTail);
                 streamTailToGlobalTailMap.put(streamAddressSpace.getKey(), streamTail);
@@ -465,45 +463,31 @@ public class SequencerServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.TOKEN_REQ)
     public void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
-                                          ChannelHandlerContext ctx, IServerRouter r) {
+                             ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("Token request. Msg: {}", msg);
 
         TokenRequest req = msg.getPayload();
-        final Timer timer = getTimer(req.getReqType());
-
         // dispatch request handler according to request type while collecting the timer metrics
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
-            switch (req.getReqType()) {
-                case TokenRequest.TK_QUERY:
-                    handleTokenQuery(msg, ctx, r);
-                    return;
+        switch (req.getReqType()) {
+            case TokenRequest.TK_QUERY:
+                handleTokenQuery(msg, ctx, r);
+                return;
 
-                case TokenRequest.TK_RAW:
-                    handleRawToken(msg, ctx, r);
-                    return;
+            case TokenRequest.TK_RAW:
+                handleRawToken(msg, ctx, r);
+                return;
 
-                case TokenRequest.TK_TX:
-                    handleTxToken(msg, ctx, r);
-                    return;
+            case TokenRequest.TK_TX:
+                handleTxToken(msg, ctx, r);
+                return;
 
-                default:
-                    handleAllocation(msg, ctx, r);
-                    return;
-            }
+            default:
+                handleAllocation(msg, ctx, r);
+                return;
         }
+
     }
 
-    /**
-     * Return a timer based on the type of request. It will take the name from the cache
-     * initialized at construction of the sequencer server to avoid String concatenation.
-     *
-     * @param reqType type of a {@link TokenRequest} instance
-     * @return an instance {@link Timer} corresponding to the provided {@param reqType}
-     */
-    private Timer getTimer(byte reqType) {
-        final String timerName = timerNameCache.getOrDefault(reqType, CorfuComponent.INFRA_SEQUENCER + "unknown");
-        return ServerContext.getMetrics().timer(timerName);
-    }
 
     /**
      * this method serves log-tokens for a raw log implementation.
@@ -632,11 +616,11 @@ public class SequencerServer extends AbstractServer {
 
     /**
      * This method handles the request of streams addresses.
-     *
+     * <p>
      * The request of address spaces can be of two types:
-     *      - For specific streams (and specific ranges for each stream).
-     *      - For all streams (complete range).
-     *
+     * - For specific streams (and specific ranges for each stream).
+     * - For all streams (complete range).
+     * <p>
      * The response contains the requested streams address maps and the global log tail.
      */
     @ServerHandler(type = CorfuMsgType.STREAMS_ADDRESS_REQUEST)
@@ -700,8 +684,8 @@ public class SequencerServer extends AbstractServer {
         private final int cacheSize = DEFAULT_CACHE_SIZE;
 
         public static Config parse(Map<String, Object> opts) {
-            int cacheSize = (int)(opts.containsKey("--sequencer-cache-size") ?
-            Integer.parseInt((String)opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE);
+            int cacheSize = (int) (opts.containsKey("--sequencer-cache-size") ?
+                    Integer.parseInt((String) opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE);
             return Config.builder()
                     .cacheSize(cacheSize)
                     .build();

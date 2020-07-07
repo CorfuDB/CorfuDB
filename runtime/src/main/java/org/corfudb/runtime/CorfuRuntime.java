@@ -41,7 +41,6 @@ import org.corfudb.runtime.view.LayoutManagementView;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
@@ -113,18 +112,24 @@ public class CorfuRuntime {
         // region Address Space Parameters
         /**
          * Number of times to attempt to read before hole filling.
+         *
          * @deprecated This is a no-op. Use holeFillWait
-         * */
+         */
         @Deprecated
-        @Default int holeFillRetry = 10;
+        @Default
+        int holeFillRetry = 10;
 
-        /** Time to wait between read requests reattempts before hole filling. */
-        @Default Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
+        /**
+         * Time to wait between read requests reattempts before hole filling.
+         */
+        @Default
+        Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
 
         /**
          * Time limit after which the reader gives up and fills the hole.
          */
-        @Default Duration holeFillTimeout = Duration.ofSeconds(10);
+        @Default
+        Duration holeFillTimeout = Duration.ofSeconds(10);
 
         /**
          * Whether or not to disable the cache.
@@ -148,7 +153,7 @@ public class CorfuRuntime {
          * This is a hint to size the AddressSpaceView cache, a higher concurrency
          * level allows for less lock contention at the cost of more memory overhead.
          * The default value of zero will result in using the cache's internal default
-         * concurrency level (i.e. 4). 
+         * concurrency level (i.e. 4).
          */
         @Default
         int cacheConcurrencyLevel = 0;
@@ -425,13 +430,6 @@ public class CorfuRuntime {
         private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
 
         /**
-         * Port at which the {@link CorfuRuntime} will allow third-party
-         * collectors to pull for metrics.
-         */
-        @Default
-        private int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
-
-        /**
          * The compression codec to use to encode a write's payload
          */
         @Default
@@ -582,8 +580,6 @@ public class CorfuRuntime {
      */
     private volatile Layout latestLayout = null;
 
-    @Getter
-    private static final MetricRegistry defaultMetrics = new MetricRegistry();
 
     /**
      * Register SystemDownHandler.
@@ -682,14 +678,6 @@ public class CorfuRuntime {
 
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
-
-        // Try to expose metrics via Dropwizard CsvReporter JmxReporter and Slf4jReporter.
-        MetricsUtils.metricsReportingSetup(defaultMetrics);
-        if (parameters.getPrometheusMetricsPort() != MetricsUtils.NO_METRICS_PORT) {
-            // Try to expose metrics via Prometheus.
-            MetricsUtils.metricsReportingSetup(
-                    defaultMetrics,parameters.getPrometheusMetricsPort());
-        }
 
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
@@ -986,14 +974,13 @@ public class CorfuRuntime {
                         // It is futile trying to re-connect to the wrong cluster
                         log.warn("Giving up since cluster is incorrect or reconfigured!");
                         throw we;
-                    } catch (ExecutionException ee){
+                    } catch (ExecutionException ee) {
                         if (ee.getCause() instanceof TimeoutException) {
                             log.warn("Tried to get layout from {} but failed by timeout", s);
                         } else {
                             log.warn("Tried to get layout from {} but failed with exception:", s, ee);
                         }
-                    }
-                    catch (Exception e) {
+                    } catch (Exception e) {
                         log.warn("Tried to get layout from {} but failed with exception:", s, e);
                     }
                 }

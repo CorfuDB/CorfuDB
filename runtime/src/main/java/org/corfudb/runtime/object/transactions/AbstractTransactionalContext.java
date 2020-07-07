@@ -1,7 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
@@ -21,16 +19,13 @@ import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -144,24 +139,11 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final Map<UUID, Long> knownStreamPosition = new HashMap<>();
 
-    /**
-     * Metrics related fields for registry and the context marking the beginning of a transaction.
-     */
-    @Getter
-    private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-    private static final String TXN_OP_DURATION_TIMER_NAME = CorfuComponent.OBJECT.toString() +
-            "txn-op-duration";
-    private final Timer txDurationTimer = metrics.timer(TXN_OP_DURATION_TIMER_NAME);
-    @Getter
-    private final Timer.Context txOpDurationContext;
-
     AbstractTransactionalContext(Transaction transaction) {
         transactionID = UUID.randomUUID();
         this.transaction = transaction;
 
         startTime = System.currentTimeMillis();
-
-        txOpDurationContext = MetricsUtils.getConditionalContext(txDurationTimer);
 
         parentContext = TransactionalContext.getCurrentContext();
 
@@ -193,8 +175,8 @@ public abstract class AbstractTransactionalContext implements
      * @return The result of the upcall.
      */
     public abstract <T extends ICorfuSMR<T>> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
-                                                                     long timestamp,
-                                                                     Object[] conflictObject);
+                                                                    long timestamp,
+                                                                    Object[] conflictObject);
 
     public void syncWithRetryUnsafe(VersionLockedObject vlo,
                                     Token snapshotTimestamp,
@@ -240,8 +222,8 @@ public abstract class AbstractTransactionalContext implements
      * @return The address the update was written at.
      */
     public abstract <T extends ICorfuSMR<T>> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
-                                                             SMREntry updateEntry,
-                                                             Object[] conflictObject);
+                                                            SMREntry updateEntry,
+                                                            Object[] conflictObject);
 
     /**
      * Add a given transaction to this transactional context, merging
@@ -255,7 +237,7 @@ public abstract class AbstractTransactionalContext implements
      * Add an object that needs extra processing right before commit happens
      *
      * @param preCommitListener The context of the object that needs extra processing
-     *                         along with its lambda.
+     *                          along with its lambda.
      */
     public abstract void addPreCommitListener(PreCommitListener preCommitListener);
 
@@ -330,7 +312,7 @@ public abstract class AbstractTransactionalContext implements
     /**
      * Merge another readSet into this one.
      *
-     * @param other  Source readSet to merge in
+     * @param other Source readSet to merge in
      */
     void mergeReadSetInto(ConflictSetInfo other) {
         getReadSetInfo().mergeInto(other);
@@ -343,7 +325,7 @@ public abstract class AbstractTransactionalContext implements
      * @param updateEntry     the update
      * @param conflictObjects the conflict objects to add
      * @return a synthetic "address" in the write-set, to be used for
-     *     checking upcall results
+     * checking upcall results
      */
     long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
             conflictObjects) {
@@ -357,7 +339,7 @@ public abstract class AbstractTransactionalContext implements
     /**
      * convert our write set into a new MultiObjectSMREntry.
      *
-     * @return  the write set
+     * @return the write set
      */
     MultiObjectSMREntry collectWriteSetEntries() {
         return getWriteSetInfo().getWriteSet();

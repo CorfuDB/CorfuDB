@@ -1,7 +1,5 @@
 package org.corfudb.runtime;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -9,8 +7,6 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.object.CorfuCompileProxy;
 import org.corfudb.runtime.object.ICorfuSMR;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.serializer.ISerializer;
 
 import java.util.ArrayList;
@@ -26,19 +22,17 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
     @Getter
     private List<ICorfuSMR<T>> maps = new ArrayList<>();
 
-    // Registry and Timer used for measuring append checkpoints
-    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-    private static final String MULTI_CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +
-            "append-several-checkpoints";
-    private final Timer appendCheckpointsTimer = metricRegistry.timer(MULTI_CHECKPOINT_TIMER_NAME);
-
-    /** Add a map to the list of maps to be checkpointed by this class. */
+    /**
+     * Add a map to the list of maps to be checkpointed by this class.
+     */
     @SuppressWarnings("unchecked")
     public void addMap(T map) {
         maps.add((ICorfuSMR<T>) map);
     }
 
-    /** Add map(s) to the list of maps to be checkpointed by this class. */
+    /**
+     * Add map(s) to the list of maps to be checkpointed by this class.
+     */
 
     public void addAllMaps(Collection<T> maps) {
         for (T map : maps) {
@@ -46,10 +40,11 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
         }
     }
 
-    /** Checkpoint multiple CorfuTables. Since this method is Map specific
-     *  then the keys are unique and the order doesn't matter.
+    /**
+     * Checkpoint multiple CorfuTables. Since this method is Map specific
+     * then the keys are unique and the order doesn't matter.
      *
-     * @param rt CorfuRuntime
+     * @param rt     CorfuRuntime
      * @param author Author's name, stored in checkpoint metadata
      * @return Global log address of the first record of
      */
@@ -61,13 +56,13 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
         Token minSnapshot = Token.UNINITIALIZED;
 
         final long cpStart = System.currentTimeMillis();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointsTimer)) {
+        try {
             for (ICorfuSMR<T> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
 
                 CheckpointWriter<T> cpw = new CheckpointWriter(rt, streamId, author, (T) map);
                 ISerializer serializer = ((CorfuCompileProxy) map.getCorfuSMRProxy())
-                                .getSerializer();
+                        .getSerializer();
                 cpw.setSerializer(serializer);
 
                 Token minCPSnapshot = Token.UNINITIALIZED;
@@ -77,7 +72,7 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
                         break;
                     } catch (WrongEpochException wee) {
                         log.info("Epoch changed to {} during append checkpoint snapshot resolution. Sequencer" +
-                                " failover can lead to potential epoch regression, retry {}/{}", wee.getCorrectEpoch(),
+                                        " failover can lead to potential epoch regression, retry {}/{}", wee.getCorrectEpoch(),
                                 retry, numRetries);
                         retry++;
                         if (retry == numRetries) {

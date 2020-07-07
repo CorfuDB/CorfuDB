@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -15,7 +14,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 
 import java.time.Duration;
@@ -23,7 +21,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -93,10 +90,14 @@ public class TestClientRouter implements IClientRouter {
 
     public List<TestRule> rules;
 
-    /** The server router endpoint this client should route to. */
+    /**
+     * The server router endpoint this client should route to.
+     */
     TestServerRouter serverRouter;
 
-    /** A mock channel context for this connection. */
+    /**
+     * A mock channel context for this connection.
+     */
     TestChannelContext channelContext;
 
     /**
@@ -128,7 +129,7 @@ public class TestClientRouter implements IClientRouter {
             CorfuMsg m = (CorfuMsg) o;
             if (validateClientId(m)) {
                 IClient handler = handlerMap.get(m.getMsgType());
-                if (handler == null){
+                if (handler == null) {
                     throw new IllegalStateException("Client handler doesn't exists for message: " + m.getMsgType());
                 }
 
@@ -180,14 +181,9 @@ public class TestClientRouter implements IClientRouter {
         if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
             throw new NetworkException("Disconnected endpoint", NodeLocator.builder()
-                                                                    .host(host)
-                                                                    .port(port).build());
+                    .host(host)
+                    .port(port).build());
         }
-
-        // Set up the timer and context to measure request
-        final Timer roundTripMsgTimer = getTimer(message);
-        final Timer.Context roundTripMsgContext = MetricsUtils
-                .getConditionalContext(roundTripMsgTimer);
 
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
@@ -204,31 +200,14 @@ public class TestClientRouter implements IClientRouter {
             routeMessage(message);
         }
 
-        // Generate a benchmarked future to measure the underlying request
-        final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
-            MetricsUtils.stopConditionalContext(roundTripMsgContext);
-            return x;
-        });
-
         // Generate a timeout future, which will complete exceptionally if the main future is not completed.
-        final CompletableFuture<T> cfTimeout = CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             outstandingRequests.remove(thisRequest);
             log.debug("Remove request {} due to timeout!", thisRequest);
             return null;
         });
         return cfTimeout;
-    }
-
-    // Create a timer using appropriate cached timer names
-    private Timer getTimer(@NonNull CorfuMsg message) {
-        if (!timerNameCache.containsKey(message.getMsgType())) {
-            timerNameCache.put(message.getMsgType(),
-                               CorfuComponent.CLIENT_ROUTER.toString() +
-                               message.getMsgType().name().toLowerCase());
-        }
-        return CorfuRuntime.getDefaultMetrics()
-                .timer(timerNameCache.get(message.getMsgType()));
     }
 
     /**
@@ -248,7 +227,7 @@ public class TestClientRouter implements IClientRouter {
                 .map(x -> x.evaluate(message, this))
                 .allMatch(x -> x)) {
             // Write the message out to the channel.
-                routeMessage(message);
+            routeMessage(message);
         }
     }
 
@@ -266,8 +245,8 @@ public class TestClientRouter implements IClientRouter {
                 .map(x -> x.evaluate(outMsg, this))
                 .allMatch(x -> x)) {
             // Write the message out to the channel.
-                ctx.writeAndFlush(outMsg);
-                log.trace("Sent response: {}", outMsg);
+            ctx.writeAndFlush(outMsg);
+            log.trace("Sent response: {}", outMsg);
         }
     }
 

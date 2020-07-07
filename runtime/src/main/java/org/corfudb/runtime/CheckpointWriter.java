@@ -1,7 +1,5 @@
 package org.corfudb.runtime;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -19,8 +17,6 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -34,15 +30,17 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 
-/** Checkpoint writer for CorfuTables: take a snapshot of the
- *  object via TXBegin(), then dump the frozen object's
- *  state into CheckpointEntry records into the object's
- *  stream.
- *  TODO: Generalize to all SMR objects.
+/**
+ * Checkpoint writer for CorfuTables: take a snapshot of the
+ * object via TXBegin(), then dump the frozen object's
+ * state into CheckpointEntry records into the object's
+ * stream.
+ * TODO: Generalize to all SMR objects.
  */
 @Slf4j
 public class CheckpointWriter<T extends StreamingMap> {
-    /** Metadata to be stored in the CP's 'dict' map.
+    /**
+     * Metadata to be stored in the CP's 'dict' map.
      */
     private final UUID streamId;
     private final String author;
@@ -58,42 +56,50 @@ public class CheckpointWriter<T extends StreamingMap> {
     private final UUID checkpointStreamID;
     private final Map<CheckpointEntry.CheckpointDictKey, String> mdkv = new HashMap<>();
 
-    /** Mutator lambda to change map key.  Typically used for
-     *  testing but could also be used for type conversion, etc.
+    /**
+     * Mutator lambda to change map key.  Typically used for
+     * testing but could also be used for type conversion, etc.
      */
     @Getter
     @Setter
-    Function<Object,Object> keyMutator = (x) -> x;
+    Function<Object, Object> keyMutator = (x) -> x;
 
-    /** Mutator lambda to change map value.  Typically used for
-     *  testing but could also be used for type conversion, etc.
+    /**
+     * Mutator lambda to change map value.  Typically used for
+     * testing but could also be used for type conversion, etc.
      */
     @Getter
     @Setter
-    Function<Object,Object> valueMutator = (x) -> x;
+    Function<Object, Object> valueMutator = (x) -> x;
 
-    /** Batch size: number of SMREntry in a single CONTINUATION.
+    /**
+     * Batch size: number of SMREntry in a single CONTINUATION.
      */
     @Getter
     @Setter
     private int batchSize = 50;
 
-    /** BiConsumer to run after every CheckpointEntry is appended to the stream.
+    /**
+     * BiConsumer to run after every CheckpointEntry is appended to the stream.
      */
     @Getter
     @Setter
-    BiConsumer<CheckpointEntry,Long> postAppendFunc = (cp, l) -> { };
+    BiConsumer<CheckpointEntry, Long> postAppendFunc = (cp, l) -> {
+    };
 
-    /** Local ref to the object's runtime.
+    /**
+     * Local ref to the object's runtime.
      */
     private final CorfuRuntime rt;
 
-    /** Local ref to the stream's view.
+    /**
+     * Local ref to the stream's view.
      */
     final StreamsView sv;
 
-    /** Local ref to the object that we're dumping.
-     *  TODO: generalize to all SMR objects.
+    /**
+     * Local ref to the object that we're dumping.
+     * TODO: generalize to all SMR objects.
      */
     private final T map;
 
@@ -101,11 +107,13 @@ public class CheckpointWriter<T extends StreamingMap> {
     @Setter
     ISerializer serializer = Serializers.getDefaultSerializer();
 
-    /** Constructor for Checkpoint Writer for Corfu Maps.
-     * @param rt object's runtime
+    /**
+     * Constructor for Checkpoint Writer for Corfu Maps.
+     *
+     * @param rt       object's runtime
      * @param streamId unique identifier of stream to checkpoint
-     * @param author checkpoint initiator
-     * @param map local reference of the map to checkpoint
+     * @param author   checkpoint initiator
+     * @param map      local reference of the map to checkpoint
      */
     public CheckpointWriter(CorfuRuntime rt, UUID streamId, String author, T map) {
         this.rt = rt;
@@ -134,11 +142,11 @@ public class CheckpointWriter<T extends StreamingMap> {
 
     /**
      * Write a checkpoint which reflects the state at snapshot.
-     *
+     * <p>
      * This API should not be directly invoked.
      *
-     *  @param snapshotTimestamp snapshot at which the checkpoint is taken.
-     *  */
+     * @param snapshotTimestamp snapshot at which the checkpoint is taken.
+     */
     @VisibleForTesting
     public Token appendCheckpoint(Token snapshotTimestamp) {
         long start = System.currentTimeMillis();
@@ -150,7 +158,7 @@ public class CheckpointWriter<T extends StreamingMap> {
                 .begin();
 
         log.info("appendCheckpoint: Started checkpoint for {} at snapshot {}", streamId, snapshotTimestamp);
-        
+
         try (Stream<Map.Entry> entries = this.map.entryStream()) {
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
@@ -179,10 +187,11 @@ public class CheckpointWriter<T extends StreamingMap> {
         return writeToken.getToken();
     }
 
-    /** Append a checkpoint START record to this object's stream.
+    /**
+     * Append a checkpoint START record to this object's stream.
      *
-     *  <p>Corfu client transaction management, if desired, is the
-     *  caller's responsibility.</p>
+     * <p>Corfu client transaction management, if desired, is the
+     * caller's responsibility.</p>
      *
      * @return Global log address of the START record.
      */
@@ -195,7 +204,7 @@ public class CheckpointWriter<T extends StreamingMap> {
         this.mdkv.put(CheckpointEntry.CheckpointDictKey.SNAPSHOT_ADDRESS,
                 Long.toString(txnSnapshot.getSequence()));
 
-        ImmutableMap<CheckpointEntry.CheckpointDictKey,String> mdkv =
+        ImmutableMap<CheckpointEntry.CheckpointDictKey, String> mdkv =
                 ImmutableMap.copyOf(this.mdkv);
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                 author, checkpointId, streamId, mdkv, null);
@@ -205,33 +214,34 @@ public class CheckpointWriter<T extends StreamingMap> {
     }
 
     /**
-     *  Append an object to a stream without caching the entries.
+     * Append an object to a stream without caching the entries.
      */
-    private long nonCachedAppend(Object object, UUID ... streamIDs) {
+    private long nonCachedAppend(Object object, UUID... streamIDs) {
         return sv.append(object, null, CacheOption.WRITE_AROUND, streamIDs);
     }
 
-    /** Append zero or more CONTINUATION records to this
-     *  object's stream.  Each will contain a fraction of
-     *  the state of the object that we're checkpointing
-     *  (up to batchSize items at a time).
+    /**
+     * Append zero or more CONTINUATION records to this
+     * object's stream.  Each will contain a fraction of
+     * the state of the object that we're checkpointing
+     * (up to batchSize items at a time).
      *
-     *  <p>Corfu client transaction management, if desired, is the
-     *  caller's responsibility.</p>
+     * <p>Corfu client transaction management, if desired, is the
+     * caller's responsibility.</p>
      *
-     *  <p>The Iterators class appears to preserve the laziness
-     *  of Stream processing; we don't wish to use more
-     *  memory than strictly necessary to generate the
-     *  checkpoint.  NOTE: It would be even more useful if
-     *  the map had a lazy iterator: the eagerness of
-     *  map.keySet().stream() is not ideal, but at least
-     *  it should be much smaller than the entire map.</p>
+     * <p>The Iterators class appears to preserve the laziness
+     * of Stream processing; we don't wish to use more
+     * memory than strictly necessary to generate the
+     * checkpoint.  NOTE: It would be even more useful if
+     * the map had a lazy iterator: the eagerness of
+     * map.keySet().stream() is not ideal, but at least
+     * it should be much smaller than the entire map.</p>
      *
-     *  <p>NOTE: The postAppendFunc lambda is executed in the
-     *  current thread context, i.e., inside of a Corfu
-     *  transaction, and that transaction will be *aborted*
-     *  at the end of this function.  Any Corfu data
-     *  modifying ops will be undone by the TXAbort().</p>
+     * <p>NOTE: The postAppendFunc lambda is executed in the
+     * current thread context, i.e., inside of a Corfu
+     * transaction, and that transaction will be *aborted*
+     * at the end of this function.  Any Corfu data
+     * modifying ops will be undone by the TXAbort().</p>
      *
      * @return Stream of global log addresses of the CONTINUATION records written.
      */
@@ -267,10 +277,11 @@ public class CheckpointWriter<T extends StreamingMap> {
         return entryCount;
     }
 
-    /** Append a checkpoint END record to this object's stream.
+    /**
+     * Append a checkpoint END record to this object's stream.
      *
-     *  <p>Corfu client transaction management, if desired, is the
-     *  caller's responsibility.</p>
+     * <p>Corfu client transaction management, if desired, is the
+     * caller's responsibility.</p>
      *
      * @return Global log address of the END record.
      */

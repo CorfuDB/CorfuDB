@@ -9,7 +9,7 @@ import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.MetricsUtils;
+import org.ehcache.sizeof.SizeOf;
 import org.junit.Test;
 
 import java.util.*;
@@ -21,6 +21,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Created by mwei on 2/1/16.
  */
 public class AddressSpaceViewTest extends AbstractViewTest {
+
+    private static final SizeOf sizeOf = SizeOf.newInstance();
 
     private void setupNodes() {
         addServer(SERVERS.PORT_0);
@@ -85,7 +87,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         final int payloadSize = 4000;
         byte[] payload = new byte[payloadSize];
 
-        long maxCacheSize = oneMb / MetricsUtils.sizeOf.deepSizeOf(payload);
+        long maxCacheSize = oneMb / sizeOf.deepSizeOf(payload);
 
         for (int x = 0; x < maxCacheSize * 2; x++) {
             rt.getStreamsView().get(UUID.randomUUID()).append(payload);
@@ -144,7 +146,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         // Write two entries, with different cache options
         rt.getAddressSpaceView().write(new TokenResponse(new Token(epoch, 0),
-                Collections.singletonMap(CorfuRuntime.getStreamID("stream1"), Address.NO_BACKPOINTER)),
+                        Collections.singletonMap(CorfuRuntime.getStreamID("stream1"), Address.NO_BACKPOINTER)),
                 "payload".getBytes(), CacheOption.WRITE_THROUGH);
 
         rt.getAddressSpaceView().write(new TokenResponse(new Token(epoch, 1),
