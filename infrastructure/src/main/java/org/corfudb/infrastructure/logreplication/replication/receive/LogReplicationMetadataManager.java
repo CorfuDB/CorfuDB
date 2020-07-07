@@ -69,7 +69,7 @@ public class LogReplicationMetadataManager {
             throw new ReplicationWriterException(e);
         }
 
-        setupTopologyConfigID(topologyConfigId);
+        setupTopologyConfigId(topologyConfigId);
     }
 
     /**
@@ -132,11 +132,12 @@ public class LogReplicationMetadataManager {
         return val;
     }
 
+
     /**
      * Get the most recent ConfigID.
      * @return
      */
-    public long getTopologyConfigID() {
+    public long getTopologyConfigId() {
         return query(null, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
     }
     /**
@@ -154,9 +155,7 @@ public class LogReplicationMetadataManager {
     public String getVersion() { return queryString(null, LogReplicationMetadataType.VERSION); }
 
     /**
-     * Given a specific timestamp, get the most recent started full snapshot sync's timestamp.
-     * If the timestamp is null, get the most recent value.
-     * @param
+     * Get the most recent LAST_SNAP_START value.
      * @return
      */
     public long getLastSnapStartTimestamp() {
@@ -266,7 +265,7 @@ public class LogReplicationMetadataManager {
      * At the same time reset replication status metadata to -1.
      * @param topologyConfigId
      */
-    public void setupTopologyConfigID(long topologyConfigId) {
+    public void setupTopologyConfigId(long topologyConfigId) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistedTopologyConfigId = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
 
@@ -285,9 +284,6 @@ public class LogReplicationMetadataManager {
             appendUpdate(txBuilder, key, val);
          }
 
-        if (getVersion(null) == null) {
-
-        }
         txBuilder.commit(timestamp);
 
         log.info("Update siteConfigID {}, new metadata {}", topologyConfigId, toString());
@@ -338,7 +334,7 @@ public class LogReplicationMetadataManager {
         txBuilder.commit(timestamp);
 
         log.info("Set SnapshotStart Commit: {}", toString());
-        return (ts == getLastSnapStartTimestamp() && topologyConfigId == getTopologyConfigID());
+        return (ts == getLastSnapStartTimestamp() && topologyConfigId == getTopologyConfigId());
     }
 
 
@@ -416,7 +412,7 @@ public class LogReplicationMetadataManager {
     @Override
     public String toString() {
         String s = new String();
-        s = s.concat(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID.getVal() + " " + getTopologyConfigID() +" ");
+        s = s.concat(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID.getVal() + " " + getTopologyConfigId() +" ");
         s = s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED.getVal() + " " + getLastSnapStartTimestamp() +" ");
         s = s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
         s = s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");

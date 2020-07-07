@@ -325,7 +325,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         logReplicationMetadataManager.setSnapshotApplied(inputEntry);
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(null), this);
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
 
         log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
                 inputEntry, rxState);
@@ -371,7 +371,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     public LogReplicationQueryMetadataResponse processQueryMetadataRequest() {
         LogReplicationQueryMetadataResponse response = new LogReplicationQueryMetadataResponse(
-                logReplicationMetadataManager.getTopologyConfigID(),
+                logReplicationMetadataManager.getTopologyConfigId(),
                 logReplicationMetadataManager.getVersion(),
                 logReplicationMetadataManager.getLastSnapStartTimestamp(),
                 logReplicationMetadataManager.getLastSnapTransferDoneTimestamp(),
@@ -419,7 +419,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param topologyConfigId
      */
     public void updateTopologyConfigId(long topologyConfigId) {
-        logReplicationMetadataManager.setupTopologyConfigID(topologyConfigId);
+        logReplicationMetadataManager.setupTopologyConfigId(topologyConfigId);
         this.topologyConfigId = topologyConfigId;
     }
 

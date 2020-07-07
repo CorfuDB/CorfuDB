@@ -7,7 +7,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_TRANSFER_END;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_TRANSFER_END;
 
 @Slf4j
 public class SnapshotSinkBufferManager extends SinkBufferManager {
@@ -69,7 +68,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());
 
         // Set Snapshot Timestamp.
-        entry.getMetadata().setSnapshotTimestamp(logReplicationMetadataManager.getLastSnapStartTimestamp(null));
+        entry.getMetadata().setSnapshotTimestamp(logReplicationMetadataManager.getLastSnapStartTimestamp());
 
         // Set ackValue.
         long lastProcessedSeq = getLastProcessed();
@@ -87,7 +86,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
             metadata.setMessageMetadataType(MessageType.SNAPSHOT_REPLICATED);
         }
 
-        log.info("SnapshotSinkBufferManager send ACK {} for {}", lastProcessedSeq, metadata);
+        log.debug("SnapshotSinkBufferManager send ACK {} for {}", lastProcessedSeq, metadata);
         return metadata;
     }
 
@@ -111,7 +110,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
 
     boolean shouldAck(LogReplicationEntry entry) {
         // If it has different baseSnapshot, ignore it.
-        if (entry.getMetadata().getSnapshotTimestamp() != logReplicationMetadataManager.getLastSnapStartTimestamp(null)) {
+        if (entry.getMetadata().getSnapshotTimestamp() != logReplicationMetadataManager.getLastSnapStartTimestamp()) {
             log.warn("Get a message {} that has different snapshotTime with expecting {}", entry.getMetadata(),
                     logReplicationMetadataManager);
             return false;
@@ -120,7 +119,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
 
         // Always send an ACK for snapshot tranfer end marker.
         long lastProcessedSeq = logReplicationMetadataManager.getLastSnapSeqNum(null);
-        log.info("lastProccessedSeq {}  snapshotEndSeq {}", lastProcessedSeq, snapshotEndSeq);
+        log.debug("lastProccessedSeq {}  snapshotEndSeq {}", lastProcessedSeq, snapshotEndSeq);
         if (lastProcessedSeq == (snapshotEndSeq - 1)) {
             log.info("Snapshot End has been processed lastProccessedSeq {}  snapshotEndSeq {}", lastProcessedSeq, snapshotEndSeq);
             return true;

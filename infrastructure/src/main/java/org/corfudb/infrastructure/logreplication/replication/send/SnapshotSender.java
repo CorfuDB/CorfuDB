@@ -29,7 +29,7 @@ import static java.lang.Thread.sleep;
  *  i.e, reading and sending a snapshot of the data for the requested streams.
  *
  *  It reads log entries from the data-store through the SnapshotReader, and hands it to the
- *  DataSender (the application specific callback for sending data to the remote site) through BufferManager.
+ *  DataSender (the application specific callback for sending data to the remote cluster) through BufferManager.
  *
  *  The SnapshotReader has a default implementation based on reads at the stream layer
  *  (no serialization/deserialization) required.

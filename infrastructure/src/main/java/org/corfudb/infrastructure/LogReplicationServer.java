@@ -58,16 +58,6 @@ public class LogReplicationServer extends AbstractServer {
         this.serverContext = context;
         this.metadataManager = metadataManager;
         this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig, metadataManager, serverContext, topologyConfigId);
-
-        /*
-         * TODO xq: we need two thread pools
-         * One thread pool use for communication and process short messages. If we have multiple threads in this pool
-         * the SinkManager receive function need to be synchronzied.
-         *
-         * One pool is used to process the Snapshot full sync phase II: apply phase.
-         *
-         */
-
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
     }
@@ -124,17 +114,16 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isLeader(msg, r)) {
             LogReplicationMetadataManager metadata = sinkManager.getLogReplicationMetadataManager();
-            CorfuStoreMetadata.Timestamp ts = metadata.getTimestamp();
 
             // TODO (Xiaoqin Ma): That's 6 independent DB calls per one LOG_REPLICATION_NEGOTIATION_REQUEST.
             //  Can we do just one? Also, It does not look like we handle failures if one of them fails, for example.
             LogReplicationQueryMetadataResponse response = new LogReplicationQueryMetadataResponse(
-                    metadata.getTopologyConfigID(ts),
-                    metadata.getVersion(ts),
-                    metadata.getLastSnapStartTimestamp(ts),
-                    metadata.getLastSnapTransferDoneTimestamp(ts),
-                    metadata.getLastSrcBaseSnapshotTimestamp(ts),
-                    metadata.getLastProcessedLogTimestamp(ts));
+                    metadata.getTopologyConfigId(),
+                    metadata.getVersion(),
+                    metadata.getLastSnapStartTimestamp(),
+                    metadata.getLastSnapTransferDoneTimestamp(),
+                    metadata.getLastSrcBaseSnapshotTimestamp(),
+                    metadata.getLastProcessedLogTimestamp());
             log.info("Send Negotiation response");
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_RESPONSE.payloadMsg(response));
         } else {

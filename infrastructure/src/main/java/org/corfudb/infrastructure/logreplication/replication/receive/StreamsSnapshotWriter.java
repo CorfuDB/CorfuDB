@@ -125,7 +125,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long persistSnapTransferred = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
         long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
 
-        //for transfer phase start, verify it hasn't received any message yet.
+        // for transfer phase start, verify it hasn't received any message yet.
         if (siteConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart || srcGlobalSnapshot <= persistSnapTransferred ||
                 persitSeqNum != Address.NON_ADDRESS) {
                 log.warn("Skip current processing as the persistent metadata {} shows the current operation is out of date " +
