@@ -23,7 +23,6 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
 
     public void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
         this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;
-        start();
     }
 
     public void setLocalEndpoint(String endpoint) {

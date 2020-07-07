@@ -364,6 +364,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                assertThat(mapA1.containsKey(String.valueOf(i))).isTrue();
             }
 
+            System.out.print("\nTest Succeeds!!!");
         } finally {
             shutdown();
         }

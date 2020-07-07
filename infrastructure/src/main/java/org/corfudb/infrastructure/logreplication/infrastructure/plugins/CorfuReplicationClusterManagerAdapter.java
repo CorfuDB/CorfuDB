@@ -13,9 +13,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 public interface CorfuReplicationClusterManagerAdapter {
 
     /**
-     *   Register the discovery service and start the cluster manager callback service.
-     *   Implementation of this function should call start(), start this ClusterManager at the upper
-     *   layer to get the callback for topology change.
+     *   Register the discovery service
      */
      void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
 
@@ -23,7 +21,6 @@ public interface CorfuReplicationClusterManagerAdapter {
      * Set the localEndpoint
      */
     void setLocalEndpoint(String endpoint);
-
 
     /**
      * Query the topology information.
@@ -39,9 +36,8 @@ public interface CorfuReplicationClusterManagerAdapter {
     // start to talk to the upper layer to get cluster topology information
     void start();
 
-    // Stop the ClusterManger service
+    // Stop the ClusterManager service
     void shutdown();
-
 
     /**
      * While doing a cluster role type flip, it is the API used to notify the current log

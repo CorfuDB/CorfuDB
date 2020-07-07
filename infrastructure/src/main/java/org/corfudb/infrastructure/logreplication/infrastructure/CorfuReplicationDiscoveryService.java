@@ -212,6 +212,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 // Connect to Cluster Manager and Retrieve Topology Info
                 log.info("Connecting to Cluster Manager adapter...");
                 clusterManagerAdapter.register(this);
+                clusterManagerAdapter.start();
                 log.info("Fetch topology from Cluster Manager...");
                 TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.queryTopologyConfig(false);
                 topologyDescriptor = new TopologyDescriptor(topologyMessage);
@@ -550,8 +551,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Override
     public void prepareToBecomeStandby() {
-        //TODO  It does not restrict ClusterRole change from standby -> active or active->standby however,
-        // our underlying only process one type. Maybe it's the naming? or revising the actual functionality?
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null) {
             replicationManager.prepareClusterRoleChange();
         } else {
