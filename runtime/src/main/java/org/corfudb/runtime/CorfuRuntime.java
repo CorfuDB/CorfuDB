@@ -144,12 +144,6 @@ public class CorfuRuntime {
         long maxCacheEntries;
 
         /**
-         * The max in-memory size of the cache in bytes
-         */
-        @Default
-        long maxCacheWeight;
-
-        /**
          * This is a hint to size the AddressSpaceView cache, a higher concurrency
          * level allows for less lock contention at the cost of more memory overhead.
          * The default value of zero will result in using the cache's internal default

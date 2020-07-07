@@ -83,17 +83,12 @@ public class AddressSpaceView extends AbstractView {
 
         final boolean cacheDisabled = runtime.getParameters().isCacheDisabled();
         final long maxCacheEntries = runtime.getParameters().getMaxCacheEntries();
-        // TODO(Maithem): Deprecate
-        final long maxCacheWeight = runtime.getParameters().getMaxCacheWeight();
         final int concurrencyLevel = runtime.getParameters().getCacheConcurrencyLevel();
 
         if (cacheDisabled) {
             cacheBuilder.maximumSize(0); // Do not allocate memory when cache is disabled.
         } else if (maxCacheEntries != 0) {
             cacheBuilder.maximumSize(maxCacheEntries);
-        } else if (maxCacheWeight == 0) {
-            // If cache weight/size are not set, then we default to using size based cache.
-            cacheBuilder.maximumSize(DEFAULT_MAX_CACHE_ENTRIES);
         }
 
         if (concurrencyLevel != 0) {
