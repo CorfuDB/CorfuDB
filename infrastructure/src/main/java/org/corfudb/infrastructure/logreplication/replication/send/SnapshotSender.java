@@ -29,11 +29,8 @@ import static java.lang.Thread.sleep;
  *  i.e, reading and sending a snapshot of the data for the requested streams.
  *
  *  It reads log entries from the data-store through the SnapshotReader, and hands it to the
-<<<<<<< HEAD:infrastructure/src/main/java/org/corfudb/infrastructure/logreplication/replication/send/SnapshotSender.java
  *  DataSender (the application specific callback for sending data to the remote cluster).
-=======
- *  DataSender (the application specific callback for sending data to the remote site) through BufferManager.
->>>>>>> ca154dbb4b6... Add some comments. Fix bugs. Fix failing tests.:log-replication/src/main/java/org/corfudb/logreplication/send/SnapshotSender.java
+ *  DataSender (the application specific callback for sending data to the remote cluster) through BufferManager.
  *
  *  The SnapshotReader has a default implementation based on reads at the stream layer
  *  (no serialization/deserialization) required.

@@ -57,16 +57,6 @@ public class LogReplicationServer extends AbstractServer {
         this.serverContext = context;
         this.metadataManager = metadataManager;
         this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig, metadataManager, serverContext);
-
-        /*
-         * TODO xq: we need two thread pools
-         * One thread pool use for communication and process short messages. If we have multiple threads in this pool
-         * the SinkManager receive function need to be synchronzied.
-         *
-         * One pool is used to process the Snapshot full sync phase II: apply phase.
-         *
-         */
-
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
     }
@@ -128,7 +118,7 @@ public class LogReplicationServer extends AbstractServer {
             // TODO (Xiaoqin Ma): That's 6 independent DB calls per one LOG_REPLICATION_NEGOTIATION_REQUEST.
             //  Can we do just one? Also, It does not look like we handle failures if one of them fails, for example.
             LogReplicationQueryMetadataResponse response = new LogReplicationQueryMetadataResponse(
-                    metadata.getTopologyConfigID(ts),
+                    metadata.getTopologyConfigId(ts),
                     metadata.getVersion(ts),
                     metadata.getLastSnapStartTimestamp(ts),
                     metadata.getLastSnapTransferDoneTimestamp(ts),

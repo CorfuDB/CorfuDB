@@ -142,14 +142,14 @@ public abstract class SinkBufferManager {
         long lastProcessedSeq = getLastProcessed();
 
         if (preTs == lastProcessedSeq) {
-            log.info("Process the message {}, expecting TS {}", dataMessage.getMetadata(), preTs);
+            log.trace("Process the message {}, expecting TS {}", dataMessage.getMetadata(), preTs);
             sinkManager.processMessage(dataMessage);
             ackCnt++;
             processBuffer();
         } else if (currentTs > lastProcessedSeq && buffer.size() < maxSize) {
             // If it is an out of order message with higher timestamp,
             // put it into the buffer if there is space.
-            log.info("Buffer message {}, expecting TS {}", dataMessage.getMetadata(), preTs);
+            log.trace("Buffer message {}, expecting TS {}", dataMessage.getMetadata(), preTs);
             buffer.put(preTs, dataMessage);
         }
 
@@ -183,9 +183,8 @@ public abstract class SinkBufferManager {
      * The lastProcessedSeq message's ack value.
      * For snapshot, it is the entry's seqNumber.
      * For log entry, it is the entry's timestamp.
-     * Will use the metadata as the source of the truth.
+     * The information is got from the metadata corfu table.
      */
-    //long lastProcessedSeq;
     abstract  long getLastProcessed();
 
     /**

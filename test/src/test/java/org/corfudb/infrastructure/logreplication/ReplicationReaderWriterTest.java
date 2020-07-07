@@ -15,7 +15,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Query;
@@ -27,7 +26,6 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
-import org.corfudb.test.TestSchema;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
@@ -53,9 +51,6 @@ import static org.corfudb.integration.ReplicationReaderWriterIT.writeLogEntryMsg
 public class ReplicationReaderWriterTest extends AbstractViewTest {
     static private final int START_VAL = 1;
     static final int NUM_KEYS = 4;
-    static final String PRIMARY_SITE_ID = "PRIMARY_SITE_0";
-    static final String REMOTE_SITE_ID = "REMOTE_SITE_0";
-
 
     CorfuRuntime srcDataRuntime = null;
     CorfuRuntime dstDataRuntime = null;
@@ -64,7 +59,6 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
     HashMap<String, CorfuTable<Long, Long>> srcTables = new HashMap<>();
     HashMap<String, CorfuTable<Long, Long>> dstTables = new HashMap<>();
-    HashMap<String, CorfuTable<Long, Long>> shadowTables = new HashMap<>();
     LogEntryReader logEntryReader;
     LogEntryWriter logEntryWriter;
 

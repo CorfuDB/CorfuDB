@@ -329,23 +329,14 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Initial acquire of semaphore, the transition method will block until a transition occurs
         transitionAvailable.acquire();
 
-        // Transition #1: Replication Start
-        // transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
-
-        // Transition #2: Snapshot Sync Request
+        // Snapshot Sync Request
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
-        //transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
         System.out.println("**** Wait for snapshot sync to complete");
 
-        // Block until the snapshot sync completes and next transition occurs.
-        // while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
-        //
-        // }
 
-        //assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
         Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
         while (listenerQueue.size() < LARGE_NUM_ENTRIES/StreamsSnapshotReader.MAX_NUM_SMR_ENTRY) {

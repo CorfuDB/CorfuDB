@@ -838,7 +838,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
         expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
-        assertThat(expectedAckTimestamp).isEqualTo(logReplicationMetadataManager.getLastProcessedLogTimestamp(null));
+        assertThat(expectedAckTimestamp).isEqualTo(logReplicationMetadataManager.getLastProcessedLogTimestamp());
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
     }
@@ -1322,7 +1322,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // If expected a ackTs, release semaphore / unblock the wait
         if (observableAckMsg.getDataMessage() != null) {
             LogReplicationEntry logReplicationEntry = observableAckMsg.getDataMessage();
-            //System.out.print("\nackMsg " + logReplicationEntry.getLogReplicationStatus());
             switch (testConfig.waitOn) {
                 case ON_ACK:
                     verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
