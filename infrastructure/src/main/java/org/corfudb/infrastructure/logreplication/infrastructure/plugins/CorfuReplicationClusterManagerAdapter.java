@@ -14,27 +14,30 @@ public interface CorfuReplicationClusterManagerAdapter {
 
     /**
      *   Register the discovery service and start the cluster manager callback service.
-     *   Implementation of this function should call register(), register this ClusterManager at the upper
+     *   Implementation of this function should call start(), start this ClusterManager at the upper
      *   layer to get the callback for topology change.
      */
-     void start(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
+     void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
 
      /**
      * Set the localEndpoint
      */
     void setLocalEndpoint(String endpoint);
 
-    // This is the currentTopology cached at the adapter.
-    public TopologyConfigurationMsg getTopologyConfig();
 
-    // This will talk to the real Cluster Manager and get the most current topology.
-    TopologyConfigurationMsg queryTopologyConfig();
+    /**
+     * Query the topology information.
+     * @param useCached if it is true, used the cached topology, otherwise do a query to get the most
+     *                  recent topology from the real Cluster Manager.
+     * @return
+     */
+    TopologyConfigurationMsg queryTopologyConfig(boolean useCached);
 
     // This is called when get a notification of cluster config change.
     void updateTopologyConfig(TopologyConfigurationMsg newClusterConfigMsg);
 
-    // the register at the upper layer to get cluster topology information
-    void register();
+    // start to talk to the upper layer to get cluster topology information
+    void start();
 
     // Stop the ClusterManger service
     void shutdown();
@@ -46,7 +49,7 @@ public interface CorfuReplicationClusterManagerAdapter {
      * bookkeeping to calculate the number of log entries to be sent over
      *
      */
-    void prepareClusterRoleChange();
+    void prepareToBecomeStandby();
 
 
     /**
