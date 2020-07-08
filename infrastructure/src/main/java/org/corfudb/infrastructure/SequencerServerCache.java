@@ -3,6 +3,9 @@ package org.corfudb.infrastructure;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.Counter;
+import org.corfudb.common.metrics.Gauge;
+import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.runtime.view.Address;
 import org.ehcache.sizeof.SizeOf;
 
@@ -75,6 +78,8 @@ public class SequencerServerCache {
     //As calculating object size is expensive, used the value calculated by deepSize
     private final int CONFLICTTXSTREAM_OBJ_SIZE = 80; //by calculated by deepSize
 
+    private final Counter numKeysInvalidated;
+
     /**
      * The cache limited by size.
      * For a synchronous cache we are using a same-thread executor (Runnable::run)
@@ -82,13 +87,17 @@ public class SequencerServerCache {
      *
      * @param cacheSize cache size
      */
-    public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
+    public SequencerServerCache(int cacheSize, long maxConflictNewSequencer, StatsGroup statsGroup) {
         this.cacheSize = cacheSize;
         conflictKeys = new HashMap();
         cacheEntries = new PriorityQueue(cacheSize, Comparator.comparingLong
                 (a -> ((ConflictTxStream) a).txVersion));
         maxConflictWildcard = maxConflictNewSequencer;
         this.maxConflictNewSequencer = maxConflictNewSequencer;
+
+        // TODO(Maithem): Track window size in bytes?
+        statsGroup.scope("cache").addGauge("txn_window_size", this.conflictKeys::size);
+        numKeysInvalidated = statsGroup.scope("cache").createCounter("num_keys_invalidated");
     }
 
     /**
@@ -142,14 +151,18 @@ public class SequencerServerCache {
      * @param trimMark trim mark
      */
     public void invalidateUpTo(long trimMark) {
-        log.debug("Invalidate sequencer cache. Trim mark: {}", trimMark);
         int entries = 0;
         int pqEntries = 0;
         while (Address.isAddress(firstAddress()) && firstAddress() < trimMark) {
             pqEntries += invalidateSmallestTxVersion();
             entries++;
         }
-        log.info("Invalidated entries {} addresses {}", pqEntries, entries);
+
+        numKeysInvalidated.inc(pqEntries);
+
+        if (log.isDebugEnabled()) {
+            log.debug("Invalidated entries {} addresses {}", pqEntries, entries);
+        }
     }
 
     /**

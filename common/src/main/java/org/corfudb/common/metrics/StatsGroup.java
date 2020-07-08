@@ -6,7 +6,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- *
  * Created by Maithem on 7/7/20.
  */
 public class StatsGroup {
@@ -19,6 +18,8 @@ public class StatsGroup {
     private final Map<String, Meter> meters = new ConcurrentHashMap<>();
 
     private final Map<String, Counter> counters = new ConcurrentHashMap<>();
+
+    private final Map<String, Gauge> gauges = new ConcurrentHashMap<>();
 
     private final Map<String, StatsGroup> scopes = new ConcurrentHashMap<>();
 
@@ -44,6 +45,12 @@ public class StatsGroup {
 
     public Counter createCounter(String name) {
         return counters.merge(name, new Counter(name), (k, v) -> {
+            throw new IllegalStateException(name(prefix, name) + " already exists!");
+        });
+    }
+
+    public void addGauge(String name, Gauge gauge) {
+        gauges.merge(name, gauge, (k, v) -> {
             throw new IllegalStateException(name(prefix, name) + " already exists!");
         });
     }

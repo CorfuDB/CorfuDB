@@ -42,7 +42,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -140,11 +139,13 @@ public class SequencerServer extends AbstractServer {
 
     private final Histogram txnResolutionLatency;
 
-    private final Meter touchedKeysMeter;
+    private final Meter keysResolutionMeter;
 
     private final Counter txnAborts;
 
     private final Counter rawTokenAllocations;
+
+    private final StatsGroup sequencerStats;
 
     /**
      * Returns a new SequencerServer.
@@ -155,19 +156,20 @@ public class SequencerServer extends AbstractServer {
         this.serverContext = serverContext;
         Config config = Config.parse(serverContext.getServerConfig());
 
+        sequencerStats = serverContext.getStats().scope(getClass().getSimpleName());
+
         // Sequencer server is single threaded by current design
         this.executor = Executors.newSingleThreadExecutor(
                 new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
 
         globalLogTail = Address.getMinAddress();
-        this.cache = new SequencerServerCache(config.getCacheSize(), globalLogTail - 1);
+        this.cache = new SequencerServerCache(config.getCacheSize(), globalLogTail - 1, sequencerStats);
 
-        StatsGroup stats = serverContext.getStats().scope(getClass().getSimpleName());
-        this.queryLatency = stats.createHistogram("query_latency");
-        this.txnResolutionLatency = stats.createHistogram("txn_commit_latency");
-        this.touchedKeysMeter = stats.createMeter("num_keys_commit");
-        this.txnAborts = stats.createCounter("txn_aborts");
-        this.rawTokenAllocations = stats.createCounter("raw_allocation");
+        this.queryLatency = sequencerStats.createHistogram("query_latency");
+        this.txnResolutionLatency = sequencerStats.createHistogram("txn_commit_latency");
+        this.keysResolutionMeter = sequencerStats.createMeter("num_keys_commit");
+        this.txnAborts = sequencerStats.createCounter("txn_aborts");
+        this.rawTokenAllocations = sequencerStats.createCounter("raw_allocation");
     }
 
     @Override
@@ -257,7 +259,7 @@ public class SequencerServer extends AbstractServer {
                 continue;
             }
 
-            touchedKeysMeter.record(conflictParamSet.size());
+            keysResolutionMeter.record(conflictParamSet.size());
             // TODO(Abort) rate
 
 
@@ -409,7 +411,7 @@ public class SequencerServer extends AbstractServer {
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
             globalLogTail = msg.getPayload().getGlobalTail();
-            cache = new SequencerServerCache(cache.getCacheSize(), globalLogTail - 1);
+            cache = new SequencerServerCache(cache.getCacheSize(), globalLogTail - 1, sequencerStats);
             // Clear the existing map as it could have been populated by an earlier reset.
             streamTailToGlobalTailMap = new HashMap<>();
 

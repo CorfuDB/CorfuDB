@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.SequencerServerCache;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
@@ -27,6 +28,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Slf4j
 public class SequencerServerCacheTest extends AbstractObjectTest {
+
+    private final StatsGroup statsGroup = new StatsGroup("test_stats");
+
     @Test
     public void testSequencerCacheTrim() {
 
@@ -69,7 +73,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
     public void testCache() {
         final AtomicBoolean criticalVariable = new AtomicBoolean();
 
-        SequencerServerCache cache = new SequencerServerCache(1, Address.NOT_FOUND);
+        SequencerServerCache cache = new SequencerServerCache(1, Address.NOT_FOUND, statsGroup);
         final long firstValue = 1L;
         final long secondValue = 2L;
         final int iterations = 10;
@@ -133,7 +137,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         Test the evication the firstAddress while the cache is full, by generating address out of order
      */
     public void testSequencerCacheEvict1() {
-        SequencerServerCache cache = new SequencerServerCache(cacheSize, Address.NOT_FOUND);
+        SequencerServerCache cache = new SequencerServerCache(cacheSize, Address.NOT_FOUND, statsGroup);
         long address = 0;
         HashMap<ConflictTxStream, Long> recordMap = new HashMap<>();
 
@@ -167,7 +171,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         Test the evication the firstAddress while the cache is full, by generating address in order
      */
     public void testSequencerCacheEvict2() {
-        SequencerServerCache cache = new SequencerServerCache(cacheSize, Address.NOT_FOUND);
+        SequencerServerCache cache = new SequencerServerCache(cacheSize, Address.NOT_FOUND, statsGroup);
         long address = 0;
         HashMap<ConflictTxStream, Long> recordMap = new HashMap<>();
 
@@ -205,7 +209,7 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
         Test the value regression for the same key
      */
     public void testSequencerRegression() {
-        SequencerServerCache cache = new SequencerServerCache(cacheSize, Address.NOT_FOUND);
+        SequencerServerCache cache = new SequencerServerCache(cacheSize, Address.NOT_FOUND, statsGroup);
         long address = 0;
         HashMap<ConflictTxStream, Long> recordMap = new HashMap<>();
         boolean result;
