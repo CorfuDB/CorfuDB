@@ -118,14 +118,19 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                             // A new leader has been found, start negotiation, to determine log replication
                             // continuation or start point
                             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
-                            break;
+                            return;
                         } else {
-                            log.debug("Leader is not ");
+                            log.debug("Node {} is not the leader. Leadership={}", leadershipResponse.getEndpoint(),
+                                    leadershipResponse.isLeader());
 
                             // Remove CF for completed request
                             pendingLeadershipQueries.remove(leadershipResponse.getEndpoint());
                         }
                     }
+
+                    // No remote leader was found, retry leadership
+                    fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND, leader));
+
                 } catch (Exception ex) {
                     log.warn("Exception caught while verifying remote leader.", ex);
                     fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND, leader));
