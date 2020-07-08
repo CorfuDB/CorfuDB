@@ -42,7 +42,7 @@ public class LogReplicationClient extends AbstractClient {
 
     public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() {
         return getRouter().sendMessageAndGetCompletable(
-                    new CorfuMsg(CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_RESPONSE).setEpoch(0));
+                    new CorfuMsg(CorfuMsgType.LOG_REPLICATION_QUERY_METADATA_REQUEST).setEpoch(0));
     }
 
     public CompletableFuture<LogReplicationEntry> sendLogEntry(LogReplicationEntry logReplicationEntry) {

@@ -196,7 +196,7 @@ public class SnapshotSender {
             log.info("Reading and sending phase.");
             readAndTransmit(snapshotSyncEventId);
         } else if (!dataSenderBufferManager.pendingMessages.isEmpty()) {
-            log.info("Snapshot full sync: snapshot reader is done, there is still data in the buffer {}",
+            log.info("Snapshot full sync: snapshot reader is done and the message buffer size {}",
                     dataSenderBufferManager.pendingMessages.getSize());
             fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE,
                     new LogReplicationEventMetadata(snapshotSyncEventId)));
@@ -235,7 +235,7 @@ public class SnapshotSender {
         // If Snapshot is complete, add end marker
         if (readingCompleted) {
             LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
-            log.info("SnapshotSender sent out SNAPSHOT_END message {} " + endDataMessage.getMetadata());
+            log.info("SnapshotSender sent out SNAPSHOT_TRANSSFER_END message {} ", endDataMessage.getMetadata());
             dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;
         }
