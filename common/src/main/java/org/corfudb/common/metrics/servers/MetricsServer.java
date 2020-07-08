@@ -1,4 +1,4 @@
-package org.corfudb.common.metrics;
+package org.corfudb.common.metrics.servers;
 
 /**
  * MetricsServer can be implemented by different metrics exporters, like prometheus.

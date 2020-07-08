@@ -1199,6 +1199,45 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
     }
 
+    // TODO(Maithem): open segments
+    // compact time
+    // compact freed space
+    // write queue size
+    // replication time
+    // RPC time
+    // number holes
+    // number of overwrite exceptions
+    // bytes written
+    // bytes read
+    // client/server cache hit rate
+    // no rollback/reset
+    // stream rebuild time?
+    // rollback/forward latency
+    // scan and filter
+    // transaction size?
+    // non transactional access
+    // sequencer cache window size/count
+    // transaction sizes
+    // gauges on number of keys in table
+    // optimistic access
+    // thread pauses
+    // tcp disconnects
+    // number of open streams/tables?
+    // runtime gc stats?
+    // stream stats
+    // disk stats for /config
+    // optimistic context undo cost
+    // rocksdb stats
+    // jvm pauses
+    // total log size
+    // orchestrator stats
+    // FD cycle
+    // network out
+    // Layout query
+    // layout server stats
+    // serialization
+    // peer stats network (timeouts
+
     @Override
     public boolean contains(long address) throws TrimmedException {
         // auto commit client is expected to get TrimmedException and

@@ -22,8 +22,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 public class AddressSpaceViewTest extends AbstractViewTest {
 
-    private static final SizeOf sizeOf = SizeOf.newInstance();
-
     private void setupNodes() {
         addServer(SERVERS.PORT_0);
         addServer(SERVERS.PORT_1);

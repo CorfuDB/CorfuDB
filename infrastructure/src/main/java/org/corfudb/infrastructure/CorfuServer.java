@@ -8,8 +8,6 @@ import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
-import org.corfudb.common.metrics.MetricsServer;
-import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;

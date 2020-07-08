@@ -15,8 +15,6 @@ import org.eclipse.jetty.servlet.ServletHolder;
 import java.util.Map;
 import java.util.Optional;
 
-import org.corfudb.common.metrics.MetricsServer;
-
 @Slf4j
 public class PrometheusMetricsServer implements MetricsServer {
     private final Server server;

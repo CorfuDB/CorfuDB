@@ -37,8 +37,6 @@ import java.util.Set;
 @Slf4j
 public class HandlerMethods {
 
-    private final Map<CorfuMsgType, String> timerNameCache = new HashMap<>();
-
     /**
      * The handler map.
      */
