@@ -213,16 +213,17 @@ public abstract class SenderBufferManager {
         //Enforce a resend or not
         LogReplicationEntry ack = null;
         boolean force = false;
-        log.trace("Doing processAcks {} and resend {}", pendingCompletableFutureForAcks.keySet(), pendingMessages.getSize());
+        log.info("processAcks {} and pendingMessage size {}", pendingCompletableFutureForAcks.keySet(), pendingMessages.getSize());
+
+        if (pendingMessages.isEmpty()) {
+            return null;
+        }
 
         try {
             ack = processAcks();
-        } catch (TimeoutException e) {
+        } catch (Exception e) {
             log.warn("Caught a timeout exception ", e);
             force = true;
-        } catch (Exception e) {
-            log.warn("Caught an Exception and will notify discovery service ", e);
-            //TODO: notify discoveryService
         }
 
         for (int i = 0; i < pendingMessages.getSize(); i++) {

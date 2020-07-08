@@ -16,10 +16,13 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 
+@RunWith(Parameterized.class)
 public class CorfuReplicationE2EIT extends AbstractIT {
 
+    private static final int SLEEP_INTERVAL = 1000;
     private String pluginConfigFilePath;
 
     // Note: this flag is kept for debugging purposes only.
@@ -36,8 +39,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
     @Parameterized.Parameters
     public static Collection input() {
 
-        List<String> transportPlugins = Arrays.asList("src/test/resources/transport/grpcConfig.properties",
-                "src/test/resources/transport/nettyConfig.properties");
+        List<String> transportPlugins = Arrays.asList("src/test/resources/transport/nettyConfig.properties");
 
         if(runProcess) {
             List<String> absolutePathPlugins = new ArrayList<>();
@@ -171,7 +173,8 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             // Verify data is present in Standby Site
             System.out.println("Wait ... Delta log replication in progress ...");
             while (mapAStandby.size() != (numWrites + numWrites/2)) {
-                //
+                sleep(SLEEP_INTERVAL);
+                System.out.print("\nmapAStandby.size " + mapAStandby.size());
             }
 
             // Verify data is present in Standby Site (delta)
