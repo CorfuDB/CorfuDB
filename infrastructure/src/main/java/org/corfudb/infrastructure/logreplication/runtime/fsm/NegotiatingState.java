@@ -16,7 +16,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Log Replication Runtime Negotiating State.
@@ -32,8 +31,6 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     private CorfuLogReplicationRuntime fsm;
 
     private Optional<String> leaderEndpoint;
-
-    private volatile AtomicBoolean inProgress = new AtomicBoolean(false);
 
     private ExecutorService worker;
 
@@ -95,12 +92,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
-        // Start Negotiation (check if ongoing negotiation is in progress)
-        // TODO(Gabriela) remove, single thread...
-        if(!inProgress.get()) {
-            // Start Negotiation
-            worker.submit(this::negotiate);
-        }
+        // Start Negotiation
+        worker.submit(this::negotiate);
     }
 
     private void negotiate() {
@@ -117,18 +110,12 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
                 // Negotiation to leader node completed, unblock channel in the router.
                 router.getRemoteLeaderConnectionFuture().complete(null);
-
-                // Negotiation completed
-                inProgress.set(false);
             } else {
                 // No leader found at the time of negotiation
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
             }
-        } catch (LogReplicationNegotiationException ne) {
-            log.error("Negotiation request timed out. Retry, until connection is marked as down or recovers.", ne);
-            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ERROR));
-        } catch (TimeoutException te) {
-            log.error("Negotiation request timed out. Retry, until connection is marked as down or recovers.", te);
+        } catch (LogReplicationNegotiationException | TimeoutException ex) {
+            log.error("Negotiation failed. Retry, until negotiation succeeds or connection is marked as down.", ex);
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
         } catch (Exception e) {
             log.error("Unexpected exception during negotiation, retry.", e);
