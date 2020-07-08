@@ -15,8 +15,8 @@ public class UniversalMsgEncoder extends MessageToMessageEncoder<Object> {
     protected void encode(ChannelHandlerContext channelHandlerContext,
                           Object msg, List<Object> out) {
         if(msg instanceof ByteBuf) {
-            byte[] bytes = new byte[((ByteBuf) msg).readableBytes()];
-            ((ByteBuf)msg).readBytes(bytes); // use . array()
+            byte[] bytes = new byte[((ByteBuf)msg).readableBytes()];
+            ((ByteBuf)msg).readBytes(bytes); // TODO: why not use .array()?
 
             CorfuProtocol.LegacyCorfuMsg lcm = CorfuProtocol.LegacyCorfuMsg.newBuilder().
                     setPayload(ByteString.copyFrom(bytes)).build();
