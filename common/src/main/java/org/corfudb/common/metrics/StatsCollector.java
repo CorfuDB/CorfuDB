@@ -26,8 +26,6 @@ import java.util.concurrent.TimeUnit;
 public class StatsCollector {
 
     /**     * system level metrics,
-
-     *
      *
      * System Metrics
      * cat /proc/diskstats
@@ -42,57 +40,32 @@ public class StatsCollector {
      * JVM Metrics
      *sanatize
      * gc pauses
+     * number of threads
      *
      * Server Metrics
-     *     * log disk latency
-     *      * read/write meter
-     *      * number of holes
-     *      * number of overwrites
-     *      * batch queue size
-     *      multi read sizes
-
-     *      * prefix trim stats
-     *      * open segment handles
-     *      *
-     *      * number of threads
-     *      number of opened streams
-     *           * cluster peer network stats
+     *
+     * // admin client (seal, push layout, find new layout?)
      *                * epoch changes
      *      * layout commit latency?
      *      * time it takes to achieve concensus
      *      * seal time?
      *           * FD period time
-     *      * bytes freed
-     *      * delete time for prefix trim
-     *      *
-     *      * logunit/client cache stats
-     *      *
-     *      * fsync time
-     *      *
-     *      *
      *      * workflow time
-     *      *
      *      * state transfer times?
-     *      *tail query latency
      *
      *
      * compression ratio
-     *
-     * sequence number of streams
-     *
      * Component
-     * RPC
+     * RPC      *      * // opened connect/connections/active connections
+     *      *           * cluster peer network stats
      *
-     *
-     *
+     *client cache stats
      * Runtime Metrics
      *
      * number of open ojects in runtime
      * number of opened streams
      *
-     *
      * Transaction level metrics
-     *
      *
      * number of network exceptions
      *
@@ -106,9 +79,6 @@ public class StatsCollector {
      * runtime exceptions
 
      os.detected.name: linux
-     [INFO] os.detected.arch: x86_64
-     [INFO] os.detected.version: 4.15
-     [INFO] os.detected.version.major: 4
 
      *
      * flush on jvm exit?

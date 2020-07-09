@@ -170,6 +170,7 @@ public class SequencerServer extends AbstractServer {
         this.keysResolutionMeter = sequencerStats.createMeter("num_keys_commit");
         this.txnAborts = sequencerStats.createCounter("txn_aborts");
         this.rawTokenAllocations = sequencerStats.createCounter("raw_allocation");
+        sequencerStats.createGauge("opened_streams", streamsAddressMap::size);
     }
 
     @Override

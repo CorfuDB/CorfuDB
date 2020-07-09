@@ -113,7 +113,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
 
-    private final StatsGroup logStats;
+    private final StatsGroup streamLogFilesStats;
 
     private final Histogram syncLatency;
 
@@ -131,7 +131,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param noVerify      Disable checksum if true
      */
     public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
-        logStats = serverContext.getStats().scope(getClass().getSimpleName());
+        streamLogFilesStats = serverContext.getStats().scope(getClass().getSimpleName());
         logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
@@ -153,7 +153,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
-        logStats.createGauge("log_size", () -> logSizeQuota.getUsed());
+        streamLogFilesStats.createGauge("log_size", () -> logSizeQuota.getUsed());
 
         verifyLogs();
         // Starting address initialization should happen before
@@ -167,11 +167,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             syncTailSegment(getTrimMark() - 1);
         }
 
-        syncLatency = logStats.createHistogram("segment_sync");
-        compactLatency = logStats.createHistogram("prefix_compact");
+        syncLatency = streamLogFilesStats.createHistogram("segment_sync");
+        compactLatency = streamLogFilesStats.createHistogram("prefix_compact");
         openSegments = () -> writeChannels.size();
-        logStats.createGauge("open_segments", openSegments);
-        bytesTrimmed = logStats.createCounter("bytes_trimmed");
+        streamLogFilesStats.createGauge("open_segments", openSegments);
+        bytesTrimmed = streamLogFilesStats.createCounter("bytes_trimmed");
     }
 
     private long getStartingSegment() {
@@ -1336,9 +1336,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.resetCommittedTail();
         logMetadata = new LogMetadata();
         writeChannels.clear();
-        logStats.unregisterScopes();
+        streamLogFilesStats.unregisterScopes();
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
-        logStats.createGauge("log_size", () -> logSizeQuota.getUsed());
+        streamLogFilesStats.createGauge("log_size", () -> logSizeQuota.getUsed());
         log.info("reset: Completed, end segment {}", endSegment);
     }
 

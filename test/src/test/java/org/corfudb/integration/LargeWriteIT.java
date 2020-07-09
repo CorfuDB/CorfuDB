@@ -36,7 +36,7 @@ public class LargeWriteIT {
         final int payloadSize = 100;
         byte[] payload = new byte[payloadSize];
 
-        final int numWrites = 1000000;
+        final int numWrites = 10_000;
 
         long ts1 = System.currentTimeMillis();
         CompletableFuture<Boolean>[] resFt = new CompletableFuture[numWrites];

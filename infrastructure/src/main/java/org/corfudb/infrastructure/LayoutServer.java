@@ -2,13 +2,19 @@ package org.corfudb.infrastructure;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
+
 import java.lang.invoke.MethodHandles;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.annotation.Nonnull;
+
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.Histogram;
+import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.infrastructure.ServerThreadFactory.ExceptionHandler;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -81,6 +87,8 @@ public class LayoutServer extends AbstractServer {
         return getState() == ServerState.READY;
     }
 
+    private final LayoutAPIStats apiStats;
+
     /**
      * Returns new LayoutServer for context.
      *
@@ -88,6 +96,8 @@ public class LayoutServer extends AbstractServer {
      */
     public LayoutServer(@Nonnull ServerContext serverContext) {
         this.serverContext = serverContext;
+
+        apiStats = new LayoutAPIStats(serverContext.getStats().scope(getClass().getSimpleName()));
 
         this.paxosDataStore = PaxosDataStore.builder()
                 .dataStore(serverContext.getDataStore())
@@ -103,9 +113,31 @@ public class LayoutServer extends AbstractServer {
         }
     }
 
+    class LayoutAPIStats {
+
+        private final Map<CorfuMsgType, Histogram> histograms;
+
+        public LayoutAPIStats(StatsGroup statsGroup) {
+            histograms = new HashMap<>(getHandler().getHandledTypes().size());
+            StatsGroup apiStats = statsGroup.scope("api");
+
+            for (CorfuMsgType type : getHandler().getHandledTypes()) {
+                histograms.put(type, apiStats.createHistogram(type.toString()));
+            }
+        }
+
+        public void recordNs(CorfuMsgType type, long value) {
+            histograms.get(type).recordNs(value);
+        }
+    }
+
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        executor.submit(() -> getHandler().handle(msg, ctx, r));
+        executor.submit(() -> {
+            long start = System.nanoTime();
+            getHandler().handle(msg, ctx, r);
+            apiStats.recordNs(msg.getMsgType(), System.nanoTime() - start);
+        });
     }
 
     @Override
@@ -113,7 +145,6 @@ public class LayoutServer extends AbstractServer {
         super.shutdown();
         executor.shutdown();
     }
-
 
     private boolean isBootstrapped(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (getCurrentLayout() == null) {
@@ -129,13 +160,13 @@ public class LayoutServer extends AbstractServer {
     /**
      * Handle a layout request message.
      *
-     * @param msg              corfu message containing LAYOUT_REQUEST
-     * @param ctx              netty ChannelHandlerContext
-     * @param r                server router
+     * @param msg corfu message containing LAYOUT_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
      */
     @ServerHandler(type = CorfuMsgType.LAYOUT_REQUEST)
     public synchronized void handleMessageLayoutRequest(CorfuPayloadMsg<Long> msg,
-                                                    ChannelHandlerContext ctx, IServerRouter r) {
+                                                        ChannelHandlerContext ctx, IServerRouter r) {
         if (!isBootstrapped(msg, ctx, r)) {
             return;
         }
@@ -178,8 +209,7 @@ public class LayoutServer extends AbstractServer {
                 log.warn("handleMessageLayoutBootstrap: The layout does {} not have a clusterId",
                         layout);
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
-            }
-            else{
+            } else {
                 setCurrentLayout(layout);
                 serverContext.setServerEpoch(layout.getEpoch(), r);
                 //send a response that the bootstrap was successful.
@@ -274,7 +304,7 @@ public class LayoutServer extends AbstractServer {
         if (payloadEpoch != serverEpoch) {
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, serverEpoch));
             log.trace("handleMessageLayoutPropose: Incoming message with wrong epoch, got {}, "
-                            + "expected {}, message was: {}", payloadEpoch, serverEpoch, msg);
+                    + "expected {}, message was: {}", payloadEpoch, serverEpoch, msg);
             return;
         }
         // This is a propose. If no prepare, reject.
@@ -329,13 +359,13 @@ public class LayoutServer extends AbstractServer {
      * Force layout enables the server to bypass consensus
      * and accept a new layout.
      *
-     * @param msg              corfu message containing LAYOUT_FORCE
-     * @param ctx              netty ChannelHandlerContext
-     * @param r                server router
+     * @param msg corfu message containing LAYOUT_FORCE
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
      */
     private synchronized void forceLayout(@Nonnull CorfuPayloadMsg<LayoutCommittedRequest> msg,
-                                               @Nonnull ChannelHandlerContext ctx,
-                                               @Nonnull IServerRouter r) {
+                                          @Nonnull ChannelHandlerContext ctx,
+                                          @Nonnull IServerRouter r) {
         final long payloadEpoch = msg.getPayload().getEpoch();
         final long serverEpoch = getServerEpoch();
 

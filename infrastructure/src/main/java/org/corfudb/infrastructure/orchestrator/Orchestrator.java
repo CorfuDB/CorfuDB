@@ -5,6 +5,7 @@ import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Maps;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
@@ -69,10 +70,13 @@ public class Orchestrator {
 
     final ExecutorService executor;
 
+    private final StatsGroup orchestratorStats;
+
     public Orchestrator(@Nonnull SingletonResource<CorfuRuntime> runtime,
                         @Nonnull ServerContext serverContext) {
         this.serverContext = serverContext;
         this.getRuntime = runtime;
+        orchestratorStats = serverContext.getStats().scope(getClass().getSimpleName());
 
         executor = Executors.newFixedThreadPool(Runtime.getRuntime()
                 .availableProcessors(), new ThreadFactory() {

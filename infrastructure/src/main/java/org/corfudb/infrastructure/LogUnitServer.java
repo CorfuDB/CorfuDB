@@ -112,7 +112,11 @@ public class LogUnitServer extends AbstractServer {
 
     private final Counter exceptionsCounter;
 
+    private final Counter overwriteExceptionsCounter;
+
     private final Counter holeWritesCounter;
+
+    private final Histogram logunitSealLatency;
 
     private final LogUnitAPIStats apiStats;
 
@@ -147,6 +151,8 @@ public class LogUnitServer extends AbstractServer {
 
         exceptionsCounter = logunitStats.createCounter("exceptions");
         holeWritesCounter = logunitStats.createCounter("hole_writes");
+        overwriteExceptionsCounter = logunitStats.createCounter("overwrite_exceptions");
+        logunitSealLatency = logunitStats.createHistogram("seal_latency");
         apiStats = new LogUnitAPIStats(logunitStats);
     }
 
@@ -159,7 +165,7 @@ public class LogUnitServer extends AbstractServer {
             StatsGroup apiStats = statsGroup.scope("api");
 
             for (CorfuMsgType type : getHandler().getHandledTypes()) {
-                histograms.put(type, apiStats.createHistogram(type.messageType.toString()));
+                histograms.put(type, apiStats.createHistogram(type.toString()));
             }
         }
 
@@ -261,6 +267,7 @@ public class LogUnitServer extends AbstractServer {
             WrongEpochException wee = (WrongEpochException) ex.getCause();
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, wee.getCorrectEpoch()));
         } else if (ex.getCause() instanceof OverwriteException) {
+            overwriteExceptionsCounter.inc();
             OverwriteException owe = (OverwriteException) ex.getCause();
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE
                     .payloadMsg(owe.getOverWriteCause().getId()));
@@ -471,7 +478,7 @@ public class LogUnitServer extends AbstractServer {
         msg.setPriorityLevel(PriorityLevel.HIGH);
         try {
             batchWriter.addTask(SEAL, msg).join();
-            apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
+            logunitSealLatency.recordMs(System.currentTimeMillis() - start);
         } catch (CompletionException ce) {
             if (ce.getCause() instanceof WrongEpochException) {
                 // The BaseServer expects to observe this exception,

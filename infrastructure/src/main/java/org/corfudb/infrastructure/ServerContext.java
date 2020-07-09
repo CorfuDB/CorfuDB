@@ -148,7 +148,7 @@ public class ServerContext implements AutoCloseable {
             Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
 
     @Getter
-    private final StatsGroup stats = new StatsGroup("infra");
+    private final StatsGroup stats = new StatsGroup("");
 
     /**
      * Returns a new ServerContext.

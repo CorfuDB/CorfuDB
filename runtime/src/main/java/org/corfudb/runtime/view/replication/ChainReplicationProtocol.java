@@ -332,7 +332,8 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
     @Override
     protected void holeFill(RuntimeLayout runtimeLayout, long globalAddress) {
         int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
-        log.warn("fillHole[{}]: chain head {}/{}", Token.of(runtimeLayout.getLayout().getEpoch(), globalAddress),
+        // TODO raise alarm instead?
+        log.debug("fillHole[{}]: chain head {}/{}", Token.of(runtimeLayout.getLayout().getEpoch(), globalAddress),
                 1, numUnits);
         // In chain replication, we write synchronously to every unit in
         // the chain.
