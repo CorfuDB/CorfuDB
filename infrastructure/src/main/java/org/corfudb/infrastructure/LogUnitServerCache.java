@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -30,13 +31,20 @@ public class LogUnitServerCache {
     //Empirical threshold of number of streams in a logdata beyond which server performance may be slow
     private final int MAX_STREAM_THRESHOLD = 20;
 
-    public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
+    public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog, StatsGroup stats) {
         this.streamLog = streamLog;
         this.dataCache = Caffeine.newBuilder()
                 .<Long, ILogData>weigher((addr, logData) -> getLogDataTotalSize(logData))
                 .maximumWeight(config.getMaxCacheSize())
                 .removalListener(this::handleEviction)
                 .build(this::handleRetrieval);
+
+        StatsGroup cacheStats = stats.scope(getClass().getSimpleName());
+
+        cacheStats.addGauge("hit_rate", this.dataCache.stats()::hitRate);
+        cacheStats.addGauge("average_load_time", this.dataCache.stats()::averageLoadPenalty);
+        cacheStats.addGauge("size_estimate", this.dataCache::estimatedSize);
+        // TODO(Maithem) add total weight
     }
 
     private int getLogDataTotalSize(ILogData logData) {

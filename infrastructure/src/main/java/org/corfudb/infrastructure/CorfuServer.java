@@ -6,6 +6,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
+import io.netty.buffer.PooledByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.StatsCollector;
@@ -242,6 +243,11 @@ public class CorfuServer {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             StatsCollector collector = new StatsCollector();
+            serverContext.getStats().addGauge("allocator_direct_mem_usage",
+                    PooledByteBufAllocator.DEFAULT.metric()::usedDirectMemory);
+            serverContext.getStats().addGauge("allocator_heap_mem_usage",
+                    PooledByteBufAllocator.DEFAULT.metric()::usedHeapMemory);
+
             collector.register(serverContext.getStats());
             try {
                 activeServer = new CorfuServerNode(serverContext);

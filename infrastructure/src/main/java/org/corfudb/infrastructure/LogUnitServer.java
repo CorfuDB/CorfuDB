@@ -1,10 +1,29 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
+
+
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
+import java.lang.invoke.MethodHandles;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
@@ -37,24 +56,6 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
-
-import java.lang.invoke.MethodHandles;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 
 
 /**
@@ -104,6 +105,8 @@ public class LogUnitServer extends AbstractServer {
 
     private ExecutorService executor;
 
+    private final StatsGroup logunitStats;
+
     /**
      * Returns a new LogUnitServer.
      *
@@ -112,6 +115,7 @@ public class LogUnitServer extends AbstractServer {
     public LogUnitServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
+        this.logunitStats = serverContext.getStats().scope(getClass().getSimpleName());
         executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
                 new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
 
@@ -127,7 +131,7 @@ public class LogUnitServer extends AbstractServer {
             streamLog = new StreamLogFiles(serverContext, config.isNoVerify());
         }
 
-        dataCache = new LogUnitServerCache(config, streamLog);
+        dataCache = new LogUnitServerCache(config, streamLog, logunitStats);
         batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
 
         logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);

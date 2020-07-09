@@ -17,6 +17,9 @@ import org.corfudb.infrastructure.log.LogFormat.DataType;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.common.metrics.Gauge;
+import org.corfudb.common.metrics.Histogram;
+import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.common.compression.Codec;
@@ -109,6 +112,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
 
+    private final StatsGroup logStats;
+
+    private final Histogram syncLatency;
+
+    private final Histogram compactLatency;
+
+    private final Gauge openSegments;
+
     /**
      * Returns a file-based stream log object.
      *
@@ -117,6 +128,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param noVerify      Disable checksum if true
      */
     public StreamLogFiles(ServerContext serverContext, boolean noVerify) {
+        logStats = serverContext.getStats().scope(getClass().getSimpleName());
         logDir = Paths.get(serverContext.getServerConfig().get("--log-path").toString(), "log");
         writeChannels = new ConcurrentHashMap<>();
         channelsToSync = new HashSet<>();
@@ -138,6 +150,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
+        logStats.addGauge("log_size", () -> logSizeQuota.getUsed());
 
         verifyLogs();
         // Starting address initialization should happen before
@@ -150,6 +163,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         if (Math.max(logMetadata.getGlobalTail(), 0L) < getTrimMark()) {
             syncTailSegment(getTrimMark() - 1);
         }
+
+        syncLatency = logStats.createHistogram("segment_sync");
+        compactLatency = logStats.createHistogram("prefix_compact");
+        openSegments = () -> writeChannels.size();
+        logStats.addGauge("open_segments", () -> openSegments);
     }
 
     private long getStartingSegment() {
@@ -389,18 +407,24 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public void sync(boolean force) throws IOException {
+        long start = System.nanoTime();
         if (force) {
             for (FileChannel ch : channelsToSync) {
                 ch.force(true);
             }
         }
-        log.trace("Sync'd {} channels", channelsToSync.size());
+        syncLatency.recordNs(System.nanoTime() - start);
+        if (log.isTraceEnabled()) {
+            log.trace("Sync'd {} channels", channelsToSync.size());
+        }
         channelsToSync.clear();
     }
 
     @Override
     public synchronized void compact() {
+        long start = System.nanoTime();
         trimPrefix();
+        compactLatency.recordNs(System.nanoTime() - start);
     }
 
     @Override
@@ -1221,6 +1245,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             fh.close();
         }
 
+        // TODO(Maithem) don't re-assign this
         writeChannels = new ConcurrentHashMap<>();
     }
 
@@ -1306,7 +1331,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.resetCommittedTail();
         logMetadata = new LogMetadata();
         writeChannels.clear();
+        logStats.unregisterScopes();
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
+        logStats.addGauge("log_size", () -> logSizeQuota.getUsed());
         log.info("reset: Completed, end segment {}", endSegment);
     }
 

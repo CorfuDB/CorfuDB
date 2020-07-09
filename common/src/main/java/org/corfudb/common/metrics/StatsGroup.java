@@ -55,6 +55,7 @@ public class StatsGroup {
     }
 
     public void addGauge(String name, Gauge gauge) {
+        //TODO(Maithem) allow for gaugeCreate?
         gauges.merge(name, gauge, (k, v) -> {
             throw new IllegalStateException(name(prefix, name) + " already exists!");
         });

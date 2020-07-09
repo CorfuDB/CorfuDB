@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * A quota for a resource that can be modeled with a long.
- *
+ * <p>
  * Created by Maithem on 6/20/19.
  */
 public class ResourceQuota {
@@ -53,6 +53,10 @@ public class ResourceQuota {
      */
     public long getAvailable() {
         return Math.max(limit - used.get(), 0);
+    }
+
+    public long getUsed() {
+        return used.get();
     }
 
 }

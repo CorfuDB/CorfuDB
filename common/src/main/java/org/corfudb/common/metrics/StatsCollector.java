@@ -30,6 +30,7 @@ public class StatsCollector {
      *
      *
      * System Metrics
+     * cat /proc/diskstats
      *      * network tx/rx
      *      * disk read/write
      *      * number open fds
@@ -39,18 +40,17 @@ public class StatsCollector {
      *      res memory used by process
      *
      * JVM Metrics
-     *
+     *sanatize
      * gc pauses
      *
      * Server Metrics
-     *      * pooled allocater mem
      *     * log disk latency
      *      * read/write meter
      *      * number of holes
      *      * number of overwrites
      *      * batch queue size
      *      multi read sizes
-     *           * logsize
+
      *      * prefix trim stats
      *      * open segment handles
      *      *
@@ -62,7 +62,6 @@ public class StatsCollector {
      *      * time it takes to achieve concensus
      *      * seal time?
      *           * FD period time
-     *      *
      *      * bytes freed
      *      * delete time for prefix trim
      *      *
@@ -152,6 +151,10 @@ public class StatsCollector {
         return sdf.format(new Date(System.currentTimeMillis()));
     }
 
+    String name(String prefix, String name) {
+        return prefix + "_" + name;
+    }
+
     public void collect(Writer writer) throws IOException {
         Stack<StatsGroup> stack = new Stack<>();
         stack.addAll(statsGroups.values());
@@ -159,10 +162,11 @@ public class StatsCollector {
 
         while (!stack.empty()) {
             StatsGroup group = stack.pop();
-            group.getCounters().forEach((k, v) -> lines.add(now() + " counter " + k + " " + toString(v)));
-            group.getGauges().forEach((k, v) -> lines.add(now() + " gauge " + k + " " + toString(v)));
-            group.getHistograms().forEach((k, v) -> lines.add(now() + " histogram " + k + " " + toString(v)));
-            group.getMeters().forEach((k, v) -> lines.add(now() + " meter " + k + " " + toString(v)));
+            String prefix = group.getPrefix();
+            group.getCounters().forEach((k, v) -> lines.add(now() + " counter " + name(prefix, k) + " " + toString(v)));
+            group.getGauges().forEach((k, v) -> lines.add(now() + " gauge " + name(prefix, k) + " " + toString(v)));
+            group.getHistograms().forEach((k, v) -> lines.add(now() + " histogram " + name(prefix, k) + " " + toString(v)));
+            group.getMeters().forEach((k, v) -> lines.add(now() + " meter " + name(prefix, k) + " " + toString(v)));
             stack.addAll(group.getScopes().values());
         }
 
