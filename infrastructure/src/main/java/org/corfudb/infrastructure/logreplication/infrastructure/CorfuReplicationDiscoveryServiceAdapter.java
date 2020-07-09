@@ -13,7 +13,7 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
     /**
      *
      */
-    void prepareClusterRoleChange();
+    void prepareToBecomeStandby();
 
     /**
      *

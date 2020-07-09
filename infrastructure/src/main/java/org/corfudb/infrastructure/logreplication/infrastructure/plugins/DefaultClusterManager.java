@@ -23,7 +23,7 @@ import java.util.UUID;
 import static java.lang.Thread.sleep;
 
 @Slf4j
-public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter {
+public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAdapter {
     public static long epoch = 0;
     public static final int changeInterval = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
@@ -48,6 +48,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter
     public SiteManagerCallback siteManagerCallback;
 
     Thread thread = new Thread(siteManagerCallback);
+
+
 
     public void start() {
         siteManagerCallback = new SiteManagerCallback(this);
@@ -168,9 +170,10 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter
         return clusterConfigurationMsg;
     }
 
+
     @Override
-    public TopologyConfigurationMsg queryTopologyConfig() {
-        if (topologyConfig == null) {
+    public TopologyConfigurationMsg queryTopologyConfig(boolean useCached) {
+        if (topologyConfig == null || !useCached) {
             topologyConfig = constructTopologyConfigMsg();
         }
 
@@ -221,7 +224,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerAdapter
                 try {
                     sleep(changeInterval);
                     if (siteFlip) {
-                        TopologyDescriptor newConfig = changePrimary(siteManager.getTopologyConfig());
+                        TopologyDescriptor newConfig = changePrimary(siteManager.queryTopologyConfig(true));
                         siteManager.updateTopologyConfig(newConfig.convertToMessage());
                         log.warn("change the cluster config");
                         siteFlip = false;
