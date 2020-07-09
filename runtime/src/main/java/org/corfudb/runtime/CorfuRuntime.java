@@ -982,7 +982,7 @@ public class CorfuRuntime {
                 .splitAsStream(configurationString)
                 .map(String::trim)
                 .collect(Collectors.toList());
-        log.info("***** Bootstrap Layout Servers {} *******", bootstrapLayoutServers);
+        log.info("Bootstrap Layout Servers {}", bootstrapLayoutServers);
         layoutServers = new ArrayList<>(bootstrapLayoutServers);
         return this;
     }
