@@ -63,7 +63,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         ByteBuf buf = Unpooled.buffer();
         OpaqueEntry.serialize(buf, entry);
         currentMsgTs = entry.getVersion();
-        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, topologyConfigId,logEntryRequestId,
+        LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, topologyConfigId, logEntryRequestId,
                 currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
