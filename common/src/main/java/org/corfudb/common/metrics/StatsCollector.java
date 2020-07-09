@@ -25,6 +25,103 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class StatsCollector {
 
+    /**     * system level metrics,
+
+     *
+     *
+     * System Metrics
+     *      * network tx/rx
+     *      * disk read/write
+     *      * number open fds
+     *      resident memory
+     *           * cpu utilization
+     *      * load average
+     *      res memory used by process
+     *
+     * JVM Metrics
+     *
+     * gc pauses
+     *
+     * Server Metrics
+     *      * pooled allocater mem
+     *     * log disk latency
+     *      * read/write meter
+     *      * number of holes
+     *      * number of overwrites
+     *      * batch queue size
+     *      multi read sizes
+     *           * logsize
+     *      * prefix trim stats
+     *      * open segment handles
+     *      *
+     *      * number of threads
+     *      number of opened streams
+     *           * cluster peer network stats
+     *                * epoch changes
+     *      * layout commit latency?
+     *      * time it takes to achieve concensus
+     *      * seal time?
+     *           * FD period time
+     *      *
+     *      * bytes freed
+     *      * delete time for prefix trim
+     *      *
+     *      * logunit/client cache stats
+     *      *
+     *      * fsync time
+     *      *
+     *      *
+     *      * workflow time
+     *      *
+     *      * state transfer times?
+     *      *tail query latency
+     *
+     *
+     * compression ratio
+     *
+     * sequence number of streams
+     *
+     * Component
+     * RPC
+     *
+     *
+     *
+     * Runtime Metrics
+     *
+     * number of open ojects in runtime
+     * number of opened streams
+     *
+     *
+     * Transaction level metrics
+     *
+     *
+     * number of network exceptions
+     *
+     * direct access
+     *
+     * scan and filter latency
+     *
+     * //track lock waiting?
+     *
+     *
+     * runtime exceptions
+
+
+     *
+     * flush on jvm exit?
+     *
+     * table level metrics
+     * table size
+     * VLO metrics
+     * Stream Metrics
+     * RuntimeGC metrics
+     * serialization time?
+     *
+     * number of layout requests
+     * number of timeouts
+     * network stats rpc latency
+     **
+     */
     ScheduledExecutorService statsLogger = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
             .setDaemon(true)
             .setNameFormat("StatsCollector-%d")
@@ -34,13 +131,13 @@ public class StatsCollector {
     Map<String, StatsGroup> statsGroups = new ConcurrentHashMap<>();
     private final SimpleDateFormat sdf;
     public StatsCollector() {
-        sdf = new SimpleDateFormat();
+        sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX");
         sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
 
         Runnable task = () -> {
-            try {
-                Writer writer = new StringWriter();
+            try (Writer writer = new StringWriter()){
                 collect(writer);
+                writer.flush();
                 log.info("StatsCollector\n{}", writer.toString());
             } catch (Exception e) {
                 log.error("Failed to collect stats", e);

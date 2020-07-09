@@ -12,11 +12,14 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.TimeZone;
 
 import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
@@ -52,7 +55,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
             .setMemory(false)
             .build();
     }
-    
+
     @Test
     public void testWriteReadWithChecksum() {
         // Enable checksum, then append and read the same entry
