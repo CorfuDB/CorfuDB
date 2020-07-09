@@ -1,51 +1,58 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
-import lombok.Getter;
-
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
-public abstract class CorfuReplicationClusterManagerAdapter {
-    @Getter
-    CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
-
-    @Getter
-    TopologyConfigurationMsg topologyConfig;
-
-    public void connect(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
-        this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;
-        start();
-    }
-
-    public synchronized TopologyConfigurationMsg fetchTopology() {
-        topologyConfig = queryTopologyConfig();
-        return topologyConfig;
-    }
+/**
+ * This is the interface for CorfuReplicationClusterManager.
+ * Implementation of this should have following members:
+ * 1. corfuReplicationDiscoveryService that is needed to notify the cluster configuration change.
+ * 2. localEndpoint that has the local node information.
+ *
+ */
+public interface CorfuReplicationClusterManagerAdapter {
 
     /**
-     * Will be called when the cluster change and a new configuration is sent over
-     *
-     * @param newTopologyConfigMsg
+     *   Register the discovery service
      */
-    public synchronized void updateTopologyConfig(TopologyConfigurationMsg newTopologyConfigMsg) {
-        if (newTopologyConfigMsg.getTopologyConfigID() > topologyConfig.getTopologyConfigID()) {
-            topologyConfig = newTopologyConfigMsg;
-            corfuReplicationDiscoveryService.updateTopology(topologyConfig);
-        }
-    }
+     void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
 
-    public void prepareSiteRoleChange() {
-        corfuReplicationDiscoveryService.prepareClusterRoleChange();
-    }
+     /**
+     * Set the localEndpoint
+     */
+    void setLocalEndpoint(String endpoint);
 
-    public int queryReplicationStatus() {
-        return corfuReplicationDiscoveryService.queryReplicationStatus();
-    }
+    /**
+     * Query the topology information.
+     * @param useCached if it is true, used the cached topology, otherwise do a query to get the most
+     *                  recent topology from the real Cluster Manager.
+     * @return
+     */
+    TopologyConfigurationMsg queryTopologyConfig(boolean useCached);
 
-    //TODO: handle the case that queryTopologyConfig return an exception.
-    public abstract TopologyConfigurationMsg queryTopologyConfig();
+    // This is called when get a notification of cluster config change.
+    void updateTopologyConfig(TopologyConfigurationMsg newClusterConfigMsg);
 
-    public abstract void start();
+    // start to talk to the upper layer to get cluster topology information
+    void start();
 
-    public abstract void shutdown();
+    // Stop the ClusterManager service
+    void shutdown();
+
+    /**
+     * While doing a cluster role type flip, it is the API used to notify the current log
+     * replication node to prepare a cluster role type change. It will do some
+     * bookkeeping to calculate the number of log entries to be sent over
+     *
+     */
+    void prepareToBecomeStandby();
+
+
+    /**
+     * This API is used to query the log replication status when it is preparing a role type flip and
+     * the replicated tables should be in read-only mode.
+     *
+     * @return
+     */
+    int queryReplicationStatus();
 }
