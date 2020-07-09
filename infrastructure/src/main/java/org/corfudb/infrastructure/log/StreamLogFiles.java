@@ -17,6 +17,7 @@ import org.corfudb.infrastructure.log.LogFormat.DataType;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.common.metrics.Counter;
 import org.corfudb.common.metrics.Gauge;
 import org.corfudb.common.metrics.Histogram;
 import org.corfudb.common.metrics.StatsGroup;
@@ -120,6 +121,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     private final Gauge openSegments;
 
+    private final Counter bytesTrimmed;
+
     /**
      * Returns a file-based stream log object.
      *
@@ -150,7 +153,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
-        logStats.addGauge("log_size", () -> logSizeQuota.getUsed());
+        logStats.createGauge("log_size", () -> logSizeQuota.getUsed());
 
         verifyLogs();
         // Starting address initialization should happen before
@@ -167,7 +170,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         syncLatency = logStats.createHistogram("segment_sync");
         compactLatency = logStats.createHistogram("prefix_compact");
         openSegments = () -> writeChannels.size();
-        logStats.addGauge("open_segments", openSegments);
+        logStats.createGauge("open_segments", openSegments);
+        bytesTrimmed = logStats.createCounter("bytes_trimmed");
     }
 
     private long getStartingSegment() {
@@ -1296,6 +1300,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
         }
         logSizeQuota.release(freedBytes);
+        bytesTrimmed.inc(freedBytes);
         log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes", numFiles, freedBytes);
     }
 
@@ -1333,7 +1338,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         writeChannels.clear();
         logStats.unregisterScopes();
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
-        logStats.addGauge("log_size", () -> logSizeQuota.getUsed());
+        logStats.createGauge("log_size", () -> logSizeQuota.getUsed());
         log.info("reset: Completed, end segment {}", endSegment);
     }
 

@@ -118,6 +118,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> read(long address) {
+        //TODO(Maithem): unify read api
         return read(address, true);
     }
 

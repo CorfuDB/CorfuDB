@@ -41,9 +41,9 @@ public class LogUnitServerCache {
 
         StatsGroup cacheStats = stats.scope(getClass().getSimpleName());
 
-        cacheStats.addGauge("hit_rate", this.dataCache.stats()::hitRate);
-        cacheStats.addGauge("average_load_time", this.dataCache.stats()::averageLoadPenalty);
-        cacheStats.addGauge("size_estimate", this.dataCache::estimatedSize);
+        cacheStats.createGauge("hit_rate", this.dataCache.stats()::hitRate);
+        cacheStats.createGauge("average_load_time", this.dataCache.stats()::averageLoadPenalty);
+        cacheStats.createGauge("size_estimate", this.dataCache::estimatedSize);
         // TODO(Maithem) add total weight
     }
 

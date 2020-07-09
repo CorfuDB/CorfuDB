@@ -12,6 +12,7 @@ import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -23,6 +24,8 @@ import java.util.concurrent.TimeUnit;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.Counter;
+import org.corfudb.common.metrics.Histogram;
 import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
@@ -107,6 +110,12 @@ public class LogUnitServer extends AbstractServer {
 
     private final StatsGroup logunitStats;
 
+    private final Counter exceptionsCounter;
+
+    private final Counter holeWritesCounter;
+
+    private final LogUnitAPIStats apiStats;
+
     /**
      * Returns a new LogUnitServer.
      *
@@ -132,11 +141,32 @@ public class LogUnitServer extends AbstractServer {
         }
 
         dataCache = new LogUnitServerCache(config, streamLog, logunitStats);
-        batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
+        batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync(), logunitStats);
 
         logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+
+        exceptionsCounter = logunitStats.createCounter("exceptions");
+        holeWritesCounter = logunitStats.createCounter("hole_writes");
+        apiStats = new LogUnitAPIStats(logunitStats);
     }
 
+    class LogUnitAPIStats {
+
+        private final Map<CorfuMsgType, Histogram> histograms;
+
+        public LogUnitAPIStats(StatsGroup statsGroup) {
+            histograms = new HashMap<>(getHandler().getHandledTypes().size());
+            StatsGroup apiStats = statsGroup.scope("api");
+
+            for (CorfuMsgType type : getHandler().getHandledTypes()) {
+                histograms.put(type, apiStats.createHistogram(type.messageType.toString()));
+            }
+        }
+
+        public void recordMs(CorfuMsgType type, long value) {
+            histograms.get(type).recordMs(value);
+        }
+    }
 
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
@@ -149,8 +179,13 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
     public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleTailRequest: received a tail request {}", msg);
+        long start = System.currentTimeMillis();
+
         batchWriter.<TailsResponse>addTask(TAILS_QUERY, msg)
-                .thenAccept(tailsResp -> r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp)))
+                .thenAccept(tailsResp -> {
+                    r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp));
+                    apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
@@ -163,12 +198,15 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST)
     public void handleLogAddressSpaceRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        long start = System.currentTimeMillis();
         CorfuPayloadMsg<Void> payloadMsg = new CorfuPayloadMsg<>();
         payloadMsg.copyBaseFields(msg);
         log.trace("handleLogAddressSpaceRequest: received a log address space request {}", msg);
         batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
-                .thenAccept(tailsResp -> r.sendResponse(ctx, msg,
-                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
+                .thenAccept(tailsResp -> {
+                    r.sendResponse(ctx, msg, CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp));
+                    apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, payloadMsg, r);
                     return null;
@@ -181,7 +219,9 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST)
     public void handleTrimMarkRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleTrimMarkRequest: received a trim mark request {}", msg);
+        long start = System.currentTimeMillis();
         r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
+        apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
     }
 
     /**
@@ -190,7 +230,9 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.COMMITTED_TAIL_REQUEST)
     public void handleCommittedTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleCommittedTailRequest: received a committed log tail request {}", msg);
+        long start = System.currentTimeMillis();
         r.sendResponse(ctx, msg, CorfuMsgType.COMMITTED_TAIL_RESPONSE.payloadMsg(streamLog.getCommittedTail()));
+        apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
     }
 
     /**
@@ -200,8 +242,11 @@ public class LogUnitServer extends AbstractServer {
     public void updateCommittedTail(CorfuPayloadMsg<Long> msg,
                                     ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("updateCommittedTail: received request to update committed tail {}", msg);
+        long start = System.currentTimeMillis();
         streamLog.updateCommittedTail(msg.getPayload());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
+
     }
 
     /**
@@ -209,6 +254,9 @@ public class LogUnitServer extends AbstractServer {
      */
     private void handleException(Throwable ex, ChannelHandlerContext ctx, CorfuPayloadMsg msg, IServerRouter r) {
         log.trace("handleException: handling exception {} for {}", ex, msg);
+
+        exceptionsCounter.inc();
+
         if (ex.getCause() instanceof WrongEpochException) {
             WrongEpochException wee = (WrongEpochException) ex.getCause();
             r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, wee.getCorrectEpoch()));
@@ -234,6 +282,7 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        long start = System.currentTimeMillis();
         LogData logData = (LogData) msg.getPayload().getData();
         log.debug("log write: type: {}, address: {}, streams: {}", logData.getType(),
                 logData.getToken(), logData.getBackpointerMap());
@@ -242,6 +291,7 @@ public class LogUnitServer extends AbstractServer {
         // some reads will block until a hole is filled this is required (i.e. bypass quota checks)
         // because the requirement is to allow reads, but only block writes once the quota is exhausted
         if (logData.isHole()) {
+            holeWritesCounter.inc();
             msg.setPriorityLevel(PriorityLevel.HIGH);
         }
 
@@ -249,6 +299,7 @@ public class LogUnitServer extends AbstractServer {
                 .thenRunAsync(() -> {
                     dataCache.put(msg.getPayload().getGlobalAddress(), logData);
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+                    apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
                 }, executor).exceptionally(ex -> {
             handleException(ex, ctx, msg, r);
             return null;
@@ -261,12 +312,16 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.RANGE_WRITE)
     public void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
                            ChannelHandlerContext ctx, IServerRouter r) {
+        long start = System.currentTimeMillis();
         List<LogData> range = msg.getPayload().getEntries();
         log.debug("rangeWrite: Writing {} entries [{}-{}]", range.size(),
                 range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
 
         batchWriter.addTask(RANGE_WRITE, msg)
-                .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
+                .thenRun(() -> {
+                    r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
+                    apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
@@ -283,9 +338,13 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
     private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
                             IServerRouter r) {
+        long start = System.currentTimeMillis();
         log.debug("prefixTrim: trimming prefix to {}", msg.getPayload().getAddress());
         batchWriter.addTask(PREFIX_TRIM, msg)
-                .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()))
+                .thenRun(() -> {
+                    r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+                    apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
@@ -294,6 +353,7 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.READ_REQUEST)
     public void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        long start = System.currentTimeMillis();
         long address = msg.getPayload().getAddress();
         boolean cacheable = msg.getPayload().isCacheReadResult();
         log.trace("read: {}, cacheable: {}", msg.getPayload().getAddress(), cacheable);
@@ -307,6 +367,7 @@ public class LogUnitServer extends AbstractServer {
                 rr.put(address, (LogData) logData);
             }
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
+            apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
         } catch (DataCorruptionException e) {
             log.error("Data corruption exception while reading address {}", address, e);
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.payloadMsg(address));
@@ -315,6 +376,7 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.MULTIPLE_READ_REQUEST)
     public void multiRead(CorfuPayloadMsg<MultipleReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        long start = System.currentTimeMillis();
         boolean cacheable = msg.getPayload().isCacheReadResult();
         log.trace("multiRead: {}, cacheable: {}", msg.getPayload().getAddresses(), cacheable);
 
@@ -329,6 +391,7 @@ public class LogUnitServer extends AbstractServer {
                 }
             }
             r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
+            apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
         } catch (DataCorruptionException e) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
         }
@@ -337,6 +400,7 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.INSPECT_ADDRESSES_REQUEST)
     public void inspectAddresses(CorfuPayloadMsg<InspectAddressesRequest> msg,
                                  ChannelHandlerContext ctx, IServerRouter r) {
+        long start = System.currentTimeMillis();
         log.trace("inspectAddresses: {}", msg.getPayload().getAddresses());
         InspectAddressesResponse inspectResponse = new InspectAddressesResponse();
         try {
@@ -346,6 +410,7 @@ public class LogUnitServer extends AbstractServer {
                 }
             }
             r.sendResponse(ctx, msg, CorfuMsgType.INSPECT_ADDRESSES_RESPONSE.payloadMsg(inspectResponse));
+            apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
         } catch (TrimmedException te) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
         } catch (DataCorruptionException dce) {
@@ -360,13 +425,14 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.KNOWN_ADDRESS_REQUEST)
     private void getKnownAddressesInRange(CorfuPayloadMsg<KnownAddressRequest> msg,
                                           ChannelHandlerContext ctx, IServerRouter r) {
-
+        long start = System.currentTimeMillis();
         KnownAddressRequest request = msg.getPayload();
         try {
             Set<Long> knownAddresses = streamLog
                     .getKnownAddressesInRange(request.getStartRange(), request.getEndRange());
             r.sendResponse(ctx, msg,
                     CorfuMsgType.KNOWN_ADDRESS_RESPONSE.payloadMsg(knownAddresses));
+            apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
         } catch (Exception e) {
             handleException(e, ctx, msg, r);
         }
@@ -374,16 +440,20 @@ public class LogUnitServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST)
     private void handleCompactRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        long start = System.currentTimeMillis();
         log.debug("handleCompactRequest: received a compact request {}", msg);
         streamLog.compact();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
     }
 
     @ServerHandler(type = CorfuMsgType.FLUSH_CACHE)
     private void handleFlushCacheRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        long start = System.currentTimeMillis();
         log.debug("handleFlushCacheRequest: received a cache flush request {}", msg);
         dataCache.invalidateAll();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
     }
 
     /**
@@ -395,11 +465,13 @@ public class LogUnitServer extends AbstractServer {
      */
     @Override
     public void sealServerWithEpoch(long epoch) {
+        long start = System.currentTimeMillis();
         CorfuPayloadMsg<Long> msg = new CorfuPayloadMsg<>();
         msg.setEpoch(epoch);
         msg.setPriorityLevel(PriorityLevel.HIGH);
         try {
             batchWriter.addTask(SEAL, msg).join();
+            apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
         } catch (CompletionException ce) {
             if (ce.getCause() instanceof WrongEpochException) {
                 // The BaseServer expects to observe this exception,
@@ -427,7 +499,7 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.RESET_LOGUNIT)
     private synchronized void resetLogUnit(CorfuPayloadMsg<Long> msg,
                                            ChannelHandlerContext ctx, IServerRouter r) {
-
+        long start = System.currentTimeMillis();
         // Check if the reset request is with an epoch greater than the last reset epoch seen to
         // prevent multiple reset in the same epoch. and should be equal to the current router
         // epoch to prevent stale reset requests from wiping out the data.
@@ -439,6 +511,7 @@ public class LogUnitServer extends AbstractServer {
                         dataCache.invalidateAll();
                         log.info("LogUnit Server Reset.");
                         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+                        apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
                     }).exceptionally(ex -> {
                 handleException(ex, ctx, msg, r);
                 return null;
@@ -446,6 +519,7 @@ public class LogUnitServer extends AbstractServer {
         } else {
             log.info("LogUnit Server Reset request received but reset already done.");
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+            apiStats.recordMs(msg.getMsgType(), System.currentTimeMillis() - start);
         }
     }
 

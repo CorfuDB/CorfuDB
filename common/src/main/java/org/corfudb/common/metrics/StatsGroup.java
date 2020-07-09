@@ -54,8 +54,7 @@ public class StatsGroup {
         });
     }
 
-    public void addGauge(String name, Gauge gauge) {
-        //TODO(Maithem) allow for gaugeCreate?
+    public void createGauge(String name, Gauge gauge) {
         gauges.merge(name, gauge, (k, v) -> {
             throw new IllegalStateException(name(prefix, name) + " already exists!");
         });
@@ -66,10 +65,7 @@ public class StatsGroup {
         return scopes.computeIfAbsent(scopePrefix, k -> new StatsGroup(scopePrefix));
     }
 
-    public void unregister(StatsGroup statsGroup) {
-        scopes.remove(statsGroup.getPrefix());
-    }
-
+    // TODO(Maithem): clean child scopes?
     public void unregisterScopes() {
         scopes.clear();
     }

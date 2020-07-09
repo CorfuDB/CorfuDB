@@ -16,6 +16,7 @@ import javax.annotation.Nonnull;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -68,12 +69,15 @@ public class BatchProcessor implements AutoCloseable {
      * @param streamLog the backing log (can be in memory or file)
      * @param sync    If true, the batch writer will sync writes to secondary storage
      */
-    public BatchProcessor(StreamLog streamLog, long sealEpoch, boolean sync) {
+    public BatchProcessor(StreamLog streamLog, long sealEpoch, boolean sync, StatsGroup statsGroup) {
         this.sealEpoch = sealEpoch;
         this.sync = sync;
         this.streamLog = streamLog;
         operationsQueue = new LinkedBlockingQueue<>();
         processorService.submit(this::processor);
+
+        StatsGroup batchProcessorStats = statsGroup.scope(getClass().getSimpleName());
+        batchProcessorStats.createGauge("batch_processor_queue_len", operationsQueue::size);
     }
 
     /**

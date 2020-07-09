@@ -198,7 +198,7 @@ public class StatsCollector {
         sb.append("75pct ").append(histogram.get75thPercentile()).append(" ");
         sb.append("95pct ").append(histogram.get95thPercentile()).append(" ");
         sb.append("99pct ").append(histogram.get99thPercentile()).append(" ");
-        sb.append("cnt ").append(histogram.getCount()).append(" ");
+        sb.append("count ").append(histogram.getCount()).append(" ");
         return sb.toString();
     }
 

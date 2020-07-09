@@ -243,9 +243,9 @@ public class CorfuServer {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             StatsCollector collector = new StatsCollector();
-            serverContext.getStats().addGauge("allocator_direct_mem_usage",
+            serverContext.getStats().createGauge("allocator_direct_mem_usage",
                     PooledByteBufAllocator.DEFAULT.metric()::usedDirectMemory);
-            serverContext.getStats().addGauge("allocator_heap_mem_usage",
+            serverContext.getStats().createGauge("allocator_heap_mem_usage",
                     PooledByteBufAllocator.DEFAULT.metric()::usedHeapMemory);
 
             collector.register(serverContext.getStats());
