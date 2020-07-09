@@ -13,14 +13,19 @@ public class StatsGroup {
     @Getter
     private final String prefix;
 
+    @Getter
     private final Map<String, Histogram> histograms = new ConcurrentHashMap<>();
 
+    @Getter
     private final Map<String, Meter> meters = new ConcurrentHashMap<>();
 
+    @Getter
     private final Map<String, Counter> counters = new ConcurrentHashMap<>();
 
+    @Getter
     private final Map<String, Gauge> gauges = new ConcurrentHashMap<>();
 
+    @Getter
     private final Map<String, StatsGroup> scopes = new ConcurrentHashMap<>();
 
     public StatsGroup(String prefix) {
@@ -60,6 +65,16 @@ public class StatsGroup {
         return scopes.computeIfAbsent(scopePrefix, k -> new StatsGroup(scopePrefix));
     }
 
+    public void unregister(StatsGroup statsGroup) {
+        scopes.remove(statsGroup.getPrefix());
+    }
+
+    public void unregisterScopes() {
+        scopes.clear();
+    }
+
     //TODO(Maithem): scan and filter/ rocksdb
+
+    //TODO(Maithem): need to un-register (sequencer bootstrap?)
 
 }

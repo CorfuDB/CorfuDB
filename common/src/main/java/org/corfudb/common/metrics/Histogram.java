@@ -28,10 +28,11 @@ public class Histogram {
         snapshot = recorder.getIntervalHistogram(snapshot);
     }
 
-    // TODO(Maithem): Refresh recorder/reset
-
-    public void snapshot() {
+    public void snapshotAndReset() {
         snapshot = recorder.getIntervalHistogram(snapshot);
+        //TODO(Maithem): Some data points are lost between the snapshot and the reset
+        //TODO(Maithem): perf implication of reset ? (internal locking)
+        recorder.reset();
     }
 
     public long getCount() {

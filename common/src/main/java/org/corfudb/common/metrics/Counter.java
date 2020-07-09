@@ -30,4 +30,8 @@ public class Counter {
     public void inc(long value) {
         count.add(value);
     }
+
+    public long sumThenReset() {
+        return count.sumThenReset();
+    }
 }

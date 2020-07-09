@@ -8,6 +8,7 @@ import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
+import org.corfudb.common.metrics.StatsCollector;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -240,6 +241,8 @@ public class CorfuServer {
         // Manages the lifecycle of the Corfu Server.
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
+            StatsCollector collector = new StatsCollector();
+            collector.register(serverContext.getStats());
             try {
                 activeServer = new CorfuServerNode(serverContext);
                 activeServer.startAndListen();

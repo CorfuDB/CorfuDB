@@ -411,6 +411,7 @@ public class SequencerServer extends AbstractServer {
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
             globalLogTail = msg.getPayload().getGlobalTail();
+            sequencerStats.unregisterScopes();
             cache = new SequencerServerCache(cache.getCacheSize(), globalLogTail - 1, sequencerStats);
             // Clear the existing map as it could have been populated by an earlier reset.
             streamTailToGlobalTailMap = new HashMap<>();
