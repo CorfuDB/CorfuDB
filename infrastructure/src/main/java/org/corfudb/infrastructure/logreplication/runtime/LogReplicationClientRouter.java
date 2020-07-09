@@ -181,11 +181,8 @@ public class LogReplicationClientRouter implements IClientRouter {
                                 .get(getParameters().getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
                         throw new UnrecoverableCorfuInterruptedError(e);
-                    } catch (TimeoutException te) {
+                    } catch (TimeoutException | ExecutionException te) {
                         cf.completeExceptionally(te);
-                        return cf;
-                    } catch (ExecutionException ee) {
-                        cf.completeExceptionally(Utils.extractCauseWithCompleteStacktrace(ee));
                         return cf;
                     }
 

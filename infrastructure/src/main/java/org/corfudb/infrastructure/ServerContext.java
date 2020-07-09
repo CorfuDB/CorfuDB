@@ -8,9 +8,10 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.ChannelImplementation;
+import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
+import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -23,7 +24,8 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.common.util.UuidUtils;
+import org.corfudb.util.UuidUtils;
+import org.corfudb.utils.lock.Lock;
 
 import javax.annotation.Nonnull;
 import java.io.File;
@@ -189,7 +191,7 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    public int getBaseServerThreadCount() {
+    int getBaseServerThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--base-server-threads");
         return threadCount == null ? 1 : threadCount;
     }
@@ -212,6 +214,16 @@ public class ServerContext implements AutoCloseable {
     public String getPluginConfigFilePath() {
         String pluginConfigFilePath = getServerConfig(String.class, "--plugin");
         return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
+    }
+
+    public int getSnapshotSyncBatchSize() {
+        Integer snapshotSyncBatchSize = getServerConfig(Integer.class, "--snapshot-batch");
+        return snapshotSyncBatchSize == null ? SnapshotSender.DEFAULT_SNAPSHOT_BATCH_SIZE : snapshotSyncBatchSize;
+    }
+
+    public int getLockLeaseDuration() {
+        Integer lockLeaseDuration = getServerConfig(Integer.class, "--lock-lease");
+        return lockLeaseDuration == null ? Lock.leaseDuration : lockLeaseDuration;
     }
 
     /**

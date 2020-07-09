@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
 import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.Messages.CorfuMessage;
-import org.corfudb.runtime.LogReplicationChannelGrpc;
+import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,8 +36,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
      * Note: we cannot rely on the request ID, because for client streaming APIs this will change for each
      * message, despite being part of the same stream.
      */
-    // TODO(Anny): to avoid unpacking, perhaps store requestId and retrieve the lowest one?
-    Map<Messages.Uuid, StreamObserver<CorfuMessage>> replicationStreamObserverMap;
+    Map<Long, StreamObserver<CorfuMessage>> replicationStreamObserverMap;
 
     public GRPCLogReplicationServerHandler(LogReplicationServerRouter router) {
         this.router = router;
@@ -69,10 +68,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                 // Forward the received message to the router
                 router.receive(replicationCorfuMessage);
                 try {
-                    // Obtain Snapshot Sync Identifier, to uniquely identify this replication process
-                    Messages.LogReplicationEntry protoEntry = replicationCorfuMessage.getPayload()
-                            .unpack(Messages.LogReplicationEntry.class);
-                    replicationStreamObserverMap.putIfAbsent(protoEntry.getMetadata().getSyncRequestId(), responseObserver);
+                    replicationStreamObserverMap.putIfAbsent(replicationCorfuMessage.getRequestID(), responseObserver);
                 } catch (Exception e) {
                     log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
                             replicationCorfuMessage.getRequestID(), e);
@@ -95,25 +91,25 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
         // Case: message to send is an ACK (async observers)
         if (msg.getType().equals(Messages.CorfuMessageType.LOG_REPLICATION_ENTRY)) {
             try {
-                // Extract Sync Request Id from Payload
-                Messages.Uuid uuid = msg.getPayload().unpack(Messages.LogReplicationEntry.class).getMetadata().getSyncRequestId();
+                long requestId = msg.getRequestID();
 
-                if (!replicationStreamObserverMap.containsKey(uuid)) {
+                if (!replicationStreamObserverMap.containsKey(msg.getRequestID())) {
                     log.warn("Corfu Message {} has no pending observer. Message {} will not be sent.", msg.getRequestID(), msg.getType().name());
                     log.info("Stream observers in map: {}", replicationStreamObserverMap.keySet());
                     return;
                 }
 
-                StreamObserver<CorfuMessage> observer = replicationStreamObserverMap.get(uuid);
+                StreamObserver<CorfuMessage> observer = replicationStreamObserverMap.get(requestId);
                 log.info("Sending[{}]: {}", msg.getRequestID(), msg.getType().name());
                 observer.onNext(msg);
                 observer.onCompleted();
 
                 // Remove observer as response was already sent
-                replicationStreamObserverMap.remove(uuid);
-
+                // Since we send summarized ACKs (to avoid memory leaks) remove all observers lower or equal than
+                // the one for which a response is being sent.
+                replicationStreamObserverMap.keySet().removeIf(id -> id <= requestId);
             } catch (Exception e) {
-                log.error("");
+                log.error("Caught exception while trying to send message {}", msg.getRequestID());
             }
 
         } else {

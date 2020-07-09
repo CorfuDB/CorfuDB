@@ -56,8 +56,8 @@ public class LogReplicationEntryMetadata {
         this.timestamp = inputMetadata.timestamp;
     }
 
-    public LogReplicationEntryMetadata(MessageType type, long epoch, UUID syncRequestId, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {
-        this(type, epoch, syncRequestId, entryTimeStamp, snapshotTimestamp);
+    public LogReplicationEntryMetadata(MessageType type, long topologyConfigId, UUID syncRequestId, long entryTimeStamp, long previousEntryTimestamp, long snapshotTimestamp, long sequence) {
+        this(type, topologyConfigId, syncRequestId, entryTimeStamp, snapshotTimestamp);
         this.previousTimestamp = previousEntryTimestamp;
         this.snapshotSyncSeqNum = sequence;
     }

@@ -39,8 +39,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class SnapshotSender {
 
-    // TODO (probably move to a configuration file)
-    public static final int SNAPSHOT_BATCH_SIZE = 5;
+    public static int DEFAULT_SNAPSHOT_BATCH_SIZE = 100;
     public static final int DEFAULT_TIMEOUT = 5000;
 
     private CorfuRuntime runtime;
@@ -48,6 +47,7 @@ public class SnapshotSender {
     private SenderBufferManager dataSenderBufferManager;
     private LogReplicationFSM fsm;
     private long baseSnapshotTimestamp;
+    private final int snapshotSyncBatchSize;
 
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
     private boolean startSnapshotSync = true;
@@ -61,10 +61,11 @@ public class SnapshotSender {
     private volatile boolean stopSnapshotSync = false;
 
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                          ReadProcessor readProcessor, LogReplicationFSM fsm) {
+                          ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
+        this.snapshotSyncBatchSize = snapshotSyncBatchSize <= 0 ? DEFAULT_SNAPSHOT_BATCH_SIZE : snapshotSyncBatchSize;
         this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender);
     }
 
@@ -82,7 +83,7 @@ public class SnapshotSender {
 
         boolean completed = false;  // Flag indicating the snapshot sync is completed
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
-        int messagesSent = 0;       // Limit the number of messages to SNAPSHOT_BATCH_SIZE. The reason we need to limit
+        int messagesSent = 0;       // Limit the number of messages to snapshotSyncBatchSize. The reason we need to limit
                                     // is because by design several state machines can share the same thread pool,
                                     // therefore, we need to hand the thread for other workers to execute.
         SnapshotReadMessage snapshotReadMessage;
@@ -92,7 +93,7 @@ public class SnapshotSender {
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
             // or snapshot sync is stopped
             dataSenderBufferManager.resend();
-            while (messagesSent < SNAPSHOT_BATCH_SIZE && !dataSenderBufferManager.getPendingMessages().isFull() &&!completed && !stopSnapshotSync) {
+            while (messagesSent < snapshotSyncBatchSize && !dataSenderBufferManager.getPendingMessages().isFull() && !completed && !stopSnapshotSync) {
 
                 try {
                     snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
@@ -134,7 +135,7 @@ public class SnapshotSender {
                     log.error("Exception caught while blocking on snapshot sync {}, ack for {}",
                             snapshotSyncEventId, baseSnapshotTimestamp, e);
                     if (snapshotSyncAck.isCompletedExceptionally()) {
-                        log.error("...");
+                        log.error("Snapshot Sync completed exceptionally", e);
                     }
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
                 } finally {
@@ -156,7 +157,7 @@ public class SnapshotSender {
             // Generate a special LogReplicationEntry with only metadata (used as start marker on receiver side
             // to complete snapshot sync and send the right ACK)
             try {
-                dataSenderBufferManager.sendWithBuffering(resendMsgsAndWaitAckForSnapshotEnd(snapshotSyncEventId));
+                dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
                 snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
                 snapshotSyncComplete(snapshotSyncEventId);
@@ -174,7 +175,7 @@ public class SnapshotSender {
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
-            dataSenderBufferManager.sendWithBuffering(resendMsgsAndWaitAckForSnapshotEnd(snapshotSyncEventId));
+            dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
             startSnapshotSync = false;
             numMessages++;
         }
@@ -184,7 +185,7 @@ public class SnapshotSender {
         // If Snapshot is complete, add end marker
         if (completed) {
             LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
-            log.info("SnapshotSender sent out SNAPSHOT_END message {} " + endDataMessage.getMetadata());
+            log.info("SnapshotSender sent out SNAPSHOT_END message {} ", endDataMessage.getMetadata());
             snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;
         }
@@ -199,7 +200,7 @@ public class SnapshotSender {
      * @param snapshotSyncEventId snapshot sync event identifier
      * @return snapshot sync start marker as LogReplicationEntry
      */
-    private LogReplicationEntry resendMsgsAndWaitAckForSnapshotEnd(UUID snapshotSyncEventId) {
+    private LogReplicationEntry getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START, fsm.getTopologyConfigId(),
                 snapshotSyncEventId, Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
