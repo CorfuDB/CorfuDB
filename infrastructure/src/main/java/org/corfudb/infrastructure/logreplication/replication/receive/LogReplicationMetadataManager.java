@@ -2,6 +2,8 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.ReplicationTopologyInfoStore;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
@@ -24,6 +26,8 @@ public class LogReplicationMetadataManager {
     private static final String namespace = "CORFU_SYSTEM";
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
 
+    ReplicationTopologyInfoStore topologyInfoStore;
+
     private CorfuStore corfuStore;
 
     private String metadataTableName;
@@ -35,6 +39,8 @@ public class LogReplicationMetadataManager {
     public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
         this.runtime = rt;
         this.corfuStore = new CorfuStore(runtime);
+        this.topologyInfoStore = new ReplicationTopologyInfoStore(runtime, localClusterId);
+
         metadataTableName = getPersistedWriterMetadataTableName(localClusterId);
         try {
             metadataTable = this.corfuStore.openTable(namespace,
@@ -47,7 +53,9 @@ public class LogReplicationMetadataManager {
             log.error("Caught an exception while opening the table namespace={}, name={}", namespace, metadataTableName);
             throw new ReplicationWriterException(e);
         }
-        setupTopologyConfigId(topologyConfigId);
+
+        TopologyDescriptor topologyDescriptor = new TopologyDescriptor(topologyConfigId, null, null);
+        setupTopologyConfigId(topologyConfigId, topologyDescriptor);
     }
 
     public CorfuStoreMetadata.Timestamp getTimestamp() {
@@ -129,7 +137,7 @@ public class LogReplicationMetadataManager {
         txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
-    public void setupTopologyConfigId(long siteConfigID) {
+    public void setupTopologyConfigId(long siteConfigID, TopologyDescriptor topologyDescriptor) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
 
@@ -149,6 +157,10 @@ public class LogReplicationMetadataManager {
          }
 
         txBuilder.commit(timestamp);
+
+        // update topology corfutable
+
+        topologyInfoStore.append(topologyDescriptor.convertToMessage());
         log.info("Update topologyConfigId, new metadata {}", this);
     }
 

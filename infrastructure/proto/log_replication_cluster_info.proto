@@ -2,6 +2,14 @@ syntax = "proto3";
 
 package org.corfudb.infrastructure.logreplication.proto;
 
+message TopologyConfigurationID {
+  uint64 topologyConfigID = 1;
+}
+
+message TopologyTimestamp {
+  string timestamp = 1;
+}
+
 // Multi-Cluster Topology configuration
 message TopologyConfigurationMsg {
   uint64 topologyConfigID = 1;   // This ID tracks changes in the topology configuration

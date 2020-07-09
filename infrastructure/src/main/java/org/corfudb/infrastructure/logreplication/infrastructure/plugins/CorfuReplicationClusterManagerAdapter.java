@@ -17,11 +17,6 @@ public abstract class CorfuReplicationClusterManagerAdapter {
         start();
     }
 
-    public synchronized TopologyConfigurationMsg fetchTopology() {
-        topologyConfig = queryTopologyConfig();
-        return topologyConfig;
-    }
-
     /**
      * Will be called when the cluster change and a new configuration is sent over
      *
@@ -38,7 +33,7 @@ public abstract class CorfuReplicationClusterManagerAdapter {
         corfuReplicationDiscoveryService.prepareClusterRoleChange();
     }
 
-    public int queryReplicationStatus() {
+    public synchronized int queryReplicationStatus() {
         return corfuReplicationDiscoveryService.queryReplicationStatus();
     }
 

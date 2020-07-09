@@ -213,7 +213,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 log.info("Connecting to Cluster Manager adapter...");
                 clusterManagerAdapter.connect(this);
                 log.info("Fetch topology from Cluster Manager...");
-                TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.fetchTopology();
+                TopologyConfigurationMsg topologyMessage = queryTopologyConfig();
                 topologyDescriptor = new TopologyDescriptor(topologyMessage);
                 return;
             } catch (Exception e) {
@@ -428,7 +428,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         updateLocalTopology(newTopology);
 
         // Update topology config id in metadata manager
-        logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
+        logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId(), newTopology);
         log.debug("Persist new topologyConfigId {}, cluster id={}, status={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
 
@@ -596,6 +596,15 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if(clusterManagerAdapter != null) {
             clusterManagerAdapter.shutdown();
         }
+    }
+
+    /**
+     * Wrapper for the queryTopologyConfig in ClusterManagerAdapter.
+     *
+     * @return
+     */
+    private synchronized TopologyConfigurationMsg queryTopologyConfig() {
+        return clusterManagerAdapter.queryTopologyConfig();
     }
 
     /**
