@@ -239,7 +239,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             //as data have been transfered over, the replication status should be 100% done.
             int replicationStatus = 0;
             DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareToBecomeStandby();
             replicationStatus = siteManager.queryReplicationStatus();
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
                 replicationStatus = siteManager.queryReplicationStatus();
@@ -258,7 +258,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             }
 
             replicationStatus = 0;
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareToBecomeStandby();
             int retry = 0;
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE && retry++ < MAX_RETRY) {
                 replicationStatus = siteManager.queryReplicationStatus();
@@ -280,14 +280,14 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
             int replicationStatus = 0;
             DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareToBecomeStandby();
             replicationStatus = siteManager.queryReplicationStatus();
 
             System.out.print("\nreplication percentage done " + replicationStatus);
             assertThat(replicationStatus).isEqualTo(CorfuReplicationManager.PERCENTAGE_BASE);
 
 
-            TopologyDescriptor topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().getTopologyConfig());
+            TopologyDescriptor topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().queryTopologyConfig(true));
             String primary = topologyDescriptor.getActiveCluster().getClusterId();
             String currentPimary = primary;
 
@@ -307,7 +307,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                 discoveryService.wait();
             }
 
-            topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().getTopologyConfig());
+            topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().queryTopologyConfig(true));
             currentPimary = topologyDescriptor.getActiveCluster().getClusterId();
 
             assertThat(currentPimary).isNotEqualTo(primary);
@@ -342,7 +342,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             siteManager = (DefaultClusterManager)serverB.getClusterManagerAdapter();
             sleep(sleepInterval);
 
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareToBecomeStandby();
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
                 replicationStatus = siteManager.queryReplicationStatus();
                 System.out.print("\nreplication percentage done " + replicationStatus);
@@ -364,6 +364,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                assertThat(mapA1.containsKey(String.valueOf(i))).isTrue();
             }
 
+            System.out.print("\nTest Succeeds!!!");
         } finally {
             shutdown();
         }
