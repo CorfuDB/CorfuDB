@@ -18,6 +18,11 @@ public class LogReplicationConfig {
      */
     private Set<String> streamsToReplicate;
 
+    /*
+     * Snapshot Sync Batch Size (number of entries)
+     */
+    private int snapshotSyncBatchSize;
+
     /**
      * Constructor
      *
@@ -25,5 +30,16 @@ public class LogReplicationConfig {
      */
     public LogReplicationConfig(Set<String> streamsToReplicate) {
         this.streamsToReplicate = streamsToReplicate;
+    }
+
+    /**
+     * Constructor
+     *
+     * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
+     * @param snapshotSyncBatchSize snapshot sync batch size (number of entries per batch)
+     */
+    public LogReplicationConfig(Set<String> streamsToReplicate, int snapshotSyncBatchSize) {
+        this(streamsToReplicate);
+        this.snapshotSyncBatchSize = snapshotSyncBatchSize;
     }
 }
