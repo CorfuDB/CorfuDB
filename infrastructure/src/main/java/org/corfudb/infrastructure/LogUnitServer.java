@@ -1,7 +1,25 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
+
+
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
+import java.lang.invoke.MethodHandles;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +36,6 @@ import org.corfudb.protocols.wireprotocol.InspectAddressesRequest;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
@@ -37,24 +54,6 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
-
-import java.lang.invoke.MethodHandles;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 
 
 /**
@@ -288,66 +287,57 @@ public class LogUnitServer extends AbstractServer {
                 });
     }
 
-    @ServerHandler(type = CorfuMsgType.READ_REQUEST)
-    public void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        long address = msg.getPayload().getAddress();
-        boolean cacheable = msg.getPayload().isCacheReadResult();
-        log.trace("read: {}, cacheable: {}", msg.getPayload().getAddress(), cacheable);
-
-        ReadResponse rr = new ReadResponse();
-        try {
-            ILogData logData = dataCache.get(address, cacheable);
-            if (logData == null) {
-                rr.put(address, LogData.getEmpty(address));
-            } else {
-                rr.put(address, (LogData) logData);
-            }
-            r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
-        } catch (DataCorruptionException e) {
-            log.error("Data corruption exception while reading address {}", address, e);
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.payloadMsg(address));
-        }
+  @ServerHandler(type = CorfuMsgType.READ_REQUEST)
+  public void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    boolean cacheable = msg.getPayload().isCacheReadResult();
+    if (log.isTraceEnabled()) {
+      log.trace("read: {}, cacheable: {}", msg.getPayload().getAddresses(), cacheable);
     }
 
-    @ServerHandler(type = CorfuMsgType.MULTIPLE_READ_REQUEST)
-    public void multiRead(CorfuPayloadMsg<MultipleReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        boolean cacheable = msg.getPayload().isCacheReadResult();
-        log.trace("multiRead: {}, cacheable: {}", msg.getPayload().getAddresses(), cacheable);
+    ReadResponse rr = new ReadResponse();
 
-        ReadResponse rr = new ReadResponse();
-        try {
-            for (Long address : msg.getPayload().getAddresses()) {
-                ILogData logData = dataCache.get(address, cacheable);
-                if (logData == null) {
-                    rr.put(address, LogData.getEmpty(address));
-                } else {
-                    rr.put(address, (LogData) logData);
-                }
-            }
-            r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
-        } catch (DataCorruptionException e) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
+    for (long address : msg.getPayload().getAddresses()) {
+      try {
+        ILogData logData = dataCache.get(address, cacheable);
+        if (logData == null) {
+          rr.put(address, LogData.getEmpty(address));
+        } else {
+          rr.put(address, (LogData) logData);
         }
+      } catch (DataCorruptionException e) {
+        log.error(
+            "Data corruption exception while reading addresses {}",
+            msg.getPayload().getAddresses(),
+            e);
+        r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.payloadMsg(address));
+        return;
+      }
     }
+    r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
+  }
 
-    @ServerHandler(type = CorfuMsgType.INSPECT_ADDRESSES_REQUEST)
-    public void inspectAddresses(CorfuPayloadMsg<InspectAddressesRequest> msg,
-                                 ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("inspectAddresses: {}", msg.getPayload().getAddresses());
-        InspectAddressesResponse inspectResponse = new InspectAddressesResponse();
-        try {
-            for (long address : msg.getPayload().getAddresses()) {
-                if (!streamLog.contains(address)) {
-                    inspectResponse.add(address);
-                }
-            }
-            r.sendResponse(ctx, msg, CorfuMsgType.INSPECT_ADDRESSES_RESPONSE.payloadMsg(inspectResponse));
-        } catch (TrimmedException te) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
-        } catch (DataCorruptionException dce) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.msg());
+  @ServerHandler(type = CorfuMsgType.INSPECT_ADDRESSES_REQUEST)
+  public void inspectAddresses(
+      CorfuPayloadMsg<InspectAddressesRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+    List<Long> addresses = msg.getPayload().getAddresses();
+    log.trace("inspectAddresses: {}", addresses);
+    InspectAddressesResponse inspectResponse = new InspectAddressesResponse();
+
+    for (long address : addresses) {
+      try {
+        if (!streamLog.contains(address)) {
+          inspectResponse.add(address);
         }
+      } catch (TrimmedException te) {
+        r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
+        return;
+      } catch (DataCorruptionException dce) {
+        r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.payloadMsg(address));
+        return;
+      }
     }
+    r.sendResponse(ctx, msg, CorfuMsgType.INSPECT_ADDRESSES_RESPONSE.payloadMsg(inspectResponse));
+  }
 
     /**
      * Handles requests for known entries in specified range.

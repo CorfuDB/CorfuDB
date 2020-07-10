@@ -247,7 +247,7 @@ public class ClusterReconfigIT extends AbstractIT {
                                                   String endpoint, long end) throws Exception {
         ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(endpoint)
-                .readAll(getRangeAddressAsList(0L, end))
+                .read(getRangeAddressAsList(0L, end), false)
                 .get();
         return readResponse.getAddresses().entrySet()
                 .stream()
@@ -810,7 +810,7 @@ public class ClusterReconfigIT extends AbstractIT {
         int verificationCounter = 0;
         for (LogData logData : runtime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient("localhost:9002")
-                .readAll(getRangeAddressAsList(startAddress, endAddress))
+                .read(getRangeAddressAsList(startAddress, endAddress), false)
                 .get().getAddresses().values()) {
             assertThat(logData.getPayload(runtime))
                     .isEqualTo(Integer.toString(verificationCounter++).getBytes());
@@ -890,7 +890,7 @@ public class ClusterReconfigIT extends AbstractIT {
         int verificationCounter = 0;
         for (LogData logData : runtime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient("localhost:9002")
-                .readAll(getRangeAddressAsList(startAddress, endAddress)).get()
+                .read(getRangeAddressAsList(startAddress, endAddress), false).get()
                 .getAddresses().values()) {
             assertThat(logData.getPayload(runtime))
                     .isEqualTo(Integer.toString(verificationCounter++).getBytes());

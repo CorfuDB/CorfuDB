@@ -21,7 +21,6 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
@@ -83,7 +82,7 @@ public class StateTransferTest extends AbstractViewTest {
                                                   String endpoint, long end) throws Exception {
         ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(endpoint)
-                .readAll(ContiguousSet.create(Range.closed(0L, end), DiscreteDomain.longs()).asList())
+                .read(ContiguousSet.create(Range.closed(0L, end), DiscreteDomain.longs()).asList(), false)
                 .get();
         return readResponse.getAddresses().entrySet()
                 .stream()

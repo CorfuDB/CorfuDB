@@ -164,7 +164,7 @@ public class CommittedBatchProcessor implements StateTransferBatchProcessor {
         for (int i = 0; i < maxReadRetries; i++) {
             try {
                 ReadResponse response = CFUtils
-                        .getUninterruptibly(client.readAll(addresses));
+                        .getUninterruptibly(client.read(addresses, false));
                 Map<Long, ILogData> records = new HashMap<>(response.getAddresses());
                 ReadBatch readBatch = checkReadRecords(addresses,
                         records, destNode);
