@@ -1,7 +1,5 @@
 package org.corfudb.runtime.view;
 
-import static java.util.Objects.requireNonNull;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
@@ -37,6 +35,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * This class represents the layout of a Corfu instance.
@@ -178,9 +178,10 @@ public class Layout {
         Set<String> activeServers = new HashSet<>();
         activeServers.addAll(layoutServers);
         activeServers.addAll(sequencers);
-        segments.forEach(x ->
-                x.getStripes().forEach(y ->
-                        activeServers.addAll(y.getLogServers())));
+        segments.forEach(segment -> segment
+                .getStripes()
+                .forEach(stripe -> activeServers.addAll(stripe.getLogServers()))
+        );
         activeServers.removeAll(unresponsiveServers);
         return activeServers;
     }
@@ -402,10 +403,10 @@ public class Layout {
             }
 
             @Override
-            public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
-                                                            Set<String> responsiveNodes) {
-                return !responsiveNodes.containsAll(layoutSegment.getAllLogServers())
-                        ? ClusterStatus.UNAVAILABLE : ClusterStatus.STABLE;
+            public ClusterStatus getClusterHealthForSegment(
+                    LayoutSegment layoutSegment, Set<String> responsiveNodes) {
+                return responsiveNodes.containsAll(layoutSegment.getAllLogServers())
+                        ? ClusterStatus.STABLE : ClusterStatus.UNAVAILABLE;
             }
         },
         QUORUM_REPLICATION {
@@ -608,7 +609,7 @@ public class Layout {
          * @return Set of log unit servers.
          */
         public Set<String> getAllLogServers() {
-            return this.getStripes().stream()
+            return stripes.stream()
                     .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
                     .collect(Collectors.toSet());
         }
