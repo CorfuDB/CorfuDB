@@ -286,21 +286,20 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             System.out.print("\nreplication percentage done " + replicationStatus);
             assertThat(replicationStatus).isEqualTo(CorfuReplicationManager.PERCENTAGE_BASE);
 
-
             TopologyDescriptor topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().queryTopologyConfig(true));
-            String primary = topologyDescriptor.getActiveCluster().getClusterId();
-            String currentPimary = primary;
+            String active = topologyDescriptor.getActiveClusters().keySet().iterator().next();
+            String currentActive = active;
 
             // Wait till site role change and new transfer done.
-            assertThat(currentPimary).isEqualTo(primary);
+            assertThat(currentActive).isEqualTo(active);
 
             System.out.print("\nbefore site switch mapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 
             siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
-            siteManager.getSiteManagerCallback().siteFlip = true;
+            siteManager.getSiteManagerCallback().clusterRoleChange = true;
             siteManager = (DefaultClusterManager) serverB.getClusterManagerAdapter();
-            siteManager.getSiteManagerCallback().siteFlip = true;
+            siteManager.getSiteManagerCallback().clusterRoleChange = true;
 
             CorfuReplicationDiscoveryService discoveryService = serverA.getReplicationDiscoveryService();
             synchronized (discoveryService) {
@@ -308,10 +307,10 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             }
 
             topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().queryTopologyConfig(true));
-            currentPimary = topologyDescriptor.getActiveCluster().getClusterId();
+            currentActive = topologyDescriptor.getActiveClusters().keySet().iterator().next();
 
-            assertThat(currentPimary).isNotEqualTo(primary);
-            System.out.print("\nVerified Site Role Change primary " + currentPimary);
+            assertThat(currentActive).isNotEqualTo(active);
+            System.out.print("\nVerified Site Role Change primary " + currentActive);
             System.out.print("\nmapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 
