@@ -20,6 +20,7 @@ import org.corfudb.util.Sleep;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
+import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
 import org.corfudb.utils.lock.LockListener;
 
@@ -312,7 +313,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
         }
 
-        return new LogReplicationConfig(streamsToReplicate);
+        return new LogReplicationConfig(streamsToReplicate, serverContext.getSnapshotSyncBatchSize());
     }
 
     /**
@@ -322,6 +323,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private void registerToLogReplicationLock() {
         try {
+
+            Lock.setLeaseDuration(serverContext.getLockLeaseDuration());
+
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     LockClient lock = new LockClient(logReplicationNodeId, getCorfuRuntime());
