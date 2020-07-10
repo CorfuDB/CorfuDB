@@ -134,7 +134,7 @@ public class SnapshotSender {
                     log.error("Exception caught while blocking on snapshot sync {}, ack for {}",
                             snapshotSyncEventId, baseSnapshotTimestamp, e);
                     if (snapshotSyncAck.isCompletedExceptionally()) {
-                        log.error("...");
+                        log.error("Snapshot Sync completed exceptionally", e);
                     }
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
                 } finally {
@@ -184,7 +184,7 @@ public class SnapshotSender {
         // If Snapshot is complete, add end marker
         if (completed) {
             LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
-            log.info("SnapshotSender sent out SNAPSHOT_END message {} " + endDataMessage.getMetadata());
+            log.info("SnapshotSender sent out SNAPSHOT_END message {} ", endDataMessage.getMetadata());
             snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;
         }
