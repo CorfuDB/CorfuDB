@@ -221,7 +221,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
-        int numTransition = (NUM_ENTRIES/(batchSize* SnapshotSender.SNAPSHOT_BATCH_SIZE)) + 1;
+        int numTransition = (NUM_ENTRIES/(batchSize* SnapshotSender.DEFAULT_SNAPSHOT_BATCH_SIZE)) + 1;
         Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
 
@@ -296,7 +296,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #2: This time the snapshot sync completes
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
-        for (int i = 0; i<(NUM_ENTRIES/(BATCH_SIZE * SnapshotSender.SNAPSHOT_BATCH_SIZE)) + 1; i++) {
+        for (int i = 0; i<(NUM_ENTRIES/(BATCH_SIZE * SnapshotSender.DEFAULT_SNAPSHOT_BATCH_SIZE)) + 1; i++) {
             transitionAvailable.acquire();
         }
 
