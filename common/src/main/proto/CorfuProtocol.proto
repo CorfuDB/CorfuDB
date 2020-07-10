@@ -59,11 +59,13 @@ message PingResponse {
 }
 
 message AuthenticateRequest {
-
+    UUID clientId = 1;
+    UUID serverId = 2;
 }
 
 message AuthenticateResponse {
-
+    UUID serverId = 1;
+    string corfuVersion = 2;
 }
 
 message RestartRequest {

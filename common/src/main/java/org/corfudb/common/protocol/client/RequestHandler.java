@@ -21,7 +21,7 @@ public abstract class RequestHandler extends ChannelInboundHandlerAdapter {
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;
         ByteBufInputStream msgInputStream = new ByteBufInputStream(msgBuf);
-
+        
         try {
             Request request = Request.parseFrom(msgInputStream);
             Header  header = request.getHeader();
