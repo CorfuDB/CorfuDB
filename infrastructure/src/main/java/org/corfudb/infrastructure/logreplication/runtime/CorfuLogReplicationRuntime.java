@@ -274,6 +274,10 @@ public class CorfuLogReplicationRuntime {
         leaderEndpoint = Optional.ofNullable(leader);
     }
 
+    public synchronized void dropRemoteLeader() {
+        leaderEndpoint = Optional.empty();
+    }
+
     public synchronized Optional<String> getRemoteLeader() {
         return leaderEndpoint;
     }

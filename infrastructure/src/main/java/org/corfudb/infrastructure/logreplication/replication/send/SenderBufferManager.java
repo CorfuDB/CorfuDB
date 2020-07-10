@@ -217,7 +217,7 @@ public abstract class SenderBufferManager {
             log.warn("Caught a timeout exception ", e);
             force = true;
         } catch (Exception e) {
-            log.warn("Caught an Exception and will notify discovery service ", e);
+            log.trace("Caught an Exception and will notify discovery service ", e);
             //TODO: notify discoveryService
         }
 

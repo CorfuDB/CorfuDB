@@ -2,6 +2,7 @@ package org.corfudb.utils.lock.states;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.utils.lock.Lock;
+import org.corfudb.utils.lock.LockConfig;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -20,12 +21,6 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class HasLeaseState extends LockState {
-    //TODO move these to configs.
-
-    // duration after which a local task checks if a lease has expired.
-    private static int DURATION_BETWEEN_LEASE_CHECKS = 60;
-
-
     // task to renew lease
     private Optional<ScheduledFuture<?>> leaseRenewalFuture = Optional.empty();
 
@@ -36,13 +31,16 @@ public class HasLeaseState extends LockState {
     // this variable is used to check whether the lease has expired.
     private volatile Optional<Instant> leaseTime = Optional.empty();
 
+
+    private final LockConfig lockConfig;
     /**
      * Constructor
      *
      * @param lock log replication state machine
      */
-    public HasLeaseState(Lock lock) {
+    public HasLeaseState(Lock lock, LockConfig lockConfig) {
         super(lock);
+        this.lockConfig = lockConfig;
     }
 
     /**
@@ -54,7 +52,8 @@ public class HasLeaseState extends LockState {
      */
     @Override
     public Optional<LockState> processEvent(LockEvent event) throws IllegalTransitionException {
-        log.debug("Lock: {} lock event:{} in state:{}", lock.getLockId(), event, getType());
+        log.debug("Lock: {} lock event:{} in state:{} for id: {}", lock.getLockId(), event,
+                getType(), lockStore.getClientId());
         switch (event) {
             case LEASE_ACQUIRED: {
                 // This should not happen !
@@ -151,7 +150,7 @@ public class HasLeaseState extends LockState {
                 taskFuture.cancel(true);
                 log.error("Lock: {} {} callback cancelled due to timeout!", lock.getLockId(), callback);
             }
-        }, MaxTimeForNotificationListenerProcessing, TimeUnit.SECONDS);
+        }, lockConfig.getLockMaxTimeListenerNotificationSeconds(), TimeUnit.SECONDS);
     }
 
     /**
@@ -178,7 +177,7 @@ public class HasLeaseState extends LockState {
                             }
                         },
                         0,
-                        DurationBetweenLeaseRenewals,
+                        lockConfig.getLockDurationBetweenLeaseRenewalsSeconds(),
                         TimeUnit.SECONDS
                 ));
         }
@@ -194,14 +193,14 @@ public class HasLeaseState extends LockState {
             if (!leaseMonitorFuture.isPresent() || leaseMonitorFuture.get().isDone())
                 leaseMonitorFuture = Optional.of(taskScheduler.scheduleWithFixedDelay(
                         () -> {
-                            if (leaseTime.isPresent() && leaseTime.get().isBefore(Instant.now().minusSeconds(Lock.leaseDuration))) {
+                            if (leaseTime.isPresent() && leaseTime.get().isBefore(Instant.now().minusSeconds(lockConfig.getLockLeaseDurationInSeconds()))) {
                                 log.info("Lock: {} lease expired for lock {}", lock.getLockId());
                                 lock.input(LockEvent.LEASE_EXPIRED);
                             }
 
                         },
                         0,
-                        DURATION_BETWEEN_LEASE_CHECKS,
+                        lockConfig.getLockDurationBetweenLeaseChecksSeconds(),
                         TimeUnit.SECONDS
                 ));
         }

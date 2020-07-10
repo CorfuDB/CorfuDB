@@ -55,6 +55,9 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                     return fsm.getStates().get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY);
                 }
                 return this;
+            case REMOTE_LEADER_LOSS:
+                this.worker.submit(this::verifyLeadership);
+                return this;
             case REMOTE_LEADER_NOT_FOUND:
                 return this;
             case ON_CONNECTION_UP:

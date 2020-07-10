@@ -15,6 +15,7 @@ import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.lang.reflect.Constructor;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Map;
@@ -47,6 +48,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[--snapshot-batch=<batch-size>]"
                     + "[--lock-lease=<lease-duration>]"
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
+                    + "[--node-id=<nodeId>]"
                     + "[--plugin=<plugin-config-file-path>]"
                     + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
                     + "[--log-size-quota-percentage=<max_log_size_percentage>]"
@@ -292,7 +294,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * @param serverContext server context (server information)
      * @return completable future for discovered topology
      */
-    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) {
+    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) throws Exception {
 
         log.info("Start Discovery Service.");
         CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = new CompletableFuture<>();
@@ -389,7 +391,19 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
-            return (CorfuReplicationClusterManagerAdapter) adapter.getDeclaredConstructor().newInstance();
+            if (config.getTopologyConfigPath().isPresent()) {
+                String param = config.getTopologyConfigPath().get();
+                log.info("Using static config path: {}", param);
+                // If topology config path is configured, there is a constructor that accepts
+                // this path as an argument.
+                Constructor declaredConstructor = adapter
+                        .getDeclaredConstructor(String.class);
+                return (CorfuReplicationClusterManagerAdapter)
+                        declaredConstructor.newInstance(param);
+            } else {
+                return (CorfuReplicationClusterManagerAdapter) adapter.newInstance();
+            }
+
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);

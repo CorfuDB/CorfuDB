@@ -93,12 +93,11 @@ public class LogEntryWriter {
         long persistLogTS = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_PROCESSED);
 
         long topologyConfigId = txMessage.getMetadata().getTopologyConfigId();
-        long ts = txMessage.getMetadata().getSnapshotTimestamp();
-        long entryTS= txMessage.getMetadata().getTimestamp();
+        long entryTS = txMessage.getMetadata().getTimestamp();
 
         lastMsgTs = Math.max(persistLogTS, lastMsgTs);
 
-        if (topologyConfigId != persistSiteConfigID || ts != persistSnapStart || ts != persistSnapDone ||
+        if (topologyConfigId != persistSiteConfigID ||
                 txMessage.getMetadata().getPreviousTimestamp() != persistLogTS) {
             log.warn("Skip write this msg {} as its timestamp is later than the persisted one " +
                     txMessage.getMetadata() +  " persisteSiteConfig " + persistSiteConfigID + " persistSnapStart " + persistSnapStart +

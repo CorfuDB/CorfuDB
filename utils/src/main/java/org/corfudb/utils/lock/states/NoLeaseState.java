@@ -44,6 +44,10 @@ public class NoLeaseState extends LockState {
                 log.warn("Lock: {} renewed event arrived late!", lock.getLockId());
                 return Optional.empty();
             }
+            case FORCE_LEASE_ACQUIRED: {
+                forceAcquire();
+                return Optional.of(lock.getStates().get(LockStateType.HAS_LEASE));
+            }
             case LEASE_REVOKED: {
                 //lock client revoked the lease on this lock, should try to acquire lease.
                 acquireLease();
@@ -96,6 +100,16 @@ public class NoLeaseState extends LockState {
         } catch (Exception e) {
             log.error("Lock: {} could not acquire lease {}", lock.getLockId(), e);
         }
+    }
+
+    private void forceAcquire() {
+        try {
+            lockStore.forceAcquire(lock.getLockId());
+        }
+        catch (Exception e) {
+            log.error("Lock: {} could not force-acquire lease {}", lock.getLockId(), e);
+        }
+
     }
 
 }

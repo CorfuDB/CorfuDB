@@ -135,7 +135,7 @@ public abstract class SinkBufferManager {
      */
     public LogReplicationEntry processMsgAndBuffer(LogReplicationEntry dataMessage) {
 
-        if (verifyMessageType(dataMessage) == false)
+        if (!verifyMessageType(dataMessage))
            return null;
 
         long preTs = getPreSeq(dataMessage);
