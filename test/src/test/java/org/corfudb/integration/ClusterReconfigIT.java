@@ -63,6 +63,7 @@ public class ClusterReconfigIT extends AbstractIT {
     private static String corfuSingleNodeHost;
     private final int basePort = 9000;
     private final int retries = 10;
+    private final String testStream = "test";
 
     @Before
     public void loadProperties() {
@@ -131,29 +132,6 @@ public class ClusterReconfigIT extends AbstractIT {
         assertThat(epochVerifier.test(refreshedLayout.getEpoch())).isTrue();
     }
 
-    /**
-     * Creates a message of specified size in bytes.
-     *
-     * @param msgSize
-     * @return
-     */
-    private static String createStringOfSize(int msgSize) {
-        StringBuilder sb = new StringBuilder(msgSize);
-        for (int i = 0; i < msgSize; i++) {
-            sb.append('a');
-        }
-        return sb.toString();
-    }
-
-    private Process runPersistentServer(String address, int port, boolean singleNode) throws IOException {
-        return new CorfuServerRunner()
-                .setHost(address)
-                .setPort(port)
-                .setLogPath(getCorfuServerLogPath(address, port))
-                .setSingle(singleNode)
-                .runServer();
-    }
-
     private Thread startDaemonWriter(CorfuRuntime corfuRuntime, Random r, CorfuTable table,
                                      String data, AtomicBoolean stopFlag) {
         Thread t = new Thread(() -> {
@@ -178,8 +156,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
     /**
      * A cluster of one node is started - 9000.
-     * Then a block of data of 15,000 entries is written to the node.
-     * This is to ensure we have at least 1.5 data log files.
+     * Then a block of data of 1,000 entries is written to the node.
      * A daemon thread is instantiated to randomly put data while add node is executed.
      * 2 nodes - 9001 and 9002 are added to the cluster.
      * Finally the addition of the 2 nodes in the layout is verified.
@@ -204,7 +181,7 @@ public class ClusterReconfigIT extends AbstractIT {
         CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("test")
+                .setStreamName(testStream)
                 .open();
 
         final String data = createStringOfSize(1_000);
@@ -253,8 +230,8 @@ public class ClusterReconfigIT extends AbstractIT {
         Map<Long, LogData> map_1 = getAllNonEmptyData(corfuRuntime, "localhost:9001", lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, "localhost:9002", lastAddress);
 
-        assertThat(map_1.entrySet()).containsOnlyElementsOf(map_0.entrySet());
-        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_1.entrySet()).containsExactlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
     }
 
     /**
@@ -415,7 +392,7 @@ public class ClusterReconfigIT extends AbstractIT {
         CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("test")
+                .setStreamName(testStream)
                 .open();
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
@@ -653,7 +630,7 @@ public class ClusterReconfigIT extends AbstractIT {
         CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("test")
+                .setStreamName(testStream)
                 .open();
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
