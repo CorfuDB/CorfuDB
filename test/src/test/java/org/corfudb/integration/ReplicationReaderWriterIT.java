@@ -2,6 +2,9 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -67,6 +70,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     // Connect with server2 to verify data
     CorfuRuntime dstDataRuntime = null;
+    static TopologyDescriptor topologyDescriptor =  new TopologyDescriptor(0,
+            new ClusterDescriptor("dummy", LogReplicationClusterInfo.ClusterRole.ACTIVE, DEFAULT_PORT), new HashMap<>());
 
     HashMap<String, CorfuTable<Long, Long>> srcTables = new HashMap<>();
     HashMap<String, CorfuTable<Long, Long>> dstTables = new HashMap<>();
@@ -285,7 +290,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeLogEntryMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, topologyDescriptor, PRIMARY_SITE_ID);
         LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
@@ -353,7 +358,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     public static void writeSnapLogMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
         LogReplicationConfig config = new LogReplicationConfig(streams);
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, topologyDescriptor, PRIMARY_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
 
@@ -614,7 +619,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public void testPersistentTable() throws IOException {
         setupEnv();
         try {
-            LogReplicationMetadataManager meta = new LogReplicationMetadataManager(writerRuntime, 0, PRIMARY_SITE_ID);
+            LogReplicationMetadataManager meta = new LogReplicationMetadataManager(writerRuntime, topologyDescriptor, PRIMARY_SITE_ID);
             meta.getLastProcessedLogTimestamp();
         } catch (Exception e) {
             e.getStackTrace();

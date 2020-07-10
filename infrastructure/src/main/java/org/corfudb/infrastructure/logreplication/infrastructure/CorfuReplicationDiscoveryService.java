@@ -212,9 +212,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 // Connect to Cluster Manager and Retrieve Topology Info
                 log.info("Connecting to Cluster Manager adapter...");
                 clusterManagerAdapter.connect(this);
+
                 log.info("Fetch topology from Cluster Manager...");
-                TopologyConfigurationMsg topologyMessage = queryTopologyConfig();
-                topologyDescriptor = new TopologyDescriptor(topologyMessage);
+                topologyDescriptor = queryTopologyConfig();
+                log.info("Fetch topology from Cluster Manager {}", topologyDescriptor);
                 return;
             } catch (Exception e) {
                 String message = "Caught exception while fetching topology. Log Replication cannot start.";
@@ -234,7 +235,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
 
         this.logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
-                topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
+                topologyDescriptor, localClusterDescriptor.getClusterId());
 
         logReplicationServerHandler = new LogReplicationServer(serverContext, logReplicationConfig,
                 logReplicationMetadataManager, localCorfuEndpoint);
@@ -428,7 +429,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         updateLocalTopology(newTopology);
 
         // Update topology config id in metadata manager
-        logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId(), newTopology);
+        logReplicationMetadataManager.setupTopologyConfigId(newTopology);
         log.debug("Persist new topologyConfigId {}, cluster id={}, status={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
 
@@ -454,18 +455,27 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @param event discovery event
      */
     public void processTopologyChangeNotification(DiscoveryServiceEvent event) {
+
+        TopologyDescriptor newTopology = new TopologyDescriptor(event.getTopologyConfig());
+
+        log.trace("Process topology change notification, current={}, received={}",
+                topologyDescriptor, newTopology);
+
         // Skip stale notification
-        if (event.getTopologyConfig().getTopologyConfigID() < topologyDescriptor.getTopologyConfigId()) {
-            log.debug("Stale Topology Change Notification, current={}, received={}",
-                    topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig());
+        if (newTopology.getTopologyConfigId() < topologyDescriptor.getTopologyConfigId()) {
+            log.warn("Stale Topology Change Notification, current={}, received={}",
+                    topologyDescriptor, newTopology);
             return;
         }
 
-        TopologyDescriptor newTopology = new TopologyDescriptor(event.getTopologyConfig());
+
+        // Record the new cluster topology in the local node's log file.
+        serverContext.recordClusterTopology(newTopology);
+
         // Process standby add/remove, which will not increment config id
         // We won't stop ongoing replications in this case
         if (newTopology.getTopologyConfigId() == topologyDescriptor.getTopologyConfigId()) {
-            log.debug("Processing a new topology with the same config id, previous topology" +
+            log.info("Processing a new topology with the same config id, previous topology" +
                     " is {}, and new topology is {}", topologyDescriptor, newTopology);
             if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
                 return;
@@ -603,8 +613,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      *
      * @return
      */
-    private synchronized TopologyConfigurationMsg queryTopologyConfig() {
-        return clusterManagerAdapter.queryTopologyConfig();
+    private synchronized TopologyDescriptor queryTopologyConfig() {
+        TopologyConfigurationMsg topologyConfigurationMsg = clusterManagerAdapter.queryTopologyConfig();
+        TopologyDescriptor topologyDescriptor = new TopologyDescriptor(topologyConfigurationMsg);
+        log.info("the cluster topology {}", topologyDescriptor);
+        serverContext.recordClusterTopology(topologyDescriptor);
+        return topologyDescriptor;
     }
 
     /**

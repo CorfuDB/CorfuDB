@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * This class represents a view of a Multi-Cluster/Site Topology,
@@ -54,6 +55,7 @@ public class TopologyDescriptor {
     }
 
     public TopologyConfigurationMsg convertToMessage() {
+        log.info("descriptor {}", this);
         ArrayList<ClusterConfigurationMsg> clustersConfigs = new ArrayList<>();
         clustersConfigs.add((activeCluster.convertToMessage()));
 

@@ -34,14 +34,14 @@ public class ReplicationTopologyInfoStoreTest extends AbstractViewTest {
 
 
         // Append one topologyConfig
-        topologyInfoStore.append(topologyConfigurationMsg);
+        topologyInfoStore.appendToCorfuTable(topologyConfigurationMsg);
         queryResult =
                 topologyInfoStore.query(topologyConfigurationMsg.getTopologyConfigID());
         System.out.print("\nnumber of entries " + queryResult.size());
         assertThat(queryResult.size()).isEqualTo(1);
 
         // Append another topologyConfig with the same configID
-        topologyInfoStore.append(topologyConfigurationMsg);
+        topologyInfoStore.appendToCorfuTable(topologyConfigurationMsg);
         queryResult =
                 topologyInfoStore.query(topologyConfigurationMsg.getTopologyConfigID());
         System.out.print("\nnumber of entries " + queryResult.size());
@@ -50,7 +50,7 @@ public class ReplicationTopologyInfoStoreTest extends AbstractViewTest {
         TopologyConfigurationMsg newTopologyConfigurationMsg = TopologyConfigurationMsg.newBuilder()
                 .setTopologyConfigID(topologyConfigurationMsg.getTopologyConfigID() + 1)
                 .build();
-        topologyInfoStore.append(newTopologyConfigurationMsg);
+        topologyInfoStore.appendToCorfuTable(newTopologyConfigurationMsg);
         queryResult =
                 topologyInfoStore.query(topologyConfigurationMsg.getTopologyConfigID());
         assertThat(queryResult.size()).isEqualTo(2);

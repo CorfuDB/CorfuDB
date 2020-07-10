@@ -111,7 +111,8 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                 // Start Log Replication Server on Standby Site
                 standbyReplicationServer = runReplicationServer(standbyReplicationServerPort);
             } else {
-                serverA = new CorfuInterClusterReplicationServer(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=" + "localhost", String.valueOf(activeReplicationServerPort)});
+                serverA = new CorfuInterClusterReplicationServer(new String[]{"--plugin=" + pluginConfigFilePath,
+                        "--address=" + "localhost", String.valueOf(activeReplicationServerPort), "--log-path=" + "/Users/maxi/Projects/CorfuDB/tmp"});
                 Thread siteAThread = new Thread(serverA);
                 System.out.print("\nStart Corfu Log Replication Server on 9010");
                 siteAThread.start();
@@ -234,7 +235,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
     public void testPrepareRoleChangeAndQueryStatusAPI() throws Exception {
         try {
-            testLogReplicationEndToEnd(false, false);
+            testLogReplicationEndToEnd(true, false);
 
             //as data have been transfered over, the replication status should be 100% done.
             int replicationStatus = 0;
@@ -276,7 +277,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
     @Test
     public void runSiteSwitch() throws Exception {
         try {
-            testLogReplicationEndToEnd(false, false);
+            testLogReplicationEndToEnd(true, false);
 
             int replicationStatus = 0;
             DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();

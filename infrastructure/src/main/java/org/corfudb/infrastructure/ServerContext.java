@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -28,10 +29,12 @@ import org.corfudb.util.UuidUtils;
 import javax.annotation.Nonnull;
 import java.io.File;
 import java.nio.file.Files;
+import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -89,6 +92,8 @@ public class ServerContext implements AutoCloseable {
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
 
+    private static final String CLUSTER_TOPOLOGY = "CLUSTER_TOPOLOGY";
+
     private static final KvRecord<String> NODE_ID_RECORD = KvRecord.of(NODE_ID, String.class);
 
     private static final KvRecord<Layout> CURR_LAYOUT_RECORD = KvRecord.of(
@@ -110,7 +115,6 @@ public class ServerContext implements AutoCloseable {
     private static final KvRecord<Long> LOG_UNIT_WATERMARK_RECORD = KvRecord.of(
             PREFIX_LOGUNIT, EPOCH_WATER_MARK, Long.class
     );
-
 
     /**
      * various duration constants.
@@ -708,5 +712,15 @@ public class ServerContext implements AutoCloseable {
                     TimeUnit.MILLISECONDS
             );
         }
+    }
+
+    public void recordClusterTopology(TopologyDescriptor topologyDescriptor) {
+        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
+        long currentTime = System.currentTimeMillis();
+        String timestamp = formatter.format(new Date(currentTime)) + ":" + currentTime;
+
+        KvRecord<TopologyDescriptor> kvRecord = KvRecord.of(
+                CLUSTER_TOPOLOGY, timestamp, TopologyDescriptor.class);
+        dataStore.put(kvRecord, topologyDescriptor);
     }
 }

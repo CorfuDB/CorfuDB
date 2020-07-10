@@ -16,6 +16,8 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
 
+import java.util.Map;
+
 /**
  * The table persisted at the replication writer side.
  * It records the logreader cluster's snapshot timestamp  and last log entry's timestamp, it has received and processed.
@@ -36,7 +38,7 @@ public class LogReplicationMetadataManager {
 
     private CorfuRuntime runtime;
 
-    public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
+    public LogReplicationMetadataManager(CorfuRuntime rt, TopologyDescriptor topologyDescriptor, String localClusterId) {
         this.runtime = rt;
         this.corfuStore = new CorfuStore(runtime);
         this.topologyInfoStore = new ReplicationTopologyInfoStore(runtime, localClusterId);
@@ -54,8 +56,7 @@ public class LogReplicationMetadataManager {
             throw new ReplicationWriterException(e);
         }
 
-        TopologyDescriptor topologyDescriptor = new TopologyDescriptor(topologyConfigId, null, null);
-        setupTopologyConfigId(topologyConfigId, topologyDescriptor);
+        setupTopologyConfigId(topologyDescriptor);
     }
 
     public CorfuStoreMetadata.Timestamp getTimestamp() {
@@ -137,9 +138,10 @@ public class LogReplicationMetadataManager {
         txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
-    public void setupTopologyConfigId(long siteConfigID, TopologyDescriptor topologyDescriptor) {
+    public void setupTopologyConfigId(TopologyDescriptor topologyDescriptor) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+        long siteConfigID = topologyDescriptor.getTopologyConfigId();
 
         if (siteConfigID <= persistSiteConfigID) {
             log.warn("Skip setupTopologyConfigId. the current topologyConfigId " + siteConfigID + " is not larger than the persistSiteConfigID " + persistSiteConfigID);
@@ -160,7 +162,7 @@ public class LogReplicationMetadataManager {
 
         // update topology corfutable
 
-        topologyInfoStore.append(topologyDescriptor.convertToMessage());
+        topologyInfoStore.appendToCorfuTable(topologyDescriptor.convertToMessage());
         log.info("Update topologyConfigId, new metadata {}", this);
     }
 

@@ -31,7 +31,6 @@ public class ReplicationTopologyInfoStore {
     private CorfuStore corfuStore;
     private Table<LogReplicationClusterInfo.TopologyTimestamp, TopologyConfigurationMsg, TopologyConfigurationID> topologyHisTable;
     private String tableName;
-    private int sequence = 0;
 
     public ReplicationTopologyInfoStore(CorfuRuntime runtime, String clusterId) {
         this.corfuStore = new CorfuStore(runtime);
@@ -58,17 +57,18 @@ public class ReplicationTopologyInfoStore {
         Query q = corfuStore.query(namespace);
         QueryResult<CorfuStoreEntry<TopologyTimestamp, TopologyConfigurationMsg, TopologyConfigurationID>> queryResult =
                 q.executeQuery(tableName, record ->
-                        ((TopologyConfigurationMsg)record.getPayload()).getTopologyConfigID() == topologyConfigID);
+                        ((TopologyConfigurationMsg) record.getPayload()).getTopologyConfigID() == topologyConfigID);
         return queryResult.getResult();
     }
 
     // write interface
-    public void append(TopologyConfigurationMsg topologyConfigurationMsg) {
+    public void appendToCorfuTable(TopologyConfigurationMsg topologyConfigurationMsg) {
         Exception ex = null;
         boolean shouldRetry = true;
 
-        SimpleDateFormat formatter= new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
-        String timestamp = sequence++ + " " + formatter.format(new Date(System.currentTimeMillis()));
+        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
+        long currentTime = System.currentTimeMillis();
+        String timestamp = formatter.format(new Date(currentTime)) + ":" + currentTime;
         System.out.print("timestamp " + timestamp);
         TopologyTimestamp txKey = TopologyTimestamp.newBuilder().setTimestamp(timestamp).build();
         TopologyConfigurationID txMetadata = TopologyConfigurationID.newBuilder().
@@ -88,7 +88,7 @@ public class ReplicationTopologyInfoStore {
         }
 
         if (shouldRetry) {
-            log.warn("Could not append the topology information after MAX_RETRY {} due to {}", MAX_RETRY, ex);
+            log.warn("Could not appendToCorfuTable the topology information after MAX_RETRY {} due to {}", MAX_RETRY, ex);
         }
     }
 }

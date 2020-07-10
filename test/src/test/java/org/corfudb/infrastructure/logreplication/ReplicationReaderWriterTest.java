@@ -1,5 +1,8 @@
 package org.corfudb.infrastructure.logreplication;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
@@ -25,6 +28,7 @@ import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.test.SampleSchema.Uuid;
+import org.corfudb.utils.CommonTypes;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
@@ -49,6 +53,7 @@ import static org.corfudb.integration.ReplicationReaderWriterIT.writeLogEntryMsg
 public class ReplicationReaderWriterTest extends AbstractViewTest {
     static private final int START_VAL = 1;
     static final int NUM_KEYS = 4;
+    static final int DEFAULT_CORFU_PORT = 9000;
 
     CorfuRuntime srcDataRuntime = null;
     CorfuRuntime dstDataRuntime = null;
@@ -80,7 +85,10 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
         UUID uuid = UUID.randomUUID();
         LogReplicationConfig config = new LogReplicationConfig(hashMap.keySet());
-        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(readerRuntime, 0, uuid.toString());
+        TopologyDescriptor topologyDescriptor =  new TopologyDescriptor(0,
+                new ClusterDescriptor("dummy", LogReplicationClusterInfo.ClusterRole.ACTIVE, DEFAULT_CORFU_PORT), new HashMap<>());
+
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(readerRuntime, topologyDescriptor, uuid.toString());
         logEntryReader = new StreamsLogEntryReader(readerRuntime, config);
         logEntryWriter = new LogEntryWriter(writerRuntime, config, logReplicationMetadataManager);
     }

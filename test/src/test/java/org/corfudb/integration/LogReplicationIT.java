@@ -7,6 +7,7 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
@@ -205,7 +206,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.parseConfigurationString(DESTINATION_ENDPOINT);
         dstTestRuntime.connect();
 
-        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, ACTIVE_CLUSTER_ID);
+        TopologyDescriptor topologyDescriptor =  new TopologyDescriptor(0,
+                new ClusterDescriptor("dummy", LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT), new HashMap<>());
+
+        logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, topologyDescriptor, ACTIVE_CLUSTER_ID);
     }
 
     private void cleanEnv() {
