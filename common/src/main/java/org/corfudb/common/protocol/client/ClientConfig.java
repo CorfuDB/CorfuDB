@@ -23,7 +23,7 @@ public class ClientConfig {
     private final String KeyStorePasswordFile;
     private final String trustStore;
     private final String trustStorePasswordFile;
-    private final String saslUernameFile;
+    private final String saslUsernameFile;
     private final String saslPasswordFile;
     private final ChannelImplementation socketType;
     private final boolean tcpNoDelay;

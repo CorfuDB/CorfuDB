@@ -20,6 +20,5 @@ public class UniversalMsgDecoder extends MessageToMessageDecoder<CorfuProtocol.U
             ByteBuf buf = Unpooled.copiedBuffer(universalMsg.getLegacyCorfuMsg().getPayload().toByteArray());
             out.add(buf);
         }
-
     }
 }
