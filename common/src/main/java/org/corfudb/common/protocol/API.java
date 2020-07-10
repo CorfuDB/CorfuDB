@@ -13,6 +13,8 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.ResetRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ResetResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.SealRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.SealResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.AuthenticateRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.AuthenticateResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ProtocolVersion;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ERROR;
@@ -206,6 +208,29 @@ public class API {
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(error)
+                .build();
+    }
+    public static Request newAuthenticateRequest(Header header, UUID clientId, UUID serverId) {
+        AuthenticateRequest authRequest = AuthenticateRequest.newBuilder()
+                .setClientId(getUUID(clientId))
+                .setServerId(getUUID(serverId))
+                .build();
+
+        return Request.newBuilder()
+                .setHeader(header)
+                .setAuthenticateRequest(authRequest)
+                .build();
+    }
+
+    public static Response newAuthenticateResponse(Header header, UUID serverId, String version) {
+        AuthenticateResponse authResponse = AuthenticateResponse.newBuilder()
+                .setServerId(getUUID(serverId))
+                .setCorfuVersion(version)
+                .build();
+
+        return Response.newBuilder()
+                .setHeader(header)
+                .setAuthenticateResponse(authResponse)
                 .build();
     }
 }
