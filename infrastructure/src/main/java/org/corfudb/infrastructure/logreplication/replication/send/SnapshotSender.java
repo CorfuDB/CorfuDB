@@ -41,12 +41,11 @@ import static java.lang.Thread.sleep;
 @Slf4j
 public class SnapshotSender {
 
-    // TODO (probably move to a configuration file)
-    public static final int SNAPSHOT_BATCH_SIZE = 5;
-
     // While waiting for the standby site applying the snapshot,
     // the interval it polls the standby site.
     static final int SLEEP_INTERVAL = 1000;
+    public static int DEFAULT_SNAPSHOT_BATCH_SIZE = 5;
+    public static final int DEFAULT_TIMEOUT = 5000;
 
     private CorfuRuntime runtime;
 
@@ -60,6 +59,7 @@ public class SnapshotSender {
 
     // Snapshot timestamp.
     private long baseSnapshotTimestamp;
+    private final int snapshotSyncBatchSize;
 
     // Flag indicating the full snapshot sync's phase I, data reading and transferring phase, completed.
     boolean readingCompleted = false;
@@ -80,10 +80,11 @@ public class SnapshotSender {
     private DataSender dataSender;
 
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                          ReadProcessor readProcessor, LogReplicationFSM fsm) {
+                          ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
+        this.snapshotSyncBatchSize = snapshotSyncBatchSize <= 0 ? DEFAULT_SNAPSHOT_BATCH_SIZE : snapshotSyncBatchSize;
         this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender);
         this.dataSender = dataSender;
     }

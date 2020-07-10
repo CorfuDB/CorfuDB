@@ -24,15 +24,15 @@ public class LogReplicationPluginConfig {
 
     // Transport Configurations
     public static final String DEFAULT_JAR_PATH = "/infrastructure/target/infrastructure-0.3.0-SNAPSHOT.jar";
-    public static final String DEFAULT_SERVER_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.GRPCLogReplicationServerChannelAdapter";
-    public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.GRPCLogReplicationClientChannelAdapter";
+    public static final String DEFAULT_SERVER_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.NettyLogReplicationServerChannelAdapter";
+    public static final String DEFAULT_CLIENT_CLASSNAME = "org.corfudb.infrastructure.logreplication.transport.sample.NettyLogReplicationClientChannelAdapter";
 
     // Stream Fetcher
     public static final String DEFAULT_STREAM_FETCHER_JAR_PATH = "/target/infrastructure-0.3.0-SNAPSHOT.jar";
     public static final String DEFAULT_STREAM_FETCHER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultLogReplicationConfigAdapter";
 
     // Topology Manager
-    public static final String DEFAULT_SITE_MANAGER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager";
+    public static final String DEFAULT_CLUSTER_MANAGER_CLASSNAME = "org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager";
 
     private String transportAdapterJARPath;
     private String transportServerClassCanonicalName;
@@ -68,7 +68,7 @@ public class LogReplicationPluginConfig {
             this.streamFetcherClassCanonicalName = DEFAULT_STREAM_FETCHER_CLASSNAME;
 
             this.topologyManagerAdapterJARPath = getParentDir() + DEFAULT_JAR_PATH;
-            this.topologyManagerAdapterName = DEFAULT_SITE_MANAGER_CLASSNAME;
+            this.topologyManagerAdapterName = DEFAULT_CLUSTER_MANAGER_CLASSNAME;
         }
 
         log.debug("Log Replication Plugins :: {} ", this);

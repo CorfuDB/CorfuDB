@@ -5,6 +5,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
@@ -179,6 +180,7 @@ public class LogReplicationFSM {
      *
      * @param runtime Corfu Runtime
      * @param config log replication configuration
+     * @param remoteCluster remote cluster descriptor
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
      * @param readProcessor read processor for data transformation
@@ -201,6 +203,7 @@ public class LogReplicationFSM {
      * @param dataSender application callback for snapshot and log entry sync messages
      * @param logEntryReader log entry logreader implementation
      * @param readProcessor read processor (for data transformation)
+     * @param remoteCluster remote cluster descriptor
      * @param workers FSM executor service for state tasks
      */
     @VisibleForTesting
@@ -214,7 +217,7 @@ public class LogReplicationFSM {
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
-        snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, this);
+        snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, config.getSnapshotSyncBatchSize(), this);
         logEntrySender = new LogEntrySender(runtime, logEntryReader, dataSender, readProcessor, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state

@@ -21,6 +21,7 @@ import org.corfudb.util.Sleep;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
+import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
 import org.corfudb.utils.lock.LockListener;
 
@@ -222,9 +223,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             try {
                 // Connect to Cluster Manager and Retrieve Topology Info
                 log.info("Connecting to Cluster Manager adapter...");
-                clusterManagerAdapter.connect(this);
+                clusterManagerAdapter.register(this);
+                clusterManagerAdapter.start();
                 log.info("Fetch topology from Cluster Manager...");
-                TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.fetchTopology();
+                TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.queryTopologyConfig(false);
                 topologyDescriptor = new TopologyDescriptor(topologyMessage);
                 return;
             } catch (Exception e) {
@@ -322,7 +324,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
         }
 
-        return new LogReplicationConfig(streamsToReplicate);
+        return new LogReplicationConfig(streamsToReplicate, serverContext.getSnapshotSyncBatchSize());
     }
 
     /**
@@ -332,6 +334,9 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     private void registerToLogReplicationLock() {
         try {
+
+            Lock.setLeaseDuration(serverContext.getLockLeaseDuration());
+
             IRetry.build(IntervalRetry.class, () -> {
                 try {
                     LockClient lock = new LockClient(logReplicationNodeId, getCorfuRuntime());
@@ -562,13 +567,11 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * msg needs to send out.
      */
     @Override
-    public void prepareClusterRoleChange() {
-        //TODO  It does not restrict ClusterRole change from standby -> active or active->standby however,
-        // our underlying only process one type. Maybe it's the naming? or revising the actual functionality?
+    public void prepareToBecomeStandby() {
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null) {
             replicationManager.prepareClusterRoleChange();
         } else {
-            log.warn("Illegal prepareClusterRoleChange when cluster{} with role {}",
+            log.warn("Illegal prepareToBecomeStandby when cluster{} with role {}",
                     localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
         }
     }

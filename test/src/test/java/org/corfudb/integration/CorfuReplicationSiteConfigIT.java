@@ -239,7 +239,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             //as data have been transfered over, the replication status should be 100% done.
             int replicationStatus = 0;
             DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareToBecomeStandby();
             replicationStatus = siteManager.queryReplicationStatus();
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
                 replicationStatus = siteManager.queryReplicationStatus();
@@ -258,7 +258,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             }
 
             replicationStatus = 0;
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareToBecomeStandby();
             int retry = 0;
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE && retry++ < MAX_RETRY) {
                 replicationStatus = siteManager.queryReplicationStatus();
@@ -280,38 +280,37 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
 
             int replicationStatus = 0;
             DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareToBecomeStandby();
             replicationStatus = siteManager.queryReplicationStatus();
 
             System.out.print("\nreplication percentage done " + replicationStatus);
             assertThat(replicationStatus).isEqualTo(CorfuReplicationManager.PERCENTAGE_BASE);
 
-
-            TopologyDescriptor topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().getTopologyConfig());
-            String primary = topologyDescriptor.getActiveCluster().getClusterId();
-            String currentPimary = primary;
+            TopologyDescriptor topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().queryTopologyConfig(true));
+            String active = topologyDescriptor.getActiveClusters().keySet().iterator().next();
+            String currentActive = active;
 
             // Wait till site role change and new transfer done.
-            assertThat(currentPimary).isEqualTo(primary);
+            assertThat(currentActive).isEqualTo(active);
 
             System.out.print("\nbefore site switch mapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 
             siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
-            siteManager.getSiteManagerCallback().siteFlip = true;
+            siteManager.getSiteManagerCallback().clusterRoleChange = true;
             siteManager = (DefaultClusterManager) serverB.getClusterManagerAdapter();
-            siteManager.getSiteManagerCallback().siteFlip = true;
+            siteManager.getSiteManagerCallback().clusterRoleChange = true;
 
             CorfuReplicationDiscoveryService discoveryService = serverA.getReplicationDiscoveryService();
             synchronized (discoveryService) {
                 discoveryService.wait();
             }
 
-            topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().getTopologyConfig());
-            currentPimary = topologyDescriptor.getActiveCluster().getClusterId();
+            topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().queryTopologyConfig(true));
+            currentActive = topologyDescriptor.getActiveClusters().keySet().iterator().next();
 
-            assertThat(currentPimary).isNotEqualTo(primary);
-            System.out.print("\nVerified Site Role Change primary " + currentPimary);
+            assertThat(currentActive).isNotEqualTo(active);
+            System.out.print("\nVerified Site Role Change primary " + currentActive);
             System.out.print("\nmapAstandby size " + mapAStandby.size() + " tail " + standbyRuntime.getAddressSpaceView().getLogTail() +
                     " mapA size " + mapA.size() + " tail " + activeRuntime.getAddressSpaceView().getLogTail());
 
@@ -342,7 +341,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             siteManager = (DefaultClusterManager)serverB.getClusterManagerAdapter();
             sleep(sleepInterval);
 
-            siteManager.prepareSiteRoleChange();
+            siteManager.prepareToBecomeStandby();
             while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
                 replicationStatus = siteManager.queryReplicationStatus();
                 System.out.print("\nreplication percentage done " + replicationStatus);
@@ -364,7 +363,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                assertThat(mapA1.containsKey(String.valueOf(i))).isTrue();
             }
 
-            System.out.print("\nSiteSwitch Test Succeeds!");
+            System.out.print("\nTest Succeeds!!!");
         } finally {
             shutdown();
         }
