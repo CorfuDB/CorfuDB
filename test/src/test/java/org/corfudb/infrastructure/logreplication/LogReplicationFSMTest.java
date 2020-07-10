@@ -480,7 +480,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), config, new ClusterDescriptor("Cluster-Local",
-                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),
+                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT, new ArrayList<>()),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
                 ackReader);
         transitionObservable = fsm.getNumTransitions();

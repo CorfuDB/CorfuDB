@@ -184,12 +184,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
             } else {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--max-data-message-size=" + MSG_SIZE,  "--plugin=" + pluginConfigFilePath,
-                            "--address=localhost", "--lock-lease=5", String.valueOf(activeReplicationServerPort)});
+                            "--address=localhost", "--log-replication-config=short_lease_lock_config.properties", String.valueOf(activeReplicationServerPort)});
                 });
 
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--max-data-message-size=" + MSG_SIZE, "--plugin=" + pluginConfigFilePath,
-                            "--address=localhost", "--lock-lease=5", String.valueOf(standbyReplicationServerPort)});
+                            "--address=localhost", "--log-replication-config=short_lease_lock_config.properties", String.valueOf(standbyReplicationServerPort)});
                 });
             }
         } catch (Exception e) {

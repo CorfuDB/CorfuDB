@@ -11,6 +11,8 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRunti
 import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverterUtils;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationLeadershipLoss;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -331,7 +333,9 @@ public class LogReplicationClientRouter implements IClientRouter {
 
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (corfuMsg.getMsgType() == CorfuMsgType.LOG_REPLICATION_LEADERSHIP_LOSS) {
-                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                CorfuPayloadMsg<LogReplicationLeadershipLoss> payloadMsg = (CorfuPayloadMsg<LogReplicationLeadershipLoss>) corfuMsg;
+                String endpoint = payloadMsg.getPayload().getEndpoint();
+                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS, endpoint));
                 return;
             }
 

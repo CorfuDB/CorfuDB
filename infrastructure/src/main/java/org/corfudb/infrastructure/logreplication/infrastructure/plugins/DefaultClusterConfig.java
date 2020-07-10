@@ -14,7 +14,10 @@ public final class DefaultClusterConfig {
     private static List<String> standbyNodesUuid = Arrays.asList("123e4567-e89b-12d3-a456-556642440123");
 
     @Getter
-    private static List<String> activeNodeNames = Arrays.asList("standby_site_node0");
+    private static List<String> activeNodeNames = Arrays.asList("active_site_node0");
+
+    @Getter
+    private static List<String> standbyNodeNames = Arrays.asList("standby_site_node0");
 
     @Getter
     private static List<String> activeIpAddresses = Arrays.asList("localhost", "localhost", "localhost");

@@ -1220,7 +1220,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
                 LogReplicationRuntimeParameters.builder()
                         .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
-                                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT))
+                                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT, new ArrayList<>()))
                                 .replicationConfig(config).localCorfuEndpoint(SOURCE_ENDPOINT).build(),
                 logReplicationMetadataManager,
                 sourceDataSender);

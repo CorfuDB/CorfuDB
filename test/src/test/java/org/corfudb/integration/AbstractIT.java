@@ -564,10 +564,6 @@ public class AbstractIT extends AbstractCorfuTest {
                 command.append(" --plugin=").append(pluginConfigFilePath);
             }
 
-            if (lockLeaseDuration != null) {
-                command.append(" --lock-lease=").append(lockLeaseDuration);
-            }
-
             command.append(" -d ").append(logLevel).append(" ")
                     .append(port);
             return command.toString();

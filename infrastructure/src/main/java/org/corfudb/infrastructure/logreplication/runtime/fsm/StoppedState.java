@@ -14,7 +14,7 @@ import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourc
 @Slf4j
 public class StoppedState implements LogReplicationRuntimeState {
 
-    private LogReplicationSourceManager replicationSourceManager;
+    private final LogReplicationSourceManager replicationSourceManager;
 
     public StoppedState(LogReplicationSourceManager replicationSourceManager) {
         this.replicationSourceManager = replicationSourceManager;

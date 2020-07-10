@@ -10,6 +10,7 @@ import org.corfudb.util.Sleep;
 import org.corfudb.utils.TestLockListener;
 import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
+import org.corfudb.utils.lock.LockConfig;
 import org.corfudb.utils.lock.LockDataTypes;
 import org.corfudb.utils.lock.LockListener;
 import org.corfudb.utils.lock.states.HasLeaseState;
@@ -362,7 +363,7 @@ public class LockIT extends AbstractIT implements Observer {
                     .build();
             CorfuRuntime rt = CorfuRuntime.fromParameters(params).parseConfigurationString(corfuEndpoint).connect();
             clientIdToRuntimeMap.put(clientId, rt);
-            return new LockClient(clientId, rt);
+            return new LockClient(clientId, getDefaultLockConfig(), rt);
 
         } catch (Exception e) {
             throw e;
@@ -378,17 +379,23 @@ public class LockIT extends AbstractIT implements Observer {
         return listener;
     }
 
+    private LockConfig getDefaultLockConfig() {
+        return LockConfig.builder()
+                .lockGroup(LOCK_GROUP)
+                .lockName(LOCK_NAME)
+                .lockLeaseDurationInSeconds(LOCK_LEASE_DURATION)
+                .lockMonitorDurationInSeconds(MONITOR_LOCK_TIME_CONSTANT)
+                .lockDurationBetweenLeaseChecksSeconds(MONITOR_LOCK_TIME_CONSTANT)
+                .lockDurationBetweenLeaseRenewalsSeconds(LOCK_TIME_CONSTANT)
+                .lockMaxTimeListenerNotificationSeconds(LOCK_TIME_CONSTANT)
+                .build();
+    }
+
     private void initialize() {
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
                 .build();
         runtime = CorfuRuntime.fromParameters(params).parseConfigurationString(corfuEndpoint).connect();
-
-        LockState.setDurationBetweenLeaseRenewals(LOCK_TIME_CONSTANT);
-        LockState.setMaxTimeForNotificationListenerProcessing(LOCK_TIME_CONSTANT);
-        LockClient.setDurationBetweenLockMonitorRuns(MONITOR_LOCK_TIME_CONSTANT);
-        HasLeaseState.setDurationBetweenLeaseChecks(MONITOR_LOCK_TIME_CONSTANT);
-        Lock.setLeaseDuration(LOCK_LEASE_DURATION);
     }
 
     private void shutdown() {

@@ -187,12 +187,12 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             standbySiteName = DefaultClusterConfig.getStandbyClusterId();
             standbyCorfuPort = DefaultClusterConfig.getStandbyCorfuPort();
             standbyLogReplicationPort = DefaultClusterConfig.getStandbyLogReplicationPort();
-            standbyNodeNames.addAll(DefaultClusterConfig.getActiveNodeNames());
+            standbyNodeNames.addAll(DefaultClusterConfig.getStandbyNodeNames());
             standbyNodeHosts.addAll(DefaultClusterConfig.getStandbyIpAddresses());
             standbyNodeIds.addAll(DefaultClusterConfig.getStandbyNodesUuid());
         }
 
-        activeCluster = new ClusterDescriptor(activeClusterId, ClusterRole.ACTIVE, Integer.parseInt(activeCorfuPort));
+        activeCluster = new ClusterDescriptor(activeClusterId, ClusterRole.ACTIVE, Integer.parseInt(activeCorfuPort), new ArrayList<>());
 
         for (int i = 0; i < activeNodeNames.size(); i++) {
             log.info("Active Cluster Name {}, IpAddress {}", activeNodeNames.get(i), activeNodeHosts.get(i));
@@ -203,7 +203,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
         // Setup backup cluster information
         Map<String, ClusterDescriptor> standbySites = new HashMap<>();
-        standbySites.put(STANDBY_CLUSTER_NAME, new ClusterDescriptor(standbySiteName, ClusterRole.STANDBY, Integer.parseInt(standbyCorfuPort)));
+        standbySites.put(STANDBY_CLUSTER_NAME, new ClusterDescriptor(standbySiteName, ClusterRole.STANDBY, Integer.parseInt(standbyCorfuPort), new ArrayList<>()));
 
         for (int i = 0; i < standbyNodeNames.size(); i++) {
             log.info("Standby Cluster Name {}, IpAddress {}", standbyNodeNames.get(i), standbyNodeHosts.get(i));

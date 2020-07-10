@@ -15,19 +15,10 @@ import java.util.concurrent.ScheduledExecutorService;
  * @since 04/17/2020
  */
 public abstract class LockState {
-
-    // Renew lease every 20 seconds
-    @Setter
-    public static int DurationBetweenLeaseRenewals = 20;
-
-    // Max time allowed for listener to process a notification
-    @Setter
-    public static int MaxTimeForNotificationListenerProcessing = 60;
-
     // Lock being acquired
     protected final Lock lock;
     // Lock store to be used by the Lock states
-    protected final LockStore lockStore;
+    public final LockStore lockStore;
     // Task scheduler to be used by lock states
     protected final ScheduledExecutorService taskScheduler;
     // Dedicated scheduler to be used in HasLeaseState to monitor acquired lock
