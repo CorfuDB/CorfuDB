@@ -3,20 +3,28 @@ package org.corfudb.utils.lock.persistence;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.utils.CommonTypes.Uuid;
+import org.corfudb.utils.lock.LockConfig;
 import org.corfudb.utils.lock.LockDataTypes.LockData;
 import org.corfudb.utils.lock.LockDataTypes.LockId;
 
 import java.lang.reflect.InvocationTargetException;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.corfudb.utils.lock.Lock.leaseDuration;
+
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -39,9 +47,13 @@ public class LockStore {
     // Locks table name
     private static final String tableName = "LOCK";
 
+    @Getter
     private final Uuid clientId;
     // Corfu store to access data from the Lock table.
     private final CorfuStore corfuStore;
+
+    private final LockConfig lockConfig;
+
     /**
      * Cache of all the observed locks/leases. Contains the last timestamp at which the lock was last observed.
      */
@@ -55,7 +67,7 @@ public class LockStore {
      * @throws IllegalAccessException
      * @throws InvocationTargetException
      */
-    public LockStore(CorfuRuntime runtime, UUID clientUuid) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public LockStore(CorfuRuntime runtime, UUID clientUuid, LockConfig lockConfig) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
         this.corfuStore = new CorfuStore(runtime);
         this.corfuStore.openTable(namespace,
                 tableName,
@@ -63,7 +75,7 @@ public class LockStore {
                 LockData.class,
                 null,
                 TableOptions.builder().build());
-
+        this.lockConfig = lockConfig;
         this.clientId = Uuid.newBuilder()
                 .setMsb(clientUuid.getMostSignificantBits())
                 .setLsb(clientUuid.getLeastSignificantBits())
@@ -115,6 +127,33 @@ public class LockStore {
                 log.debug("Lock: {} Client:{} could not acquire lock. Lease in datastore: {}", lockId, clientId, lockInDatastore.get());
                 return false;
             }
+        }
+    }
+
+    @VisibleForTesting
+    public void forceAcquire(LockId lockId) throws LockStoreException {
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+        Optional<LockData> lockInDatastore = get(lockId, timestamp);
+        if (!lockInDatastore.isPresent()) {
+            LockData newLockData = LockData.newBuilder()
+                    .setLockId(lockId)
+                    .setLeaseOwnerId(clientId)
+                    .setLeaseRenewalNumber(0)
+                    .setLeaseAcquisitionNumber(0)
+                    .build();
+            // if no lock present acquire(create) the lock in datastore
+            create(lockId, newLockData, timestamp);
+            log.info("Lock: {} Client:{} acquired lock. No pre-existing lease in datastore.", lockId, clientId);
+        }
+        else {
+            LockData newLockData = LockData.newBuilder()
+                    .setLockId(lockId)
+                    .setLeaseOwnerId(clientId)
+                    .setLeaseRenewalNumber(0)
+                    .setLeaseAcquisitionNumber(lockInDatastore.get().getLeaseAcquisitionNumber() + 1)
+                    .build();
+            update(lockId, newLockData, timestamp);
+            log.info("Lock: {} Client:{} force-acquired lock.", lockId, clientId);
         }
     }
 
@@ -286,7 +325,8 @@ public class LockStore {
                 return false;
             } else {
                 // check if the lease has expired
-                boolean leaseExpired = observedLock.timestamp.isBefore(Instant.now().minusSeconds(leaseDuration));
+                boolean leaseExpired = observedLock.timestamp.isBefore(Instant.now()
+                        .minusSeconds(lockConfig.getLockLeaseDurationInSeconds()));
                 log.info("LockStore: check if lease is expired : {}", leaseExpired);
                 return leaseExpired;
             }

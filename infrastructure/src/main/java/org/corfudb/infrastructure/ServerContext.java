@@ -43,8 +43,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 /**
@@ -90,7 +90,9 @@ public class ServerContext implements AutoCloseable {
     public static final String PLUGIN_CONFIG_FILE_PATH = "../resources/corfu_plugin_config.properties";
 
 
-    /** The node Id, stored as a base64 string. */
+    /**
+     * The node Id, stored as a base64 string.
+     */
     private static final String NODE_ID = "NODE_ID";
 
 
@@ -100,7 +102,7 @@ public class ServerContext implements AutoCloseable {
             PREFIX_LAYOUT, KEY_LAYOUT, Layout.class
     );
 
-    private static final KvRecord<Long> SERVER_EPOCH_RECORD= KvRecord.of(
+    private static final KvRecord<Long> SERVER_EPOCH_RECORD = KvRecord.of(
             PREFIX_EPOCH, KEY_EPOCH, Long.class
     );
 
@@ -145,7 +147,7 @@ public class ServerContext implements AutoCloseable {
     @Getter
     private final EventLoopGroup workerGroup;
 
-    @Getter (AccessLevel.PACKAGE)
+    @Getter(AccessLevel.PACKAGE)
     private final NodeLocator nodeLocator;
 
     @Getter
@@ -172,7 +174,7 @@ public class ServerContext implements AutoCloseable {
         // Setup the netty event loops. In tests, these loops may be provided by
         // a test framework to save resources.
         final boolean providedEventLoops =
-                 getChannelImplementation().equals(ChannelImplementation.LOCAL);
+                getChannelImplementation().equals(ChannelImplementation.LOCAL);
 
         if (providedEventLoops) {
             clientGroup = getServerConfig(EventLoopGroup.class, "client");
@@ -219,8 +221,14 @@ public class ServerContext implements AutoCloseable {
         return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
     }
 
+    public Optional<String> getLogReplicationConfig() {
+        return Optional.ofNullable(getServerConfig(String.class,
+                "--log-replication-config"));
+    }
+
     /**
      * Get the max number of messages can be sent over per batch.
+     *
      * @return
      */
     public int getLogReplicationMaxNumMsgPerBatch() {
@@ -228,20 +236,10 @@ public class ServerContext implements AutoCloseable {
         return val == null ? DEFAULT_MAX_NUM_MSG_PER_BATCH : Integer.parseInt(val);
     }
 
-    public int getLockLeaseDuration() {
-        Integer lockLeaseDuration;
-        try {
-            lockLeaseDuration = getServerConfig(Integer.class, "--lock-lease");
-        } catch (ClassCastException e) {
-            // In the testing framework we only support Strings
-            lockLeaseDuration = Integer.valueOf(getServerConfig(String.class, "--lock-lease"));
-        }
-        return lockLeaseDuration == null ? Lock.leaseDuration : lockLeaseDuration;
-    }
-
     /**
      * Get the max size of the log replication data message used by both snapshot data message and
      * log entry sync data message.
+     *
      * @return
      */
     public int getLogReplicationMaxDataMessageSize() {
@@ -329,9 +327,15 @@ public class ServerContext implements AutoCloseable {
      * Generate a Node Id if not present.
      */
     private void generateNodeId() {
+        UUID serverId;
+        if (serverConfig.get("--node-id") != null) {
+            serverId = UuidUtils.fromBase64(getServerConfig(String.class, "--node-id"));
+        } else {
+            serverId = UUID.randomUUID();
+        }
         String currentId = getDataStore().get(NODE_ID_RECORD);
         if (currentId == null) {
-            String idString = UuidUtils.asBase64(UUID.randomUUID());
+            String idString = UuidUtils.asBase64(serverId);
             log.info("No Node Id, setting to new Id={}", idString);
             getDataStore().put(NODE_ID_RECORD, idString);
         } else {
@@ -342,13 +346,14 @@ public class ServerContext implements AutoCloseable {
     /**
      * Get the node id as an UUID.
      *
-     * @return  A UUID for this node.
+     * @return A UUID for this node.
      */
     public UUID getNodeId() {
         return UuidUtils.fromBase64(getNodeIdBase64());
     }
 
-    /** Get the node id as a base64 string.
+    /**
+     * Get the node id as a base64 string.
      *
      * @return A node ID for this node, as a base64 string.
      */
@@ -359,10 +364,10 @@ public class ServerContext implements AutoCloseable {
     /**
      * Get a field from the server configuration map.
      *
-     * @param type          The type of the field.
-     * @param optionName    The name of the option to retrieve.
-     * @param <T>           The type of the field to return.
-     * @return              The field with the give option name.
+     * @param type       The type of the field.
+     * @param optionName The name of the option to retrieve.
+     * @param <T>        The type of the field to return.
+     * @return The field with the give option name.
      */
     @SuppressWarnings("unchecked")
     public <T> T getServerConfig(Class<T> type, String optionName) {
@@ -374,7 +379,7 @@ public class ServerContext implements AutoCloseable {
      * Install a single node layout if and only if no layout is currently installed.
      * Synchronized, so this method is thread-safe.
      *
-     *  @return True, if a new layout was installed, false otherwise.
+     * @return True, if a new layout was installed, false otherwise.
      */
     public synchronized boolean installSingleNodeLayoutIfAbsent() {
         if (isSingleNodeSetup() && getCurrentLayout() == null) {
@@ -386,9 +391,10 @@ public class ServerContext implements AutoCloseable {
 
     /**
      * Check if it's a single node setup.
+     *
      * @return True if it is, false otherwise.
      */
-    public boolean isSingleNodeSetup(){
+    public boolean isSingleNodeSetup() {
         return (Boolean) getServerConfig().get("--single");
     }
 
@@ -396,8 +402,8 @@ public class ServerContext implements AutoCloseable {
      * Get a new single node layout used for self-bootstrapping a server started with
      * the -s flag.
      *
-     *  @returns A new single node layout with a unique cluster Id
-     *  @throws IllegalArgumentException    If the cluster id was not auto, base64 or a UUID string
+     * @throws IllegalArgumentException If the cluster id was not auto, base64 or a UUID string
+     * @returns A new single node layout with a unique cluster Id
      */
     public Layout getNewSingleNodeLayout() {
         final String clusterIdString = (String) getServerConfig().get("--cluster-id");
@@ -414,24 +420,24 @@ public class ServerContext implements AutoCloseable {
             }
         }
         log.info("getNewSingleNodeLayout: Bootstrapping with cluster Id {} [{}]",
-            clusterId, UuidUtils.asBase64(clusterId));
+                clusterId, UuidUtils.asBase64(clusterId));
         String localAddress = getServerConfig().get("--address") + ":"
-            + getServerConfig().get("<port>");
+                + getServerConfig().get("<port>");
         return new Layout(
-            Collections.singletonList(localAddress),
-            Collections.singletonList(localAddress),
-            Collections.singletonList(new LayoutSegment(
-                Layout.ReplicationMode.CHAIN_REPLICATION,
+                Collections.singletonList(localAddress),
+                Collections.singletonList(localAddress),
+                Collections.singletonList(new LayoutSegment(
+                        Layout.ReplicationMode.CHAIN_REPLICATION,
+                        0L,
+                        -1L,
+                        Collections.singletonList(
+                                new Layout.LayoutStripe(
+                                        Collections.singletonList(localAddress)
+                                )
+                        )
+                )),
                 0L,
-                -1L,
-                Collections.singletonList(
-                    new Layout.LayoutStripe(
-                        Collections.singletonList(localAddress)
-                    )
-                )
-            )),
-            0L,
-            clusterId
+                clusterId
         );
     }
 
@@ -550,7 +556,7 @@ public class ServerContext implements AutoCloseable {
      */
     public synchronized void saveFailureDetectorMetrics(FailureDetectorMetrics detector) {
         boolean enabled = Boolean.parseBoolean(System.getProperty("corfu.failuredetector", Boolean.FALSE.toString()));
-        if (!enabled){
+        if (!enabled) {
             return;
         }
 
@@ -570,7 +576,7 @@ public class ServerContext implements AutoCloseable {
      */
     public FailureDetectorMetrics getFailureDetectorMetrics() {
         boolean enabled = Boolean.parseBoolean(System.getProperty("corfu.failuredetector", Boolean.FALSE.toString()));
-        if(!enabled){
+        if (!enabled) {
             return getDefaultFailureDetectorMetric(getManagementLayout());
         }
 
@@ -587,6 +593,7 @@ public class ServerContext implements AutoCloseable {
 
     /**
      * Provide default metric.
+     *
      * @param layout current layout
      * @return default value
      */
@@ -661,7 +668,8 @@ public class ServerContext implements AutoCloseable {
      *
      * @return A worker group.
      */
-    private @Nonnull EventLoopGroup getNewWorkerGroup() {
+    private @Nonnull
+    EventLoopGroup getNewWorkerGroup() {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
                 .setNameFormat(getThreadPrefix() + "worker-%d")
                 .build();
@@ -672,7 +680,7 @@ public class ServerContext implements AutoCloseable {
                 ? Runtime.getRuntime().availableProcessors() * 2
                 : requestedThreads;
         EventLoopGroup group = getChannelImplementation().getGenerator()
-            .generate(numThreads, threadFactory);
+                .generate(numThreads, threadFactory);
 
         log.info("getWorkerGroup: Type {} with {} threads",
                 group.getClass().getSimpleName(), numThreads);
@@ -684,21 +692,22 @@ public class ServerContext implements AutoCloseable {
      *
      * @return A worker group.
      */
-    private @Nonnull EventLoopGroup getNewClientGroup() {
+    private @Nonnull
+    EventLoopGroup getNewClientGroup() {
         final ThreadFactory threadFactory = new ThreadFactoryBuilder()
                 .setNameFormat(getThreadPrefix() + "client-%d")
                 .build();
 
         final int requestedThreads =
-            Integer.parseInt(getServerConfig(String.class, "--Threads"));
+                Integer.parseInt(getServerConfig(String.class, "--Threads"));
         final int numThreads = requestedThreads == 0
-            ? Runtime.getRuntime().availableProcessors() * 2
-            : requestedThreads;
+                ? Runtime.getRuntime().availableProcessors() * 2
+                : requestedThreads;
         EventLoopGroup group = getChannelImplementation().getGenerator()
-            .generate(numThreads, threadFactory);
+                .generate(numThreads, threadFactory);
 
         log.info("getClientGroup: Type {} with {} threads",
-            group.getClass().getSimpleName(), numThreads);
+                group.getClass().getSimpleName(), numThreads);
         return group;
     }
 
@@ -707,7 +716,8 @@ public class ServerContext implements AutoCloseable {
      *
      * @return A string that should be prepended to threads this server creates.
      */
-    public @Nonnull String getThreadPrefix() {
+    public @Nonnull
+    String getThreadPrefix() {
         final String prefix = getServerConfig(String.class, "--Prefix");
         if (prefix.equals("")) {
             return "";

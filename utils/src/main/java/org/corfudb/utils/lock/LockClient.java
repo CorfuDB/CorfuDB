@@ -14,9 +14,12 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.utils.lock.LockDataTypes.LockData;
 import org.corfudb.utils.lock.LockDataTypes.LockId;
 import org.corfudb.utils.lock.persistence.LockStore;
+import org.corfudb.utils.lock.persistence.LockStoreException;
 import org.corfudb.utils.lock.states.LockEvent;
+import org.corfudb.utils.lock.states.LockStateType;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
@@ -57,6 +60,7 @@ public class LockClient {
     private static int DurationBetweenLockMonitorRuns = 10;
 
     // The context contains objects that are shared across the locks in this client.
+    @Getter
     private final ClientContext clientContext;
 
     // Handle for the periodic lock monitoring task
@@ -65,17 +69,21 @@ public class LockClient {
     @Getter
     private UUID clientId;
 
+    @Getter
+    private final LockConfig lockConfig;
+
     /**
      * Constructor
      *
      * @param clientId
+     * @param lockConfig
      * @param corfuRuntime
      * @throws NoSuchMethodException
      * @throws IllegalAccessException
      * @throws InvocationTargetException
      */
     //TODO need to determine if the application should provide a clientId or should it be internally generated.
-    public LockClient(UUID clientId, CorfuRuntime corfuRuntime) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public LockClient(UUID clientId, LockConfig lockConfig, CorfuRuntime corfuRuntime) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
 
         this.taskScheduler = Executors.newScheduledThreadPool(1, (r) ->
         {
@@ -100,10 +108,88 @@ public class LockClient {
             t.setDaemon(true);
             return t;
         });
-
+        this.lockConfig = lockConfig;
         this.clientId = clientId;
-        this.lockStore = new LockStore(corfuRuntime, clientId);
+        this.lockStore = new LockStore(corfuRuntime, clientId, lockConfig);
         this.clientContext = new ClientContext(clientId, lockStore, taskScheduler, lockListenerExecutor);
+    }
+
+    /**
+     * Application registers interest for a lock [lockgroup, lockname]. The <class>Lock</class> will then
+     * make periodic attempts to acquire lock. Lock is acquired when the <class>Lock</class> is able to write
+     * a lease record in a common table that is being written to/read by all the registered <class>Lock</class>
+     * instances. Once acquired, the lease for the lock needs to be renewed periodically or else it will be acquired by
+     * another contending <class>Lock</class> instance. The application is notified if a lock is lost.
+     *
+     * @param lockListener
+     */
+    public void registerInterest(LockListener lockListener) {
+        registerInterest(lockConfig.getLockGroup(), lockConfig.getLockName(),
+                lockListener);
+    }
+
+    @VisibleForTesting
+    public void deregisterInterest() {
+        LockId lockId = LockDataTypes.LockId.newBuilder()
+                .setLockGroup(lockConfig.getLockGroup())
+                .setLockName(lockConfig.getLockName())
+                .build();
+        if (!locks.containsKey(lockId)){
+            throw new IllegalStateException("Can only deregister if the known " +
+                    "lock is present in the map.");
+        }
+        Lock lock = locks.get(lockId);
+
+        if (lock.getState().getType() != LockStateType.HAS_LEASE) {
+            throw new IllegalStateException("Can only deregister if the lock " +
+                    "is in HAS_LEASE state.");
+        }
+
+        lock.input(LockEvent.LEASE_EXPIRED);
+    }
+
+    @VisibleForTesting
+    public void resumeInterest() {
+        LockId lockId = LockDataTypes.LockId.newBuilder()
+                .setLockGroup(lockConfig.getLockGroup())
+                .setLockName(lockConfig.getLockName())
+                .build();
+        if (!locks.containsKey(lockId)){
+            throw new IllegalStateException("Can only resume interest if the known " +
+                    "lock is present in the map.");
+        }
+
+        Lock lock = locks.get(lockId);
+
+        if (lock.getState().getType() != LockStateType.NO_LEASE) {
+            throw new IllegalStateException("Can only resume interest if the lock " +
+                    "is in NO_LEASE state.");
+        }
+
+        monitorLocks();
+
+        lock.input(LockEvent.LEASE_REVOKED);
+    }
+
+    @VisibleForTesting
+    public void forceAcquire() {
+        LockId lockId = LockDataTypes.LockId.newBuilder()
+                .setLockGroup(lockConfig.getLockGroup())
+                .setLockName(lockConfig.getLockName())
+                .build();
+        if (!locks.containsKey(lockId)){
+            throw new IllegalStateException("Can only force acquire if the known " +
+                    "lock is present in the map.");
+        }
+
+        Lock lock = locks.get(lockId);
+
+        if (lock.getState().getType() != LockStateType.NO_LEASE) {
+            throw new IllegalStateException("Can only force acquire if the lock " +
+                    "is in NO_LEASE state.");
+        }
+
+        lock.input(LockEvent.FORCE_LEASE_ACQUIRED);
     }
 
     /**
@@ -117,7 +203,8 @@ public class LockClient {
      * @param lockName
      * @param lockListener
      */
-    public void registerInterest(@NonNull String lockGroup, @NonNull String lockName, LockListener lockListener) {
+    public void registerInterest(@NonNull String lockGroup, @NonNull String lockName,
+                                 LockListener lockListener) {
         LockId lockId = LockDataTypes.LockId.newBuilder()
                 .setLockGroup(lockGroup)
                 .setLockName(lockName)
@@ -125,12 +212,27 @@ public class LockClient {
 
         Lock lock = locks.computeIfAbsent(
                 lockId,
-                (key) -> new Lock(lockId, lockListener, clientContext));
+                (key) -> new Lock(lockId, lockListener, clientContext, lockConfig));
 
         // Initialize the lease
         lock.input(LockEvent.LEASE_REVOKED);
 
         monitorLocks();
+    }
+
+    /**
+     * Get current lock data.
+     * @param lockGroup
+     * @param lockName
+     * @return
+     * @throws LockStoreException
+     */
+    public Optional<LockData> getCurrentLockData(@NonNull String lockGroup, @NonNull String lockName) throws LockStoreException {
+        LockId lockId = LockDataTypes.LockId.newBuilder()
+                .setLockGroup(lockGroup)
+                .setLockName(lockName)
+                .build();
+        return lockStore.get(lockId);
     }
 
     /**
@@ -151,8 +253,8 @@ public class LockClient {
 
                     }
                 },
-                DurationBetweenLockMonitorRuns,
-                DurationBetweenLockMonitorRuns,
+                lockConfig.getLockMonitorDurationInSeconds(),
+                lockConfig.getLockMonitorDurationInSeconds(),
                 TimeUnit.SECONDS
 
         ));

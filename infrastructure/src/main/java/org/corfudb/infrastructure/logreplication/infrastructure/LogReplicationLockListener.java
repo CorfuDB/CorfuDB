@@ -16,7 +16,7 @@ import static org.corfudb.infrastructure.logreplication.infrastructure.Discovery
  */
 @Slf4j
 public class LogReplicationLockListener implements LockListener {
-    CorfuReplicationDiscoveryService discoveryService;
+    private final CorfuReplicationDiscoveryService discoveryService;
 
     LogReplicationLockListener(CorfuReplicationDiscoveryService discoveryService) {
         this.discoveryService = discoveryService;

@@ -15,6 +15,7 @@ import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.lang.reflect.Constructor;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Map;
@@ -46,8 +47,9 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "\tlog_replication_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
                     + "[--max-num-snapshot-msg-per-batch=<batch-size>] "
                     + "[--max-data-message-size=<msg-size>] "
-                    + "[--lock-lease=<lease-duration>]"
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
+                    + "[--node-id=<nodeId>]"
+                    + "[--log-replication-config=<log-replication-config-file-path>]"
                     + "[--plugin=<plugin-config-file-path>]"
                     + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
                     + "[--log-size-quota-percentage=<max_log_size_percentage>]"
@@ -178,8 +180,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + " --max-data-message-size=<msg-size>                                       "
                     + "              The max size of replication data message in bytes.\n   "
                     + "                                                                          "
-                    + " --lock-lease=<lease-duration>                                            "
-                    + "              Lock lease duration in seconds\n                            "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
@@ -298,7 +298,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * @param serverContext server context (server information)
      * @return completable future for discovered topology
      */
-    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) {
+    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) throws Exception {
 
         log.info("Start Discovery Service.");
         CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = new CompletableFuture<>();
