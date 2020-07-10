@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -72,7 +71,6 @@ public abstract class SinkBufferManager {
     long lastProcessedSeq;
 
     /**
-     *
      * @param type
      * @param ackCycleTime
      * @param ackCycleCnt
@@ -129,25 +127,31 @@ public abstract class SinkBufferManager {
      * If the message is the expected message in order, will skip the buffering and pass to sinkManager to process it;
      * then update the lastProcessedSeq value. If the next expected messages in order are in the buffer,
      * will process all till hitting the missing one.
-     *
+     * <p>
      * If the message is not the expected message, put the entry into the buffer if there is space.
+     *
      * @param dataMessage
      */
     public LogReplicationEntry processMsgAndBuffer(LogReplicationEntry dataMessage) {
 
-        if (verifyMessageType(dataMessage) == false)
-           return null;
+        if (!verifyMessageType(dataMessage))
+            return null;
 
         long preTs = getPreSeq(dataMessage);
         long currentTs = getCurrentSeq(dataMessage);
-
+        log.info("Previous timestamp: {} Current timestamp: {} LastProcessed timestamp: {} Buffer size: {} max size: {}",
+                preTs, currentTs, lastProcessedSeq, buffer.size(), maxSize);
         if (preTs == lastProcessedSeq) {
+            log.info("Dont buffer just process.");
             sinkManager.processMessage(dataMessage);
             ackCnt++;
             lastProcessedSeq = getCurrentSeq(dataMessage);
             processBuffer();
         } else if (currentTs > lastProcessedSeq && buffer.size() < maxSize) {
+            log.info("Buffer.");
             buffer.put(preTs, dataMessage);
+        } else {
+            log.info("Something else?");
         }
 
         /*
@@ -163,6 +167,7 @@ public abstract class SinkBufferManager {
 
     /**
      * Get the previous inorder message's sequence.
+     *
      * @param entry
      * @return
      */
@@ -170,6 +175,7 @@ public abstract class SinkBufferManager {
 
     /**
      * Get the current message's sequence.
+     *
      * @param entry
      * @return
      */
@@ -177,6 +183,7 @@ public abstract class SinkBufferManager {
 
     /**
      * Make an Ack with the lastProcessedSeq
+     *
      * @param entry
      * @return
      */

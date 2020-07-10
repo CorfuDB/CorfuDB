@@ -101,7 +101,9 @@ public class CorfuReplicationE2EIT extends AbstractIT {
                     .builder()
                     .build();
 
-            CorfuRuntime activeRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
+            CorfuRuntime activeRuntime = CorfuRuntime
+                    .fromParameters(params)
+                    .setTransactionLogging(true);
             activeRuntime.parseConfigurationString(activeEndpoint);
             activeRuntime.connect();
 

@@ -73,12 +73,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 @Slf4j
 public class Lock {
-
-    // lease duration in 60 seconds
-    @Setter
-    @VisibleForTesting
-    public static int leaseDuration = 60;
-
     // id of the lock
     @Getter
     private final LockDataTypes.LockId lockId;
@@ -105,6 +99,8 @@ public class Lock {
     @Getter
     private Map<LockStateType, LockState> states = new HashMap<>();
 
+
+    private final LockConfig lockConfig;
     /**
      * Constructor
      *
@@ -112,16 +108,33 @@ public class Lock {
      * @param lockListener
      * @param clientContext
      */
-    public Lock(LockDataTypes.LockId lockId, LockListener lockListener, LockClient.ClientContext clientContext) {
+    public Lock(LockDataTypes.LockId lockId, LockListener lockListener, LockClient.ClientContext clientContext,
+                LockConfig lockConfig) {
         this.lockId = lockId;
         this.clientContext = clientContext;
         this.lockListener = lockListener;
         this.eventConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("lock-event-consumer").build());
-
+        this.lockConfig = lockConfig;
         initializeStates();
         // set initial state as NO_LEASE
         this.state = states.get(LockStateType.NO_LEASE);
+
+        eventConsumer.submit(this::consume);
+    }
+
+    public Lock(LockDataTypes.LockId lockId, LockListener lockListener,
+                LockClient.ClientContext clientContext,
+                LockConfig lockConfig, LockStateType initState) {
+        this.lockId = lockId;
+        this.clientContext = clientContext;
+        this.lockListener = lockListener;
+        this.eventConsumer = Executors.newSingleThreadExecutor(new
+                ThreadFactoryBuilder().setNameFormat("lock-event-consumer").build());
+        this.lockConfig = lockConfig;
+        initializeStates();
+        // set initial state as NO_LEASE
+        this.state = states.get(initState);
 
         eventConsumer.submit(this::consume);
     }
@@ -131,8 +144,8 @@ public class Lock {
      */
     private void initializeStates() {
         states.put(LockStateType.NO_LEASE, new NoLeaseState(this));
-        states.put(LockStateType.HAS_LEASE, new HasLeaseState(this));
-        states.put(LockStateType.STOPPED, new HasLeaseState(this));
+        states.put(LockStateType.HAS_LEASE, new HasLeaseState(this, lockConfig));
+        states.put(LockStateType.STOPPED, new HasLeaseState(this, lockConfig));
     }
 
     /**
@@ -172,7 +185,7 @@ public class Lock {
             try {
                 Optional<LockState> newState = state.processEvent(event);
                 if (newState.isPresent()) {
-                    log.trace("Transition from {} to {}", state, newState);
+                    log.info("Transition from {} to {}", state, newState);
                     transition(state, newState.get());
                     state = newState.get();
                 }

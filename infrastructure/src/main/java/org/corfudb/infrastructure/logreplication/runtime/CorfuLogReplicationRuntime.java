@@ -262,11 +262,16 @@ public class CorfuLogReplicationRuntime {
     }
 
     public synchronized void updateDisconnectedEndpoints(String endpoint) {
+        log.info("Disconnected endpoints: {}. Endpoint: {}", connectedEndpoints, endpoint);
         connectedEndpoints.remove(endpoint);
     }
 
     public synchronized void setRemoteLeaderEndpoint(String leader) {
         leaderEndpoint = Optional.ofNullable(leader);
+    }
+
+    public synchronized void dropRemoteLeader() {
+        leaderEndpoint = Optional.empty();
     }
 
     public synchronized Optional<String> getRemoteLeader() {

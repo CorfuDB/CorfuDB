@@ -82,7 +82,7 @@ public class LogReplicationServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_ENTRY)
     private void handleLogReplicationEntry(CorfuPayloadMsg<LogReplicationEntry> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("Log Replication Entry received by Server.");
+        log.info("Log Replication Entry received by Server.");
 
         if (isLeader(msg, r)) {
             // Forward the received message to the Sink Manager for apply

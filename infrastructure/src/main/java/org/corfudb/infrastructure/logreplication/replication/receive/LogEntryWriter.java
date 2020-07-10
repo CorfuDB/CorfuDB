@@ -94,15 +94,20 @@ public class LogEntryWriter {
 
         long topologyConfigId = txMessage.getMetadata().getTopologyConfigId();
         long ts = txMessage.getMetadata().getSnapshotTimestamp();
-        long entryTS= txMessage.getMetadata().getTimestamp();
+        long entryTS = txMessage.getMetadata().getTimestamp();
 
+        log.info("Persist log ts: {}, last msg ts: {}", persistLogTS, lastMsgTs);
         lastMsgTs = Math.max(persistLogTS, lastMsgTs);
 
-        if (topologyConfigId != persistSiteConfigID || ts != persistSnapStart || ts != persistSnapDone ||
+        if (topologyConfigId != persistSiteConfigID ||
                 txMessage.getMetadata().getPreviousTimestamp() != persistLogTS) {
+            log.warn("topology: {}, persistsiteconfig: {}", topologyConfigId, persistSiteConfigID);
+            log.warn("ts: {}, persistSnapStart: {}", ts, persistSnapStart);
+            log.warn("ts: {}, persistSnapDone: {}", ts, persistSnapDone);
+            log.warn("prev ts: {}, persist log ts: {}", txMessage.getMetadata().getPreviousTimestamp(), persistLogTS);
             log.warn("Skip write this msg {} as its timestamp is later than the persisted one " +
                     txMessage.getMetadata() +  " persisteSiteConfig " + persistSiteConfigID + " persistSnapStart " + persistSnapStart +
-                    " persistSnapDone " + persistSnapDone + " persistLogTs " + persistLogTS);
+                    " persistSnapDone " + persistSnapDone + " persistLogTs " + persistLogTS, txMessage);
             return;
         }
 
@@ -153,9 +158,13 @@ public class LogEntryWriter {
         //If the entry is the expecting entry, process it and process
         //the messages in the queue.
         if (msg.getMetadata().getPreviousTimestamp() == lastMsgTs) {
+            log.info("Applying tx");
             processMsg(msg);
             return lastMsgTs;
         }
+        log.info("Cant apply: previous ts: {} last msg ts: {}",
+                msg.getMetadata().getPreviousTimestamp(),
+                lastMsgTs);
 
         return Address.NON_ADDRESS;
     }

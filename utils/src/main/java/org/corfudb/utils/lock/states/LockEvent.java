@@ -13,5 +13,6 @@ public enum LockEvent {
     LEASE_RENEWED,              // lease for the lock has been renewed
     LEASE_REVOKED,              // lease for the lock has been revoked, some other process got the lock
     LEASE_EXPIRED,              // lease for the lock has expired as it could not be renewed.
-    UNRECOVERABLE_ERROR         // unrecoverable error occured
+    UNRECOVERABLE_ERROR,        // unrecoverable error occured
+    FORCE_LEASE_ACQUIRED,       // lease for the lock has been forcefully acquired
 }

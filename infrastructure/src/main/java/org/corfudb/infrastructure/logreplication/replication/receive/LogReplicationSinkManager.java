@@ -190,13 +190,13 @@ public class LogReplicationSinkManager implements DataReceiver {
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
 
-        log.debug("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
+        log.info("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
 
          // Ignore messages that have different topologyConfigId.
          // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
          // If there is a siteConfig change, the discovery service will detect it and reset the state.
         if (message.getMetadata().getTopologyConfigId() != topologyConfigId) {
-            log.trace("Sink manager with config id {} ignored msg id {}", topologyConfigId,
+            log.info("Sink manager with config id {} ignored msg id {}", topologyConfigId,
                     message.getMetadata().getTopologyConfigId());
             return null;
         }
@@ -230,6 +230,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
 
         if (rxState.equals(RxState.LOG_ENTRY_SYNC)) {
+            log.info("Time to process this log entry sink.");
             return logEntrySinkBufferManager.processMsgAndBuffer(message);
         } else {
             return snapshotSinkBufferManager.processMsgAndBuffer(message);

@@ -1,12 +1,14 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
 import lombok.Getter;
+import lombok.ToString;
 
 import java.util.UUID;
 
 /**
  * Los Replication Event Metadata
  */
+@ToString
 public class LogReplicationEventMetadata {
 
     @Getter

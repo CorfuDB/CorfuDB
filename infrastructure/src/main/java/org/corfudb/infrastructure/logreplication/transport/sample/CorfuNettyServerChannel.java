@@ -92,6 +92,10 @@ public class CorfuNettyServerChannel extends ChannelInboundHandlerAdapter {
             contextMapLogEntries.keySet().removeIf(id -> id <= message.getRequestID());
         } else {
             context = contextMap.remove(message.getRequestID());
+            if (context == null) {
+                context = contextMapLogEntries.remove(message.getRequestID());
+                contextMapLogEntries.keySet().removeIf(id -> id <= message.getRequestID());
+            }
         }
 
         return context;

@@ -144,7 +144,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     private void processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
             throws LogReplicationNegotiationException {
 
-        log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
+        log.info("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
         /*
          * If the version are different, report an error.

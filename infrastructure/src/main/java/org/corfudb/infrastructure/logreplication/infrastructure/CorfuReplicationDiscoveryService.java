@@ -1,31 +1,38 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
-import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.concurrent.SingletonResource;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
+import org.corfudb.utils.lock.LockConfig;
+import org.corfudb.utils.lock.LockDataTypes;
 import org.corfudb.utils.lock.LockListener;
+import org.corfudb.utils.lock.states.LockStateType;
 
 import javax.annotation.Nonnull;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.time.Duration;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -33,9 +40,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * This class represents the Log Replication Discovery Service.
- *
+ * <p>
  * It manages the following:
- *
+ * <p>
  * - Discover topology and determine cluster role: active/standby
  * - Lock acquisition (leader election), node leading the log replication sending and receiving
  * - Log replication configuration (streams to replicate)
@@ -120,7 +127,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private String localCorfuEndpoint;
 
-    private CorfuRuntime runtime;
+    private final SingletonResource<CorfuRuntime> runtime =
+            SingletonResource.withInitial(this::getCorfuRuntime);
 
     private LogReplicationContext replicationContext;
 
@@ -130,17 +138,17 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private LogReplicationServer logReplicationServerHandler;
 
+
     /**
      * Constructor Discovery Service
      *
-     * @param serverContext current server's context
+     * @param serverContext         current server's context
      * @param clusterManagerAdapter adapter to communicate to external Cluster Manager
-     * @param serverCallback callback to Log Replication Server upon discovery
-     *
+     * @param serverCallback        callback to Log Replication Server upon discovery
      */
     public CorfuReplicationDiscoveryService(@Nonnull ServerContext serverContext,
                                             @Nonnull CorfuReplicationClusterManagerAdapter clusterManagerAdapter,
-                                            @Nonnull CompletableFuture<CorfuInterClusterReplicationServerNode> serverCallback) {
+                                            @Nonnull CompletableFuture<CorfuInterClusterReplicationServerNode> serverCallback) throws Exception {
         this.clusterManagerAdapter = clusterManagerAdapter;
         this.logReplicationNodeId = serverContext.getNodeId();
         this.serverContext = serverContext;
@@ -172,15 +180,42 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         } catch (Exception e) {
             log.error("Unhandled exception caught during log replication service discovery. Retry,", e);
         } finally {
-            if (runtime != null) {
-                runtime.shutdown();
-            }
+            runtime.cleanup(CorfuRuntime::shutdown);
+        }
+    }
+
+    private LockConfig createLockConfig(String pluginFilePath) {
+        try (InputStream input = new FileInputStream(pluginFilePath)) {
+            Properties prop = new Properties();
+            prop.load(input);
+            String lockGroup = prop.getProperty("lock_group");
+            String lockName = prop.getProperty("lock_name");
+            int lockLeaseDurationSeconds = Integer.parseInt(prop.getProperty("lock_lease_duration_seconds"));
+            int lockMonitorDurationSeconds = Integer.parseInt(prop.getProperty("lock_monitor_duration_seconds"));
+            int lockDurationBetweenLeaseChecksSeconds = Integer.parseInt(prop.getProperty("lock_duration_between_lease_checks_seconds"));
+            int lockDurationBetweenLeaseRenewalsSeconds = Integer.parseInt(prop.getProperty("lock_duration_between_lease_renewals_seconds"));
+            int lockMaxTimeListenerNotificationSeconds = Integer.parseInt(prop.getProperty("lock_max_time_listener_notification_seconds"));
+            LockConfig config = LockConfig.builder()
+                    .lockGroup(lockGroup)
+                    .lockName(lockName)
+                    .lockLeaseDurationInSeconds(lockLeaseDurationSeconds)
+                    .lockMonitorDurationInSeconds(lockMonitorDurationSeconds)
+                    .lockDurationBetweenLeaseChecksSeconds(lockDurationBetweenLeaseChecksSeconds)
+                    .lockDurationBetweenLeaseRenewalsSeconds(lockDurationBetweenLeaseRenewalsSeconds)
+                    .lockMaxTimeListenerNotificationSeconds(lockMaxTimeListenerNotificationSeconds)
+                    .build();
+            log.info("Using lock config: {}", config);
+            return config;
+        } catch (Exception e) {
+            LockConfig config = LockConfig.builder().build();
+            log.warn("Using default lock config: {}. Encountered exception: ", config, e);
+            return config;
         }
     }
 
     /**
      * On first access start topology discovery.
-     *
+     * <p>
      * On discovery, process the topology information and fetch log replication configuration
      * (streams to replicate) required by an active and standby site before starting
      * log replication.
@@ -203,12 +238,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         // Unblock server initialization & register to Log Replication Lock, to attempt lock / leadership acquisition
         serverCallback.complete(interClusterReplicationService);
-
         registerToLogReplicationLock();
     }
 
     private void connectAndQueryTopology() throws LogReplicationDiscoveryServiceException {
-        for (int retry=0; retry < CLUSTER_MANAGER_CONNECT_RETRIES; retry++) {
+        for (int retry = 0; retry < CLUSTER_MANAGER_CONNECT_RETRIES; retry++) {
             try {
                 // Connect to Cluster Manager and Retrieve Topology Info
                 log.info("Connecting to Cluster Manager adapter...");
@@ -233,9 +267,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private void buildLogReplicationContext() {
         // Through LogReplicationConfigAdapter retrieve system-specific configurations (including streams to replicate)
-        LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
+        LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(runtime.get());
 
-        this.logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
+        this.logReplicationMetadataManager = new LogReplicationMetadataManager(runtime.get(),
                 topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
 
         logReplicationServerHandler = new LogReplicationServer(serverContext, logReplicationConfig,
@@ -256,19 +290,15 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private CorfuRuntime getCorfuRuntime() {
         // Avoid multiple runtime's
-        if (runtime == null) {
-            log.debug("Connecting to local Corfu {}", localCorfuEndpoint);
-            runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
-                    .trustStore((String) serverContext.getServerConfig().get("--truststore"))
-                    .tsPasswordFile((String) serverContext.getServerConfig().get("--truststore-password-file"))
-                    .keyStore((String) serverContext.getServerConfig().get("--keystore"))
-                    .ksPasswordFile((String) serverContext.getServerConfig().get("--keystore-password-file"))
-                    .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
-                    .build())
-                    .parseConfigurationString(localCorfuEndpoint).connect();
-        }
-
-        return runtime;
+        log.info("Connecting to local Corfu {}", localCorfuEndpoint);
+        return CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
+                .trustStore((String) serverContext.getServerConfig().get("--truststore"))
+                .tsPasswordFile((String) serverContext.getServerConfig().get("--truststore-password-file"))
+                .keyStore((String) serverContext.getServerConfig().get("--keystore"))
+                .ksPasswordFile((String) serverContext.getServerConfig().get("--keystore-password-file"))
+                .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
+                .build())
+                .parseConfigurationString(localCorfuEndpoint).connect();
     }
 
     /**
@@ -293,7 +323,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Retrieve Log Replication Configuration.
-     *
+     * <p>
      * This configuration represents all common parameters for the log replication, regardless of
      * a cluster's role.
      */
@@ -318,21 +348,21 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Register interest on Log Replication Lock.
-     *
+     * <p>
      * The node that acquires the lock will drive/lead log replication.
      */
     private void registerToLogReplicationLock() {
         try {
-
-            Lock.setLeaseDuration(serverContext.getLockLeaseDuration());
-
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    LockClient lock = new LockClient(logReplicationNodeId, getCorfuRuntime());
-                    // Callback on lock acquisition or revoke
-                    LockListener logReplicationLockListener = new LogReplicationLockListener(this);
-                    // Register Interest on the shared Log Replication Lock
-                    lock.registerInterest(LOCK_GROUP, LOCK_NAME, logReplicationLockListener);
+                    LockClient lockClient =
+                            new LockClient(logReplicationNodeId,
+                                    createLockConfig(serverContext.getPluginConfigFilePath()),
+                                    runtime.get());
+                    LockListener logReplicationLockListener =
+                            new LogReplicationLockListener(this);
+
+                    lockClient.registerInterest(LOCK_GROUP, LOCK_NAME, logReplicationLockListener);
                 } catch (Exception e) {
                     log.error("Error while attempting to register interest on log replication lock {}:{}", LOCK_GROUP, LOCK_NAME, e);
                     throw new RetryNeededException();
@@ -347,7 +377,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * This method is only called on the leader node and it triggers the start of log replication
-     *
+     * <p>
      * Depending on the role of the cluster to which this leader node belongs to, it will start
      * as source (sender/producer) or sink (receiver).
      */
@@ -358,7 +388,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 if (replicationManager == null) {
                     replicationManager = new CorfuReplicationManager(replicationContext,
                             localNodeDescriptor, logReplicationMetadataManager, serverContext.getPluginConfigFilePath(),
-                            getCorfuRuntime());
+                            runtime.get());
                 }
                 replicationManager.setTopology(topologyDescriptor);
                 replicationManager.start();
@@ -370,7 +400,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 break;
             default:
                 log.error("Log Replication not started on this cluster. Leader node {} belongs to cluster with {} role.",
-                            localEndpoint, localClusterDescriptor.getRole());
+                        localEndpoint, localClusterDescriptor.getRole());
                 break;
         }
     }
@@ -379,7 +409,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Stop Log Replication
      */
     private void stopLogReplication() {
-        switch(localClusterDescriptor.getRole()) {
+        switch (localClusterDescriptor.getRole()) {
             case ACTIVE:
                 log.info("This cluster has lost leadership. Stopping log replication, according to role {}", localClusterDescriptor.getRole());
                 replicationManager.stop();
@@ -406,7 +436,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Process lock release event
-     *
+     * <p>
      * Set leadership metadata and stop log replication in the event of leadership loss
      */
     public void processLockRelease() {
@@ -417,8 +447,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Process Topology Config Change:
-     *   - Higher config id
-     *   - Potential cluster role change
+     * - Higher config id
+     * - Potential cluster role change
      *
      * @param newTopology new discovered topology
      */
@@ -452,9 +482,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Process a topology change as provided by the Cluster Manager
-     *
+     * <p>
      * Note: We are assuming that topology configId change implies a role change.
-     *       The number of standby clusters change would not bump config id.
+     * The number of standby clusters change would not bump config id.
      *
      * @param event discovery event
      */
@@ -596,7 +626,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             replicationManager.stop();
         }
 
-        if(clusterManagerAdapter != null) {
+        if (clusterManagerAdapter != null) {
             clusterManagerAdapter.shutdown();
         }
     }
@@ -608,5 +638,48 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private String getLocalHost() {
         return NodeLocator.parseString(serverContext.getLocalEndpoint()).getHost();
+    }
+
+    private LockClient createLockClient(LockStateType initState) throws Exception {
+
+        LockConfig lockConfig = createLockConfig(serverContext.getPluginConfigFilePath());
+        LockClient lockClient =
+                new LockClient(logReplicationNodeId,
+                        lockConfig, runtime.get());
+
+        LockListener lockListener =
+                new LogReplicationLockListener(this);
+
+        LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
+                .setLockGroup(lockConfig.getLockGroup())
+                .setLockName(lockConfig.getLockName())
+                .build();
+
+        lockClient.getLocks().computeIfAbsent(
+                lockId,
+                key -> new Lock(lockId, lockListener, lockClient.getClientContext(), lockConfig,
+                        initState));
+
+        return lockClient;
+    }
+
+
+    @VisibleForTesting
+    public void deregisterToLogReplicationLock() throws Exception {
+        LockClient lockClient = createLockClient(LockStateType.HAS_LEASE);
+        lockClient.deregisterInterest();
+    }
+
+    @VisibleForTesting
+    public void forceAcquireLogReplicationLock() throws Exception {
+        LockClient lockClient = createLockClient(LockStateType.NO_LEASE);
+        lockClient.forceAcquire();
+    }
+
+    @VisibleForTesting
+    public void resumeInterestToLockReplicationLock() throws Exception {
+        LockClient lockClient = createLockClient(LockStateType.NO_LEASE);
+        lockClient.resumeInterest();
+
     }
 }

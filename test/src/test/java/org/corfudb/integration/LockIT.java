@@ -8,6 +8,7 @@ import org.corfudb.util.Sleep;
 import org.corfudb.utils.TestLockListener;
 import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
+import org.corfudb.utils.lock.LockConfig;
 import org.corfudb.utils.lock.LockDataTypes;
 import org.corfudb.utils.lock.LockListener;
 import org.corfudb.utils.lock.states.LockState;
@@ -60,55 +61,55 @@ public class LockIT extends AbstractIT implements Observer {
     public void testSingleLockClient() throws Exception {
 
         try {
-           // Start Single Corfu Node Cluster
-           corfuServer = runServer(activeSiteCorfuPort, true);
-           initialize();
+            // Start Single Corfu Node Cluster
+            corfuServer = runServer(activeSiteCorfuPort, true);
+            initialize();
 
-           // Initial acquisition of the semaphore so we can later block until execution conditions are met
-           blockUntilWaitCondition.acquire();
+            // Initial acquisition of the semaphore so we can later block until execution conditions are met
+            blockUntilWaitCondition.acquire();
 
-           UUID clientId = UUID.randomUUID();
-           LockClient client = createLockClient(clientId);
-           LockListener listener = createLockClientListener(clientId);
+            UUID clientId = UUID.randomUUID();
+            LockClient client = createLockClient(clientId);
+            LockListener listener = createLockClientListener(clientId);
 
-           client.registerInterest(LOCK_GROUP, LOCK_NAME, listener);
+            client.registerInterest(LOCK_GROUP, LOCK_NAME, listener);
 
-           LockDataTypes.LockId lockId =  LockDataTypes.LockId.newBuilder()
+            LockDataTypes.LockId lockId =  LockDataTypes.LockId.newBuilder()
                     .setLockGroup(LOCK_GROUP)
                     .setLockName(LOCK_NAME)
                     .build();
 
-           // Since this is the only client, lock should've been acquired, verify, block until condition is met
-           System.out.println("***** Wait until lock is acquired");
-           waitCondition = WaitConditionType.LOCK_ACQUIRED;
-           blockUntilWaitCondition.acquire();
+            // Since this is the only client, lock should've been acquired, verify, block until condition is met
+            System.out.println("***** Wait until lock is acquired");
+            waitCondition = WaitConditionType.LOCK_ACQUIRED;
+            blockUntilWaitCondition.acquire();
 
-           int lockCount = 1;
-           assertThat(lockAcquiredObservables.get(clientId).getValue()).isEqualTo(lockCount);
-           assertThat(client.getLocks().get(lockId).getState().getType()).isEqualTo(LockStateType.HAS_LEASE);
-           assertThat(lockRevokedObservables.get(clientId).getValue()).isEqualTo(0);
+            int lockCount = 1;
+            assertThat(lockAcquiredObservables.get(clientId).getValue()).isEqualTo(lockCount);
+            assertThat(client.getLocks().get(lockId).getState().getType()).isEqualTo(LockStateType.HAS_LEASE);
+            assertThat(lockRevokedObservables.get(clientId).getValue()).isEqualTo(0);
 
-           waitCondition = WaitConditionType.NONE;
+            waitCondition = WaitConditionType.NONE;
 
-           // Verify for 5 cycles that the lock is renewed
-           for (int i=0; i < RENEW_CYCLES; i++) {
-               System.out.println("***** Wait until lock is renewed");
-               // TODO: inspect the     // how many times the lease has been acquired by a different client
-               //    int32 lease_acquisition_number = 3;
-               //    // how many times the lease has been renewed since the last acquisition
-               //    int32 lease_renewal_number = 4;
-               // Wait for the renewal cycle + 1, and verify that the lock is still acquired
-               Sleep.sleepUninterruptibly(Duration.ofSeconds(LOCK_TIME_CONSTANT + 1));
-               assertThat(lockAcquiredObservables.get(clientId).getValue()).isEqualTo(lockCount);
-               assertThat(client.getLocks().get(lockId).getState().getType()).isEqualTo(LockStateType.HAS_LEASE);
-               assertThat(lockRevokedObservables.get(clientId).getValue()).isEqualTo(0);
-           }
-       } catch (Exception e) {
-           System.out.println("Unexpected exception: " + e);
-           throw e;
-       } finally {
-           shutdown();
-       }
+            // Verify for 5 cycles that the lock is renewed
+            for (int i=0; i < RENEW_CYCLES; i++) {
+                System.out.println("***** Wait until lock is renewed");
+                // TODO: inspect the     // how many times the lease has been acquired by a different client
+                //    int32 lease_acquisition_number = 3;
+                //    // how many times the lease has been renewed since the last acquisition
+                //    int32 lease_renewal_number = 4;
+                // Wait for the renewal cycle + 1, and verify that the lock is still acquired
+                Sleep.sleepUninterruptibly(Duration.ofSeconds(LOCK_TIME_CONSTANT + 1));
+                assertThat(lockAcquiredObservables.get(clientId).getValue()).isEqualTo(lockCount);
+                assertThat(client.getLocks().get(lockId).getState().getType()).isEqualTo(LockStateType.HAS_LEASE);
+                assertThat(lockRevokedObservables.get(clientId).getValue()).isEqualTo(0);
+            }
+        } catch (Exception e) {
+            System.out.println("Unexpected exception: " + e);
+            throw e;
+        } finally {
+            shutdown();
+        }
     }
 
     /**
@@ -153,7 +154,7 @@ public class LockIT extends AbstractIT implements Observer {
 
             assertThat(lockAcquiredObservables.get(clientId).getValue()).isEqualTo(numLocks);
             lockIds.forEach(lockId ->
-                assertThat(client.getLocks().get(lockId).getState().getType()).isEqualTo(LockStateType.HAS_LEASE));
+                    assertThat(client.getLocks().get(lockId).getState().getType()).isEqualTo(LockStateType.HAS_LEASE));
         } catch (Exception e) {
             System.out.println("Unexpected exception: " + e);
             throw e;
@@ -202,7 +203,7 @@ public class LockIT extends AbstractIT implements Observer {
             Collection<Callable<Boolean>> callableList = new ArrayList<>();
             clientIdToLockClient.forEach( (id, client) -> {
                 callableList.add(() -> {
-                    client.registerInterest(LOCK_GROUP, LOCK_NAME, clientIdToLockListener.get(id));
+                    client.registerInterest(clientIdToLockListener.get(id));
                     return true;
                 });
             });
@@ -286,7 +287,7 @@ public class LockIT extends AbstractIT implements Observer {
             Collection<Callable<Boolean>> callableList = new ArrayList<>();
             clientIdToLockClient.forEach( (id, client) -> {
                 callableList.add(() -> {
-                    client.registerInterest(LOCK_GROUP, LOCK_NAME, clientIdToLockListener.get(id));
+                    client.registerInterest(clientIdToLockListener.get(id));
                     return true;
                 });
             });
@@ -349,6 +350,18 @@ public class LockIT extends AbstractIT implements Observer {
                 .collect(Collectors.toList());
     }
 
+    private LockConfig getDefaultLockConfig() {
+        return LockConfig.builder()
+                .lockGroup(LOCK_GROUP)
+                .lockName(LOCK_NAME)
+                .lockLeaseDurationInSeconds(LOCK_LEASE_DURATION)
+                .lockMonitorDurationInSeconds(LOCK_TIME_CONSTANT)
+                .lockDurationBetweenLeaseChecksSeconds(LOCK_TIME_CONSTANT)
+                .lockDurationBetweenLeaseRenewalsSeconds(LOCK_TIME_CONSTANT)
+                .lockMaxTimeListenerNotificationSeconds(LOCK_TIME_CONSTANT)
+                .build();
+    }
+
     private LockClient createLockClient(UUID clientId) throws Exception {
         try {
             CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
@@ -356,7 +369,7 @@ public class LockIT extends AbstractIT implements Observer {
                     .build();
             CorfuRuntime rt = CorfuRuntime.fromParameters(params).parseConfigurationString(corfuEndpoint).connect();
             clientIdToRuntimeMap.put(clientId, rt);
-            return new LockClient(clientId, rt);
+            return new LockClient(clientId, getDefaultLockConfig(), rt);
 
         } catch (Exception e) {
             throw e;
@@ -377,11 +390,6 @@ public class LockIT extends AbstractIT implements Observer {
                 .builder()
                 .build();
         runtime = CorfuRuntime.fromParameters(params).parseConfigurationString(corfuEndpoint).connect();
-
-        LockState.setDurationBetweenLeaseRenewals(LOCK_TIME_CONSTANT);
-        LockState.setMaxTimeForNotificationListenerProcessing(LOCK_TIME_CONSTANT);
-        LockClient.setDurationBetweenLockMonitorRuns(LOCK_TIME_CONSTANT);
-        Lock.setLeaseDuration(LOCK_LEASE_DURATION);
     }
 
     private void shutdown() {
@@ -411,7 +419,7 @@ public class LockIT extends AbstractIT implements Observer {
                 }
                 break;
             default:
-                    break;
+                break;
         }
     }
 
