@@ -97,6 +97,7 @@ public abstract class ChannelHandler extends ResponseHandler {
                     this.channel.closeFuture().addListener(r -> disconnect());
                     state = ChannelHandlerState.CONNECTED;
                     // TODO(Maithem) Complete handshake here
+                    log.info("peer client connected");
                     this.channelCf.complete(this.channel);
                 } else {
                     disconnect();
