@@ -28,8 +28,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     public static long epoch = 0;
     public static final int changeInterval = 5000;
     public static final String config_file = "/config/corfu/corfu_replication_config.properties";
-    private static final String DEFAULT_ACTIVE_CLUSTER_NAME = "primary_site";
-    private static final String DEFAULT_STANDBY_CLUSTER_NAME = "standby_site";
+    public static final String DEFAULT_ACTIVE_CLUSTER_NAME = "primary_site";
+    public static final String DEFAULT_STANDBY_CLUSTER_NAME = "standby_site";
     private static final int NUM_NODES_PER_CLUSTER = 3;
 
     private static final String ACTIVE_CLUSTER_NAME = "primary_site";

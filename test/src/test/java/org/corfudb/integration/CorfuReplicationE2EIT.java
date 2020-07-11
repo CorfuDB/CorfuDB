@@ -1,9 +1,5 @@
 package org.corfudb.integration;
 
-import com.google.common.reflect.TypeToken;
-import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -13,21 +9,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @RunWith(Parameterized.class)
-public class CorfuReplicationE2EIT extends AbstractIT {
-
-    private String pluginConfigFilePath;
-
-    // Note: this flag is kept for debugging purposes only.
-    // Log Replication Server should run as a process as the unexpected termination of it
-    // (for instance the completion of a test) causes SYSTEM_EXIT(ERROR_CODE).
-    // If flipped to debug (easily access logs within the IDE, flip back before pushing upstream).
-    private static boolean runProcess = true;
+public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
 
     public CorfuReplicationE2EIT(String plugin) {
         this.pluginConfigFilePath = plugin;
@@ -37,7 +23,8 @@ public class CorfuReplicationE2EIT extends AbstractIT {
     @Parameterized.Parameters
     public static Collection input() {
 
-        List<String> transportPlugins = Arrays.asList("src/test/resources/transport/grpcConfig.properties",
+        List<String> transportPlugins = Arrays.asList(
+                "src/test/resources/transport/grpcConfig.properties",
                 "src/test/resources/transport/nettyConfig.properties");
 
         if(runProcess) {
@@ -69,121 +56,109 @@ public class CorfuReplicationE2EIT extends AbstractIT {
      */
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
+        testEndToEndSnapshotAndLogEntrySync();
+    }
 
-        ExecutorService executorService = Executors.newFixedThreadPool(2);
-        Process activeCorfu = null;
-        Process standbyCorfu = null;
-
-        Process activeReplicationServer = null;
-        Process standbyReplicationServer = null;
-
+    /**
+     * Test the case where the log is trimmed in between two snapshot syncs.
+     * We should guarantee that shadow streams do not throw trim exceptions
+     * and data is applied successfully.
+     */
+    @Test
+    public void testTrimmedExceptionsBetweenSnapshotSync() throws Exception {
         try {
-            final String streamA = "Table001";
+            // TODO: these tests need the lock lease duration to be decreased, so when
+            //   restarting the log replication it acquires the lease right back, the problem is
+            //   our runnerServer accepts only strings and it expects an int.
+            testEndToEndSnapshotAndLogEntrySync();
 
-            final int activeSiteCorfuPort = 9000;
-            final int standbySiteCorfuPort = 9001;
+            // Stop Log Replication on Active, so we can write some data into active Corfu
+            // and checkpoint so we enforce a subsequent Snapshot Sync
+            System.out.println("Stop Active Log Replicator ...");
+            stopActiveLogReplicator();
 
-            final int activeReplicationServerPort = 9010;
-            final int standbyReplicationServerPort = 9020;
+            // Checkpoint & Trim on the Standby (so shadow stream gets
+            checkpointStandby();
 
-            final String activeEndpoint = DEFAULT_HOST + ":" + activeSiteCorfuPort;
-            final String standbyEndpoint = DEFAULT_HOST + ":" + standbySiteCorfuPort;
+            // Write Entry's to Active Cluster (while replicator is down)
+            System.out.println("Write additional entries to active CorfuDB ...");
+            writeToActive((numWrites + (numWrites/2)), numWrites/2);
 
-            final int numWrites = 10;
+            // Confirm data does exist on Active Cluster
+            assertThat(mapA.size()).isEqualTo(numWrites*2);
 
-            // Start Single Corfu Node Cluster on Active Site
-            activeCorfu = runServer(activeSiteCorfuPort, true);
+            // Confirm new data does not exist on Standby Cluster
+            assertThat(mapAStandby.size()).isEqualTo((numWrites + (numWrites/2)));
 
-            // Start Corfu Cluster on Standby Site
-            standbyCorfu = runServer(standbySiteCorfuPort, true);
+            // Checkpoint & Trim on the Active so we force a snapshot sync on restart
+            // checkpointActive();
+            checkpointAndTrimCorfuStore();
 
-            CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                    .builder()
-                    .build();
+            System.out.println("Start active Log Replicator again ...");
+            startActiveLogReplicator();
 
-            CorfuRuntime activeRuntime = CorfuRuntime.fromParameters(params).setTransactionLogging(true);
-            activeRuntime.parseConfigurationString(activeEndpoint);
-            activeRuntime.connect();
+            System.out.println("Verify Data on Standby ...");
+            verifyDataOnStandby((numWrites*2));
 
-            CorfuRuntime standbyRuntime = new CorfuRuntime(standbyEndpoint).connect();
+            System.out.println("Entries :: " + mapAStandby.keySet());
 
-            // Write to StreamA on Active Site
-            CorfuTable<String, Integer> mapA = activeRuntime.getObjectsView()
-                    .build()
-                    .setStreamName(streamA)
-                    .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
-                    })
-                    .open();
+        } finally {
 
-            CorfuTable<String, Integer> mapAStandby = standbyRuntime.getObjectsView()
-                    .build()
-                    .setStreamName(streamA)
-                    .setTypeToken(new TypeToken<CorfuTable<String, Integer>>() {
-                    })
-                    .open();
+            executorService.shutdownNow();
 
-            assertThat(mapA.size()).isEqualTo(0);
-
-            for (int i = 0; i < numWrites; i++) {
-                activeRuntime.getObjectsView().TXBegin();
-                mapA.put(String.valueOf(i), i);
-                activeRuntime.getObjectsView().TXEnd();
+            if (activeCorfu != null) {
+                activeCorfu.destroy();
             }
 
-            assertThat(mapA.size()).isEqualTo(numWrites);
-
-            // Confirm data does not exist on Standby Site
-            assertThat(mapAStandby.size()).isEqualTo(0);
-
-            if (runProcess) {
-                // Start Log Replication Server on Active Site
-                activeReplicationServer = runReplicationServer(activeReplicationServerPort, pluginConfigFilePath);
-
-                // Start Log Replication Server on Standby Site
-                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath);
-            } else {
-                executorService.submit(() -> {
-                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=localhost", String.valueOf(activeReplicationServerPort)});
-                });
-
-                executorService.submit(() -> {
-                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=localhost", String.valueOf(standbyReplicationServerPort)});
-                });
+            if (standbyCorfu != null) {
+                standbyCorfu.destroy();
             }
 
-            System.out.println("\nUsing transport defined in :: " + pluginConfigFilePath);
-
-            // Wait until data is fully replicated
-            System.out.println("Wait ... Snapshot log replication in progress ...");
-            while (mapAStandby.size() != numWrites) {
-                //
+            if (activeReplicationServer != null) {
+                activeReplicationServer.destroy();
             }
 
-            // Verify data is present in Standby Site
-            assertThat(mapAStandby.size()).isEqualTo(numWrites);
-
-            // Add new updates (deltas)
-            for (int i=0; i < numWrites/2; i++) {
-                activeRuntime.getObjectsView().TXBegin();
-                mapA.put(String.valueOf(numWrites + i), numWrites + i);
-                activeRuntime.getObjectsView().TXEnd();
+            if (standbyReplicationServer != null) {
+                standbyReplicationServer.destroy();
             }
+        }
+    }
 
-            // Verify data is present in Standby Site
-            System.out.println("Wait ... Delta log replication in progress ...");
-            while (mapAStandby.size() != (numWrites + numWrites/2)) {
-                //
-            }
+    /**
+     * Test the case where the log is trimmed in between two log entry syncs.
+     */
+    @Test
+    public void testTrimmedExceptionsBetweenLogEntrySync() throws Exception {
+        try {
 
-            // Verify data is present in Standby Site (delta)
-            assertThat(mapAStandby.size()).isEqualTo(numWrites + numWrites/2);
+            testLogReplicationEndToEnd();
 
-            for (int i = 0; i < (numWrites + numWrites/2) ; i++) {
-                assertThat(mapAStandby.containsKey(String.valueOf(i)));
-            }
+            // Stop Log Replication on Active, so we can write some data into active Corfu
+            // and checkpoint so we enforce a subsequent Snapshot Sync
+            System.out.println("Stop Active Log Replicator ...");
+            stopActiveLogReplicator();
 
-            System.out.print("Test succeeds");
+            // Checkpoint & Trim on the Standby, so we trim the shadow stream
+            checkpointStandby();
 
+            // Write Entry's to Active Cluster (while replicator is down)
+            System.out.println("Write additional entries to active CorfuDB ...");
+            writeToActive((numWrites + (numWrites/2)), numWrites/2);
+
+            // Confirm data does exist on Active Cluster
+            assertThat(mapA.size()).isEqualTo(numWrites*2);
+
+            // Confirm new data does not exist on Standby Cluster
+            assertThat(mapAStandby.size()).isEqualTo((numWrites + (numWrites/2)));
+
+            System.out.println("Start active Log Replicator again ...");
+            startActiveLogReplicator();
+
+            // Since we did not checkpoint data should be transferred in delta's
+            System.out.println("Verify Data on Standby ...");
+            verifyDataOnStandby((numWrites*2));
+
+            System.out.println("Entries :: " + mapAStandby.keySet());
         } finally {
 
             executorService.shutdownNow();

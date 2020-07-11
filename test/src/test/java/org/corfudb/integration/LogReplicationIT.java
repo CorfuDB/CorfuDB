@@ -2,7 +2,6 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -56,7 +55,6 @@ import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim
  * transactions containing federated and non-federated streams) and verify that complete data
  * reaches the destination after initiating log replication.
  */
-@Slf4j
 public class LogReplicationIT extends AbstractIT implements Observer {
 
     static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
