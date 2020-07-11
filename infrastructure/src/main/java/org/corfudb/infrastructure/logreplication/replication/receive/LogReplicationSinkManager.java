@@ -72,16 +72,6 @@ public class LogReplicationSinkManager implements DataReceiver {
     // The executor is used to execute the applying phase for full snapshot sync.
     private final ExecutorService applySnapshotExecutor;
 
-    /*
-     * The role type is of active or standby. When log replication server is up, it will has a
-     * SinkManager by default even though it has role type active. When the role type is active (sender),
-     * the sink manager should not process any messages it receives. When there is a site flip, the discovery service
-     * will update the role type accordingly.
-     */
-    @Getter
-    @Setter
-    private boolean active = false;
-
     private LogReplicationConfig config;
 
     /*
@@ -176,8 +166,9 @@ public class LogReplicationSinkManager implements DataReceiver {
         logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(ts),
                 logReplicationMetadataManager.getLastProcessedLogTimestamp(ts));
 
-        logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(ts), this);
+        logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,this);
+
+        snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize, this);
 
         readConfig();
     }
@@ -307,8 +298,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();
 
         // Setup buffer manager.
-        snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastSnapSeqNum(null), this);
+        snapshotSinkBufferManager.reset();
 
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
@@ -324,8 +314,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         rxState = RxState.LOG_ENTRY_SYNC;
 
         logReplicationMetadataManager.setSnapshotApplied(inputEntry);
-        logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
+        //logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
+        //        logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
 
         log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
                 inputEntry, rxState);
@@ -435,9 +425,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
                 logReplicationMetadataManager.getLastProcessedLogTimestamp());
 
-        CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
-        logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(timestamp), this);
+        logEntrySinkBufferManager.reset();
     }
 
     public void shutdown() {

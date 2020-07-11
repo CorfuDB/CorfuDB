@@ -119,10 +119,12 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     @Override
-    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() {
+    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() {
         log.info("Process query metadata");
         LogReplicationQueryMetadataResponse response = destinationLogReplicationManager.processQueryMetadataRequest();
-        return response;
+        CompletableFuture<LogReplicationQueryMetadataResponse> cf = new CompletableFuture<>();
+        cf.complete(response);
+        return cf;
     }
 
     @Override

@@ -20,7 +20,7 @@ public class EmptyDataSender implements DataSender {
     public CompletableFuture<LogReplicationEntry>  send(List<LogReplicationEntry> messages) { return new CompletableFuture<>(); }
 
     @Override
-    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() {
+    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() {
         return null;
     }
 

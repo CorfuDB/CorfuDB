@@ -19,21 +19,26 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 /**
  * The log replication metadata is stored in a corfutable in the corfustore.
  * The log replication metadata is defined as a proto message that contains:
- * SiteConfigID, Version, Snapshot Full Sync Status and Log Entry Sync Status.
+ * TopologyConfigID, Version, Snapshot Full Sync Status and Log Entry Sync Status.
  * The access of the metadata is using UFO API.
  *
  * To record replication status, it has following values:
+ *
  * SnapshotStartTimestamp: when a full snapshot sync is started, it will first update this value and reset other snapshot related metadata to -1.
  * The init value for this metadata is -1. When it is -1, it means a snapshot full sync is required regardless.
+ *
  * SnapshotTranferredTimestamp: the init value is -1. When the receiver receives a snapshot transfer end marker, it will update this value to the
  * current snapshot timestamp. It will be updated to the same value as snapshot start when the snapshot data transfer is done.
- * SnapshotSeqNum: it the sequence number of each snapshot messages to detect the message loss and to prevent the re-appling the same message.
+ *
+ * SnapshotSeqNum: it is the sequence number of each snapshot message to detect the message loss and to prevent the re-applying the same message.
  * All the messages must be applied in the order of the snapshot sequence number.
- * SnapshotAppliedSeqNum: it records the operation's sequence during the apply phase to avoid the redo the apply if there is a leadership change.
- * LastLogProcessed: It records the most recent log entry has been processed.
+ *
+ * SnapshotAppliedSeqNum: it records the last applied operation's sequence number during the apply phase to avoid re-apply if there is a leadership change.
+ *
+ * LastLogProcessed: It records the most recent log entry that has been processed.
  * When a snapshot full sync is complete, it will update this value. While processing a new log entry message, it will be updated too.
  *
- * While update siteConfigID or version number, the replication status will all be reset to -1 to
+ * While update topologyConfigID or version number, the replication status will all be reset to -1 to
  * require a snapshot full sync.
  */
 @Slf4j
@@ -41,10 +46,8 @@ public class LogReplicationMetadataManager {
 
     private static final String namespace = CORFU_SYSTEM_NAMESPACE;
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
-
+    private String metadataTableName;
     private CorfuStore corfuStore;
-
-    String metadataTableName;
 
     /**
      * Table used to store the log replication status
@@ -94,7 +97,7 @@ public class LogReplicationMetadataManager {
      * @param key
      * @return
      */
-    String queryString(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
+    private String queryString(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         CorfuRecord record;
         if (timestamp == null) {
@@ -123,7 +126,7 @@ public class LogReplicationMetadataManager {
      * @param key
      * @return
      */
-    long query(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
+    public long query(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
         long val = -1;
         String str = queryString(timestamp, key);
         if (str != null) {
@@ -132,6 +135,15 @@ public class LogReplicationMetadataManager {
         return val;
     }
 
+    /**
+     * Given a specific timestamp, get the current topologyConfigId metadata value.
+     * If the timestamp is null, get the most recent value.
+     * @param ts
+     * @return
+     */
+    public long getTopologyConfigId(CorfuStoreMetadata.Timestamp ts) {
+        return query(ts, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+    }
 
     /**
      * Get the most recent ConfigID.
@@ -261,7 +273,7 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Update the siteConfigID if it is bigger than the current one.
+     * Update the topologyConfigID if it is bigger than the current one.
      * At the same time reset replication status metadata to -1.
      * @param topologyConfigId
      */
@@ -434,6 +446,9 @@ public class LogReplicationMetadataManager {
     /**
      * All types of metadata stored in the corfu table, those corresponding strings are used as keys to access
      * the real values.
+     * TOPOLOGY_CONFIG_ID: it is the cluster topologyConfigID
+     * VERSION: it is the version of the application data.
+     * L
      */
     public enum LogReplicationMetadataType {
         TOPOLOGY_CONFIG_ID("topologyConfigId"),

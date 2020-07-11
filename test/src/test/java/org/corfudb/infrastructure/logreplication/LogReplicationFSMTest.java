@@ -13,7 +13,6 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationState;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
-import org.corfudb.infrastructure.logreplication.replication.fsm.TestDataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.TestLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.TestReaderConfiguration;
 import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotReader;

@@ -73,7 +73,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                  */
                 setTransitionEventId(event.getEventID());
                 snapshotSender.reset();
-                log.info("process new snapshot_sync_request and reset the status");
+                log.info("process new snapshot_sync_request with id {} and reset the status.", event.getEventID());
                 return this;
             case SNAPSHOT_SYNC_CONTINUE:
                 /*

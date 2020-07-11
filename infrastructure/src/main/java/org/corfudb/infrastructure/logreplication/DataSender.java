@@ -37,7 +37,7 @@ public interface DataSender {
      * Used by Snapshot Full Sync to poll the receiver's status.
      * @return
      */
-    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() throws ExecutionException, InterruptedException;
+    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() throws ExecutionException, InterruptedException;
 
     /**
      * Application callback on error.

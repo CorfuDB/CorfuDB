@@ -25,8 +25,6 @@ public class CorfuDataSender implements DataSender {
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         log.info("Send single log entry for request {}", message.getMetadata());
         return client.sendLogEntry(message);
-
-
     }
 
     @Override
@@ -52,9 +50,9 @@ public class CorfuDataSender implements DataSender {
      * @return
      */
     @Override
-    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() throws ExecutionException, InterruptedException {
+    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() throws ExecutionException, InterruptedException {
         log.trace("query remote metadata");
-        return client.sendQueryMetadataRequest().get();
+        return client.sendQueryMetadataRequest();
     }
 
     @Override

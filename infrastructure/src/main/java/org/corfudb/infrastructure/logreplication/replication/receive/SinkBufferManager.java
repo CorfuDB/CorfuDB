@@ -75,10 +75,9 @@ public abstract class SinkBufferManager {
      * @param ackCycleTime
      * @param ackCycleCnt
      * @param size
-     * @param lastProcessedSeq
      * @param sinkManager
      */
-    public SinkBufferManager(MessageType type, int ackCycleTime, int ackCycleCnt, int size, long lastProcessedSeq, LogReplicationSinkManager sinkManager) {
+    public SinkBufferManager(MessageType type, int ackCycleTime, int ackCycleCnt, int size, LogReplicationSinkManager sinkManager) {
         this.type = type;
         this.ackCycleTime = ackCycleTime;
         this.ackCycleCnt = ackCycleCnt;
@@ -185,7 +184,7 @@ public abstract class SinkBufferManager {
      * For log entry, it is the entry's timestamp.
      * The information is got from the metadata corfu table.
      */
-    abstract  long getLastProcessed();
+    abstract long getLastProcessed();
 
     /**
      * Make an Ack with the lastProcessedSeq
@@ -200,4 +199,13 @@ public abstract class SinkBufferManager {
      * @return
      */
     public abstract boolean verifyMessageType(LogReplicationEntry entry);
+
+    /**
+     * Reset the buffer.
+     */
+    public void reset() {
+        buffer.clear();
+        ackCnt = 0;
+        ackTime = 0;
+    }
 }

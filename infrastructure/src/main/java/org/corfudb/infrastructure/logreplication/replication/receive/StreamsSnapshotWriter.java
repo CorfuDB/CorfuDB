@@ -12,6 +12,8 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
@@ -293,7 +295,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             txBuilder.commit(timestamp);
         } catch (Exception e) {
             log.warn("Caught an exception ", e);
-            throw e;
+            if (!(e instanceof TransactionAbortedException)) {
+                throw e;
+            }
         }
         log.debug("Process the entries {}  and set applied sequence number {} ", smrEntries, currentSeqNum);
     }

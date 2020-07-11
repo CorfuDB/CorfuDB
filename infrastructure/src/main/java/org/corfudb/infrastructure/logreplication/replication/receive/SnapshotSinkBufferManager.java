@@ -19,14 +19,12 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      * @param ackCycleTime
      * @param ackCycleCnt
      * @param size
-     * @param lastProcessedSeq for a fresh snapshot transfer, the input should be Address.NO_ADDRESS.
-     *                         If it restart the snapshot, it should be the value written in the metadata store.
      * @param sinkManager
      */
     public SnapshotSinkBufferManager(int ackCycleTime, int ackCycleCnt, int size,
-                                     long lastProcessedSeq, LogReplicationSinkManager sinkManager) {
+                                     LogReplicationSinkManager sinkManager) {
 
-        super(SNAPSHOT_MESSAGE, ackCycleTime, ackCycleCnt, size, lastProcessedSeq, sinkManager);
+        super(SNAPSHOT_MESSAGE, ackCycleTime, ackCycleCnt, size, sinkManager);
     }
 
     /**

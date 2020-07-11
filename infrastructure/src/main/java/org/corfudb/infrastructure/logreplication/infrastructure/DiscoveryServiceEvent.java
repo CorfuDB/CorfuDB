@@ -26,7 +26,7 @@ public class DiscoveryServiceEvent {
 
     public enum DiscoveryServiceEventType {
         DISCOVERED_TOPOLOGY,
-        DISCOVERY_INIT_TOPOLOGY,
+        DISCOVER_INIT_TOPOLOGY,
         ACQUIRE_LOCK,
         RELEASE_LOCK,
         UPGRADE
