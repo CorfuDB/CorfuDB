@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class SnapshotSender {
 
-    public static int DEFAULT_SNAPSHOT_BATCH_SIZE = 5;
+    public static int DEFAULT_SNAPSHOT_BATCH_SIZE = 100;
     public static final int DEFAULT_TIMEOUT = 5000;
 
     private CorfuRuntime runtime;
@@ -157,7 +157,7 @@ public class SnapshotSender {
             // Generate a special LogReplicationEntry with only metadata (used as start marker on receiver side
             // to complete snapshot sync and send the right ACK)
             try {
-                dataSenderBufferManager.sendWithBuffering(resendMsgsAndWaitAckForSnapshotEnd(snapshotSyncEventId));
+                dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
                 snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
                 snapshotSyncComplete(snapshotSyncEventId);
@@ -175,7 +175,7 @@ public class SnapshotSender {
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
-            dataSenderBufferManager.sendWithBuffering(resendMsgsAndWaitAckForSnapshotEnd(snapshotSyncEventId));
+            dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
             startSnapshotSync = false;
             numMessages++;
         }
@@ -200,7 +200,7 @@ public class SnapshotSender {
      * @param snapshotSyncEventId snapshot sync event identifier
      * @return snapshot sync start marker as LogReplicationEntry
      */
-    private LogReplicationEntry resendMsgsAndWaitAckForSnapshotEnd(UUID snapshotSyncEventId) {
+    private LogReplicationEntry getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START, fsm.getTopologyConfigId(),
                 snapshotSyncEventId, Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
