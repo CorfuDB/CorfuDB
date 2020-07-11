@@ -23,7 +23,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LogReplicationMetadataManager {
 
-    private static final String namespace = CORFU_SYSTEM_NAMESPACE;
+    private static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
 
     private CorfuStore corfuStore;
@@ -39,14 +39,14 @@ public class LogReplicationMetadataManager {
         this.corfuStore = new CorfuStore(runtime);
         metadataTableName = getPersistedWriterMetadataTableName(localClusterId);
         try {
-            metadataTable = this.corfuStore.openTable(namespace,
+            metadataTable = this.corfuStore.openTable(NAMESPACE,
                             metadataTableName,
                             LogReplicationMetadataKey.class,
                             LogReplicationMetadataVal.class,
                             null,
                             TableOptions.builder().build());
         } catch (Exception e) {
-            log.error("Caught an exception while opening the table namespace={}, name={}", namespace, metadataTableName);
+            log.error("Caught an exception while opening the table NAMESPACE={}, name={}", NAMESPACE, metadataTableName, e);
             throw new ReplicationWriterException(e);
         }
         setupTopologyConfigId(topologyConfigId);
@@ -57,16 +57,16 @@ public class LogReplicationMetadataManager {
     }
 
     public TxBuilder getTxBuilder() {
-        return corfuStore.tx(namespace);
+        return corfuStore.tx(NAMESPACE);
     }
 
     private String queryString(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         CorfuRecord record;
         if (timestamp == null) {
-            record = corfuStore.query(namespace).getRecord(metadataTableName, txKey);
+            record = corfuStore.query(NAMESPACE).getRecord(metadataTableName, txKey);
         } else {
-            record = corfuStore.query(namespace).getRecord(metadataTableName, timestamp, txKey);
+            record = corfuStore.query(NAMESPACE).getRecord(metadataTableName, timestamp, txKey);
         }
 
         LogReplicationMetadataVal metadataVal = null;
@@ -140,7 +140,7 @@ public class LogReplicationMetadataManager {
             return;
         }
 
-        TxBuilder txBuilder = corfuStore.tx(namespace);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
         for (LogReplicationMetadataType key : LogReplicationMetadataType.values()) {
             long val = Address.NON_ADDRESS;
@@ -163,7 +163,7 @@ public class LogReplicationMetadataManager {
             return;
         }
 
-        TxBuilder txBuilder = corfuStore.tx(namespace);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
         for (LogReplicationMetadataType key : LogReplicationMetadataType.values()) {
             long val = Address.NON_ADDRESS;
@@ -211,7 +211,7 @@ public class LogReplicationMetadataManager {
             return false;
         }
 
-        TxBuilder txBuilder = corfuStore.tx(namespace);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
         // Update the topologyConfigId to fence all other transactions that update the metadata at the same time
         appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
@@ -255,7 +255,7 @@ public class LogReplicationMetadataManager {
             return;
         }
 
-        TxBuilder txBuilder = corfuStore.tx(namespace);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
         //Update the topologyConfigId to fence all other transactions that update the metadata at the same time
         appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
@@ -284,7 +284,7 @@ public class LogReplicationMetadataManager {
             return;
         }
 
-        TxBuilder txBuilder = corfuStore.tx(namespace);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
         //Update the topologyConfigId to fence all other transactions that update the metadata at the same time
         appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
