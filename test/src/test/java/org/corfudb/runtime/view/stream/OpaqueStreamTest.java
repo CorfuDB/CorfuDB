@@ -48,7 +48,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         rt.getObjectsView().TXEnd();
 
 
-        Serializers.removeSerializer(customSerializer);
+        Serializers.clearCustomSerializers();
 
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 
@@ -93,7 +93,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
 
         rt.getAddressSpaceView().prefixTrim(token);
 
-        Serializers.removeSerializer(customSerializer);
+        Serializers.clearCustomSerializers();
 
         CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
 

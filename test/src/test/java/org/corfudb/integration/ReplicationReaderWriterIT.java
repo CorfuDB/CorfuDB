@@ -728,7 +728,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         Serializers.registerSerializer(serializer);
         verifyData("after log writing at dst", dstTables, srcHashMap);
-        Serializers.removeSerializer(serializer);
+        Serializers.clearCustomSerializers();
     }
 }
 

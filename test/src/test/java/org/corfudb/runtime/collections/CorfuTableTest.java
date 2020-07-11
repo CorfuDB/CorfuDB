@@ -27,6 +27,8 @@ import org.junit.Test;
 
 public class CorfuTableTest extends AbstractViewTest {
 
+    private static final int ITERATIONS = 20;
+
     Collection<String> project(Collection<Map.Entry<String, String>> entries) {
         return entries.stream().map(entry -> entry.getValue()).collect(Collectors.toCollection(ArrayList::new));
     }
@@ -282,7 +284,7 @@ public class CorfuTableTest extends AbstractViewTest {
         assertThat(getDefaultRuntime().getAddressSpaceView()
                 .read(token.getSequence()).isHole()).isTrue();
 
-        for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
+        for (int i = 0; i < ITERATIONS; i++) {
             getDefaultRuntime().getObjectsView().TXBuild()
                     .type(TransactionType.SNAPSHOT)
                     .snapshot(token)
