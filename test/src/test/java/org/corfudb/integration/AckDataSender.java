@@ -49,7 +49,7 @@ public class AckDataSender implements DataSender {
     }
 
     @Override
-    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() {
+    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() {
         log.warn("Not implemented");
         return null;
     }

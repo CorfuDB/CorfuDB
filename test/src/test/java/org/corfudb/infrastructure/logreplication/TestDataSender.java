@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure.logreplication.replication.fsm;
+package org.corfudb.infrastructure.logreplication;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -66,7 +66,7 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public LogReplicationQueryMetadataResponse sendQueryMetadataRequest() throws ExecutionException, InterruptedException {
+    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() throws ExecutionException, InterruptedException {
         log.warn("Not implemented");
         return null;
     }

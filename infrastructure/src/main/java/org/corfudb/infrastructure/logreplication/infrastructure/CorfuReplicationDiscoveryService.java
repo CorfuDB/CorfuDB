@@ -34,7 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import static org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.DISCOVERY_INIT_TOPOLOGY;
+import static org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType.DISCOVER_INIT_TOPOLOGY;
 
 /**
  * This class represents the Log Replication Discovery Service.
@@ -118,7 +118,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      * A queue of Discovery Service events
      */
-    private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue;
+    private LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue;
 
     /**
      * Callback to Log Replication Server upon topology discovery
@@ -136,8 +136,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private CorfuRuntime runtime;
 
     private LogReplicationContext replicationContext;
-
-    private boolean shouldRun = true;
 
     private boolean isLeader;
 
@@ -160,23 +158,19 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.serverCallback = serverCallback;
         this.isLeader = false;
-        this.eventQueue = new LinkedBlockingQueue<>();
         this.shutdown = false;
+        this.eventQueue = new LinkedBlockingQueue<>();
         this.executorService.submit(this::run);
     }
 
 
     /**
-     * The executor thread will keep running at background and process events in eventQue
+     * The executor thread will keep running at background and process events in eventQueue
      */
     public void run() {
+
         // The DISCOVERY_INIT_TOPOLOGY should be the first event to be processed for both ACTIVE and STANDBY sites.
-        try {
-            this.eventQueue.put(new DiscoveryServiceEvent(DISCOVERY_INIT_TOPOLOGY));
-        } catch (Exception e) {
-            log.error("Caught an exception. Stop running.");
-            shutdown();
-        }
+        this.eventQueue.add(new DiscoveryServiceEvent(DISCOVER_INIT_TOPOLOGY));
 
         while (!shutdown) {
             try {
@@ -528,7 +522,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     public void processEvent(DiscoveryServiceEvent event) throws LogReplicationDiscoveryServiceException {
         switch (event.type) {
-            case DISCOVERY_INIT_TOPOLOGY:
+            case DISCOVER_INIT_TOPOLOGY:
                 startDiscovery();
             case ACQUIRE_LOCK:
                 processLockAcquire();

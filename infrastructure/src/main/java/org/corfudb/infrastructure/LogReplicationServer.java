@@ -36,7 +36,7 @@ public class LogReplicationServer extends AbstractServer {
 
     private final ServerContext serverContext;
 
-    //Used for receiving and applying messages.
+    // Used for receiving and applying messages.
     private final ExecutorService executor;
 
     @Getter
@@ -99,7 +99,7 @@ public class LogReplicationServer extends AbstractServer {
     }
 
     /**
-     * This API is used by sender to query the log replication status at the receiver side.
+     * Server handler to process log replication status queries.
      * It is used at the negotiation phase to decide to start a snapshot full sync or log entry sync.
      * It is also used during full snapshot sync while polling the receiver's status when the receiver is
      * applying the data to the real streams.
@@ -113,6 +113,7 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isLeader(msg, r)) {
             LogReplicationMetadataManager metadata = sinkManager.getLogReplicationMetadataManager();
+            // Fetches the latest logical timestamp (global tail) in Corfu's distributed log.
             CorfuStoreMetadata.Timestamp ts = metadata.getTimestamp();
 
             // TODO (Xiaoqin Ma): That's 6 independent DB calls per one LOG_REPLICATION_NEGOTIATION_REQUEST.

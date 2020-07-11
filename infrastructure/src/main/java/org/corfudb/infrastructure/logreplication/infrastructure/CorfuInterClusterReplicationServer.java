@@ -303,7 +303,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         // acquiring lock, retrieving Site Manager Info and processing this info
         // so this node is initialized as Source (sender) or Sink (receiver)
         replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext,
-                clusterManagerAdapter, discoveryServiceCallback);;
+                clusterManagerAdapter, discoveryServiceCallback);
 
         return discoveryServiceCallback;
     }

@@ -218,9 +218,14 @@ public abstract class SenderBufferManager {
 
         try {
             ack = processAcks();
-        } catch (Exception e) {
+        } catch (TimeoutException e) {
             log.warn("Caught a timeout exception ", e);
             force = true;
+        } catch (ExecutionException | InterruptedException e ) {
+            // TODO Anny/Xiaoqin:
+            // This could be caused by network disconnection or leadership loss at the standby site,
+            // the Replication FSM should stop, and generate an event at LogReplicationRuntime.
+            log.warn("Caught an exception.", e);
         }
 
         for (int i = 0; i < pendingMessages.getSize(); i++) {
@@ -233,7 +238,7 @@ public abstract class SenderBufferManager {
                 }
 
                 entry.retry();
-                log.info("Resend message {}", entry.getData().getMetadata());
+                log.debug("Resend message {}", entry.getData().getMetadata());
                 CompletableFuture<LogReplicationEntry> cf = dataSender.send(entry.getData());
                 addCFToAcked(entry.getData(), cf);
             } else {

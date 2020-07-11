@@ -18,11 +18,10 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      * @param ackCycleTime
      * @param ackCycleCnt
      * @param size
-     * @param lastProcessedSeq last processed log entry's timestamp
      * @param sinkManager
      */
-    public LogEntrySinkBufferManager(int ackCycleTime, int ackCycleCnt, int size, long lastProcessedSeq, LogReplicationSinkManager sinkManager) {
-        super(LOG_ENTRY_MESSAGE, ackCycleTime, ackCycleCnt, size, lastProcessedSeq, sinkManager);
+    public LogEntrySinkBufferManager(int ackCycleTime, int ackCycleCnt, int size, LogReplicationSinkManager sinkManager) {
+        super(LOG_ENTRY_MESSAGE, ackCycleTime, ackCycleCnt, size, sinkManager);
     }
 
     /**
@@ -41,12 +40,12 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      * @return log entry message's timestamp.
      */
     @Override
-    long getCurrentSeq(LogReplicationEntry entry) {
+    public long getCurrentSeq(LogReplicationEntry entry) {
         return entry.getMetadata().getTimestamp();
     }
 
     @Override
-    long getLastProcessed() {
+    public long getLastProcessed() {
         return logReplicationMetadataManager.getLastProcessedLogTimestamp(null);
     }
 

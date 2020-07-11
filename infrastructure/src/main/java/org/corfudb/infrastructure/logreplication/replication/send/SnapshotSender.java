@@ -100,7 +100,7 @@ public class SnapshotSender {
         boolean cancel = false;
 
         // For each cycle, read at most SNAPSHOT_BATCH_SIZE of messages or untill the buffer is full.
-        while (messagesSent < SNAPSHOT_BATCH_SIZE && !dataSenderBufferManager.getPendingMessages().isFull()
+        while (messagesSent < snapshotSyncBatchSize && !dataSenderBufferManager.getPendingMessages().isFull()
                 &&!readingCompleted && !stopSnapshotSync) {
             try {
                 // Read one message from Corfu log.
@@ -152,7 +152,7 @@ public class SnapshotSender {
 
         try {
             // Query receiver status
-            LogReplicationQueryMetadataResponse response = dataSender.sendQueryMetadataRequest();
+            LogReplicationQueryMetadataResponse response = dataSender.sendQueryMetadataRequest().get();
 
             // If it has finised applying the snapshot, transition to log entry sync
             // Otherwise query the status in another cycle.
