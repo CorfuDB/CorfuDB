@@ -83,6 +83,9 @@ public class ServerContext implements AutoCloseable {
     private static final String PREFIX_LOGUNIT = "LOGUNIT";
     private static final String EPOCH_WATER_MARK = "EPOCH_WATER_MARK";
 
+    // Corfu Replication Server
+    public static final String PLUGIN_CONFIG_FILE_PATH = "../resources/corfu_plugin_config.properties";
+
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
 
@@ -113,7 +116,6 @@ public class ServerContext implements AutoCloseable {
      * various duration constants.
      */
     public static final Duration SHUTDOWN_TIMER = Duration.ofSeconds(5);
-
 
     @Getter
     private final Map<String, Object> serverConfig;
@@ -207,6 +209,11 @@ public class ServerContext implements AutoCloseable {
         return threadCount == null ? 4 : threadCount;
     }
 
+    public String getPluginConfigFilePath() {
+        String pluginConfigFilePath = getServerConfig(String.class, "--plugin");
+        return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
+    }
+
     /**
      * Cleanup the DataStore files with names that are prefixes of the specified
      * fileName when so that the number of these files don't exceed the user-defined
@@ -255,7 +262,7 @@ public class ServerContext implements AutoCloseable {
      *
      * @return The server channel type.
      */
-    ChannelImplementation getChannelImplementation() {
+    public ChannelImplementation getChannelImplementation() {
         final String type = getServerConfig(String.class, "--implementation");
         return ChannelImplementation.valueOf(type.toUpperCase());
     }

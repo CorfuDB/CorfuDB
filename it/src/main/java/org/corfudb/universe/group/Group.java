@@ -18,7 +18,7 @@ import static org.corfudb.universe.node.Node.NodeParams;
  * <p>
  * DEPLOY: deploys a {@link Group} representing a collection of {@link Node}-s using
  * the provided configuration in {@link GroupParams}
- * STOP: stops a {@link Group} gracefully within the provided timeout
+ * STOPPING: stops a {@link Group} gracefully within the provided timeout
  * KILL: kills a {@link Group} immediately
  */
 public interface Group<T extends Node, G extends Group.GroupParams> {

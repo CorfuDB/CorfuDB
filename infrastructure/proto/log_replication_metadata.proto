@@ -1,0 +1,27 @@
+syntax = "proto3";
+package org.corfudb.infrastructure.logreplication.proto;
+
+/**
+ * This is used by replication metadata table in corfu store.
+ * The metadata table has the following key-value pairs defined both as strings:
+ * One example to show the standby is at log entry sync state:
+ * "topologyConfigId": "0"
+ * "version": "release-1.0"
+ * "snapshotStart": "100"
+ * "snapshotSeqNum": " 88"
+ * "snapshotTransferred": "100"
+ * "snapshotApplied": "100"
+ * "lastLogEntryProcessed": "168"
+ */
+message LogReplicationMetadataKey {
+  string key = 1;
+}
+
+/**
+ * This is corresponding values for the keys in the replication
+ * metadata table in corfu store. For example:
+ * key: "topologyConfigId", val: "1".
+ */
+message LogReplicationMetadataVal {
+  string val = 1;
+}

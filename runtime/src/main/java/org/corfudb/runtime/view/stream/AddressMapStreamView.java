@@ -84,13 +84,11 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 // to be serviced immediately, rather than reading one entry at a time.
                 ld = read(currentRead, queue);
 
-                if (queue == getCurrentContext().readQueue) {
+                if (queue == getCurrentContext().readQueue && ld != null) {
                     // Validate that the data entry belongs to this stream, otherwise, skip.
                     // This verification protects from sequencer regression (tokens assigned in an older epoch
                     // that were never written to, and reassigned on a newer epoch)
-                    if ((ld.containsStream(this.id) && ld.isData()) ||
-                            (ld.isHole() && (ld.getBackpointerMap().isEmpty() || ld.containsStream(this.id)))
-                    ) {
+                    if (ld.containsStream(this.id) && ld.getType() == DataType.DATA) {
                         addToResolvedQueue(getCurrentContext(), currentRead);
                         readNext = false;
                     } else {

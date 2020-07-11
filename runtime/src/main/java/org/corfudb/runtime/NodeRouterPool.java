@@ -24,15 +24,15 @@ public class NodeRouterPool {
     private final Map<NodeLocator, IClientRouter> nodeRouters = new ConcurrentHashMap<>();
 
     /**
-     * A function to handle getting routers. Used by test framework to inject
-     * a test router. Can also be used to provide alternative logic for obtaining
+     * A function to handle getting routers. Used by channel framework to inject
+     * a channel router. Can also be used to provide alternative logic for obtaining
      * a router.
      */
     @Getter
     @Setter
     private Function<String, IClientRouter> createRouterFunction;
 
-    NodeRouterPool(Function<String, IClientRouter> createRouterFunction) {
+    public NodeRouterPool(Function<String, IClientRouter> createRouterFunction) {
         this.createRouterFunction = createRouterFunction;
     }
 

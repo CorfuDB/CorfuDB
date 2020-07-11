@@ -1,11 +1,9 @@
 package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Data;
 import lombok.Getter;
@@ -48,7 +46,6 @@ import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
 
 import javax.annotation.Nonnull;
-import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -77,254 +74,154 @@ public class CorfuRuntime {
     /**
      * A class which holds parameters and settings for the {@link CorfuRuntime}.
      */
-    @Builder
     @Data
     @ToString
-    public static class CorfuRuntimeParameters {
-        @Default
-        private final long nettyShutdownQuitePeriod = 100;
-        @Default
-        private final long nettyShutdownTimeout = 300;
+    public static class CorfuRuntimeParameters extends RuntimeParameters {
 
-        // region Object Layer Parameters
+        public static CorfuRuntimeParametersBuilder builder() {
+            return new CorfuRuntimeParametersBuilder();
+        }
 
-        /**
+        /*
          * Max size for a write request.
          */
-        @Default
+
         int maxWriteSize = 0;
 
-        /**
+        /*
          * Set the bulk read size.
          */
-        @Default
+        //@Default
         int bulkReadSize = 10;
 
-        /**
+        /*
          * How much time the Fast Loader has to get the maps up to date.
          *
          * <p>Once the timeout is reached, the Fast Loader gives up. Every map that is
          * not up to date will be loaded through normal path.
          */
-        @Default
+        //@Default
         Duration fastLoaderTimeout = Duration.ofMinutes(30);
         // endregion
 
         // region Address Space Parameters
-        /**
+        /*
          * Number of times to attempt to read before hole filling.
          * @deprecated This is a no-op. Use holeFillWait
-         * */
-        @Deprecated
-        @Default int holeFillRetry = 10;
-
-        /** Time to wait between read requests reattempts before hole filling. */
-        @Default Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
-
-        /**
-         * Time limit after which the reader gives up and fills the hole.
          */
-        @Default Duration holeFillTimeout = Duration.ofSeconds(10);
+        @Deprecated
+        //@Default
+        int holeFillRetry = 10;
 
-        /**
+        /* Time to wait between read requests reattempts before hole filling. */
+        //@Default
+        Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
+
+       /*
+         * Time limit after which the logreader gives up and fills the hole.
+         */
+        //@Default
+        Duration holeFillTimeout = Duration.ofSeconds(10);
+
+        /*
          * Whether or not to disable the cache.
          */
-        @Default
+        //@Default
         boolean cacheDisabled = false;
 
-        /**
+        /*
          * The maximum number of entries in the cache.
          */
-        @Default
+        //@Default
         long maxCacheEntries;
 
-        /**
+        /*
          * The max in-memory size of the cache in bytes
          */
-        @Default
+        //@Default
         long maxCacheWeight;
 
-        /**
+        /*
          * This is a hint to size the AddressSpaceView cache, a higher concurrency
          * level allows for less lock contention at the cost of more memory overhead.
          * The default value of zero will result in using the cache's internal default
          * concurrency level (i.e. 4). 
          */
-        @Default
+        //@Default
         int cacheConcurrencyLevel = 0;
 
-        /**
+        /*
          * Sets expireAfterAccess and expireAfterWrite in seconds.
          */
-        @Default
+        //@Default
         long cacheExpiryTime = Long.MAX_VALUE;
         // endregion
 
-        // region Handshake Parameters
-        /**
-         * Sets handshake timeout in seconds.
-         */
-        @Default
-        int handshakeTimeout = 10;
-        // endregion
-
         // region Stream Parameters
-        /**
+        /*
          * True, if strategy to discover the address space of a stream relies on the follow backpointers.
          * False, if strategy to discover the address space of a stream relies on the get stream address map.
          */
-        @Default
+        //@Default
         boolean followBackpointersEnabled = false;
 
-        /**
+        /*
          * Whether or not hole filling should be disabled.
          */
-        @Default
+        //@Default
         boolean holeFillingDisabled = false;
 
-        /**
+        /*
          * Number of times to retry on an
          * {@link org.corfudb.runtime.exceptions.OverwriteException} before giving up.
          */
-        @Default
+        //@Default
         int writeRetry = 5;
 
-        /**
+        /*
          * The number of times to retry on a retriable
          * {@link org.corfudb.runtime.exceptions.TrimmedException} during a transaction.
          */
-        @Default
+        //@Default
         int trimRetry = 2;
 
-        /**
+        /*
          * The total number of retries the checkpointer will attempt on sequencer failover to
          * prevent epoch regressions. This is independent of the number of streams to be checkpointed.
          */
-        @Default
+        //@Default
         int checkpointRetries = 5;
 
-        /**
+        /*
          * Stream Batch Size: number of addresses to fetch in advance when stream address discovery mechanism
          * relies on address maps instead of follow backpointers, i.e., followBackpointersEnabled = false;
          */
-        @Default
+        //@Default
         int streamBatchSize = 10;
 
-        /**
+        /*
          * Checkpoint read Batch Size: number of checkpoint addresses to fetch in batch when stream
          * address discovery mechanism relies on address maps instead of follow backpointers;
          */
-        @Default
+        //@Default
         int checkpointReadBatchSize = 5;
         // endregion
 
-        //region        Security parameters
-        /**
-         * True, if TLS is enabled.
-         */
-        @Default
-        boolean tlsEnabled = false;
-
-        /**
-         * A path to the key store.
-         */
-        String keyStore;
-
-        /**
-         * A file containing the password for the key store.
-         */
-        String ksPasswordFile;
-
-        /**
-         * A path to the trust store.
-         */
-        String trustStore;
-
-        /**
-         * A path containing the password for the trust store.
-         */
-        String tsPasswordFile;
-
-        /**
-         * True, if SASL plain text authentication is enabled.
-         */
-        @Default
-        boolean saslPlainTextEnabled = false;
-
-        /**
-         * A path containing the username file for SASL.
-         */
-        String usernameFile;
-
-        /**
-         * A path containing the password file for SASL.
-         */
-        String passwordFile;
-        //endregion
-
-        //region Connection parameters
-        /**
-         * {@link Duration} before requests timeout.
-         * This is the duration after which the reader hole fills the address.
-         */
-        @Default
-        Duration requestTimeout = Duration.ofSeconds(5);
-
-        /**
-         * This timeout (in seconds) is used to detect servers that
-         * shutdown abruptly without terminating the connection properly.
-         */
-        @Default
-        int idleConnectionTimeout = 7;
-
-        /**
-         * The period at which the client sends keep-alive messages to the
-         * server (a message is only send there is no write activity on the channel
-         * for the whole period.
-         */
-        @Default
-        int keepAlivePeriod = 2;
-
-        /**
-         * {@link Duration} before connections timeout.
-         */
-        @Default
-        Duration connectionTimeout = Duration.ofMillis(500);
-
-        /**
-         * {@link Duration} before reconnecting to a disconnected node.
-         */
-        @Default
-        Duration connectionRetryRate = Duration.ofSeconds(1);
-
-        /**
+        /*
          * The period at which the runtime will run garbage collection
          */
-        @Default
+        //@Default
         Duration runtimeGCPeriod = Duration.ofMinutes(20);
 
-        /**
-         * The {@link UUID} for this client. Randomly generated by default.
-         */
-        @Default
-        UUID clientId = UUID.randomUUID();
-
-        /**
+        /*
          * The {@link UUID} for the cluster this client is connecting to, or
          * {@code null} if the client should adopt the {@link UUID} of the first
          * server it connects to.
          */
-        @Default
+        //@Default
         UUID clusterId = null;
 
-        /**
-         * The type of socket which {@link NettyClientRouter}s should use. By default,
-         * an NIO based implementation is used.
-         */
-        @Default
-        ChannelImplementation socketType = ChannelImplementation.NIO;
-
-        /**
+        /*
          * Number of retries to reconnect to an unresponsive system before invoking the
          * systemDownHandler. This is mainly required to allow the fault detection mechanism
          * to detect and reconfigure the cluster.
@@ -333,144 +230,401 @@ public class CorfuRuntime {
          * invoking the systemDownHandler after a minimum of
          * (systemDownHandlerTriggerLimit * connectionRetryRate) seconds. Default: 20 seconds.
          */
-        @Default
+        //@Default
         int systemDownHandlerTriggerLimit = 20;
 
-        /**
+        /*
          * The initial list of layout servers.
          */
-        @Singular
-        List<NodeLocator> layoutServers;
+        //@Singular
+        List<NodeLocator> layoutServers = new ArrayList<>();
         //endregion
 
-        //region Threading Parameters
-        /**
-         * The {@link EventLoopGroup} which {@link NettyClientRouter}s will use.
-         * If not specified, the runtime will generate this using the {@link ChannelImplementation}
-         * specified in {@code socketType} and the {@link ThreadFactory} specified in
-         * {@code nettyThreadFactory}.
-         */
-        EventLoopGroup nettyEventLoop;
-
-        /**
-         * A string which will be used to set the
-         * {@link com.google.common.util.concurrent.ThreadFactoryBuilder#nameFormat} for the
-         * {@code nettyThreadFactory}. By default, this is set to "netty-%d".
-         * If you provide your own {@code nettyEventLoop}, this field is ignored.
-         */
-        @Default
-        String nettyEventLoopThreadFormat = "netty-%d";
-
-        /**
-         * The number of threads that should be available in the {@link NettyClientRouter}'s
-         * event pool. 0 means that we will use 2x the number of processors reported in the
-         * system. If you provide your own {@code nettyEventLoop}, this field is ignored.
-         */
-        @Default
-        int nettyEventLoopThreads = 0;
-
-        /**
-         * True, if the {@code NettyEventLoop} should be shutdown when the runtime is
-         * shutdown. False otherwise.
-         */
-        @Default
-        boolean shutdownNettyEventLoop = true;
-
-        /**
-         * Netty channel options, if provided. If no options are set, we default to
-         * the defaults in {@link this#DEFAULT_CHANNEL_OPTIONS}.
-         */
-        @Singular
-        Map<ChannelOption, Object> customNettyChannelOptions;
-
-        /**
-         * Default channel options, used if there are no options in the
-         * {@link this#customNettyChannelOptions} field.
-         */
-        static final Map<ChannelOption, Object> DEFAULT_CHANNEL_OPTIONS =
-                ImmutableMap.<ChannelOption, Object>builder()
-                        .put(ChannelOption.TCP_NODELAY, true)
-                        .put(ChannelOption.SO_REUSEADDR, true)
-                        .build();
-
-        /**
-         * A {@link UncaughtExceptionHandler} which handles threads that have an uncaught
-         * exception. Used on all {@link ThreadFactory}s the runtime creates, but if you
-         * generate your own thread factory, this field is ignored. If this field is not set,
-         * the runtime's default handler runs, which logs an error level message.
-         */
-        UncaughtExceptionHandler uncaughtExceptionHandler;
-        //endregion
-
-        /**
+        /*
          * The number of times to retry invalidate when a layout change is expected.
          */
-        @Default
+        //@Default
         int invalidateRetry = 5;
 
-        /**
-         * Represents filtering logic to be applied on the inbound messages received by Netty Client
-         * Router. If filters are not null, Netty Client Router add a filter handler and configures it
-         * with provided filters. If filters are null, no filter handler will be added to Netty's pipeline.
-         */
-        @Default
-        List<MsgHandlingFilter> nettyClientInboundMsgFilters = null;
 
-        /**
+        /*
          * The default priority of the requests made by this client.
          * Under resource constraints non-high priority requests
          * are dropped.
          */
-        @Default
+        //@Default
         private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
 
-        /**
-         * Port at which the {@link CorfuRuntime} will allow third-party
-         * collectors to pull for metrics.
-         */
-        @Default
-        private int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
-
-        /**
+        /*
          * The compression codec to use to encode a write's payload
          */
-        @Default
+        //@Default
         private Codec.Type codecType = Codec.Type.ZSTD;
 
-        // Register handlers region
-
-        // These two handlers are provided to give some control on what happen when system is down.
-        // For applications that want to have specific behaviour when a the system appears
-        // unavailable, they can register their own handler for both before the rpc request and
-        // upon cluster unreachability.
-        // An example of how to use these handlers implementing timeout is given in
-        // test/src/test/java/org/corfudb/runtime/CorfuRuntimeTest.java
-
-        /**
-         * SystemDownHandler is invoked at any point when the Corfu client attempts to make an RPC
-         * request to the Corfu cluster but is unable to complete this.
-         * NOTE: This will also be invoked during connect if the cluster is unreachable.
-         */
-        @Default
-        volatile Runnable systemDownHandler = () -> {
+        public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
+            /*boolean tlsEnabled = false;
+            String keyStore;
+            String ksPasswordFile;
+            String trustStore;
+    String tsPasswordFile;
+    boolean saslPlainTextEnabled = false;
+    String usernameFile;
+    String passwordFile;
+    int handshakeTimeout = 10;
+    Duration requestTimeout = Duration.ofSeconds(5);
+    int idleConnectionTimeout = 7;
+    int keepAlivePeriod = 2;
+    Duration connectionTimeout = Duration.ofMillis(500);
+    Duration connectionRetryRate = Duration.ofSeconds(1);
+    UUID clientId = UUID.randomUUID();
+    ChannelImplementation socketType = ChannelImplementation.NIO;
+    EventLoopGroup nettyEventLoop;
+    String nettyEventLoopThreadFormat = "netty-%d";
+    int nettyEventLoopThreads = 0;
+    boolean shutdownNettyEventLoop = true;
+    Map<ChannelOption, Object> customNettyChannelOptions = DEFAULT_CHANNEL_OPTIONS;
+    Thread.UncaughtExceptionHandler uncaughtExceptionHandler;
+    List<MsgHandlingFilter> nettyClientInboundMsgFilters = null;
+    volatile Runnable systemDownHandler = () -> {
         };
-
-        /**
-         * BeforeRPCHandler callback is invoked every time before an RPC call.
-         */
-        @Default
-        volatile Runnable beforeRpcHandler = () -> {
+    volatile Runnable beforeRpcHandler = () -> {
         };
-        //endregion
+    private int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;*/
+            int maxWriteSize = 0;
+            int bulkReadSize = 10;
+            Duration fastLoaderTimeout = Duration.ofMinutes(30);
+            int holeFillRetry = 10;
+            Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
+            Duration holeFillTimeout = Duration.ofSeconds(10);
+            boolean cacheDisabled = false;
+            long maxCacheEntries;
+            long maxCacheWeight;
+            int cacheConcurrencyLevel = 0;
+            long cacheExpiryTime = Long.MAX_VALUE;
+            boolean followBackpointersEnabled = false;
+            boolean holeFillingDisabled = false;
+            int writeRetry = 5;
+            int trimRetry = 2;
+            int checkpointRetries = 5;
+            int streamBatchSize = 10;
+            int checkpointReadBatchSize = 5;
+            Duration runtimeGCPeriod = Duration.ofMinutes(20);
+            UUID clusterId = null;
+            int systemDownHandlerTriggerLimit = 20;
+            List<NodeLocator> layoutServers = new ArrayList<>();
+            int invalidateRetry = 5;
+            private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
+            private Codec.Type codecType = Codec.Type.ZSTD;
 
-        /**
-         * Get the netty channel options to be used by the netty client implementation.
-         *
-         * @return A map containing options which should be applied to each netty channel.
-         */
-        public Map<ChannelOption, Object> getNettyChannelOptions() {
-            return customNettyChannelOptions.size() == 0
-                    ? DEFAULT_CHANNEL_OPTIONS : customNettyChannelOptions;
+               public CorfuRuntimeParametersBuilder tlsEnabled(boolean tlsEnabled) {
+        super.tlsEnabled(tlsEnabled);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder keyStore(String keyStore) {
+        super.keyStore(keyStore);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder ksPasswordFile(String ksPasswordFile) {
+        super.ksPasswordFile(ksPasswordFile);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder trustStore(String trustStore) {
+        super.trustStore(trustStore);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder tsPasswordFile(String tsPasswordFile) {
+        super.tsPasswordFile(tsPasswordFile);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder saslPlainTextEnabled(boolean saslPlainTextEnabled) {
+        super.saslPlainTextEnabled(saslPlainTextEnabled);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder usernameFile(String usernameFile) {
+        super.usernameFile(usernameFile);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder passwordFile(String passwordFile) {
+        super.passwordFile(passwordFile);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder handshakeTimeout(int handshakeTimeout) {
+        super.handshakeTimeout(handshakeTimeout);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder requestTimeout(Duration requestTimeout) {
+        super.requestTimeout(requestTimeout);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder idleConnectionTimeout(int idleConnectionTimeout) {
+        super.idleConnectionTimeout(idleConnectionTimeout);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder keepAlivePeriod(int keepAlivePeriod) {
+        super.keepAlivePeriod(keepAlivePeriod);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder connectionTimeout(Duration connectionTimeout) {
+        super.connectionTimeout(connectionTimeout);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder connectionRetryRate(Duration connectionRetryRate) {
+        super.connectionRetryRate(connectionRetryRate);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder clientId(UUID clientId) {
+        super.clientId(clientId);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder socketType(ChannelImplementation socketType) {
+        super.socketType(socketType);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder nettyEventLoop(EventLoopGroup nettyEventLoop) {
+        super.nettyEventLoop(nettyEventLoop);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder nettyEventLoopThreadFormat(String nettyEventLoopThreadFormat) {
+        super.nettyEventLoopThreadFormat(nettyEventLoopThreadFormat);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder nettyEventLoopThreads(int nettyEventLoopThreads) {
+        super.nettyEventLoopThreads(nettyEventLoopThreads);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder shutdownNettyEventLoop(boolean shutdownNettyEventLoop) {
+        super.shutdownNettyEventLoop(shutdownNettyEventLoop);
+        return this;
+    }
+    public CorfuRuntimeParametersBuilder customNettyChannelOptions(Map<ChannelOption, Object> customNettyChannelOptions) {
+        super.customNettyChannelOptions(customNettyChannelOptions);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder uncaughtExceptionHandler(Thread.UncaughtExceptionHandler uncaughtExceptionHandler) {
+        super.uncaughtExceptionHandler(uncaughtExceptionHandler);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder nettyClientInboundMsgFilters(List<MsgHandlingFilter> nettyClientInboundMsgFilters) {
+        super.nettyClientInboundMsgFilters(nettyClientInboundMsgFilters);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder prometheusMetricsPort(int prometheusMetricsPort) {
+        super.prometheusMetricsPort(prometheusMetricsPort);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder systemDownHandler(Runnable systemDownHandler) {
+        super.systemDownHandler(systemDownHandler);
+        return this;
+    }
+
+    public CorfuRuntimeParametersBuilder beforeRpcHandler(Runnable beforeRpcHandler) {
+        super.beforeRpcHandler(beforeRpcHandler);
+        return this;
+    }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxWriteSize(int maxWriteSize) {
+                this.maxWriteSize = maxWriteSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder bulkReadSize(int bulkReadSize) {
+                this.bulkReadSize = bulkReadSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder fastLoaderTimeout(Duration fastLoaderTimeout) {
+                this.fastLoaderTimeout = fastLoaderTimeout;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillRetry(int holeFillRetry) {
+                this.holeFillRetry = holeFillRetry;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillRetryThreshold(Duration holeFillRetryThreshold) {
+                this.holeFillRetryThreshold = holeFillRetryThreshold;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillTimeout(Duration holeFillTimeout) {
+                this.holeFillTimeout = holeFillTimeout;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheDisabled(boolean cacheDisabled) {
+                this.cacheDisabled = cacheDisabled;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxCacheEntries(long maxCacheEntries) {
+                this.maxCacheEntries = maxCacheEntries;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder maxCacheWeight(long maxCacheWeight) {
+                this.maxCacheWeight = maxCacheWeight;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheConcurrencyLevel(int cacheConcurrencyLevel) {
+                this.cacheConcurrencyLevel = cacheConcurrencyLevel;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder cacheExpiryTime(long cacheExpiryTime) {
+                this.cacheExpiryTime = cacheExpiryTime;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder followBackpointersEnabled(boolean followBackpointersEnabled) {
+                this.followBackpointersEnabled = followBackpointersEnabled;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillingDisabled(boolean holeFillingDisabled) {
+                this.holeFillingDisabled = holeFillingDisabled;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder writeRetry(int writeRetry) {
+                this.writeRetry = writeRetry;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder trimRetry(int trimRetry) {
+                this.trimRetry = trimRetry;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointRetries(int checkpointRetries) {
+                this.checkpointRetries = checkpointRetries;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamBatchSize(int streamBatchSize) {
+                this.streamBatchSize = streamBatchSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder checkpointReadBatchSize(int checkpointReadBatchSize) {
+                this.checkpointReadBatchSize = checkpointReadBatchSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder runtimeGCPeriod(Duration runtimeGCPeriod) {
+                this.runtimeGCPeriod = runtimeGCPeriod;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder clusterId(UUID clusterId) {
+                this.clusterId = clusterId;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder systemDownHandlerTriggerLimit(int systemDownHandlerTriggerLimit) {
+                this.systemDownHandlerTriggerLimit = systemDownHandlerTriggerLimit;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder layoutServers(List<NodeLocator> layoutServers) {
+                this.layoutServers = layoutServers;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder invalidateRetry(int invalidateRetry) {
+                this.invalidateRetry = invalidateRetry;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder priorityLevel(PriorityLevel priorityLevel) {
+                this.priorityLevel = priorityLevel;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder codecType(Codec.Type codecType) {
+                this.codecType = codecType;
+                return this;
+            }
+
+            public CorfuRuntimeParameters build() {
+                CorfuRuntimeParameters corfuRuntimeParameters = new CorfuRuntimeParameters();
+                corfuRuntimeParameters.setTlsEnabled(tlsEnabled);
+                corfuRuntimeParameters.setKeyStore(keyStore);
+                corfuRuntimeParameters.setKsPasswordFile(ksPasswordFile);
+                corfuRuntimeParameters.setTrustStore(trustStore);
+                corfuRuntimeParameters.setTsPasswordFile(tsPasswordFile);
+                corfuRuntimeParameters.setSaslPlainTextEnabled(saslPlainTextEnabled);
+                corfuRuntimeParameters.setUsernameFile(usernameFile);
+                corfuRuntimeParameters.setPasswordFile(passwordFile);
+                corfuRuntimeParameters.setHandshakeTimeout(handshakeTimeout);
+                corfuRuntimeParameters.setRequestTimeout(requestTimeout);
+                corfuRuntimeParameters.setIdleConnectionTimeout(idleConnectionTimeout);
+                corfuRuntimeParameters.setKeepAlivePeriod(keepAlivePeriod);
+                corfuRuntimeParameters.setConnectionTimeout(connectionTimeout);
+                corfuRuntimeParameters.setConnectionRetryRate(connectionRetryRate);
+                corfuRuntimeParameters.setClientId(clientId);
+                corfuRuntimeParameters.setSocketType(socketType);
+                corfuRuntimeParameters.setNettyEventLoop(nettyEventLoop);
+                corfuRuntimeParameters.setNettyEventLoopThreadFormat(nettyEventLoopThreadFormat);
+                corfuRuntimeParameters.setNettyEventLoopThreads(nettyEventLoopThreads);
+                corfuRuntimeParameters.setShutdownNettyEventLoop(shutdownNettyEventLoop);
+                corfuRuntimeParameters.setCustomNettyChannelOptions(customNettyChannelOptions);
+                corfuRuntimeParameters.setUncaughtExceptionHandler(uncaughtExceptionHandler);
+                corfuRuntimeParameters.setNettyClientInboundMsgFilters(nettyClientInboundMsgFilters);
+                corfuRuntimeParameters.setPrometheusMetricsPort(prometheusMetricsPort);
+                corfuRuntimeParameters.setSystemDownHandler(systemDownHandler);
+                corfuRuntimeParameters.setBeforeRpcHandler(beforeRpcHandler);
+                corfuRuntimeParameters.setMaxWriteSize(maxWriteSize);
+                corfuRuntimeParameters.setBulkReadSize(bulkReadSize);
+                corfuRuntimeParameters.setFastLoaderTimeout(fastLoaderTimeout);
+                corfuRuntimeParameters.setHoleFillRetry(holeFillRetry);
+                corfuRuntimeParameters.setHoleFillRetryThreshold(holeFillRetryThreshold);
+                corfuRuntimeParameters.setHoleFillTimeout(holeFillTimeout);
+                corfuRuntimeParameters.setCacheDisabled(cacheDisabled);
+                corfuRuntimeParameters.setMaxCacheEntries(maxCacheEntries);
+                corfuRuntimeParameters.setMaxCacheWeight(maxCacheWeight);
+                corfuRuntimeParameters.setCacheConcurrencyLevel(cacheConcurrencyLevel);
+                corfuRuntimeParameters.setCacheExpiryTime(cacheExpiryTime);
+                corfuRuntimeParameters.setFollowBackpointersEnabled(followBackpointersEnabled);
+                corfuRuntimeParameters.setHoleFillingDisabled(holeFillingDisabled);
+                corfuRuntimeParameters.setWriteRetry(writeRetry);
+                corfuRuntimeParameters.setTrimRetry(trimRetry);
+                corfuRuntimeParameters.setCheckpointRetries(checkpointRetries);
+                corfuRuntimeParameters.setStreamBatchSize(streamBatchSize);
+                corfuRuntimeParameters.setCheckpointReadBatchSize(checkpointReadBatchSize);
+                corfuRuntimeParameters.setRuntimeGCPeriod(runtimeGCPeriod);
+                corfuRuntimeParameters.setClusterId(clusterId);
+                corfuRuntimeParameters.setSystemDownHandlerTriggerLimit(systemDownHandlerTriggerLimit);
+                corfuRuntimeParameters.setLayoutServers(layoutServers);
+                corfuRuntimeParameters.setInvalidateRetry(invalidateRetry);
+                corfuRuntimeParameters.setPriorityLevel(priorityLevel);
+                corfuRuntimeParameters.setCodecType(codecType);
+                return corfuRuntimeParameters;
+            }
         }
 
     }
@@ -828,6 +982,7 @@ public class CorfuRuntime {
                 .splitAsStream(configurationString)
                 .map(String::trim)
                 .collect(Collectors.toList());
+        log.info("Bootstrap Layout Servers {}", bootstrapLayoutServers);
         layoutServers = new ArrayList<>(bootstrapLayoutServers);
         return this;
     }
@@ -1232,5 +1387,6 @@ public class CorfuRuntime {
         parameters.setFastLoaderTimeout(Duration.ofMinutes(timeout));
         return this;
     }
+
     // endregion
 }

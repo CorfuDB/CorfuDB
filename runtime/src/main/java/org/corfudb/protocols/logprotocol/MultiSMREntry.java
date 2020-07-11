@@ -62,14 +62,14 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         int numUpdates = b.readInt();
         updates = new ArrayList<>();
         for (int i = 0; i < numUpdates; i++) {
-            updates.add(
-                    (SMREntry) Serializers.CORFU.deserialize(b, rt));
+            b.readByte(); // strip magic
+            updates.add((SMREntry) SMREntry.deserialize(b, rt, isOpaque()));
         }
     }
 
     /**
-     * Given a buffer with the reader index pointing to a serialized MultiSMREntry, this method will
-     * seek the buffer's reader index to the end of the entry.
+     * Given a buffer with the logreader index pointing to a serialized MultiSMREntry, this method will
+     * seek the buffer's logreader index to the end of the entry.
      */
     public static void seekToEnd(ByteBuf b) {
         // Magic
