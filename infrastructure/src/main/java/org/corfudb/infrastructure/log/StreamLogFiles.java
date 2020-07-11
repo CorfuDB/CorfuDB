@@ -1223,13 +1223,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             try {
                 channel.force(true);
             } catch (IOException e) {
-                log.debug("Can't force updates in the channel", e.getMessage());
+                log.debug("Can't force updates in the channel {}", e.getMessage());
             } finally {
                 IOUtils.closeQuietly(channel);
             }
         }
 
         writeChannels = new ConcurrentHashMap<>();
+        channelsToSync.clear();
     }
 
     /**
