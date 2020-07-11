@@ -48,6 +48,9 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     @Getter
     private ISerializer serializerType;
 
+    @Getter
+    private byte serializerId = -1;
+
     /** An undo record, which can be used to undo this method.
      *
      */
@@ -93,6 +96,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         this.SMRMethod = smrMethod;
         this.SMRArguments = smrArguments;
         this.serializerType = serializer;
+        //this.serializerId = serializerType.getType();
     }
 
     /**
@@ -108,21 +112,34 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         byte[] methodBytes = new byte[methodLength];
         b.readBytes(methodBytes, 0, methodLength);
         SMRMethod = new String(methodBytes);
-        serializerType = Serializers.getSerializer(b.readByte());
+        byte serializerId = b.readByte();
         byte numArguments = b.readByte();
         Object[] arguments = new Object[numArguments];
+
+        if (!opaque) {
+            serializerType = Serializers.getSerializer(serializerId);
+        } else {
+            this.serializerId = serializerId;
+        }
+
         for (byte arg = 0; arg < numArguments; arg++) {
             int len = b.readInt();
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
-            arguments[arg] = serializerType.deserialize(objBuf, rt);
+            if (opaque) {
+                byte[] argBytes = new byte[len];
+                objBuf.readBytes(argBytes);
+                arguments[arg] = argBytes;
+            } else {
+                arguments[arg] = serializerType.deserialize(objBuf, rt);
+            }
             b.skipBytes(len);
         }
         SMRArguments = arguments;
     }
 
     /**
-     * Given a buffer with the reader index pointing to a serialized SMREntry, this method will
-     * seek the buffer's reader index to the end of the entry.
+     * Given a buffer with the logreader index pointing to a serialized SMREntry, this method will
+     * seek the buffer's logreader index to the end of the entry.
      */
     public static void seekToEnd(ByteBuf b) {
         // Magic
@@ -149,13 +166,25 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         super.serialize(b);
         b.writeShort(SMRMethod.length());
         b.writeBytes(SMRMethod.getBytes());
-        b.writeByte(serializerType.getType());
+        if (opaque) {
+            //TODO(Maithem) add test for serialize/desrialize of opaque entries
+            if (serializerId == -1) {
+                throw new IllegalStateException("opaque entry doesn't have a serializer id");
+            }
+            b.writeByte(serializerId);
+        } else {
+            b.writeByte(serializerType.getType());
+        }
         b.writeByte(SMRArguments.length);
         Arrays.stream(SMRArguments)
                 .forEach(x -> {
                     int lengthIndex = b.writerIndex();
                     b.writeInt(0);
-                    serializerType.serialize(x, b);
+                    if (opaque) {
+                        b.writeBytes((byte[]) x);
+                    } else {
+                        serializerType.serialize(x, b);
+                    }
                     int length = b.writerIndex() - lengthIndex - 4;
                     b.writerIndex(lengthIndex);
                     b.writeInt(length);

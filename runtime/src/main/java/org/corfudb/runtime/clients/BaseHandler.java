@@ -54,7 +54,10 @@ public class BaseHandler implements IClient {
      */
     @ClientHandler(type = CorfuMsgType.PING)
     private static Object handlePing(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        r.sendResponseToServer(ctx, msg, new CorfuMsg(CorfuMsgType.PONG));
+        CorfuMsg outMsg = new CorfuMsg(CorfuMsgType.PONG);
+        outMsg.copyBaseFields(msg);
+        ctx.writeAndFlush(outMsg, ctx.voidPromise());
+        log.trace("Sent response: {}", outMsg);
         return null;
     }
 

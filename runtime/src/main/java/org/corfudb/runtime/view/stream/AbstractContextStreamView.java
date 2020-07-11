@@ -9,6 +9,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
@@ -133,21 +134,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         if (entry != null) {
             // Update the pointer.
             updatePointer(entry);
-
-            // We added hole to StreamView layer, in order to enable VLO sync to a hole
-            // and in this way, we can avoid unnecessary sync that call sequencer every time.
-            // It can expose a hole to sv consumer, so check if entry is a hole.
-            if (entry.isHole()) {
-                return nextUpTo(maxGlobal);
-            }
-
-            // Process the next entry, checking if the context has changed.
-            // If the context has changed, we read again, since this entry
-            // does not contain any data, and we need to follow the new
-            // context.
-            if (processEntryForContext(entry)) {
-                return nextUpTo(maxGlobal);
-            }
         }
 
         // Return the entry.
@@ -182,9 +168,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
         // Check if the last entry updates the context.
         if (doesEntryUpdateContext(entries.get(entries.size() - 1))) {
-            // The entry which updates the context must be the last one, so
-            // process it
-            processEntryForContext(entries.get(entries.size() - 1));
 
             // Remove the entry which updates the context
             entries.remove(entries.size() - 1);
@@ -290,32 +273,13 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      */
     private void updatePointer(final ILogData data) {
         // Update the global pointer, if it is non-checkpoint data.
-        if ((data.isData() || data.isHole()) && !data.hasCheckpointMetadata()) {
+        if (data.getType() == DataType.DATA && !data.hasCheckpointMetadata()) {
             // Note: here we only set the global pointer and do not validate its position with respect to the trim mark,
             // as the pointer is expected to be moving step by step (for instance when syncing a stream up to maxGlobal)
             // The validation is deferred to these methods which call it in advance based on the expected final position
             // of the pointer.
             getCurrentContext().setGlobalPointer(data.getGlobalAddress());
         }
-    }
-
-    /** Check if the given entry adds a new context, and update
-     * the global pointer.
-     *
-     * <p>If it does, add it to the context stack. Otherwise,
-     * pop the context.
-     *
-     * <p>It is important that this method be called in order, since
-     * it updates the global pointer and can change the global pointer.
-     *
-     * @param data  The entry to process.
-     * @return      True, if this entry adds a context.
-     */
-    protected boolean processEntryForContext(final ILogData data) {
-        if (data != null) {
-            final Object payload = data.getPayload(runtime);
-        }
-        return false;
     }
 
     /** Get the current context.

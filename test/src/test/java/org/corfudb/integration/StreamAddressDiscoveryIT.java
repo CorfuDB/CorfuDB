@@ -152,13 +152,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Read S1 from new runtime (following backpointers)
             long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers(stream1Name,
                     PARAMETERS.NUM_ITERATIONS_LARGE);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (following backpointers): "
+            System.out.println("**** Total time new runtime to send 'Stream 1' (following backpointers): "
                     + totalTimeFollowBackpointers);
 
             // Read S1 from new runtime (retrieving address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps(stream1Name,
                     PARAMETERS.NUM_ITERATIONS_LARGE);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (address maps): "
+            System.out.println("**** Total time new runtime to send 'Stream 1' (address maps): "
                     + totalTimeAddressMaps);
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
@@ -249,13 +249,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Read from fresh runtime (follow backpointers)
             long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (following backpointers): "
+            System.out.println("**** Total time new runtime to send 'Stream 1' (following backpointers): "
                     + totalTimeFollowBackpointers);
 
             // Read from fresh runtime (stream address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (address maps): "
+            System.out.println("**** Total time new runtime to send 'Stream 1' (address maps): "
                     + totalTimeAddressMaps);
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
@@ -366,13 +366,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Read from fresh runtime (follow backpointers)
             long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync stream (following backpointers): "
+            System.out.println("**** Total time new runtime to send stream (following backpointers): "
                     + totalTimeFollowBackpointers);
 
             // Read from fresh runtime (stream address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync stream (address maps): "
+            System.out.println("**** Total time new runtime to send stream (address maps): "
                     + totalTimeAddressMaps);
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
@@ -1216,7 +1216,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     }
 
     /**
-     * This test is similar to the previous, but enforces the hole from a reader, as reader hole fill
+     * This test is similar to the previous, but enforces the hole from a logreader, as logreader hole fill
      * does not contain stream information to build address map.
      * @throws Exception
      */
@@ -1225,7 +1225,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         testCheckpointEmptyMapWithSequencerFailover(true);
     }
 
-    private void testCheckpointEmptyMapWithSequencerFailover(boolean readerHole) throws Exception{
+    private void testCheckpointEmptyMapWithSequencerFailover(boolean readerHole) throws Exception {
         final int n0Port = 9000;
         final int n1Port = 9001;
         final int n2Port = 9002;
@@ -1266,7 +1266,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             UUID checkpointId = CorfuRuntime.getCheckpointStreamIdFromId(streamID);
 
             if (readerHole) {
-                // Generate hole from a reader
+                // Generate hole from a logreader
                 runtime.getSequencerView().next(streamID).getToken();
                 assertThat(mA.size()).isEqualTo(0);
                 extraEntry = 1;

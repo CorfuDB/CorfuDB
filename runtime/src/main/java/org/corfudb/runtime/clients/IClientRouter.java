@@ -1,8 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import io.netty.channel.ChannelHandlerContext;
-
-import java.util.NoSuchElementException;
 import java.util.concurrent.CompletableFuture;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -17,7 +14,6 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
  */
 public interface IClientRouter {
 
-
     /**
      * Add a new client to the router.
      *
@@ -29,54 +25,19 @@ public interface IClientRouter {
     /**
      * Send a message and get a completable future to be fulfilled by the reply.
      *
-     * @param ctx     The channel handler context to send the message under.
      * @param message The message to send.
      * @param <T>     The type of completable to return.
      * @return A completable future which will be fulfilled by the reply,
      * or a timeout in the case there is no response.
      */
-    <T> CompletableFuture<T> sendMessageAndGetCompletable(ChannelHandlerContext ctx,
-                                                          CorfuMsg message);
-
-    /**
-     * Send a message using the router channel handler and
-     * get a completable future to be fulfilled by the reply.
-     *
-     * @param message The message to send.
-     * @param <T>     The type of completable to return.
-     * @return A completable future which will be fulfilled by the reply,
-     *      or a timeout in the case there is no response.
-     */
-    default <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message) {
-        return sendMessageAndGetCompletable(null, message);
-    }
+    <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message);
 
     /**
      * Send a one way message, without adding a completable future.
      *
-     * @param ctx     The context to send the message under.
      * @param message The message to send.
      */
-    void sendMessage(ChannelHandlerContext ctx, CorfuMsg message);
-
-    /**
-     * Send a one way message using the default channel handler,
-     * without adding a completable future.
-     *
-     * @param message The message to send.
-     */
-    default void sendMessage(CorfuMsg message) {
-        sendMessage(null, message);
-    }
-
-    /**
-     * Send a netty message through this router, setting the fields in the outgoing message.
-     *
-     * @param ctx    Channel handler context to use.
-     * @param inMsg  Incoming message to respond to.
-     * @param outMsg Outgoing message.
-     */
-    void sendResponseToServer(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg);
+    void sendMessage(CorfuMsg message);
 
     /**
      * Complete a given outstanding request with a completion value.
@@ -96,16 +57,9 @@ public interface IClientRouter {
     void completeExceptionally(long requestID, Throwable cause);
 
     /**
-     * Starts routing requests.
-     */
-    void start();
-
-    /**
      * Stops routing requests.
      */
     void stop();
-
-    void stop(boolean shutdown);
 
     /**
      * The host that this router is routing requests for.
