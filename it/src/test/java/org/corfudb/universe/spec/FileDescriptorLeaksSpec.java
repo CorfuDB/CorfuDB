@@ -53,20 +53,20 @@ public class FileDescriptorLeaksSpec {
     }
 
     @ToString
+    @Builder
     private static class LsofRecord {
-        int numberOfResources;
-        String process;
-        String path;
+        private final int numberOfResources;
+        private final String process;
+        private final String path;
 
         public static LsofRecord parse(String rawLsof) {
             String[] components = rawLsof.split("\t");
 
-            LsofRecord record = new LsofRecord();
-            record.numberOfResources = Integer.parseInt(components[0]);
-            record.process = components[1];
-            record.path = components[2];
-
-            return record;
+            return LsofRecord.builder()
+                    .numberOfResources(Integer.parseInt(components[0]))
+                    .process(components[1])
+                    .path(components[2])
+                    .build();
         }
     }
 }
