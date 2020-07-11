@@ -21,11 +21,9 @@ public class FileDescriptorLeaksIT extends GenericIntegrationTest {
     /**
      * Test cluster behavior after one node down.
      * <p>
-     * 1) Deploy and bootstrap a three nodes cluster
-     * 2) Stop one node
-     * 3) Verify layout, cluster status and data path
-     * 4) Recover cluster by restarting the stopped node
-     * 5) Verify layout, cluster status and data path again
+     * 1) Deploy and bootstrap a one node cluster
+     * 2) Restart the node
+     * 3) Check if there are any resource leaks
      */
     @Test(timeout = 300000)
     public void fileDescriptorLeaksTest() {
