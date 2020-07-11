@@ -150,7 +150,7 @@ public abstract class SenderBufferManager {
 
         updateAck(ack);
         log.trace("Received ack {} total pending log entry acks {} for timestamps {}",
-                ack, pendingCompletableFutureForAcks.size(), pendingCompletableFutureForAcks.keySet());
+                ack.getMetadata().getTimestamp(), pendingCompletableFutureForAcks.size(), pendingCompletableFutureForAcks.keySet());
 
         return ack;
     }

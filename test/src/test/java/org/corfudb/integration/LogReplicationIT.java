@@ -2,7 +2,6 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.Data;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -14,6 +13,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -56,7 +56,6 @@ import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim
  * transactions containing federated and non-federated streams) and verify that complete data
  * reaches the destination after initiating log replication.
  */
-@Slf4j
 public class LogReplicationIT extends AbstractIT implements Observer {
 
     static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
@@ -1180,7 +1179,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Start Log Entry Sync
         System.out.println("****** Start Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
                 + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
-        logReplicationSourceManager.startReplication(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START));
+        logReplicationSourceManager.startReplication(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START,
+                new LogReplicationEventMetadata(UUID.randomUUID(), -1, -1)));
 
         // Start TX's in parallel, while log entry sync is running
         if (injectTxData) {
