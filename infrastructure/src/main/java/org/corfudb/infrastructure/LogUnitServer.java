@@ -455,6 +455,7 @@ public class LogUnitServer extends AbstractServer {
         super.shutdown();
         executor.shutdown();
         logCleaner.shutdown();
+        streamLog.close();
         batchWriter.close();
     }
 

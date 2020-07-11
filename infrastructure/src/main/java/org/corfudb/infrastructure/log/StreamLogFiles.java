@@ -11,13 +11,13 @@ import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -1217,6 +1217,16 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public void close() {
         for (SegmentHandle fh : writeChannels.values()) {
             fh.close();
+        }
+
+        for (FileChannel channel : channelsToSync) {
+            try {
+                channel.force(true);
+            } catch (IOException e) {
+                log.debug("Can't force updates in the channel", e.getMessage());
+            } finally {
+                IOUtils.closeQuietly(channel);
+            }
         }
 
         writeChannels = new ConcurrentHashMap<>();
