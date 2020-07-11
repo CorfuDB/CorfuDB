@@ -107,8 +107,9 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
+        UUID syncRequestId = UUID.randomUUID();
         while (true) {
-            SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
+            SnapshotReadMessage snapshotReadMessage = reader.read(syncRequestId);
             msgQ.addAll(snapshotReadMessage.getMessages());
             if (snapshotReadMessage.isEndRead()) {
                 break;
@@ -126,7 +127,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
         readMsgs(msgQ, hashMap.keySet(), readerRuntime);
 
-        //call clear table
+        // call clear table
         for (String name : srcTables.keySet()) {
             CorfuTable<Long, Long> table = srcTables.get(name);
             table.clear();
@@ -135,7 +136,6 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         verifyNoData(srcTables);
 
         ReplicationReaderWriterIT.writeSnapLogMsgs(msgQ, srcTables.keySet(), writerRuntime);
-
 
         //verify data with hashtable
         openStreams(dstTables, dstDataRuntime);

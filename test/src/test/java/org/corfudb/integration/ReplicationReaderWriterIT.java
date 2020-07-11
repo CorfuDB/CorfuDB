@@ -337,9 +337,10 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         int cnt = 0;
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
+        UUID snapshotSyncId = UUID.randomUUID();
         while (true) {
             cnt++;
-            SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
+            SnapshotReadMessage snapshotReadMessage = reader.read(snapshotSyncId);
             for (org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry data : snapshotReadMessage.getMessages()) {
                 msgQ.add(data);
                 //System.out.println("generate msg " + cnt);
@@ -355,8 +356,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfig config = new LogReplicationConfig(streams);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
-
-
 
         if (msgQ.isEmpty()) {
             System.out.println("msgQ is empty");

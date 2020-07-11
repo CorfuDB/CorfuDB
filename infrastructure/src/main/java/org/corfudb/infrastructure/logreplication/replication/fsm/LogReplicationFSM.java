@@ -287,16 +287,16 @@ public class LogReplicationFSM {
             LogReplicationEvent event = eventQueue.take();
 
             if (event.getType() == LogReplicationEventType.REPLICATION_START) {
-                baseSnapshot = event.getMetadata().getSyncTimestamp();
-                ackedTimestamp = baseSnapshot;
+                baseSnapshot = event.getMetadata().getLastBaseSnapshot();
+                ackedTimestamp = event.getMetadata().getLastLogEntrySyncedTimestamp();
                 log.info("Log Replication FSM consume event {}", event);
             }
 
             if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
                 if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC &&
                         state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
-                    log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
-                    ackedTimestamp = event.getMetadata().getSyncTimestamp();
+                    log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
+                    ackedTimestamp = event.getMetadata().getLastLogEntrySyncedTimestamp();
                     log.debug("Replicated Event ackTs {} ", ackedTimestamp);
                 }
             } else {
@@ -304,9 +304,9 @@ public class LogReplicationFSM {
                     // Verify it's for the same request, as that request could've been canceled and was received later
                     if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC &&
                             state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
-                        log.info("Snapshot Sync ACK, update last ack timestamp to {}", event.getMetadata().getSyncTimestamp());
-                        baseSnapshot = event.getMetadata().getSyncTimestamp();
-                        ackedTimestamp = baseSnapshot;
+                        log.info("Snapshot Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
+                        baseSnapshot = event.getMetadata().getLastBaseSnapshot();
+                        ackedTimestamp = event.getMetadata().getLastLogEntrySyncedTimestamp();
                     }
                 }
 
