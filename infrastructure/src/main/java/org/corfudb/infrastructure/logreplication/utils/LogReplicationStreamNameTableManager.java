@@ -28,8 +28,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LogReplicationStreamNameTableManager {
 
-    private static final String LOG_REPLICATION_STREAMS_NAME_TABLE = "LogReplicationStreams";
-    private static final String LOG_REPLICATION_PLUGIN_VERSION_TABLE = "LogReplicationPluginVersion";
+    public static final String LOG_REPLICATION_STREAMS_NAME_TABLE = "LogReplicationStreams";
+    public static final String LOG_REPLICATION_PLUGIN_VERSION_TABLE = "LogReplicationPluginVersion";
 
     private ILogReplicationConfigAdapter logReplicationConfigAdapter;
 
