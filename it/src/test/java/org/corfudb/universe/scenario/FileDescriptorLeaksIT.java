@@ -54,9 +54,6 @@ public class FileDescriptorLeaksIT extends GenericIntegrationTest {
                 .createDefaultCorfuTable(DEFAULT_STREAM_NAME);
 
         for (int i = 0; i < 100; i++) {
-            if (i % 1_000 == 0) {
-                log.info("records inserted: " + i);
-            }
             table.put(String.valueOf(i), String.valueOf(i));
         }
 
