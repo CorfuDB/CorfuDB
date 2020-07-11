@@ -268,17 +268,12 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             LogReplicationEntry message = reader.read(UUID.randomUUID());
 
             if (message == null) {
-                System.out.println("**********data message is null");
+                System.out.println("********** Data message is null");
                 assertThat(false).isTrue();
             } else {
-                if (message == null) {
-                    System.out.println("**********data message is null");
-                    assertThat(false).isTrue();
-                }
-
-                //System.out.println("generate the message " + i);
+                //System.out.println(" Generate the message " + i);
                 msgQ.add(message);
-                //System.out.println("msgQ size " + msgQ.size());
+                //System.out.println(" msgQ size " + msgQ.size());
             }
         }
     }
