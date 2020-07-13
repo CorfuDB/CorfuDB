@@ -53,10 +53,12 @@ public class LogReplicationServer extends AbstractServer {
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     public LogReplicationServer(@Nonnull ServerContext context, @Nonnull  LogReplicationConfig logReplicationConfig,
-                                @Nonnull LogReplicationMetadataManager metadataManager, String corfuEndpoint) {
+                                @Nonnull LogReplicationMetadataManager metadataManager, String corfuEndpoint,
+                                long topologyConfigId) {
         this.serverContext = context;
         this.metadataManager = metadataManager;
-        this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig, metadataManager, serverContext);
+        this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig, metadataManager, serverContext, topologyConfigId);
+
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
     }

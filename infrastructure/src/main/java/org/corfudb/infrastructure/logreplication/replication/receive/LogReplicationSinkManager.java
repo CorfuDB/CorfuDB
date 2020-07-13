@@ -76,11 +76,6 @@ public class LogReplicationSinkManager implements DataReceiver {
     private LogReplicationConfig config;
 
     /*
-     * The last or current snapshot request id.
-     */
-    private UUID snapshotRequestId = new UUID(0L, 0L);
-
-    /*
      * the current baseSnapshot
      */
     private long baseSnapshotTimestamp = Address.NON_ADDRESS - 1;
@@ -108,7 +103,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
                                      LogReplicationMetadataManager metadataManager,
-                                     ServerContext context) {
+                                     ServerContext context, long topologyConfigId) {
         this.logReplicationMetadataManager = metadataManager;
         this.applySnapshotExecutor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationSinkManager-", new ServerThreadFactory.ExceptionHandler()));
@@ -129,6 +124,7 @@ public class LogReplicationSinkManager implements DataReceiver {
          */
         this.rxState = RxState.LOG_ENTRY_SYNC;
         this.config = config;
+        this.topologyConfigId = topologyConfigId;
         init();
     }
 
@@ -158,6 +154,8 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         init();
     }
+
+
 
     /**
      * Init variables.
@@ -244,7 +242,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
             // Invalid message and drop it.
             log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
-                        message.getMetadata());
+                    message.getMetadata());
 
             return null;
         }
@@ -264,7 +262,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param entry
      */
     private void processSnapshotStart(LogReplicationEntry entry) {
-        long siteConfigID = entry.getMetadata().getTopologyConfigId();
+        long topologyConfigId = entry.getMetadata().getTopologyConfigId();
         long timestamp = entry.getMetadata().getSnapshotTimestamp();
 
         log.info("Received snapshot sync start marker for {} on base snapshot timestamp {}",
@@ -285,7 +283,7 @@ public class LogReplicationSinkManager implements DataReceiver {
          * Fails to set the baseSnapshot at the metadata store, it could be a out of date message,
          * or the current node is out of sync, ignore it.
          */
-        if (logReplicationMetadataManager.setSrcBaseSnapshotStart(siteConfigID, timestamp) == false) {
+        if (logReplicationMetadataManager.setSrcBaseSnapshotStart(topologyConfigId, timestamp) == false) {
             log.warn("Sink Manager in state {} and received message {}. " +
                             "Dropping Message due to failure update of the metadata store {}",
                     rxState, entry.getMetadata(), logReplicationMetadataManager);
@@ -295,10 +293,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         /*
          * Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
          */
-        snapshotWriter.reset(siteConfigID, timestamp);
-
-        // Retrieve snapshot request ID to be used for ACK of snapshot sync complete.
-        snapshotRequestId = entry.getMetadata().getSyncRequestId();
+        snapshotWriter.reset(topologyConfigId, timestamp);
 
         // Update lastTransferDone with the new snapshot transfer timestamp.
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();
@@ -412,21 +407,27 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     /**
-     * When there is a site role type flip, the Sink Manager needs do the followings:
-     * 1. reset snapshotWriter and logEntryWriter state
-     * 2. reset buffer logEntryBuffer state.
+     * Update the topology config id
+     *
      * @param topologyConfigId
      */
     public void updateTopologyConfigId(long topologyConfigId) {
         logReplicationMetadataManager.setupTopologyConfigId(topologyConfigId);
         this.topologyConfigId = topologyConfigId;
+    }
 
-        CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
-
-        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(timestamp));
-        logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(timestamp),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(timestamp));
-
+    /**
+     * When there is a cluster role change, the Sink Manager needs do the following:
+     *
+     * 1. Reset snapshotWriter and logEntryWriter state
+     * 2. Reset buffer logEntryBuffer state.
+     *
+     * */
+    public void reset() {
+        CorfuStoreMetadata.Timestamp ts = logReplicationMetadataManager.getTimestamp();
+snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(ts));
+        logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(ts),
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(ts));
         logEntrySinkBufferManager.reset();
     }
 

@@ -44,7 +44,7 @@ public class SnapshotSender {
     // While waiting for the standby site applying the snapshot,
     // the interval it polls the standby site.
     static final int SLEEP_INTERVAL = 1000;
-    public static int DEFAULT_SNAPSHOT_BATCH_SIZE = 5;
+    public static int DEFAULT_SNAPSHOT_BATCH_SIZE = 100;
     public static final int DEFAULT_TIMEOUT = 5000;
 
     private CorfuRuntime runtime;
