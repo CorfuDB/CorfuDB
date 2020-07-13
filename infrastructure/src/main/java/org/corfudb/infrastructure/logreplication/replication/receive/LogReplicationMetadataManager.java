@@ -301,6 +301,41 @@ public class LogReplicationMetadataManager {
         log.info("Update siteConfigID {}, new metadata {}", topologyConfigId, toString());
     }
 
+
+    /**
+     * Update the version value and reset log replication related metadata except siteConfigID.
+     * @param version
+     */
+    public void updateVersion(String version) {
+        CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
+        String  persistedVersion = queryString(timestamp, LogReplicationMetadataType.VERSION);
+
+        if (persistedVersion.equals(version)) {
+            log.warn("Skip update the current version {} with new version {} as they are the same", persistedVersion, version);
+            return;
+        }
+
+        TxBuilder txBuilder = corfuStore.tx(namespace);
+
+        for (LogReplicationMetadataType key : LogReplicationMetadataType.values()) {
+            long val = Address.NON_ADDRESS;
+
+            // For version, it will be updated with the current version
+            if (key == LogReplicationMetadataType.VERSION) {
+                appendUpdate(txBuilder, key, version);
+            } else if (key == LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) {
+                // For siteConfig ID, it should not be changed. Update it to fence off other metadata updates.
+                val = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+                appendUpdate(txBuilder, key, val);
+            } else {
+                // Reset all other keys to -1.
+                appendUpdate(txBuilder, key, val);
+            }
+        }
+
+        txBuilder.commit(timestamp);
+    }
+
     /**
      * If the current topologyConfigId is not the same as the persisted topologyConfigId, ignore the operation.
      * If the current ts is smaller than the persisted snapStart, it is an old operation,

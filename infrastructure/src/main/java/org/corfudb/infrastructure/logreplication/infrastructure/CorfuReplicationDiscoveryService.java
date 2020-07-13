@@ -175,8 +175,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.shutdown = false;
         this.eventQueue = new LinkedBlockingQueue<>();
         this.executorService.submit(this::run);
+        this.isLeader = new AtomicBoolean();
     }
-
 
     /**
      * The executor thread will keep running at background and process events in eventQueue
@@ -222,6 +222,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 log.error("Invalid event type {}", event.type);
         }
     }
+
 
     /**
      * On first access start topology discovery.

@@ -305,6 +305,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         replicationDiscoveryService = new CorfuReplicationDiscoveryService(serverContext,
                 clusterManagerAdapter, discoveryServiceCallback);
 
+        replicationDiscoveryService.
         return discoveryServiceCallback;
     }
 

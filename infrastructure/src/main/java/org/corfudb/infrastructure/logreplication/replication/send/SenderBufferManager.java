@@ -210,7 +210,7 @@ public abstract class SenderBufferManager {
         //Enforce a resend or not
         LogReplicationEntry ack = null;
         boolean force = false;
-        log.info("processAcks {} and pendingMessage size {}", pendingCompletableFutureForAcks.keySet(), pendingMessages.getSize());
+        log.debug("processAcks {} and pendingMessage size {}", pendingCompletableFutureForAcks.keySet(), pendingMessages.getSize());
 
         if (pendingMessages.isEmpty()) {
             return null;
