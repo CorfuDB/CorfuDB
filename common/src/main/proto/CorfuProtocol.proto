@@ -15,10 +15,12 @@ enum MessageType {
     AUTHENTICATE = 1;
     RESTART = 2;
     SEAL  = 3;
+
     GET_LAYOUT  = 4;
     PREPARE_LAYOUT  = 5;
     PROPOSE_LAYOUT = 6;
     COMMIT_LAYOUT = 7;
+
     GET_TOKEN = 8;
     COMMIT_TRANSACTION = 9;
     BOOTSTRAP = 10;
@@ -45,6 +47,23 @@ enum ERROR {
     IO = 7;
     BOOTSTRAPPED = 8;
     NOT_BOOTSTRAPPED = 9;
+}
+
+enum Priority {
+    NORMAL = 0;
+    HIGH = 1;
+}
+
+message UUID {
+    int64 lsb = 1;
+    int64 msb = 2;
+}
+
+// Used to request a range of addresses for a stream -- Range defined by [start, end).
+message StreamAddressRange {
+    UUID streamId = 1;
+    int64 startAddress = 2;
+    int64 endAddress = 3;
 }
 
 message ServerError {
@@ -142,9 +161,14 @@ message BootstrapResponse {
 }
 
 message QueryStreamRequest {
+    enum ReqType {
+        STREAMS = 0;
+        ALL_STREAMS = 1;
+    }
 
+    ReqType type = 1;
+    repeated StreamAddressRange streamRanges = 2;
 }
-
 
 message QueryStreamResponse {
 
@@ -222,16 +246,6 @@ message ExecuteWorkflowResponse {
 
 }
 
-message UUID {
-    int64 lsb = 1;
-    int64 msb = 2;
-}
-
-enum Priority {
-    NORMAL = 0;
-    HIGH = 1;
-}
-
 message Header {
     ProtocolVersion version = 1;
     int64 request_id = 2;
@@ -239,6 +253,9 @@ message Header {
     MessageType type = 4;
     int64 epoch = 5;
     UUID cluster_id = 6;
+    UUID client_id = 7;
+    bool ignore_cluster_id = 8;
+    bool ignore_epoch = 9;
 }
 
 message Request {
@@ -298,12 +315,12 @@ message Response {
     }
 }
 
-/* Legacy corfu message serialized in bytes -- Temporary */
+// Legacy corfu message serialized in bytes -- Temporary
 message LegacyCorfuMsg {
     bytes payload = 1;
 }
 
-/* Universal wrapper message type -- Temporary */
+// Universal wrapper message type -- Temporary
 message UniversalMsg {
     oneof payload {
         Request msgRequest = 1;

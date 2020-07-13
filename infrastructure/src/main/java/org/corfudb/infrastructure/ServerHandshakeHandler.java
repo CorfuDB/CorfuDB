@@ -20,7 +20,8 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeResponse;
-import org.corfudb.protocols.wireprotocol.HandshakeState;
+import org.corfudb.common.protocol.API;
+import org.corfudb.common.protocol.HandshakeState;
 
 /**
  * The ServerHandshakeHandler waits for the handshake message, validates and sends
@@ -106,7 +107,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
 
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
         // which indicates node id matching is not required.
-        if (serverId.equals(UUID.fromString("00000000-0000-0000-0000-000000000000"))) {
+        if (serverId.equals(API.DEFAULT_UUID)) {
             log.info("channelRead: node id matching is not requested by client.");
         } else if (!serverId.equals(this.nodeId)) {
             log.error("channelRead: Invalid handshake: this is {} and client is trying to connect to {}",

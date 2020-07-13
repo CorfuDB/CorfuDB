@@ -1,4 +1,4 @@
-package org.corfudb.protocols.wireprotocol;
+package org.corfudb.common.protocol;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
