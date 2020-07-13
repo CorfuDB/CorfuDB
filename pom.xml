@@ -44,6 +44,7 @@
 
         <!-- Dependency versions -->
         <junit.jupiter.version>5.4.2</junit.jupiter.version>
+        <checkstyle.version>8.29</checkstyle.version>
     </properties>
 
     <scm>
@@ -314,7 +315,6 @@
                 <artifactId>sonar-maven-plugin</artifactId>
                 <version>3.3.0.603</version>
             </plugin>
-            <!-- Make a folder `target/libs/` with all the dependencies -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
@@ -323,20 +323,13 @@
                     <dependency>
                         <groupId>com.puppycrawl.tools</groupId>
                         <artifactId>checkstyle</artifactId>
-                        <version>8.20</version>
+                        <version>${checkstyle.version}</version>
                     </dependency>
                 </dependencies>
                 <executions>
                     <execution>
                         <id>validate</id>
                         <phase>validate</phase>
-                        <configuration>
-                            <encoding>UTF-8</encoding>
-                            <configLocation>checks.xml</configLocation>
-                            <suppressionsLocation>checkstyle-suppressions.xml</suppressionsLocation>
-                            <consoleOutput>true</consoleOutput>
-                            <failsOnError>false</failsOnError>
-                        </configuration>
                         <goals>
                             <goal>check</goal>
                         </goals>
@@ -345,11 +338,15 @@
                 <configuration>
                     <encoding>UTF-8</encoding>
                     <configLocation>checks.xml</configLocation>
+                    <suppressionsLocation>checkstyle-suppressions.xml</suppressionsLocation>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
                     <consoleOutput>true</consoleOutput>
-                    <failsOnError>false</failsOnError>
+                    <failsOnError>true</failsOnError>
+                    <logViolationsToConsole>true</logViolationsToConsole>
+                    <failOnViolation>true</failOnViolation>
                 </configuration>
             </plugin>
-
+            <!-- Make a folder `target/libs/` with all the dependencies -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
