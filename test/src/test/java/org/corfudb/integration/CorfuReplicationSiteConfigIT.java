@@ -276,7 +276,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
     @Test
     public void runSiteSwitch() throws Exception {
         try {
-            testLogReplicationEndToEnd(false, false);
+            testLogReplicationEndToEnd(true, false);
 
             int replicationStatus = 0;
             DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
@@ -363,7 +363,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
                assertThat(mapA1.containsKey(String.valueOf(i))).isTrue();
             }
 
-            System.out.print("\nTest Succeeds!!!");
+            System.out.print("\nConfig Flip Test Succeeds!!!");
         } finally {
             shutdown();
         }

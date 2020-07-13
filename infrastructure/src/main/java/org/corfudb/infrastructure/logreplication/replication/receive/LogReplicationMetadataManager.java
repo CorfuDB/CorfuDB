@@ -285,7 +285,7 @@ public class LogReplicationMetadataManager {
     /**
      * Update the topologyConfigID if it is bigger than the current one.
      * At the same time reset replication status metadata to -1.
-     * @param siteConfigID
+     * @param topologyConfigId
      */
     public void setupTopologyConfigId(long topologyConfigId) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
@@ -309,7 +309,7 @@ public class LogReplicationMetadataManager {
 
         txBuilder.commit(timestamp);
 
-        log.info("Update siteConfigID {}, new metadata {}", siteConfigID, toString());
+        log.info("Update siteConfigID {}, new metadata {}", topologyConfigId, toString());
     }
 
 
@@ -361,16 +361,16 @@ public class LogReplicationMetadataManager {
     public boolean setSrcBaseSnapshotStart(long topologyConfigId, long ts) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistedTopologyConfigID = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-        long persistSnapStart = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        long persistedSnapStart = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
 
         log.debug("Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, persistedSnapshotStart={}",
-                topologyConfigId, ts, persistedTopologyConfigID, persistSnapStart);
+                topologyConfigId, ts, persistedTopologyConfigID, persistedSnapStart);
 
         // It means the cluster config has changed, ignore the update operation.
         if (topologyConfigId != persistedTopologyConfigID || ts < persistedSnapStart) {
             log.warn("The metadata is older than the persisted one. Set snapshotStart topologyConfigId={}, ts={}," +
                     " persistedTopologyConfigId={}, persistedSnapshotStart={}", topologyConfigId, ts,
-                    persistedTopologyConfigID, persistSnapStart);
+                    persistedTopologyConfigID, persistedSnapStart);
             return false;
         }
 
@@ -393,7 +393,7 @@ public class LogReplicationMetadataManager {
 
         log.debug("Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
                         "persistedSnapshotStart={}",
-                topologyConfigId, ts, persistedTopologyConfigID, persistSnapStart);
+                topologyConfigId, ts, persistedTopologyConfigID, persistedSnapStart);
 
         return (ts == getLastSnapStartTimestamp() && topologyConfigId == getTopologyConfigId());
     }

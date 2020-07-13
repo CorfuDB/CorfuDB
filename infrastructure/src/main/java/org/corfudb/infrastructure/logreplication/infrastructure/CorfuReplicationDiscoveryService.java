@@ -171,8 +171,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.shutdown = false;
         this.eventQueue = new LinkedBlockingQueue<>();
         this.executorService.submit(this::run);
+        this.isLeader = new AtomicBoolean();
     }
-
 
     /**
      * The executor thread will keep running at background and process events in eventQueue
@@ -189,33 +189,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
             } catch (Exception | LogReplicationDiscoveryServiceException e) {
                 log.error("Caught an exception. Stop discovery service.", e);
                 shutdown();
-    }
-
-    /**
-     * Process discovery event
-     */
-    public void processEvent(DiscoveryServiceEvent event) {
-        switch (event.type) {
-            case ACQUIRE_LOCK:
-                processLockAcquire();
-                break;
-
-            case RELEASE_LOCK:
-                processLockRelease();
-                break;
-
-            case DISCOVERED_TOPOLOGY:
-                processTopologyChangeNotification(event);
-                break;
-
-            case UPGRADE:
-                processUpgrade(event);
-                break;
-
-            default:
-                log.error("Invalid event type {}", event.type);
+            }
         }
     }
+
 
     /**
      * On first access start topology discovery.
@@ -646,9 +623,12 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Process discovery event
      */
     public void processEvent(DiscoveryServiceEvent event) throws LogReplicationDiscoveryServiceException {
+        log.info("Process event {}", event.getType());
         switch (event.type) {
             case DISCOVER_INIT_TOPOLOGY:
                 startDiscovery();
+                break;
+
             case ACQUIRE_LOCK:
                 processLockAcquire();
                 break;
