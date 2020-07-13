@@ -18,6 +18,7 @@ import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.log.MultiReadWriteLock.AutoCloseableLock;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -417,19 +418,27 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         // Close segments before deleting their corresponding log files
-        closeSegmentHandlers(endSegment);
+        List<SegmentHandle> obsoleteSegments = closeSegmentHandlers(endSegment);
 
+        obsoleteSegments.forEach(obsoleteSegment -> {
+            writeChannels.remove(obsoleteSegment.getFileName(), obsoleteSegment);
+        });
+
+        deleteFiles(endSegment, "trimPrefix: ignoring file {}");
+
+        log.info("trimPrefix: completed, end segment {}", endSegment);
+    }
+
+    private void deleteFiles(long endSegment, String errorMsg) {
         deleteFilesMatchingFilter(file -> {
             try {
                 String segmentStr = file.getName().split("\\.")[0];
                 return Long.parseLong(segmentStr) <= endSegment;
             } catch (Exception e) {
-                log.warn("trimPrefix: ignoring file {}", file.getName());
+                log.warn(errorMsg, file.getName());
                 return false;
             }
         });
-
-        log.info("trimPrefix: completed, end segment {}", endSegment);
     }
 
     private LogData getLogData(LogEntry entry) {
@@ -920,8 +929,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         ByteBuffer allRecordsBuf = ByteBuffer.allocate(totalBytes);
 
-        try (MultiReadWriteLock.AutoCloseableLock ignored =
-                     segmentLocks.acquireWriteLock(segment.getSegment())) {
+        try (AutoCloseableLock ignored = segmentLocks.acquireWriteLock(segment.getSegment())) {
             for (int ind = 0; ind < entryBuffs.size(); ind++) {
                 long channelOffset = segment.getWriteChannel().position()
                         + allRecordsBuf.position() + METADATA_SIZE;
@@ -978,8 +986,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         ByteBuffer record = getByteBuffer(metadata, logEntry);
         long channelOffset;
 
-        try (MultiReadWriteLock.AutoCloseableLock ignored =
-                     segmentLocks.acquireWriteLock(segment.getSegment())) {
+        try (AutoCloseableLock ignored = segmentLocks.acquireWriteLock(segment.getSegment())) {
             channelOffset = segment.getWriteChannel().position() + METADATA_SIZE;
             writeByteBuffer(segment.getWriteChannel(), record);
             channelsToSync.add(segment.getWriteChannel());
@@ -1237,13 +1244,14 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * Closes all segment handlers up to and including the handler for the endSegment.
      *
      * @param endSegment The segment index of the last segment up to (including) the end segment.
+     * @return obsolete segments
      */
-    private void closeSegmentHandlers(long endSegment) {
-        for (SegmentHandle sh : writeChannels.values()) {
-            if (sh.getSegment() > endSegment) {
-                continue;
-            }
+    private List<SegmentHandle> closeSegmentHandlers(long endSegment) {
+        List<SegmentHandle> obsoleteSegments = writeChannels.values().stream()
+                .filter(segmentHandle -> segmentHandle.getSegment() <= endSegment)
+                .collect(Collectors.toList());
 
+        for (SegmentHandle sh : obsoleteSegments) {
             if (sh.getRefCount() != 0) {
                 log.warn("closeSegmentHandlers: Segment {} is trimmed, but refCount is {}, attempting to trim anyways",
                         sh.getSegment(), sh.getRefCount()
@@ -1253,6 +1261,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             sh.close();
             writeChannels.remove(sh.getFileName());
         }
+
+        return obsoleteSegments;
     }
 
     /**
@@ -1298,23 +1308,18 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         log.warn("Global Tail:{}, endSegment={}", logMetadata.getGlobalTail(), endSegment);
 
         // Close segments before deleting their corresponding log files
-        closeSegmentHandlers(endSegment);
+        List<SegmentHandle> obsoleteSegments = closeSegmentHandlers(endSegment);
 
-        deleteFilesMatchingFilter(file -> {
-            try {
-                String segmentStr = file.getName().split("\\.")[0];
-                return Long.parseLong(segmentStr) <= endSegment;
-            } catch (Exception e) {
-                log.warn("reset: ignoring file {}", file.getName());
-                return false;
-            }
+        obsoleteSegments.forEach(obsoleteSegment -> {
+            writeChannels.remove(obsoleteSegment.getFileName(), obsoleteSegment);
         });
+
+        deleteFiles(endSegment, "reset: ignoring file {}");
 
         dataStore.resetStartingAddress();
         dataStore.resetTailSegment();
         dataStore.resetCommittedTail();
         logMetadata = new LogMetadata();
-        writeChannels.clear();
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         log.info("reset: Completed, end segment {}", endSegment);
     }

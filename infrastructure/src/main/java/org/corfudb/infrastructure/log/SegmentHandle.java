@@ -23,16 +23,16 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @Data
 class SegmentHandle {
-    final long segment;
+    private final long segment;
 
     @NonNull
-    final FileChannel writeChannel;
+    private  final FileChannel writeChannel;
 
     @NonNull
-    final FileChannel readChannel;
+    private final FileChannel readChannel;
 
     @NonNull
-    String fileName;
+    private final String fileName;
 
     private final Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
     private final Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());

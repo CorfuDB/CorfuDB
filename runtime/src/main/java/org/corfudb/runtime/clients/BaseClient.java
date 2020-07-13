@@ -104,7 +104,10 @@ public class BaseClient implements IClient {
      * the endpoint acks, otherwise False or exceptional completion.
      */
     public CompletableFuture<Boolean> restart() {
-        return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESTART)
-                .setEpoch(epoch).setClusterID(clusterId));
+        CorfuMsg msg = new CorfuMsg(CorfuMsgType.RESTART)
+                .setEpoch(epoch)
+                .setClusterID(clusterId);
+
+        return router.sendMessageAndGetCompletable(msg);
     }
 }
