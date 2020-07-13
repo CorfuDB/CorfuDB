@@ -17,10 +17,13 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.AuthenticateRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.AuthenticateResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ProtocolVersion;
+import org.corfudb.common.protocol.proto.CorfuProtocol.StreamAddressRange;
+import org.corfudb.common.protocol.proto.CorfuProtocol.QueryStreamRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ERROR;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.common.protocol.proto.CorfuProtocol.WrongClusterPayload;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -212,10 +215,9 @@ public class API {
     }
     public static Request newAuthenticateRequest(Header header, UUID clientId, UUID serverId) {
         AuthenticateRequest authRequest = AuthenticateRequest.newBuilder()
-                .setClientId(getUUID(clientId))
-                .setServerId(getUUID(serverId))
-                .build();
-
+                                            .setClientId(getUUID(clientId))
+                                            .setServerId(getUUID(serverId))
+                                            .build();
         return Request.newBuilder()
                 .setHeader(header)
                 .setAuthenticateRequest(authRequest)
@@ -224,13 +226,28 @@ public class API {
 
     public static Response newAuthenticateResponse(Header header, UUID serverId, String version) {
         AuthenticateResponse authResponse = AuthenticateResponse.newBuilder()
-                .setServerId(getUUID(serverId))
-                .setCorfuVersion(version)
-                .build();
-
+                                                .setServerId(getUUID(serverId))
+                                                .setCorfuVersion(version)
+                                                .build();
         return Response.newBuilder()
                 .setHeader(header)
                 .setAuthenticateResponse(authResponse)
                 .build();
+    }
+
+    public static Request newQueryStreamRequest(Header header, QueryStreamRequest.ReqType type,
+                                                List<StreamAddressRange> ranges) {
+        QueryStreamRequest qsRequest = QueryStreamRequest.newBuilder()
+                                                .setType(type)
+                                                .addAllStreamRanges(ranges)
+                                                .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setQueryStreamRequest(qsRequest)
+                .build();
+    }
+
+    public static Request newQueryStreamRequest(Header header, List<StreamAddressRange> ranges) {
+        return newQueryStreamRequest(header, QueryStreamRequest.ReqType.STREAMS, ranges);
     }
 }
