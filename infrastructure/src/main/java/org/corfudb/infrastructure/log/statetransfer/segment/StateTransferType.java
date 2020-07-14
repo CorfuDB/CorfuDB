@@ -6,6 +6,6 @@ package org.corfudb.infrastructure.log.statetransfer.segment;
  * log unit servers.
  */
 public enum StateTransferType {
-    PROTOCOL_READ,
-    CONSISTENT_READ
+  PROTOCOL_READ,
+  CONSISTENT_READ
 }
