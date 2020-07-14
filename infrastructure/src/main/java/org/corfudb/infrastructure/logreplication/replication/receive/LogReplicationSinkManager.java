@@ -159,9 +159,8 @@ public class LogReplicationSinkManager implements DataReceiver {
     private void init() {
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
-        CorfuStoreMetadata.Timestamp ts = logReplicationMetadataManager.getTimestamp();
-        logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(ts),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(ts));
+        logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
+                logReplicationMetadataManager.getLastProcessedLogTimestamp());
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,this);
 

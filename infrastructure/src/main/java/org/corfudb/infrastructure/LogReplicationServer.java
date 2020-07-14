@@ -114,15 +114,6 @@ public class LogReplicationServer extends AbstractServer {
 
         if (isLeader(msg, r)) {
             LogReplicationMetadataManager metadata = sinkManager.getLogReplicationMetadataManager();
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
-
->>>>>>> 174345dfb68... Address comments.
-            // Fetches the latest logical timestamp (global tail) in Corfu's distributed log.
-            CorfuStoreMetadata.Timestamp ts = metadata.getTimestamp();
->>>>>>> 378772f4c7a... Address comments.
 
             // TODO (Xiaoqin Ma): That's 6 independent DB calls per one LOG_REPLICATION_NEGOTIATION_REQUEST.
             //  Can we do just one? Also, It does not look like we handle failures if one of them fails, for example.

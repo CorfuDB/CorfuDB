@@ -1157,8 +1157,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         } else {
             System.out.print("\n****** blockUnitilExpectedAckType " + expectedAckMsgType);
             blockUntilExpectedAckType.acquire();
-            while (logReplicationMetadataManager.getLastProcessedLogTimestamp(null) !=
-                    logReplicationMetadataManager.getLastSnapStartTimestamp(null)) {
+            while (logReplicationMetadataManager.getLastProcessedLogTimestamp() !=
+                    logReplicationMetadataManager.getLastSnapStartTimestamp()) {
                 sleep(SLEEP_INTERVAL);
                 log.info("metadata {}", logReplicationMetadataManager);
             }
@@ -1340,8 +1340,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        long lastSnapStart = logReplicationMetadataManager.getLastSnapStartTimestamp(null);
-        long lastSnapDone = logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(null);
+        long lastSnapStart = logReplicationMetadataManager.getLastSnapStartTimestamp();
+        long lastSnapDone = logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp();
 
         System.out.println("\nlastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
         assertThat(lastSnapStart == lastSnapDone).isTrue();

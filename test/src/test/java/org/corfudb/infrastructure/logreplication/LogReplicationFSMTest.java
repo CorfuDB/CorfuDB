@@ -301,8 +301,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         //assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         while (listenerQueue.size() < NUM_ENTRIES) {
-           int i = listenerQueue.size();
-           //
+            //
         }
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 

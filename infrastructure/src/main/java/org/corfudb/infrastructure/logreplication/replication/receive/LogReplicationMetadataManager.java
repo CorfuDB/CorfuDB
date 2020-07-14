@@ -146,7 +146,7 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Get the most recent ConfigID.
+     * Get the most recent topologyConfigID.
      * @return
      */
     public long getTopologyConfigId() {
@@ -183,43 +183,43 @@ public class LogReplicationMetadataManager {
      * Given a specific timestamp, get the most recent full snapshot sync's timestamp that has complete the
      * transferred phase.
      * If the timestamp is null, get the most recent value.
-     * @param ts
+     * @param
      * @return
      */
-    public long getLastSnapTransferDoneTimestamp(CorfuStoreMetadata.Timestamp ts) {
-            return query(ts, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
+    public long getLastSnapTransferDoneTimestamp() {
+            return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
     }
 
     /**
      * Given a specific timestamp, get the most recent completed snapshot full sync's timestamp.
      * If the timestamp is null, get the most recent value.
-     * @param ts
+     * @param
      * @return
      */
-    public long getLastSrcBaseSnapshotTimestamp(CorfuStoreMetadata.Timestamp ts) {
-        return query(ts, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
+    public long getLastSrcBaseSnapshotTimestamp() {
+        return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
     }
 
     /**
      * Given a specific timestamp, get the most recent snapshot message's sequence number
      * that the receiver has applied to the shadow streams.
      * If the timestamp is null, get the most recent value.
-     * @param ts
+     * @param
      * @return
      */
-    public long getLastSnapSeqNum(CorfuStoreMetadata.Timestamp ts) {
-        return query(ts, LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
+    public long getLastSnapSeqNum() {
+        return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
     }
 
     /**
      * Given a specific timestamp, get the most recent applied operation sequence number
      * that the receiver has applied to the real streams.
      * If the timestamp is null, get the most recent value.
-     * @param ts
+     * @param
      * @return
      */
-    public long getLastSnapAppliedSeqNum(CorfuStoreMetadata.Timestamp ts) {
-        return query(ts, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM);
+    public long getLastSnapAppliedSeqNum() {
+        return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM);
     }
 
     /**
@@ -266,10 +266,6 @@ public class LogReplicationMetadataManager {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistedTopologyConfigId = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
 
-<<<<<<< HEAD
-=======
-        // If the persistTopologyConfigID is Address.NON_ADDRESS, it means the metadata table hasn't been initialized yet.
->>>>>>> 174345dfb68... Address comments.
         if (topologyConfigId <= persistedTopologyConfigId) {
             log.warn("Skip setupTopologyConfigId. the current topologyConfigId " + topologyConfigId + " is not larger than the persistedTopologyConfigID " + persistedTopologyConfigId);
             return;

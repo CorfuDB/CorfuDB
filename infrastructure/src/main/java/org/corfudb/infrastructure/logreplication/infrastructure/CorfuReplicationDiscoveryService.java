@@ -173,9 +173,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.shutdown = false;
         this.isLeader = new AtomicBoolean();
         this.eventQueue = new LinkedBlockingQueue<>();
-
-        // Start the service
-        start();
     }
 
     /**
@@ -192,7 +189,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      * The executor thread will keep running at background and process events in eventQueue
      */
-    public void run() {
+    private void run() {
 
         while (!shutdown) {
             try {

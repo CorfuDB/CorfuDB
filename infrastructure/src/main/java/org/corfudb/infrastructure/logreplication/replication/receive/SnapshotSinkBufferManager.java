@@ -53,7 +53,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
 
     @Override
     long getLastProcessed() {
-        return logReplicationMetadataManager.getLastSnapSeqNum(null);
+        return logReplicationMetadataManager.getLastSnapSeqNum();
     }
 
     /**
@@ -116,7 +116,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
 
 
         // Always send an ACK for snapshot tranfer end marker.
-        long lastProcessedSeq = logReplicationMetadataManager.getLastSnapSeqNum(null);
+        long lastProcessedSeq = logReplicationMetadataManager.getLastSnapSeqNum();
         log.debug("lastProccessedSeq {}  snapshotEndSeq {}", lastProcessedSeq, snapshotEndSeq);
         if (lastProcessedSeq == (snapshotEndSeq - 1)) {
             log.info("Snapshot End has been processed lastProccessedSeq {}  snapshotEndSeq {}", lastProcessedSeq, snapshotEndSeq);
