@@ -143,7 +143,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp());
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(), config);
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
@@ -272,7 +272,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         /*
          * Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
          */
-        snapshotWriter.reset(topologyConfigId, timestamp);
+        snapshotWriter.reset(topologyConfigId, timestamp, config);
 
         // Update lastTransferDone with the new snapshot transfer timestamp.
         baseSnapshotTimestamp = entry.getMetadata().getSnapshotTimestamp();
@@ -370,10 +370,11 @@ public class LogReplicationSinkManager implements DataReceiver {
      * 2. Reset buffer logEntryBuffer state.
      *
      * */
-    public void reset() {
-        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp());
+    public void reset(LogReplicationConfig config) {
+        this.config = config;
+        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(), config);
         logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp());
+                logReplicationMetadataManager.getLastProcessedLogTimestamp(), config);
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
     }

@@ -4,6 +4,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfigUpdateListener;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -31,7 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * to get a view of the last synchronized point at the remote cluster.
  */
 @Slf4j
-public class LogReplicationServer extends AbstractServer {
+public class LogReplicationServer extends AbstractServer implements LogReplicationConfigUpdateListener {
 
     private final ServerContext serverContext;
 
@@ -161,5 +162,10 @@ public class LogReplicationServer extends AbstractServer {
 
     public synchronized void setActive(boolean active) {
         isActive.set(active);
+    }
+
+    @Override
+    public void onLogReplicationConfigUpdate(LogReplicationConfig logReplicationConfig) {
+        sinkManager.reset(logReplicationConfig);
     }
 }

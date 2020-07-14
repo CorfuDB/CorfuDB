@@ -34,8 +34,8 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     @Getter
     private final LogReplicationServerRouter router;
 
-    @Getter
-    private LogReplicationConfig logReplicationConfig;
+    /*@Getter
+    private LogReplicationConfig logReplicationConfig;*/
 
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;
@@ -48,15 +48,15 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
      * @param
      */
     public CorfuInterClusterReplicationServerNode(@Nonnull ServerContext serverContext,
-                                                  @Nonnull LogReplicationServer server,
-                                                  @Nonnull LogReplicationConfig config) {
+                                                  @Nonnull LogReplicationServer server) {
+                                                  //@Nonnull LogReplicationConfig config) {
         this(serverContext,
                 ImmutableMap.<Class, AbstractServer>builder()
                         .put(BaseServer.class, new BaseServer(serverContext))
                         .put(LogReplicationServer.class, server)
                         .build()
         );
-        this.logReplicationConfig = config;
+        //this.logReplicationConfig = config;
     }
 
     /**

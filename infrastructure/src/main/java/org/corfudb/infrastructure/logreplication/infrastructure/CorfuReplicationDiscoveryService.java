@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfigUpdateListener;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
@@ -17,7 +18,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.util.Sleep;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -28,6 +28,7 @@ import org.corfudb.utils.lock.LockListener;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -135,6 +136,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private LogReplicationServer logReplicationServerHandler;
 
+    private LogReplicationConfig logReplicationConfig;
+
+    private LogReplicationStreamNameTableManager replicationStreamNameTableManager;
+
+    private List<LogReplicationConfigUpdateListener> logReplicationConfigUpdateListeners;
     /**
      * Indicates the server has been started. A server is started once it is determined
      * that this node belongs to a cluster in the topology provided by ClusterManager.
@@ -259,7 +265,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private void bootstrapLogReplicationService() {
         // Through LogReplicationConfigAdapter retrieve system-specific configurations (including streams to replicate)
-        LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
+        logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime(), false);
 
         logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
                 topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
@@ -269,7 +275,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
 
         interClusterReplicationService = new CorfuInterClusterReplicationServerNode(serverContext,
-                logReplicationServerHandler, logReplicationConfig);
+                logReplicationServerHandler);
 
         // Pass server's channel context through the Log Replication Context, for shared objects between the server
         // and the client channel (specific requirements of the transport implementation)
@@ -280,6 +286,17 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         serverCallback.complete(interClusterReplicationService);
 
         serverStarted = true;
+    }
+
+    private void processUpgradeIfRequired() {
+        if (replicationStreamNameTableManager.wasUpgraded()) {
+            input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
+        }
+    }
+
+    private void registerToLogReplicationConfigUpdate() {
+        logReplicationConfigUpdateListeners.add(logReplicationServerHandler);
+        logReplicationConfigUpdateListeners.add(replicationContext);
     }
 
     /**
@@ -338,22 +355,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * This configuration represents all common parameters for the log replication, regardless of
      * a cluster's role.
      */
-    private LogReplicationConfig getLogReplicationConfiguration(CorfuRuntime runtime) {
-
-        LogReplicationStreamNameTableManager replicationStreamNameTableManager =
-                new LogReplicationStreamNameTableManager(runtime, serverContext.getPluginConfigFilePath());
-
-        Set<String> streamsToReplicate = replicationStreamNameTableManager.getStreamsToReplicate();
-
-        // TODO pankti: Check if version does not match. If it does not, create an event for site discovery to
-        //  do a snapshot sync.
-        boolean upgraded = replicationStreamNameTableManager
-                .isUpgraded();
-
-        if (upgraded) {
-            input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
+    private LogReplicationConfig getLogReplicationConfiguration(CorfuRuntime runtime, boolean siteFlip) {
+        if (replicationStreamNameTableManager == null) {
+            replicationStreamNameTableManager = new LogReplicationStreamNameTableManager(
+                    runtime, serverContext.getPluginConfigFilePath());
         }
-
+        // If there was a site flip, we should forcefully refresh the table even if it exists
+        Set<String> streamsToReplicate = replicationStreamNameTableManager.getStreamsToReplicate(siteFlip);
         return new LogReplicationConfig(streamsToReplicate, serverContext.getSnapshotSyncBatchSize());
     }
 
@@ -492,6 +500,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @param newTopology new discovered topology
      */
     public void onClusterRoleChange(TopologyDescriptor newTopology) {
+        //Read the configuration again and refresh the LogReplicationConfig object, snapshot sync anyway happens
+        logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime(), true);
+        notifyLogReplicationConfigUpdateListeners();
+
         // TODO: confirm prepare to become standby is a two-step process, otherwise,
         //  we can't just stop on an intention to switch
         // Stop ongoing replication, stopLogReplication() checks leadership and active
@@ -499,8 +511,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             stopLogReplication();
         }
-
-        //TODO pankti: read the configuration again and refresh the LogReplicationConfig object
 
         // Update topology, cluster, and node configs
         updateLocalTopology(newTopology);
@@ -510,10 +520,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         log.debug("Persist new topologyConfigId {}, cluster id={}, status={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
 
-        // Update sink manager
+        // Update topologyConfigId in sink manager
         interClusterReplicationService.getLogReplicationServer().getSinkManager()
                 .updateTopologyConfigId(topologyDescriptor.getTopologyConfigId());
-        interClusterReplicationService.getLogReplicationServer().getSinkManager().reset();
 
         // Update replication server, in case there is a role change
         logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
@@ -522,6 +531,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (isLeader.get()) {
             onLeadershipAcquire();
         }
+    }
+
+    private void notifyLogReplicationConfigUpdateListeners() {
+        logReplicationConfigUpdateListeners.forEach(listener ->
+            listener.onLogReplicationConfigUpdate(logReplicationConfig));
     }
 
     /**
@@ -604,6 +618,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             log.info("Node[{}] belongs to cluster, descriptor={}", localEndpoint, localClusterDescriptor);
             if (!serverStarted) {
                 bootstrapLogReplicationService();
+                processUpgradeIfRequired();
+                registerToLogReplicationConfigUpdate();
                 registerToLogReplicationLock();
             }
             return true;
@@ -628,12 +644,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     /***
-     * After an upgrade, the active site should perform a snapshot sync
+     * After an upgrade, the active site should perform a snapshot sync. This is achieved by resetting the
+     * metadata on the standby
      */
     private void processUpgrade(DiscoveryServiceEvent event) {
-        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-            // TODO pankti: is this correct?
-            replicationManager.restart(event.getRemoteSiteInfo());
+        if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
+            // TODO pankti: How to reset the metadata?
         }
     }
 

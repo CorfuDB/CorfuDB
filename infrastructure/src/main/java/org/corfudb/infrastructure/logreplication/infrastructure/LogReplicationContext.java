@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.LogReplicationConfigUpdateListener;
 import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 
 /**
@@ -12,7 +13,7 @@ import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
  *
  * @author amartinezman
  */
-public class LogReplicationContext {
+public class LogReplicationContext implements LogReplicationConfigUpdateListener {
 
     @Getter
     private LogReplicationConfig config;
@@ -35,5 +36,10 @@ public class LogReplicationContext {
         this.topology = topology;
         this.localCorfuEndpoint = localCorfuEndpoint;
         this.channelContext = channelContext;
+    }
+
+    @Override
+    public void onLogReplicationConfigUpdate(LogReplicationConfig config) {
+        this.config = config;
     }
 }

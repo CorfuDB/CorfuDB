@@ -355,9 +355,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         LogReplicationConfig config = new LogReplicationConfig(streams);
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
-
-
-
         if (msgQ.isEmpty()) {
             System.out.println("msgQ is empty");
         }
@@ -365,7 +362,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         long siteConfigID = msgQ.get(0).getMetadata().getTopologyConfigId();
         long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
         logReplicationMetadataManager.setSrcBaseSnapshotStart(siteConfigID, snapshot);
-        writer.reset(siteConfigID, snapshot);
+        writer.reset(siteConfigID, snapshot, config);
 
         for (org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry msg : msgQ) {
             writer.apply(msg);

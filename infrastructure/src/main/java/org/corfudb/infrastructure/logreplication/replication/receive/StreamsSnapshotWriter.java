@@ -46,6 +46,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private LogReplicationMetadataManager logReplicationMetadataManager;
     HashMap<UUID, UUID> uuidMap;
     Phase phase;
+    private LogReplicationConfig logReplicationConfig;
 
 
     // The sequence number of the message, it has received.
@@ -58,8 +59,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         uuidMap = new HashMap<>();
         shadowMap = new HashMap<>();
         phase = Phase.TransferPhase;
+        logReplicationConfig = config;
+        createShadowAndStreamMaps();
+    }
 
-        for (String stream : config.getStreamsToReplicate()) {
+    private void createShadowAndStreamMaps() {
+        for (String stream : logReplicationConfig.getStreamsToReplicate()) {
             String shadowStream = stream + SHADOW_STREAM_NAME_SUFFIX;
             UUID streamID = CorfuRuntime.getStreamID(stream);
             UUID shadowID = CorfuRuntime.getStreamID(shadowStream);
@@ -125,14 +130,18 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * Reset snapshot writer state.
      * @param snapshot
      */
-    public void reset(long siteConfigID, long snapshot) {
+    public void reset(long siteConfigID, long snapshot, LogReplicationConfig config) {
         this.siteConfigID = siteConfigID;
         srcGlobalSnapshot = snapshot;
         recvSeq = 0;
+        logReplicationConfig = config;
 
-        //clear shadow streams and remember the start address
+        // clear shadow streams and remember the start address
         clearTables();
         shadowStreamStartAddress = rt.getAddressSpaceView().getLogTail();
+
+        // recreate shadow and streams maps with the updated config
+        createShadowAndStreamMaps();
     }
 
 

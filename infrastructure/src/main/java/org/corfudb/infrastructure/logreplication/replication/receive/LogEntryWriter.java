@@ -36,23 +36,24 @@ public class LogEntryWriter {
     private long srcGlobalSnapshot; //the source snapshot that the transaction logs are based
     private long lastMsgTs; //the timestamp of the last message processed.
     private LogReplicationMetadataManager logReplicationMetadataManager;
+    private LogReplicationConfig config;
 
     public LogEntryWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
         this.rt = rt;
         this.logReplicationMetadataManager = logReplicationMetadataManager;
+        this.config = config;
+        createStreamsAndViewMaps();
+        srcGlobalSnapshot = Address.NON_ADDRESS;
+        lastMsgTs = Address.NON_ADDRESS;
+    }
 
-        Set<String> streams = config.getStreamsToReplicate();
+    private void createStreamsAndViewMaps() {
         streamMap = new HashMap<>();
-
-        for (String s : streams) {
+        for (String s : config.getStreamsToReplicate()) {
             streamMap.put(CorfuRuntime.getStreamID(s), s);
         }
 
-        srcGlobalSnapshot = Address.NON_ADDRESS;
-        lastMsgTs = Address.NON_ADDRESS;
-
         streamViewMap = new HashMap<>();
-
         for (UUID uuid : streamMap.keySet()) {
             streamViewMap.put(uuid, rt.getStreamsView().getUnsafe(uuid));
         }
@@ -168,8 +169,10 @@ public class LogEntryWriter {
      * @param snapshot
      * @param ackTimestamp
      */
-    public void reset(long snapshot, long ackTimestamp) {
+    public void reset(long snapshot, long ackTimestamp, LogReplicationConfig config) {
         srcGlobalSnapshot = snapshot;
         lastMsgTs = ackTimestamp;
+        this.config = config;
+        createStreamsAndViewMaps();
     }
 }
