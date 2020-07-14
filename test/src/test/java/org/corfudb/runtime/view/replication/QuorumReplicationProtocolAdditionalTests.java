@@ -1,11 +1,18 @@
 /**
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance
- * with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
  */
 package org.corfudb.runtime.view.replication;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertNotNull;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import java.util.Collections;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
@@ -28,277 +35,275 @@ import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Collections;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.Assert.assertNotNull;
-
-/**
- * Created by Konstantin Spirov on 1/30/2017.
- */
+/** Created by Konstantin Spirov on 1/30/2017. */
 public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
+  public static final UUID testClientId = UUID.nameUUIDFromBytes("TEST_CLIENT".getBytes());
+  private Layout layout = null;
+  private CorfuRuntime corfuRuntime = null;
 
-    public static final UUID testClientId = UUID.nameUUIDFromBytes("TEST_CLIENT".getBytes());
-    private Layout layout = null;
-    private CorfuRuntime corfuRuntime = null;
+  @Before
+  public void before() {
 
-    @Before
-    public void before() {
+    addServer(SERVERS.PORT_0);
+    addServer(SERVERS.PORT_1);
+    addServer(SERVERS.PORT_2);
 
-        addServer(SERVERS.PORT_0);
-        addServer(SERVERS.PORT_1);
-        addServer(SERVERS.PORT_2);
+    layout =
+        new TestLayoutBuilder()
+            .setEpoch(1L)
+            .addLayoutServer(SERVERS.PORT_0)
+            .addLayoutServer(SERVERS.PORT_1)
+            .addLayoutServer(SERVERS.PORT_2)
+            .addSequencer(SERVERS.PORT_0)
+            .buildSegment()
+            .setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION)
+            .buildStripe()
+            .addLogUnit(SERVERS.PORT_0)
+            .addLogUnit(SERVERS.PORT_1)
+            .addLogUnit(SERVERS.PORT_2)
+            .addToSegment()
+            .addToLayout()
+            .build();
+    bootstrapAllServers(layout);
+    getManagementServer(SERVERS.PORT_0).shutdown();
+    getManagementServer(SERVERS.PORT_1).shutdown();
+    getManagementServer(SERVERS.PORT_2).shutdown();
 
-        layout = new TestLayoutBuilder()
-                .setEpoch(1L)
-                .addLayoutServer(SERVERS.PORT_0)
-                .addLayoutServer(SERVERS.PORT_1)
-                .addLayoutServer(SERVERS.PORT_2)
-                .addSequencer(SERVERS.PORT_0)
-                .buildSegment()
-                .setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION)
-                .buildStripe()
-                .addLogUnit(SERVERS.PORT_0)
-                .addLogUnit(SERVERS.PORT_1)
-                .addLogUnit(SERVERS.PORT_2)
-                .addToSegment()
-                .addToLayout()
-                .build();
-        bootstrapAllServers(layout);
-        getManagementServer(SERVERS.PORT_0).shutdown();
-        getManagementServer(SERVERS.PORT_1).shutdown();
-        getManagementServer(SERVERS.PORT_2).shutdown();
+    layout.getSegment(0L).setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION);
 
-        layout.getSegment(0L).setReplicationMode(Layout.ReplicationMode.QUORUM_REPLICATION);
+    corfuRuntime = new CorfuRuntime();
+    corfuRuntime.setCacheDisabled(true);
+    layout.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
 
-        corfuRuntime = new CorfuRuntime();
-        corfuRuntime.setCacheDisabled(true);
-        layout.getLayoutServers().forEach(corfuRuntime::addLayoutServer);
+    layout
+        .getAllServers()
+        .forEach(
+            serverEndpoint -> {
+              corfuRuntime
+                  .getRouter(serverEndpoint)
+                  .setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+              corfuRuntime
+                  .getRouter(serverEndpoint)
+                  .setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+              corfuRuntime
+                  .getRouter(serverEndpoint)
+                  .setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
+            });
 
-
-        layout.getAllServers().forEach(serverEndpoint -> {
-            corfuRuntime.getRouter(serverEndpoint).setTimeoutConnect(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-            corfuRuntime.getRouter(serverEndpoint).setTimeoutResponse(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-            corfuRuntime.getRouter(serverEndpoint).setTimeoutRetry(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
-        });
-
-        corfuRuntime.connect();
-
-    }
-
-
-  public CorfuRuntime getDefaultRuntime() {
-        return corfuRuntime;
+    corfuRuntime.connect();
   }
 
-    @Test
-    @SuppressWarnings("unchecked")
-    public void checkRecoveryWriteTriggeredFromReadRecoversDataWhenTheQuorumIsLost()
-            throws Exception {
+  public CorfuRuntime getDefaultRuntime() {
+    return corfuRuntime;
+  }
 
-        //configure the layout accordingly
-        CorfuRuntime r = getDefaultRuntime();
+  @Test
+  @SuppressWarnings("unchecked")
+  public void checkRecoveryWriteTriggeredFromReadRecoversDataWhenTheQuorumIsLost()
+      throws Exception {
 
-        LogUnitServer u0 = getLogUnit(SERVERS.PORT_0);
-        LogUnitServer u1 = getLogUnit(SERVERS.PORT_1);
-        LogUnitServer u2 = getLogUnit(SERVERS.PORT_2);
+    // configure the layout accordingly
+    CorfuRuntime r = getDefaultRuntime();
 
-        final long ADDRESS_0 = 0L;
+    LogUnitServer u0 = getLogUnit(SERVERS.PORT_0);
+    LogUnitServer u1 = getLogUnit(SERVERS.PORT_1);
+    LogUnitServer u2 = getLogUnit(SERVERS.PORT_2);
 
-        //write at 0
-        ByteBuf b = Unpooled.buffer();
-        Serializers.CORFU.serialize("0".getBytes(), b);
-        WriteRequest m = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(ADDRESS_0);
-        m.setRank(new IMetadata.DataRank(0));
-        m.setBackpointerMap(Collections.emptyMap());
-        sendMessage(u1, CorfuMsgType.WRITE.payloadMsg(m));
-        sendMessage(u2, CorfuMsgType.WRITE.payloadMsg(m));
-        u2.shutdown();
+    final long ADDRESS_0 = 0L;
 
-        LogUnitServerAssertions.assertThat(u0)
-                .isEmptyAtAddress(ADDRESS_0);
+    // write at 0
+    ByteBuf b = Unpooled.buffer();
+    Serializers.CORFU.serialize("0".getBytes(), b);
+    WriteRequest m = WriteRequest.builder().data(new LogData(DataType.DATA, b)).build();
+    m.setGlobalAddress(ADDRESS_0);
+    m.setRank(new IMetadata.DataRank(0));
+    m.setBackpointerMap(Collections.emptyMap());
+    sendMessage(u1, CorfuMsgType.WRITE.payloadMsg(m));
+    sendMessage(u2, CorfuMsgType.WRITE.payloadMsg(m));
+    u2.shutdown();
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
-                .isEqualTo("0".getBytes());
+    LogUnitServerAssertions.assertThat(u0).isEmptyAtAddress(ADDRESS_0);
 
-        LogUnitServerAssertions.assertThat(u1)
-                .matchesDataAtAddress(ADDRESS_0, "0".getBytes());
+    assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime())).isEqualTo("0".getBytes());
 
-        LogUnitServerAssertions.assertThat(u0)
-                .matchesDataAtAddress(ADDRESS_0, "0".getBytes());
+    LogUnitServerAssertions.assertThat(u1).matchesDataAtAddress(ADDRESS_0, "0".getBytes());
 
-    }
+    LogUnitServerAssertions.assertThat(u0).matchesDataAtAddress(ADDRESS_0, "0".getBytes());
+  }
 
+  @Test
+  @SuppressWarnings("unchecked")
+  public void checkReadOnEmptyPosition() throws Exception {
 
+    // configure the layout accordingly
+    CorfuRuntime r = getDefaultRuntime();
 
-    @Test
-    @SuppressWarnings("unchecked")
-    public void checkReadOnEmptyPosition()
-            throws Exception {
+    LogUnitServer u0 = getLogUnit(SERVERS.PORT_0);
 
-        //configure the layout accordingly
-        CorfuRuntime r = getDefaultRuntime();
+    UUID streamA = CorfuRuntime.getStreamID("stream A");
 
-        LogUnitServer u0 = getLogUnit(SERVERS.PORT_0);
+    byte[] testPayload = "hello world".getBytes();
 
-        UUID streamA = CorfuRuntime.getStreamID("stream A");
+    // generate a stream hole
+    TokenResponse tr = r.getSequencerView().next(streamA);
 
-        byte[] testPayload = "hello world".getBytes();
+    IStreamView sv = r.getStreamsView().get(streamA);
+    sv.append(testPayload);
 
+    tr = r.getSequencerView().next(streamA);
 
-        //generate a stream hole
-        TokenResponse tr =
-                r.getSequencerView().next(streamA);
+    // make sure we can still read the stream.
+    assertThat(sv.next().getPayload(getRuntime())).isEqualTo(testPayload);
 
-        IStreamView sv = r.getStreamsView().get(streamA);
-        sv.append(testPayload);
+    int address = 0;
+    assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.HOLE);
+    assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.DATA);
+    assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.HOLE);
 
-        tr = r.getSequencerView().next(streamA);
+    //      TODO(mwei) - fix me
+    //      assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.EMPTY);
 
-        //make sure we can still read the stream.
-        assertThat(sv.next().getPayload(getRuntime()))
-                .isEqualTo(testPayload);
+  }
 
-        int address = 0;
-        assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.HOLE);
-        assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.DATA);
-        assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.HOLE);
+  @Test
+  @SuppressWarnings("unchecked")
+  public void canReadWrite() throws Exception {
+    CorfuRuntime r = getDefaultRuntime();
+    UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
+    byte[] testPayload = "hello world".getBytes();
+    r.getAddressSpaceView()
+        .write(
+            new TokenResponse(
+                new Token(r.getLayoutView().getLayout().getEpoch(), 0),
+                Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
+            testPayload);
+    ILogData x = r.getAddressSpaceView().read(0);
+    assertNotNull(x.getRank());
+    assertThat(r.getAddressSpaceView().read(0L).getPayload(r)).isEqualTo("hello world".getBytes());
 
-//      TODO(mwei) - fix me
-//      assertThat(r.getAddressSpaceView().read(address++).getType()).isEqualTo(DataType.EMPTY);
+    assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA)).isTrue();
 
-    }
+    assertThat(
+            (IMetadata.DataRank)
+                r.getAddressSpaceView()
+                    .read(0L)
+                    .getMetadataMap()
+                    .get(IMetadata.LogUnitMetadataType.RANK))
+        .isNotNull();
+  }
 
+  @Test
+  @SuppressWarnings("unchecked")
+  public void canReadWriteConcurrent() throws Exception {
+    CorfuRuntime r = getDefaultRuntime();
 
+    final int numberThreads = 5;
+    final int numberRecords = 1_000;
 
-    @Test
-    @SuppressWarnings("unchecked")
-    public void canReadWrite()
-            throws Exception {
-        CorfuRuntime r = getDefaultRuntime();
-        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
-        byte[] testPayload = "hello world".getBytes();
-        r.getAddressSpaceView().write(new TokenResponse(new Token(r.getLayoutView().getLayout().getEpoch(), 0),
-                        Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
-                testPayload);
-        ILogData x = r.getAddressSpaceView().read(0);
-        assertNotNull(x.getRank());
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(r))
-                .isEqualTo("hello world".getBytes());
-
-        assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA))
-                .isTrue();
-
-        assertThat((IMetadata.DataRank) r.getAddressSpaceView().read(0L).getMetadataMap()
-                .get(IMetadata.LogUnitMetadataType.RANK)).isNotNull();
-
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    public void canReadWriteConcurrent()
-            throws Exception {
-        CorfuRuntime r = getDefaultRuntime();
-
-        final int numberThreads = 5;
-        final int numberRecords = 1_000;
-
-        scheduleConcurrently(numberThreads, threadNumber -> {
-            int base = threadNumber * numberRecords;
-            for (int i = base; i < base + numberRecords; i++) {
-                r.getAddressSpaceView().write(new TokenResponse(new Token(r.getLayoutView().getLayout().getEpoch(), i),
-                                Collections.singletonMap(CorfuRuntime.getStreamID("a"), Address.NO_BACKPOINTER)),
-                        Integer.toString(i).getBytes());
-            }
+    scheduleConcurrently(
+        numberThreads,
+        threadNumber -> {
+          int base = threadNumber * numberRecords;
+          for (int i = base; i < base + numberRecords; i++) {
+            r.getAddressSpaceView()
+                .write(
+                    new TokenResponse(
+                        new Token(r.getLayoutView().getLayout().getEpoch(), i),
+                        Collections.singletonMap(
+                            CorfuRuntime.getStreamID("a"), Address.NO_BACKPOINTER)),
+                    Integer.toString(i).getBytes());
+          }
         });
-        executeScheduled(numberThreads, PARAMETERS.TIMEOUT_LONG);
+    executeScheduled(numberThreads, PARAMETERS.TIMEOUT_LONG);
 
-        scheduleConcurrently(numberThreads, threadNumber -> {
-            int base = threadNumber * numberRecords;
-            for (int i = base; i < base + numberRecords; i++) {
-                assertThat(r.getAddressSpaceView().read(i).getPayload(getRuntime()))
-                        .isEqualTo(Integer.toString(i).getBytes());
-            }
+    scheduleConcurrently(
+        numberThreads,
+        threadNumber -> {
+          int base = threadNumber * numberRecords;
+          for (int i = base; i < base + numberRecords; i++) {
+            assertThat(r.getAddressSpaceView().read(i).getPayload(getRuntime()))
+                .isEqualTo(Integer.toString(i).getBytes());
+          }
         });
-        executeScheduled(numberThreads, PARAMETERS.TIMEOUT_LONG);
-        assertNotNull(r.getAddressSpaceView().read(0L).getRank());
-        assertThat((IMetadata.DataRank) r.getAddressSpaceView().read(0L).getMetadataMap()
-                .get(IMetadata.LogUnitMetadataType.RANK)).isNotNull();
-    }
+    executeScheduled(numberThreads, PARAMETERS.TIMEOUT_LONG);
+    assertNotNull(r.getAddressSpaceView().read(0L).getRank());
+    assertThat(
+            (IMetadata.DataRank)
+                r.getAddressSpaceView()
+                    .read(0L)
+                    .getMetadataMap()
+                    .get(IMetadata.LogUnitMetadataType.RANK))
+        .isNotNull();
+  }
 
-    @Test
-    @SuppressWarnings("unchecked")
-    public void canReadWriteToMultiple()
-            throws Exception {
+  @Test
+  @SuppressWarnings("unchecked")
+  public void canReadWriteToMultiple() throws Exception {
 
+    // configure the layout accordingly
+    CorfuRuntime r = getDefaultRuntime();
 
-        //configure the layout accordingly
-        CorfuRuntime r = getDefaultRuntime();
+    UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
+    byte[] testPayload = "hello world".getBytes();
 
+    r.getAddressSpaceView()
+        .write(
+            new TokenResponse(
+                new Token(r.getLayoutView().getLayout().getEpoch(), 0),
+                Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
+            testPayload);
 
-        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
-        byte[] testPayload = "hello world".getBytes();
+    assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
+        .isEqualTo("hello world".getBytes());
 
-        r.getAddressSpaceView().write(new TokenResponse(new Token(r.getLayoutView().getLayout().getEpoch(), 0),
-                        Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
-                testPayload);
+    assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA)).isTrue();
+    assertThat(
+            (IMetadata.DataRank)
+                r.getAddressSpaceView()
+                    .read(0L)
+                    .getMetadataMap()
+                    .get(IMetadata.LogUnitMetadataType.RANK))
+        .isNotNull();
+  }
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
-                .isEqualTo("hello world".getBytes());
+  @Test
+  @SuppressWarnings("unchecked")
+  public void ensureAllUnitsContainData() throws Exception {
 
-        assertThat(r.getAddressSpaceView().read(0L)
-                .containsStream(streamA)).isTrue();
-                assertThat((IMetadata.DataRank) r.getAddressSpaceView().read(0L).getMetadataMap()
-                .get(IMetadata.LogUnitMetadataType.RANK)).isNotNull();
+    // configure the layout accordingly
+    CorfuRuntime r = getDefaultRuntime();
 
-    }
+    UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
+    byte[] testPayload = "hello world".getBytes();
 
-    @Test
-    @SuppressWarnings("unchecked")
-    public void ensureAllUnitsContainData()
-            throws Exception {
+    r.getAddressSpaceView()
+        .write(
+            new TokenResponse(
+                new Token(1, 0), Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
+            testPayload);
 
+    assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
+        .isEqualTo("hello world".getBytes());
 
-        //configure the layout accordingly
-        CorfuRuntime r = getDefaultRuntime();
+    assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA));
 
-        UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
-        byte[] testPayload = "hello world".getBytes();
+    // Ensure that the data was written to each logunit.
+    LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_0))
+        .matchesDataAtAddress(0, testPayload);
+    LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_1))
+        .matchesDataAtAddress(0, testPayload);
+    LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_2))
+        .matchesDataAtAddress(0, testPayload);
+  }
 
-        r.getAddressSpaceView().write(new TokenResponse(new Token(1, 0),
-                        Collections.singletonMap(streamA, Address.NO_BACKPOINTER)),
-                testPayload);
+  public void sendMessage(LogUnitServer s, CorfuMsg message) {
+    TestServerRouter router = new TestServerRouter();
+    router.addServer(s);
+    message.setClientID(testClientId);
+    message.setRequestID(requestCounter.getAndIncrement());
+    router.sendServerMessage(message);
+  }
 
-        assertThat(r.getAddressSpaceView().read(0L).getPayload(getRuntime()))
-                .isEqualTo("hello world".getBytes());
-
-        assertThat(r.getAddressSpaceView().read(0L).containsStream(streamA));
-
-        // Ensure that the data was written to each logunit.
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_0))
-                .matchesDataAtAddress(0, testPayload);
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_1))
-                .matchesDataAtAddress(0, testPayload);
-        LogUnitServerAssertions.assertThat(getLogUnit(SERVERS.PORT_2))
-                .matchesDataAtAddress(0, testPayload);
-    }
-
-
-
-    public void sendMessage(LogUnitServer s, CorfuMsg message) {
-        TestServerRouter router = new TestServerRouter();
-        router.addServer(s);
-        message.setClientID(testClientId);
-        message.setRequestID(requestCounter.getAndIncrement());
-        router.sendServerMessage(message);
-    }
-
-    private AtomicInteger requestCounter = new AtomicInteger(0);
-
+  private AtomicInteger requestCounter = new AtomicInteger(0);
 }

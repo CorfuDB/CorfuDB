@@ -1,6 +1,12 @@
 package org.corfudb.universe.group.cluster;
 
 import com.google.common.collect.ImmutableSortedSet;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.EqualsAndHashCode;
@@ -14,87 +20,59 @@ import org.corfudb.universe.group.cluster.Cluster.ClusterType;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.server.CorfuServerParams;
 
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-import java.util.SortedSet;
-import java.util.TreeSet;
-import java.util.stream.Collectors;
-
 @Builder
 @EqualsAndHashCode
 @ToString
 public class CorfuClusterParams<T extends CorfuServerParams> implements GroupParams<T> {
 
-    @Getter
-    @Default
-    @NonNull
-    private String name = RandomStringUtils.randomAlphabetic(6).toLowerCase();
+  @Getter @Default @NonNull
+  private String name = RandomStringUtils.randomAlphabetic(6).toLowerCase();
 
-    @Default
-    @Getter
-    private final int numNodes = 3;
+  @Default @Getter private final int numNodes = 3;
 
-    /**
-     * Corfu server version, for instance: 0.3.0-SNAPSHOT
-     */
-    @NonNull
-    @Getter
-    private final String serverVersion;
+  /** Corfu server version, for instance: 0.3.0-SNAPSHOT */
+  @NonNull @Getter private final String serverVersion;
 
-    @Default
-    @NonNull
-    private final SortedSet<T> nodes = new TreeSet<>();
+  @Default @NonNull private final SortedSet<T> nodes = new TreeSet<>();
 
-    @Getter
-    @Default
-    @NonNull
-    private final NodeType nodeType = NodeType.CORFU_SERVER;
+  @Getter @Default @NonNull private final NodeType nodeType = NodeType.CORFU_SERVER;
 
-    @Default
-    @Getter
-    private final int bootStrapRetries = 20;
+  @Default @Getter private final int bootStrapRetries = 20;
 
-    @Default
-    @Getter
-    @NonNull
-    private final Duration retryDuration = Duration.ofSeconds(3);
+  @Default @Getter @NonNull private final Duration retryDuration = Duration.ofSeconds(3);
 
-    @Override
-    public ClusterType getType() {
-        return ClusterType.CORFU_CLUSTER;
-    }
+  @Override
+  public ClusterType getType() {
+    return ClusterType.CORFU_CLUSTER;
+  }
 
-    @Override
-    public ImmutableSortedSet<T> getNodesParams() {
-        return ImmutableSortedSet.copyOf(nodes);
-    }
+  @Override
+  public ImmutableSortedSet<T> getNodesParams() {
+    return ImmutableSortedSet.copyOf(nodes);
+  }
 
-    public synchronized T getNode(String serverName) {
-        Map<String, T> nodesMap = nodes
-                .stream()
-                .collect(Collectors.toMap(CorfuServerParams::getName, n -> n));
+  public synchronized T getNode(String serverName) {
+    Map<String, T> nodesMap =
+        nodes.stream().collect(Collectors.toMap(CorfuServerParams::getName, n -> n));
 
-        return nodesMap.get(serverName);
-    }
+    return nodesMap.get(serverName);
+  }
 
-    @Override
-    public synchronized CorfuClusterParams<T> add(T nodeParams) {
-        nodes.add(ClassUtils.cast(nodeParams));
-        return this;
-    }
+  @Override
+  public synchronized CorfuClusterParams<T> add(T nodeParams) {
+    nodes.add(ClassUtils.cast(nodeParams));
+    return this;
+  }
 
-    public String getFullNodeName(String nodeName) {
-        return name + "-corfu-" + nodeName;
-    }
+  public String getFullNodeName(String nodeName) {
+    return name + "-corfu-" + nodeName;
+  }
 
-    public int size() {
-        return getNodesParams().size();
-    }
+  public int size() {
+    return getNodesParams().size();
+  }
 
-    public List<String> getClusterNodes() {
-        return getNodesParams().stream()
-                .map(CorfuServerParams::getName)
-                .collect(Collectors.toList());
-    }
+  public List<String> getClusterNodes() {
+    return getNodesParams().stream().map(CorfuServerParams::getName).collect(Collectors.toList());
+  }
 }

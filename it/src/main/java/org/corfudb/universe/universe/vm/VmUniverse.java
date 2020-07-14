@@ -1,5 +1,6 @@
 package org.corfudb.universe.universe.vm;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -15,90 +16,83 @@ import org.corfudb.universe.universe.AbstractUniverse;
 import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
-
 /**
  * Represents VM implementation of a {@link Universe}.
- * <p>
- * The following are the main functionalities provided by this class:
- * </p>
- * DEPLOY: first deploys VMs on vSphere (if not exist), then deploys the group (corfu server) on the VMs
- * SHUTDOWN: stops the {@link Universe}, i.e. stops the existing {@link Group} gracefully within the provided timeout
+ *
+ * <p>The following are the main functionalities provided by this class: DEPLOY: first deploys VMs
+ * on vSphere (if not exist), then deploys the group (corfu server) on the VMs SHUTDOWN: stops the
+ * {@link Universe}, i.e. stops the existing {@link Group} gracefully within the provided timeout
  */
 @Slf4j
 public class VmUniverse extends AbstractUniverse<NodeParams, VmUniverseParams> {
 
-    private final AtomicBoolean destroyed = new AtomicBoolean(false);
+  private final AtomicBoolean destroyed = new AtomicBoolean(false);
 
-    @NonNull
-    @Getter
-    private final ApplianceManager applianceManager;
+  @NonNull @Getter private final ApplianceManager applianceManager;
 
-    @Builder
-    public VmUniverse(VmUniverseParams universeParams, ApplianceManager applianceManager,
-                      LoggingParams loggingParams) {
-        super(universeParams, loggingParams);
-        this.applianceManager = applianceManager;
+  @Builder
+  public VmUniverse(
+      VmUniverseParams universeParams,
+      ApplianceManager applianceManager,
+      LoggingParams loggingParams) {
+    super(universeParams, loggingParams);
+    this.applianceManager = applianceManager;
 
-        applianceManager.deploy();
-        init();
+    applianceManager.deploy();
+    init();
+  }
+
+  /**
+   * Deploy a vm specific {@link Universe} according to provided parameter, vSphere APIs, and other
+   * components.
+   *
+   * @return Current instance of a VM {@link Universe} would be returned.
+   * @throws UniverseException this exception will be thrown if deploying a {@link Universe} is not
+   *     successful
+   */
+  @Override
+  public VmUniverse deploy() {
+    log.info("Deploy the universe: {}", universeId);
+
+    deployGroups();
+
+    return this;
+  }
+
+  /** Deploy a {@link Group} on existing VMs according to input parameter. */
+  @Override
+  protected Group buildGroup(GroupParams groupParams) {
+    if (groupParams.getType() != ClusterType.CORFU_CLUSTER) {
+      throw new UniverseException("Unknown node type: " + groupParams.getType());
     }
 
-    /**
-     * Deploy a vm specific {@link Universe} according to provided parameter, vSphere APIs, and other components.
-     *
-     * @return Current instance of a VM {@link Universe} would be returned.
-     * @throws UniverseException this exception will be thrown if deploying a {@link Universe} is not successful
-     */
-    @Override
-    public VmUniverse deploy() {
-        log.info("Deploy the universe: {}", universeId);
+    return VmCorfuCluster.builder()
+        .universeParams(universeParams)
+        .corfuClusterParams(ClassUtils.cast(groupParams))
+        .vms(applianceManager.getVms())
+        .loggingParams(loggingParams)
+        .build();
+  }
 
-        deployGroups();
-
-        return this;
+  /** Shutdown the {@link Universe} by stopping each of its {@link Group}. */
+  @Override
+  public void shutdown() {
+    if (!universeParams.isCleanUpEnabled()) {
+      log.info("Shutdown is disabled");
+      return;
     }
 
-    /**
-     * Deploy a {@link Group} on existing VMs according to input parameter.
-     */
-    @Override
-    protected Group buildGroup(GroupParams groupParams) {
-        if (groupParams.getType() != ClusterType.CORFU_CLUSTER) {
-            throw new UniverseException("Unknown node type: " + groupParams.getType());
-        }
-
-        return VmCorfuCluster.builder()
-                .universeParams(universeParams)
-                .corfuClusterParams(ClassUtils.cast(groupParams))
-                .vms(applianceManager.getVms())
-                .loggingParams(loggingParams)
-                .build();
-
+    if (destroyed.getAndSet(true)) {
+      log.info("Can't shutdown vm universe. Already destroyed");
+      return;
     }
 
-    /**
-     * Shutdown the {@link Universe} by stopping each of its {@link Group}.
-     */
-    @Override
-    public void shutdown() {
-        if (!universeParams.isCleanUpEnabled()) {
-            log.info("Shutdown is disabled");
-            return;
-        }
+    log.info("Shutdown the universe: {}, params: {}", universeId, groups);
+    shutdownGroups();
+  }
 
-        if (destroyed.getAndSet(true)) {
-            log.info("Can't shutdown vm universe. Already destroyed");
-            return;
-        }
-
-        log.info("Shutdown the universe: {}, params: {}", universeId, groups);
-        shutdownGroups();
-    }
-
-    @Override
-    public Universe add(GroupParams groupParams) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
+  @Override
+  public Universe add(GroupParams groupParams) {
+    throw new UnsupportedOperationException("Not implemented");
+  }
 }

@@ -13,37 +13,33 @@ import org.corfudb.universe.node.server.docker.DockerSupportServer;
 import org.corfudb.universe.universe.UniverseParams;
 import org.corfudb.universe.util.DockerManager;
 
-/**
- * Provides Docker implementation of {@link CorfuCluster}.
- */
+/** Provides Docker implementation of {@link CorfuCluster}. */
 @Slf4j
 public class DockerSupportCluster extends AbstractSupportCluster {
-    @NonNull
-    private final DockerClient docker;
-    @NonNull
-    private final DockerManager dockerManager;
+  @NonNull private final DockerClient docker;
+  @NonNull private final DockerManager dockerManager;
 
-    @Builder
-    public DockerSupportCluster(DockerClient docker, SupportClusterParams supportParams,
-                                UniverseParams universeParams) {
-        super(universeParams, supportParams);
-        this.docker = docker;
-        this.dockerManager = DockerManager.builder().docker(docker).build();
-    }
+  @Builder
+  public DockerSupportCluster(
+      DockerClient docker, SupportClusterParams supportParams, UniverseParams universeParams) {
+    super(universeParams, supportParams);
+    this.docker = docker;
+    this.dockerManager = DockerManager.builder().docker(docker).build();
+  }
 
-    @Override
-    public void bootstrap() {
-        // NOOP
-    }
+  @Override
+  public void bootstrap() {
+    // NOOP
+  }
 
-    @Override
-    protected Node buildServer(SupportServerParams nodeParams) {
-        return DockerSupportServer.builder()
-                .universeParams(universeParams)
-                .clusterParams(params)
-                .params(nodeParams)
-                .docker(docker)
-                .dockerManager(dockerManager)
-                .build();
-    }
+  @Override
+  protected Node buildServer(SupportServerParams nodeParams) {
+    return DockerSupportServer.builder()
+        .universeParams(universeParams)
+        .clusterParams(params)
+        .params(nodeParams)
+        .docker(docker)
+        .dockerManager(dockerManager)
+        .build();
+  }
 }

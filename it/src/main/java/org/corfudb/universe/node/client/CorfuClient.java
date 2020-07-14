@@ -9,61 +9,44 @@ import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.universe.node.Node;
 
-/**
- * Represent a Corfu client implementation of {@link Node}.
- */
+/** Represent a Corfu client implementation of {@link Node}. */
 public interface CorfuClient extends Node {
-    ClientParams getParams();
+  ClientParams getParams();
 
-    /**
-     * Create a default CorfuTable object for data-path
-     * verification in scenario tests
-     *
-     * @param streamName stream name of the table
-     * @return CorfuTable object created by runtime
-     */
-    <K, V> CorfuTable<K, V> createDefaultCorfuTable(String streamName);
+  /**
+   * Create a default CorfuTable object for data-path verification in scenario tests
+   *
+   * @param streamName stream name of the table
+   * @return CorfuTable object created by runtime
+   */
+  <K, V> CorfuTable<K, V> createDefaultCorfuTable(String streamName);
 
-    /**
-     * See {@link CorfuRuntime#connect()}
-     */
-    void connect();
+  /** See {@link CorfuRuntime#connect()} */
+  void connect();
 
-    /**
-     * See {@link CorfuRuntime()}
-     */
-    CorfuRuntime getRuntime();
+  /** See {@link CorfuRuntime()} */
+  CorfuRuntime getRuntime();
 
-    /**
-     * See {@link LayoutView#getLayout()}
-     */
-    Layout getLayout();
+  /** See {@link LayoutView#getLayout()} */
+  Layout getLayout();
 
-    /**
-     * See {@link CorfuRuntime#getManagementView()}
-     */
-    ManagementView getManagementView();
+  /** See {@link CorfuRuntime#getManagementView()} */
+  ManagementView getManagementView();
 
-    /**
-     * See {@link CorfuRuntime#getObjectsView()}
-     */
-    ObjectsView getObjectsView();
+  /** See {@link CorfuRuntime#getObjectsView()} */
+  ObjectsView getObjectsView();
 
-    /**
-     * See {@link CorfuRuntime#invalidateLayout()}
-     */
-    void invalidateLayout();
+  /** See {@link CorfuRuntime#invalidateLayout()} */
+  void invalidateLayout();
 
-    /**
-     * A handler which is invoked at any point when the Corfu client
-     * attempts to make an RPC request to the Corfu cluster but is
-     * unable to complete. This method can be helpful in tests where
-     * the it is needed to assert that the cluster is unavailable
-     */
-    default void systemDownHandler() {
-        throw new UnreachableClusterException("Cluster is unavailable");
-    }
+  /**
+   * A handler which is invoked at any point when the Corfu client attempts to make an RPC request
+   * to the Corfu cluster but is unable to complete. This method can be helpful in tests where the
+   * it is needed to assert that the cluster is unavailable
+   */
+  default void systemDownHandler() {
+    throw new UnreachableClusterException("Cluster is unavailable");
+  }
 
-    void shutdown();
-
+  void shutdown();
 }

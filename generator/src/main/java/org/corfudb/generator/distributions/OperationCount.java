@@ -8,25 +8,25 @@ import java.util.Random;
 /**
  * This class implements the distribution of a random integer generator.
  *
- * Created by maithem on 7/14/17.
+ * <p>Created by maithem on 7/14/17.
  */
 public class OperationCount implements DataSet {
-    private final Random rand = new Random();
+  private final Random rand = new Random();
 
-    public void populate() {
-        //no-op
-    }
+  public void populate() {
+    // no-op
+  }
 
-    @Override
-    public List<Integer> sample(int num) {
-        List<Integer> ints = new ArrayList<>();
-        for (int x = 0; x < num; x++) {
-            ints.add(rand.nextInt(100) + 1);
-        }
-        return ints;
+  @Override
+  public List<Integer> sample(int num) {
+    List<Integer> ints = new ArrayList<>();
+    for (int x = 0; x < num; x++) {
+      ints.add(rand.nextInt(100) + 1);
     }
+    return ints;
+  }
 
-    public List getDataSet() {
-        return Arrays.asList();
-    }
+  public List getDataSet() {
+    return Arrays.asList();
+  }
 }

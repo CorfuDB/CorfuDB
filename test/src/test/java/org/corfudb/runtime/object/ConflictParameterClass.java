@@ -6,32 +6,26 @@ import org.corfudb.annotations.CorfuObject;
 import org.corfudb.annotations.Mutator;
 import org.corfudb.annotations.MutatorAccessor;
 
-/**
- * Created by mwei on 12/15/16.
- */
+/** Created by mwei on 12/15/16. */
 @CorfuObject
 public class ConflictParameterClass implements ICorfuSMR<ConflictParameterClass> {
 
-    @Mutator(name = "mutatorTest")
-    public void mutatorTest(int test1, @ConflictParameter int test2) {
+  @Mutator(name = "mutatorTest")
+  public void mutatorTest(int test1, @ConflictParameter int test2) {}
 
-    }
+  @Accessor
+  public int accessorTest(@ConflictParameter String test1, String test2) {
+    return 0;
+  }
 
-    @Accessor
-    public int accessorTest(@ConflictParameter String test1, String test2) {
-        return 0;
-    }
+  @MutatorAccessor(name = "mutatorAccessorTest")
+  public Object mutatorAccessorTest(@ConflictParameter String test1, String test2) {
+    return 0;
+  }
 
-    @MutatorAccessor(name = "mutatorAccessorTest")
-    public Object mutatorAccessorTest(@ConflictParameter String test1, String test2) {
-        return 0;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public ConflictParameterClass getContext(ICorfuExecutionContext.Context context) {
-        return this;
-    }
+  /** {@inheritDoc} */
+  @Override
+  public ConflictParameterClass getContext(ICorfuExecutionContext.Context context) {
+    return this;
+  }
 }

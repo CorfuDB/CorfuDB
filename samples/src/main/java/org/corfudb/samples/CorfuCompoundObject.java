@@ -8,42 +8,45 @@ import org.corfudb.annotations.Mutator;
 import org.corfudb.runtime.object.ICorfuSMR;
 
 /**
- * Corfu objects may be compound, and work as expected.
- * Here is a simple example of a compound Corfu class.
+ * Corfu objects may be compound, and work as expected. Here is a simple example of a compound Corfu
+ * class.
  *
- * Created by dmalkhi on 1/5/17.
+ * <p>Created by dmalkhi on 1/5/17.
  */
 @CorfuObject
 public class CorfuCompoundObject implements ICorfuSMR<CorfuCompoundObject> {
 
-    public class Inner {
-        @Setter
-        @Getter
-        String firstName, lastName;
+  public class Inner {
+    @Setter @Getter String firstName, lastName;
 
-        public Inner(String f, String l) { firstName = f; lastName = l; }
+    public Inner(String f, String l) {
+      firstName = f;
+      lastName = l;
     }
+  }
 
-    Inner user;
-    int ID;
+  Inner user;
+  int ID;
 
-    @Mutator(name = "set")
-    public void set(Inner in, int id) {
-        this.user = in;
-        this.ID = id;
-    }
+  @Mutator(name = "set")
+  public void set(Inner in, int id) {
+    this.user = in;
+    this.ID = id;
+  }
 
-    @Accessor
-    public Inner getUser() { return user;}
+  @Accessor
+  public Inner getUser() {
+    return user;
+  }
 
-    @Accessor
-    public int getID() { return ID;}
+  @Accessor
+  public int getID() {
+    return ID;
+  }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public CorfuCompoundObject getContext(Context context) {
-        return this;
-    }
+  /** {@inheritDoc} */
+  @Override
+  public CorfuCompoundObject getContext(Context context) {
+    return this;
+  }
 }

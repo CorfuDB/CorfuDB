@@ -1,5 +1,6 @@
 package org.corfudb.universe.universe.process;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ClassUtils;
@@ -14,69 +15,65 @@ import org.corfudb.universe.universe.Universe;
 import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 /**
  * Represents PROCESS implementation of a {@link Universe}.
- * <p>
- * The following are the main functionalities provided by this class:
- * </p>
- * DEPLOY: first deploys corfu servers on a loacl machine (if not exist),
- * then deploys the group (of corfu servers) on the local machine
- * SHUTDOWN: stops the {@link Universe}, i.e. stops the existing {@link Group}
- * gracefully within the provided timeout
+ *
+ * <p>The following are the main functionalities provided by this class: DEPLOY: first deploys corfu
+ * servers on a loacl machine (if not exist), then deploys the group (of corfu servers) on the local
+ * machine SHUTDOWN: stops the {@link Universe}, i.e. stops the existing {@link Group} gracefully
+ * within the provided timeout
  */
 @Slf4j
 public class ProcessUniverse extends AbstractUniverse<NodeParams, UniverseParams> {
 
-    private final AtomicBoolean destroyed = new AtomicBoolean(false);
+  private final AtomicBoolean destroyed = new AtomicBoolean(false);
 
-    @Builder
-    public ProcessUniverse(UniverseParams universeParams, LoggingParams loggingParams) {
-        super(universeParams, loggingParams);
-        init();
+  @Builder
+  public ProcessUniverse(UniverseParams universeParams, LoggingParams loggingParams) {
+    super(universeParams, loggingParams);
+    init();
+  }
+
+  @Override
+  public Universe deploy() {
+    log.info("Deploy the universe: {}", universeId);
+
+    deployGroups();
+
+    return this;
+  }
+
+  @Override
+  protected Group buildGroup(GroupParams<NodeParams> groupParams) {
+    if (groupParams.getType() == ClusterType.CORFU_CLUSTER) {
+      return ProcessCorfuCluster.builder()
+          .universeParams(universeParams)
+          .corfuClusterParams(ClassUtils.cast(groupParams))
+          .loggingParams(loggingParams)
+          .build();
     }
 
-    @Override
-    public Universe deploy() {
-        log.info("Deploy the universe: {}", universeId);
+    throw new UniverseException("Unknown node type");
+  }
 
-        deployGroups();
-
-        return this;
+  @Override
+  public void shutdown() {
+    if (!universeParams.isCleanUpEnabled()) {
+      log.info("Shutdown is disabled");
+      return;
     }
 
-    @Override
-    protected Group buildGroup(GroupParams<NodeParams> groupParams) {
-        if (groupParams.getType() == ClusterType.CORFU_CLUSTER) {
-            return ProcessCorfuCluster.builder()
-                    .universeParams(universeParams)
-                    .corfuClusterParams(ClassUtils.cast(groupParams))
-                    .loggingParams(loggingParams)
-                    .build();
-        }
-
-        throw new UniverseException("Unknown node type");
+    if (destroyed.getAndSet(true)) {
+      log.info("Can't shutdown `process` universe. Already destroyed");
+      return;
     }
 
-    @Override
-    public void shutdown() {
-        if (!universeParams.isCleanUpEnabled()) {
-            log.info("Shutdown is disabled");
-            return;
-        }
+    log.info("Shutdown the universe: {}, params: {}", universeId, groups.keySet());
+    shutdownGroups();
+  }
 
-        if (destroyed.getAndSet(true)) {
-            log.info("Can't shutdown `process` universe. Already destroyed");
-            return;
-        }
-
-        log.info("Shutdown the universe: {}, params: {}", universeId, groups.keySet());
-        shutdownGroups();
-    }
-
-    @Override
-    public Universe add(GroupParams groupParams) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
+  @Override
+  public Universe add(GroupParams groupParams) {
+    throw new UnsupportedOperationException("Not implemented");
+  }
 }

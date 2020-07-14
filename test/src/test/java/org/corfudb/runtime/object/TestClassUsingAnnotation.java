@@ -1,49 +1,44 @@
 package org.corfudb.runtime.object;
 
+import java.util.concurrent.atomic.AtomicInteger;
 import org.corfudb.annotations.*;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
-/**
- * Created by mwei on 6/22/16.
- */
-@CorfuObject(objectType = ObjectType.SMR,
-        constructorType = ConstructorType.RUNTIME,
-        stateSource = StateSource.SELF
-)
+/** Created by mwei on 6/22/16. */
+@CorfuObject(
+    objectType = ObjectType.SMR,
+    constructorType = ConstructorType.RUNTIME,
+    stateSource = StateSource.SELF)
 public class TestClassUsingAnnotation implements ICorfuSMR<TestClassUsingAnnotation> {
 
-    AtomicInteger a1;
+  AtomicInteger a1;
 
-    public TestClassUsingAnnotation() {
-        a1 = new AtomicInteger();
-    }
+  public TestClassUsingAnnotation() {
+    a1 = new AtomicInteger();
+  }
 
-    @PassThrough
-    public boolean testFn1() {
-        return true;
-    }
+  @PassThrough
+  public boolean testFn1() {
+    return true;
+  }
 
-    @MutatorAccessor(name = "testIncrement")
-    public boolean testIncrement() {
-        return a1.incrementAndGet() != 0;
-    }
+  @MutatorAccessor(name = "testIncrement")
+  public boolean testIncrement() {
+    return a1.incrementAndGet() != 0;
+  }
 
-    @Accessor
-    public int getValue() {
-        return a1.get();
-    }
+  @Accessor
+  public int getValue() {
+    return a1.get();
+  }
 
-    @Mutator(name = "reset")
-    public void reset() {
-        a1.set(0);
-    }
+  @Mutator(name = "reset")
+  public void reset() {
+    a1.set(0);
+  }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public TestClassUsingAnnotation getContext(ICorfuExecutionContext.Context context) {
-        return this;
-    }
+  /** {@inheritDoc} */
+  @Override
+  public TestClassUsingAnnotation getContext(ICorfuExecutionContext.Context context) {
+    return this;
+  }
 }

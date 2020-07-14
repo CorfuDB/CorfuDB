@@ -9,17 +9,17 @@ message EventInfo {
  */
 
 public class Event {
-    private int id;
-    private String name;
-    private int port;
-    private long event_time;
-    private int frequency;
+  private int id;
+  private String name;
+  private int port;
+  private long event_time;
+  private int frequency;
 
-    public Event(int id, String name, int port, long event_time, int freq) {
-        this.id = id;
-        this.name = name;
-        this.port = port;
-        this.event_time = event_time;
-        this.frequency = freq;
-    }
+  public Event(int id, String name, int port, long event_time, int freq) {
+    this.id = id;
+    this.name = name;
+    this.port = port;
+    this.event_time = event_time;
+    this.frequency = freq;
+  }
 }

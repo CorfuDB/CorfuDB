@@ -10,57 +10,45 @@ import org.junit.Test;
 
 public class NodeLocatorTest extends AbstractViewTest {
 
-    @Test
-    public void invalidNodeThrowsException() {
-        assertThatThrownBy(() -> NodeLocator.parseString("invalid{}"))
-            .isInstanceOf(IllegalArgumentException.class);
-    }
+  @Test
+  public void invalidNodeThrowsException() {
+    assertThatThrownBy(() -> NodeLocator.parseString("invalid{}"))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
 
-    /** Tests that a legacy (without protocol) node parses correctly. **/
-    @Test
-    public void legacyNodeParses() {
-        final int PORT_NUM = 3000;
-        NodeLocator locator = NodeLocator.parseString("10.0.0.1:3000");
+  /** Tests that a legacy (without protocol) node parses correctly. * */
+  @Test
+  public void legacyNodeParses() {
+    final int PORT_NUM = 3000;
+    NodeLocator locator = NodeLocator.parseString("10.0.0.1:3000");
 
-        assertThat(locator.getHost())
-            .isEqualTo("10.0.0.1");
+    assertThat(locator.getHost()).isEqualTo("10.0.0.1");
 
-        assertThat(locator.getPort())
-            .isEqualTo(PORT_NUM);
+    assertThat(locator.getPort()).isEqualTo(PORT_NUM);
 
-        assertThat(locator.getNodeId())
-            .isNull();
+    assertThat(locator.getNodeId()).isNull();
 
-        assertThat(locator.getProtocol())
-            .isEqualTo(Protocol.TCP);
-    }
+    assertThat(locator.getProtocol()).isEqualTo(Protocol.TCP);
+  }
 
-    @Test
-    public void nodeCanBeConvertedBackAndForth() {
-        NodeLocator locator = NodeLocator.builder()
-                .host("localhost")
-                .port(1)
-                .protocol(Protocol.TCP)
-                .build();
-        NodeLocator parsed = NodeLocator.parseString(locator.toEndpointUrl());
+  @Test
+  public void nodeCanBeConvertedBackAndForth() {
+    NodeLocator locator =
+        NodeLocator.builder().host("localhost").port(1).protocol(Protocol.TCP).build();
+    NodeLocator parsed = NodeLocator.parseString(locator.toEndpointUrl());
 
-        assertThat(locator).isEqualToComparingFieldByField(parsed);
-        assertThat(locator).isEqualTo(parsed);
-    }
+    assertThat(locator).isEqualToComparingFieldByField(parsed);
+    assertThat(locator).isEqualTo(parsed);
+  }
 
-    @Test
-    public void nodeCanBeConvertedBackAndForthWithNoNodeId() {
-        NodeLocator locator = NodeLocator.builder()
-            .host("localhost")
-            .port(1)
-            .nodeId(null)
-            .protocol(Protocol.TCP)
-            .build();
+  @Test
+  public void nodeCanBeConvertedBackAndForthWithNoNodeId() {
+    NodeLocator locator =
+        NodeLocator.builder().host("localhost").port(1).nodeId(null).protocol(Protocol.TCP).build();
 
-        NodeLocator parsed = NodeLocator.parseString(locator.toString());
+    NodeLocator parsed = NodeLocator.parseString(locator.toString());
 
-        assertThat(locator).isEqualToComparingFieldByField(parsed);
-        assertThat(locator).isEqualTo(parsed);
-    }
-
+    assertThat(locator).isEqualToComparingFieldByField(parsed);
+    assertThat(locator).isEqualTo(parsed);
+  }
 }

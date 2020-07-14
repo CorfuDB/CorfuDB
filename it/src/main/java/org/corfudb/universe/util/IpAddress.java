@@ -9,12 +9,10 @@ import lombok.NonNull;
 @EqualsAndHashCode
 public class IpAddress {
 
-    @Getter
-    @NonNull
-    private final String ip;
+  @Getter @NonNull private final String ip;
 
-    @Override
-    public String toString() {
-        return ip;
-    }
+  @Override
+  public String toString() {
+    return ip;
+  }
 }
