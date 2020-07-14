@@ -55,7 +55,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      * @return ackMessage's metadata.
      */
     @Override
-    public LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
+    public LogReplicationEntryMetadata getAckMetadata(LogReplicationEntry entry) {
         long lastProcessedSeq = getLastProcessed();
 
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());

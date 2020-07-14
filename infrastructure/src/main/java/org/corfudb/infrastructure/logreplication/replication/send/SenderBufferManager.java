@@ -182,10 +182,9 @@ public abstract class SenderBufferManager {
      * @param message
      */
     public CompletableFuture<LogReplicationEntry> sendWithBuffering(LogReplicationEntry message) {
-        //todo need to be removed.
         message.getMetadata().setSnapshotSyncSeqNum(maxAckedMsgSeqNum++);
         pendingMessages.append(message);
-        log.info("Send messsage {}", message.getMetadata());
+        log.trace("Send messsage {}", message.getMetadata());
         CompletableFuture<LogReplicationEntry> cf = dataSender.send(message);
         addCFToAcked(message, cf);
         return cf;

@@ -62,7 +62,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      * @return
      */
     @Override
-    public LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
+    public LogReplicationEntryMetadata getAckMetadata(LogReplicationEntry entry) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());
 
         // Set Snapshot Timestamp.

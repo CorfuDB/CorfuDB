@@ -87,7 +87,7 @@ public class LogReplicationMetadataManager {
      * create a tx builder
      * @return
      */
-    TxBuilder getTxBuilder() {
+    public TxBuilder getTxBuilder() {
         return corfuStore.tx(namespace);
     }
 
@@ -184,21 +184,6 @@ public class LogReplicationMetadataManager {
         return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
     }
 
-    public long getLastSnapTransferDoneTimestamp() {
-        return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
-    }
-
-    public long getLastSrcBaseSnapshotTimestamp() {
-        return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
-    }
-
-    public long getLastSnapSeqNum() {
-        return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
-    }
-
-    public long getLastSnapAppliedSeqNum() {
-        return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM);
-    }
 
     public long getLastProcessedLogTimestamp() {
         return query(null, LogReplicationMetadataType.LAST_LOG_PROCESSED);
@@ -259,7 +244,7 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Append an metadata update to the same tx with a long.
+     * Append a metadata update to the same tx with a long.
      * @param txBuilder
      * @param key the key to be updated.
      * @param val the new value.
@@ -271,7 +256,7 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Append an metadata update to the same tx with a String.
+     * Append a metadata update to the same tx with a String.
      * @param txBuilder
      * @param key the key to be updated.
      * @param val the new value.
@@ -291,7 +276,7 @@ public class LogReplicationMetadataManager {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistedTopologyConfigId = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
 
-        // If the persistSiteConfigID is Address.NON_ADDRESS, it means the metadata table hasn't been initialized yet.
+        // If the persistTopologyConfigID is Address.NON_ADDRESS, it means the metadata table hasn't been initialized yet.
         if (topologyConfigId <= persistedTopologyConfigId) {
             log.warn("Skip setupTopologyConfigId. the current topologyConfigId " + topologyConfigId + " is not larger than the persistedTopologyConfigID " + persistedTopologyConfigId);
             return;
@@ -309,12 +294,14 @@ public class LogReplicationMetadataManager {
 
         txBuilder.commit(timestamp);
 
-        log.info("Update siteConfigID {}, new metadata {}", topologyConfigId, toString());
+        log.info("Update topologyConfigID {}, new metadata {}", topologyConfigId, toString());
     }
 
 
     /**
-     * Update the version value and reset log replication related metadata except siteConfigID.
+     * Update the version value. Reset log replication related metadata except topologyConfigID to show
+     * a full snapshot sync is required as the version has been changed.
+     *
      * @param version
      */
     public void updateVersion(String version) {
@@ -335,7 +322,7 @@ public class LogReplicationMetadataManager {
             if (key == LogReplicationMetadataType.VERSION) {
                 appendUpdate(txBuilder, key, version);
             } else if (key == LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) {
-                // For siteConfig ID, it should not be changed. Update it to fence off other metadata updates.
+                // For topologyConfig ID, it should not be changed. Update it to fence off other metadata updates.
                 val = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
                 appendUpdate(txBuilder, key, val);
             } else {
@@ -407,16 +394,16 @@ public class LogReplicationMetadataManager {
     public void setLastSnapTransferDoneTimestamp(long topologyConfigId, long ts) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistedTopologyConfigId = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-        long persistSnapStart = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        long persistedSnapStart = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
 
         log.debug("setLastSnapTransferDone snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}," +
-                " persistedSiteConfigID={}, persistedSnapshotStart={}", topologyConfigId, ts, persistedTopologyConfigId,
-                persistSnapStart);
+                " persistedTopologyConfigID={}, persistedSnapshotStart={}", topologyConfigId, ts, persistedTopologyConfigId,
+                persistedSnapStart);
 
         // It means the cluster config has changed, ignore the update operation.
         if (topologyConfigId != persistedTopologyConfigId || ts <= persistedTopologyConfigId) {
             log.warn("The metadata is older than the persisted one. Set snapshotStart topologyConfigId " + topologyConfigId + " ts " + ts +
-                    " persisteSiteConfigID " + persistedTopologyConfigId + " persistSnapStart " + persistSnapStart);
+                    " persisteTopologyfigID " + persistedTopologyConfigId + " persistSnapStart " + persistedSnapStart);
             return;
         }
 
@@ -431,7 +418,7 @@ public class LogReplicationMetadataManager {
         txBuilder.commit(timestamp);
 
         log.debug("Commit. Set snapshotStart topologyConfigId " + topologyConfigId + " ts " + ts +
-                " persisteSiteConfigID " + persistedTopologyConfigId + " persistSnapStart " + persistSnapStart);
+                " persisteTopologyConfigID " + persistedTopologyConfigId + " persistSnapStart " + persistedSnapStart);
         return;
     }
 
@@ -442,30 +429,30 @@ public class LogReplicationMetadataManager {
      */
     public void setSnapshotApplied(LogReplicationEntry entry) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        long persistSiteConfigID = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-        long persistSnapStart = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-        long persistSnapTranferDone = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
-        long siteConfigID = entry.getMetadata().getTopologyConfigId();
+        long persistedTopologyConfigId = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+        long persistedSnapStart = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        long persistedSnapTranferDone = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
+        long topologyConfigId = entry.getMetadata().getTopologyConfigId();
         long ts = entry.getMetadata().getSnapshotTimestamp();
 
-        if (siteConfigID != persistSiteConfigID || ts != persistSnapStart || ts != persistSnapTranferDone) {
-            log.warn("topologyConfigId " + siteConfigID + " != " + " persist " + persistSiteConfigID +  " ts " + ts +
-                    " != " + "persistSnapTransferDone " + persistSnapTranferDone);
+        if (topologyConfigId != persistedTopologyConfigId || ts != persistedSnapStart || ts != persistedSnapTranferDone) {
+            log.warn("topologyConfigId " + topologyConfigId + " != " + " persist " + persistedTopologyConfigId +  " ts " + ts +
+                    " != " + "persistSnapTransferDone " + persistedSnapTranferDone);
             return;
         }
 
         TxBuilder txBuilder = corfuStore.tx(namespace);
 
         //Update the topologyConfigId to fence all other transactions that update the metadata at the same time
-        appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
+        appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
 
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, ts);
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_LOG_PROCESSED, ts);
 
         txBuilder.commit(timestamp);
 
-        log.debug("Commit. Set snapshotStart topologyConfigId " + siteConfigID + " ts " + ts +
-                " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
+        log.debug("Commit. Set snapshotStart topologyConfigId " + topologyConfigId + " ts " + ts +
+                " persistTopologyfigID " + persistedTopologyConfigId + " persistSnapStart " + persistedSnapStart);
 
         return;
     }

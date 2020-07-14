@@ -23,7 +23,7 @@ public class CorfuDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
-        log.info("Send single log entry for request {}", message.getMetadata());
+        log.trace("Send single log entry for request {}", message.getMetadata());
         return client.sendLogEntry(message);
     }
 
@@ -45,12 +45,12 @@ public class CorfuDataSender implements DataSender {
     }
 
     /**
-     * Used by Snapshot Full Sync while has done with transferring data and waiting for the receiver to finish applying.
+     * Used by Snapshot Full Sync when it has finished transferring data and is waiting for the receiver to finish applying.
      * The sender queries the receiver's status and will do the proper transition.
      * @return
      */
     @Override
-    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() throws ExecutionException, InterruptedException {
+    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() {
         log.trace("query remote metadata");
         return client.sendQueryMetadataRequest();
     }

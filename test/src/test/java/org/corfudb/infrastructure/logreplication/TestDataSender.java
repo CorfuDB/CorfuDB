@@ -66,9 +66,9 @@ public class TestDataSender implements DataSender {
     }
 
     @Override
-    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() throws ExecutionException, InterruptedException {
+    public CompletableFuture<LogReplicationQueryMetadataResponse> sendQueryMetadataRequest() {
         log.warn("Not implemented");
-        return null;
+        return new CompletableFuture<>();
     }
 
     public void reset() {

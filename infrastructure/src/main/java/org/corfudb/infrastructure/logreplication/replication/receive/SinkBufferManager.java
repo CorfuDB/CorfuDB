@@ -156,7 +156,7 @@ public abstract class SinkBufferManager {
          * Send Ack with lastProcessedSeq
          */
         if (shouldAck(dataMessage)) {
-            LogReplicationEntryMetadata metadata = makeAckMessage(dataMessage);
+            LogReplicationEntryMetadata metadata = getAckMetadata(dataMessage);
             return new LogReplicationEntry(metadata, new byte[0]);
         }
 
@@ -191,7 +191,7 @@ public abstract class SinkBufferManager {
      * @param entry
      * @return
      */
-    public abstract LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry);
+    public abstract LogReplicationEntryMetadata getAckMetadata(LogReplicationEntry entry);
 
     /*
      * Verify if the message is the correct type.
