@@ -27,8 +27,6 @@ public class SourceForwardingDataSender implements DataSender {
     // Runtime to remote/destination Corfu Server
     private CorfuRuntime runtime;
 
-    private LogReplicationSourceManager sourceManager;
-
     // Manager in remote/destination site, to emulate the channel, we instantiate the destination receiver
     private LogReplicationSinkManager destinationLogReplicationManager;
 
@@ -138,7 +136,6 @@ public class SourceForwardingDataSender implements DataSender {
      * Auxiliary Methods
      */
     public void setSourceManager(LogReplicationSourceManager sourceManager) {
-        sourceManager = sourceManager;
         destinationDataSender.setSourceManager(sourceManager);
         destinationDataControl.setSourceManager(sourceManager);
     }

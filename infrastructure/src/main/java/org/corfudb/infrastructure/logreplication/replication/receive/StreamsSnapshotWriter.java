@@ -13,7 +13,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
@@ -48,11 +47,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     CorfuRuntime rt;
 
     /*
-     * Record the siteConfigID when the snapshot full sync start.
-     * If the siteConfigID has changed during the snapshot full sync,
+     * Record the topologyConfigID when the snapshot full sync start.
+     * If the topologyConfigID has changed during the snapshot full sync,
      * this snapshot full sync should be aborted and restart a new one.
      */
-    long siteConfigID;
+    long topologyConfigID;
 
     /**
      * The current snapshot full sync's snapshot timestamp.
@@ -128,17 +127,17 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
 
         // for transfer phase start, verify it hasn't received any message yet.
-        if (siteConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart || srcGlobalSnapshot <= persistSnapTransferred ||
+        if (topologyConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart || srcGlobalSnapshot <= persistSnapTransferred ||
                 persitSeqNum != Address.NON_ADDRESS) {
                 log.warn("Skip current processing as the persistent metadata {} shows the current operation is out of date " +
-                        "current siteConfigID {} srcGlobalSnapshot {}", logReplicationMetadataManager,
-                        siteConfigID, srcGlobalSnapshot);
+                        "current topologyConfigID {} srcGlobalSnapshot {}", logReplicationMetadataManager,
+                        topologyConfigID, srcGlobalSnapshot);
             return;
         }
 
 
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigID);
 
         // Clear all the tables.
         for (UUID streamID : streamViewMap.keySet()) {
@@ -165,16 +164,16 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long persitAppliedSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM);
 
         //If the metadata shows it is in the apply start phase and other metadata is consistent.
-        if (siteConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart ||
+        if (topologyConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart ||
                 persistSnapTransferred != srcGlobalSnapshot || persitAppliedSeqNum != Address.NON_ADDRESS) {
             log.warn("Skip current processing as the persistent metadata {} shows the current operation is out of date " +
-                            "current siteConfigID {} srcGlobalSnapshot {}", logReplicationMetadataManager,
-                    siteConfigID, srcGlobalSnapshot);
+                            "current topologyConfigID {} srcGlobalSnapshot {}", logReplicationMetadataManager,
+                    topologyConfigID, srcGlobalSnapshot);
             return;
         }
 
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigID);
 
         for (UUID streamID : streamViewMap.keySet()) {
             SMREntry entry = new SMREntry("clear", new Array[0], Serializers.PRIMITIVE);
@@ -203,7 +202,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param snapshot
      */
     public void reset(long siteConfigID, long snapshot) {
-        this.siteConfigID = siteConfigID;
+        this.topologyConfigID = siteConfigID;
         srcGlobalSnapshot = snapshot;
         recvSeq = 0;
         appliedSeq = 0;
@@ -228,17 +227,17 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
 
         // Verify the message is in the correct order according to the metadata. If it is out of sync with the metadata, skip it.
-        if (siteConfigID != persistConfigID || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
-            log.warn("Skip processing current entry with siteConfigID {} srcGlobalSnapshot {} currentSeqNum {} " +
+        if (topologyConfigID != persistConfigID || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
+            log.warn("Skip processing current entry with topologyConfigID {} srcGlobalSnapshot {} currentSeqNum {} " +
                     " as it is not the expected entry according to the log replication metadata status {}",
-            siteConfigID, srcGlobalSnapshot, currentSeqNum, logReplicationMetadataManager);
+                    topologyConfigID, srcGlobalSnapshot, currentSeqNum, logReplicationMetadataManager);
             return;
         }
 
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
 
-        // Update the siteConfigID with the same value to fence off other metadata updates.
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
+        // Update the topologyConfigID with the same value to fence off other metadata updates.
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigID);
 
         // Update the snapshotSeqNumb
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM, currentSeqNum);
@@ -271,17 +270,17 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM);
 
         // Verify that the operation is in the correct order. If it is out of sync with the metadata, skip it.
-        if (siteConfigID != persistConfigID || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
-            log.warn("Skip current processing as the persistent metadata {} has applied more recent message {} than current siteConfigID {} " +
+        if (topologyConfigID != persistConfigID || srcGlobalSnapshot != persistSnapStart || currentSeqNum != (persitSeqNum + 1)) {
+            log.warn("Skip current processing as the persistent metadata {} has applied more recent message {} than current topologyConfigID {} " +
                     "srcGlobalSnapshot {} currentAppliedSeqNum {}", logReplicationMetadataManager.toString(),
-                    siteConfigID, srcGlobalSnapshot, currentSeqNum);
+                    topologyConfigID, srcGlobalSnapshot, currentSeqNum);
             return;
         }
 
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
 
-        // Update the siteConfigID with the same value to fence off any metadata updates based on the same timestamp.
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
+        // Update the topologyConfigID with the same value to fence off any metadata updates based on the same timestamp.
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigID);
 
         // Update the appliedSeqNumber.
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM, currentSeqNum);
@@ -355,10 +354,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         phase = Phase.ApplyPhase;
         //verify that the snapshot Apply hasn't started yet and set it as started and set the seqNumber
         long ts = entry.getMetadata().getSnapshotTimestamp();
-        siteConfigID = entry.getMetadata().getTopologyConfigId();
+        topologyConfigID = entry.getMetadata().getTopologyConfigId();
 
         //update the metadata
-        logReplicationMetadataManager.setLastSnapTransferDoneTimestamp(siteConfigID, ts);
+        logReplicationMetadataManager.setLastSnapTransferDoneTimestamp(topologyConfigID, ts);
     }
 
     /**
@@ -390,7 +389,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     /**
      * read from shadowStreams and append to the real streams.
      */
-    public void snapshotTransferDone(LogReplicationEntry message) {
+    public void setSnapshotTransferDoneAndStartApply(LogReplicationEntry message) {
         // Set metadata and phase
         setSnapshotTransferDone(message);
 

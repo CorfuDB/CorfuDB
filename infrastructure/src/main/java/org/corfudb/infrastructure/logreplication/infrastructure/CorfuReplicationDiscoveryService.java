@@ -18,7 +18,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.util.Sleep;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -90,7 +89,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      *  Executor that process events in order in the event queue.
      */
-    private ExecutorService executorService;
+    private final ExecutorService executorService;
 
     /**
      * Defines the topology, which is discovered through the Cluster Manager
@@ -123,7 +122,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     /**
      * A queue of Discovery Service events
      */
-    private LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue;
+    private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue;
 
     /**
      * Callback to Log Replication Server upon topology discovery
@@ -171,20 +170,29 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.serverCallback = serverCallback;
         this.isLeader = new AtomicBoolean();
-        this.eventQueue = new LinkedBlockingQueue<>();
         this.shutdown = false;
-        this.eventQueue = new LinkedBlockingQueue<>();
-        this.executorService.submit(this::run);
         this.isLeader = new AtomicBoolean();
+        this.eventQueue = new LinkedBlockingQueue<>();
+
+        // Start the service
+        start();
+    }
+
+    /**
+     * start Discovery Service
+     */
+    public void start() {
+
+        // The DISCOVERY_INIT_TOPOLOGY should be the first event to be processed for both ACTIVE and STANDBY sites.
+        this.eventQueue.add(new DiscoveryServiceEvent(DISCOVER_INIT_TOPOLOGY));
+
+        this.executorService.submit(this::run);
     }
 
     /**
      * The executor thread will keep running at background and process events in eventQueue
      */
     public void run() {
-
-        // The DISCOVERY_INIT_TOPOLOGY should be the first event to be processed for both ACTIVE and STANDBY sites.
-        this.eventQueue.add(new DiscoveryServiceEvent(DISCOVER_INIT_TOPOLOGY));
 
         while (!shutdown) {
             try {
@@ -201,7 +209,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      * Process discovery event
      */
     public void processEvent(DiscoveryServiceEvent event) {
-        switch (event.type) {
+        switch (event.getType()) {
             case ACQUIRE_LOCK:
                 processLockAcquire();
                 break;
@@ -219,7 +227,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
                 break;
 
             default:
-                log.error("Invalid event type {}", event.type);
+                log.error("Invalid event type {}", event.getType());
         }
     }
 

@@ -367,7 +367,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         LogReplicationEntry msg = msgQ.get(msgQ.size() - 1);
         msg.getMetadata().setSnapshotSyncSeqNum(msg.getMetadata().getSnapshotSyncSeqNum() + 1);
         msg.getMetadata().setMessageMetadataType(MessageType.SNAPSHOT_TRANSFER_END);
-        writer.snapshotTransferDone(msg);
+        writer.setSnapshotTransferDoneAndStartApply(msg);
     }
 
     void accessTxStream(Iterator iterator, int num) {

@@ -115,7 +115,11 @@ public class LogReplicationServer extends AbstractServer {
         if (isLeader(msg, r)) {
             LogReplicationMetadataManager metadata = sinkManager.getLogReplicationMetadataManager();
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+
+>>>>>>> 174345dfb68... Address comments.
             // Fetches the latest logical timestamp (global tail) in Corfu's distributed log.
             CorfuStoreMetadata.Timestamp ts = metadata.getTimestamp();
 >>>>>>> 378772f4c7a... Address comments.

@@ -19,6 +19,8 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 
 import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
@@ -239,6 +241,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
         // Manages the lifecycle of the Corfu Log Replication Server.
         while (!shutdownServer) {
+
             try {
                 CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = startDiscoveryService(serverContext);
 
@@ -250,7 +253,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                 log.info("Discovery Service completed. Start Log Replication Service...");
 
                 activeServer.startAndListen();
-            } catch (Throwable th) {
+            } catch (InterruptedException | ExecutionException th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
                 System.exit(EXIT_ERROR_CODE);
             }
@@ -292,7 +295,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * @param serverContext server context (server information)
      * @return completable future for discovered topology
      */
-    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) throws InterruptedException {
+    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) {
 
         log.info("Start Discovery Service.");
         CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = new CompletableFuture<>();

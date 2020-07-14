@@ -7,14 +7,14 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 
 public class DiscoveryServiceEvent {
     @Getter
-    DiscoveryServiceEventType type;
+    private DiscoveryServiceEventType type;
 
     @Getter
-    TopologyConfigurationMsg topologyConfig = null;
+    private TopologyConfigurationMsg topologyConfig = null;
 
     @Getter
     @Setter
-    ClusterDescriptor remoteSiteInfo;
+    private ClusterDescriptor remoteSiteInfo;
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
        this.type = type;

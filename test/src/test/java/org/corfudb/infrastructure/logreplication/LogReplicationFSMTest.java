@@ -221,6 +221,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
         int numTransition = (NUM_ENTRIES/(batchSize* SnapshotSender.DEFAULT_SNAPSHOT_BATCH_SIZE)) + 1;
+
+        // The number of messages that the DataSender has sent out.
         Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
         for (int i = 0; i < numTransition; i++) {
@@ -293,7 +295,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
 
         for (int i = 0; i<(NUM_ENTRIES/(BATCH_SIZE * SnapshotSender.DEFAULT_SNAPSHOT_BATCH_SIZE)) + 1; i++) {
-             // transitionAvailable.acquire();
+           //transitionAvailable.acquire();
         }
 
         //assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
@@ -328,13 +330,16 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Initial acquire of semaphore, the transition method will block until a transition occurs
         transitionAvailable.acquire();
 
-        // Snapshot Sync Request
+        // Transition #1: Replication Start
+        // transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+
+        // Transition #2: Snapshot Sync Request
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST));
+        //transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
         System.out.println("**** Wait for snapshot sync to complete");
-
 
         Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
