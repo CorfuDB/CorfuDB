@@ -3,6 +3,7 @@ package org.corfudb.runtime.utils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.NodeLocator.Protocol;

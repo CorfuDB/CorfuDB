@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.log.statetransfer.batch;
 
 import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.SUCCEEDED;
 
+
 import java.util.Optional;
 import lombok.Builder;
 import lombok.Builder.Default;

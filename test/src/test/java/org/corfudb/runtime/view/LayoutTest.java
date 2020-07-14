@@ -4,6 +4,7 @@ import static java.lang.reflect.Modifier.TRANSIENT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+
 import com.google.common.collect.Sets;
 import groovy.util.logging.Slf4j;
 import java.io.IOException;

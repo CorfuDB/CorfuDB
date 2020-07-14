@@ -2,6 +2,7 @@ package org.corfudb.runtime.object.transactions;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.object.TransactionalObject;
 import org.junit.Test;

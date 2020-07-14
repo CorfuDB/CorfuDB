@@ -7,6 +7,7 @@ import static org.corfudb.universe.scenario.ScenarioUtils.waitForLayoutChange;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
+
 import java.time.Duration;
 import java.util.Map;
 import org.corfudb.runtime.collections.CorfuTable;

@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.log.statetransfer;
 
 import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.FAILED;
 
+
 import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;

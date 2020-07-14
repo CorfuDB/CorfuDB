@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import static org.corfudb.runtime.collections.QueryOptions.DEFAULT_OPTIONS;
 
+
 import com.google.protobuf.Message;
 import java.util.ArrayList;
 import java.util.Collection;

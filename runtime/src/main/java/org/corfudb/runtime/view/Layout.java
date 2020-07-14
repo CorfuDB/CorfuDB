@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import static java.util.Objects.requireNonNull;
 
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;

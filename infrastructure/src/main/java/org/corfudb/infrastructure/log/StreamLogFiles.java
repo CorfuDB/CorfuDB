@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.log;
 
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;

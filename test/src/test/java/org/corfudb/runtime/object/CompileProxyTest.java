@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+
 import com.google.common.reflect.TypeToken;
 import java.util.Map;
 import java.util.Random;

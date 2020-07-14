@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import com.google.common.reflect.TypeToken;
 import java.util.ArrayList;
 import java.util.Collection;

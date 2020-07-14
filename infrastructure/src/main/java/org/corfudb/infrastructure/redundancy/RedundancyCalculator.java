@@ -4,6 +4,7 @@ import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegme
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.RESTORED;
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;

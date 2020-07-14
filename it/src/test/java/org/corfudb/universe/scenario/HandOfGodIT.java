@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_TABLE_ITER;
 
+
 import java.time.Duration;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ClusterStatusReport;

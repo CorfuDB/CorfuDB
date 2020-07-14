@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import java.util.UUID;
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;

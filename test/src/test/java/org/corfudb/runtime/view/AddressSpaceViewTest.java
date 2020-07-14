@@ -3,15 +3,22 @@ package org.corfudb.runtime.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+
 import com.google.common.cache.Cache;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
-import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.MetricsUtils;
 import org.junit.Test;

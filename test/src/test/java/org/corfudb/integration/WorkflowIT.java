@@ -1,7 +1,8 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.integration.Harness.run;
+
 
 import com.google.common.reflect.TypeToken;
 import java.time.Duration;

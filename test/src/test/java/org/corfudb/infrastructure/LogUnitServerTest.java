@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
 import static org.junit.Assert.fail;
 
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.File;
@@ -20,7 +21,15 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.corfudb.format.Types;
 import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.protocols.wireprotocol.*;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.ReadRequest;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TrimRequest;
+import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;

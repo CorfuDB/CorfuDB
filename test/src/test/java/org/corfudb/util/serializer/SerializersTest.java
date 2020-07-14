@@ -2,6 +2,7 @@ package org.corfudb.util.serializer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import org.corfudb.CustomSerializer;
 import org.junit.Test;
 

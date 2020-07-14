@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import java.util.Collections;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;

@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+
 import java.util.Arrays;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;

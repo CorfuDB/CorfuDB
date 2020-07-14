@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+
 import com.google.common.collect.Streams;
 import com.google.common.math.Quantiles;
 import com.google.common.reflect.TypeToken;

@@ -4,6 +4,7 @@ import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.DAT
 import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.HOST_SYSTEM;
 import static org.corfudb.universe.universe.vm.ApplianceManager.ResourceType.RESOURCE_TYPE;
 
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.vmware.vim25.GuestInfo;

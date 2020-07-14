@@ -3,6 +3,7 @@ package org.corfudb.universe.scenario;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst;
 
+
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;

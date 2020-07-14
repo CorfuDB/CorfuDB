@@ -2,6 +2,7 @@ package org.corfudb.protocols.logprotocol;
 
 import static com.google.common.base.Preconditions.checkState;
 
+
 import io.netty.buffer.ByteBuf;
 import java.util.Arrays;
 import java.util.Collections;

@@ -2,6 +2,7 @@ package org.corfudb.universe.node.server.docker;
 
 import static com.spotify.docker.client.DockerClient.LogsParam;
 
+
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.DockerClient.ListImagesParam;
 import com.spotify.docker.client.LogStream;

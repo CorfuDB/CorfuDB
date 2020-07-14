@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import static junit.framework.TestCase.fail;
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Random;

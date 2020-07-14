@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.replication;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.wireprotocol.DataType;

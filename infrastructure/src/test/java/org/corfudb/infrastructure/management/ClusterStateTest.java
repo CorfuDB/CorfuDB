@@ -9,6 +9,7 @@ import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivit
 import static org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity.connectivity;
 import static org.junit.Assert.assertEquals;
 
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import org.corfudb.protocols.wireprotocol.ClusterState;

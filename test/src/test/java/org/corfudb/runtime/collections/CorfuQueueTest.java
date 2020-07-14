@@ -1,22 +1,23 @@
 package org.corfudb.runtime.collections;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+
 import com.google.common.primitives.UnsignedBytes;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import lombok.Getter;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-
 /**
  * Created by Sundar Sridharan on May 22, 2019
  */
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Simple test of basic operations to check that insert order is preserved in the queue.

@@ -2,6 +2,7 @@ package org.corfudb.runtime.clients;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
 import org.corfudb.comm.ChannelImplementation;

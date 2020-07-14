@@ -2,6 +2,7 @@ package org.corfudb.runtime.object.transactions;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import java.util.List;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;

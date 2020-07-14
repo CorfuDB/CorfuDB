@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import org.junit.Test;
 
 /** Created by dmalkhi on 12/4/16. */

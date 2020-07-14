@@ -2,6 +2,7 @@ package org.corfudb.protocols.logprotocol;
 
 import static com.google.common.base.Preconditions.checkState;
 
+
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;

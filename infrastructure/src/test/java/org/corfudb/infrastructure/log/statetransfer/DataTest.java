@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log.statetransfer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
+
 import com.google.common.collect.Ordering;
 import java.util.AbstractMap;
 import java.util.List;

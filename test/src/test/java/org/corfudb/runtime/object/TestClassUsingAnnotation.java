@@ -1,7 +1,14 @@
 package org.corfudb.runtime.object;
 
 import java.util.concurrent.atomic.AtomicInteger;
-import org.corfudb.annotations.*;
+import org.corfudb.annotations.Accessor;
+import org.corfudb.annotations.ConstructorType;
+import org.corfudb.annotations.CorfuObject;
+import org.corfudb.annotations.Mutator;
+import org.corfudb.annotations.MutatorAccessor;
+import org.corfudb.annotations.ObjectType;
+import org.corfudb.annotations.PassThrough;
+import org.corfudb.annotations.StateSource;
 
 /** Created by mwei on 6/22/16. */
 @CorfuObject(

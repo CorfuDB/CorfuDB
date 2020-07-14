@@ -6,6 +6,7 @@ import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegme
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.builder;
 
+
 import com.google.common.collect.ImmutableList;
 import java.util.Optional;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.TransferSegmentException;

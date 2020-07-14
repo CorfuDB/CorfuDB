@@ -3,6 +3,7 @@ package org.corfudb.runtime.checkpoint;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.fail;
 
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.reflect.TypeToken;
 import java.util.ArrayList;

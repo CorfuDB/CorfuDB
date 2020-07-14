@@ -2,6 +2,7 @@ package org.corfudb.runtime.object;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+
 import com.google.common.reflect.TypeToken;
 import java.lang.reflect.InvocationTargetException;
 import org.corfudb.runtime.CorfuRuntime;

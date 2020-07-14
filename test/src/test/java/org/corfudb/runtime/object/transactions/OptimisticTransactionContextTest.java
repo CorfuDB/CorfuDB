@@ -3,6 +3,7 @@ package org.corfudb.runtime.object.transactions;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+
 import com.google.common.reflect.TypeToken;
 import java.nio.ByteBuffer;
 import java.time.Duration;

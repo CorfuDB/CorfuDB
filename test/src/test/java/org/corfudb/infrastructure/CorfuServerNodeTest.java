@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+
 import org.junit.Test;
 
 public class CorfuServerNodeTest {

@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log.statetransfer.segment;
 import static org.corfudb.infrastructure.log.statetransfer.segment.StateTransferType.CONSISTENT_READ;
 import static org.corfudb.infrastructure.log.statetransfer.segment.StateTransferType.PROTOCOL_READ;
 
+
 import com.google.common.collect.ImmutableList;
 import java.util.Optional;
 import lombok.AccessLevel;

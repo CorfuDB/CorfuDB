@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.orchestrator.workflows;
 
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.RESTORE_REDUNDANCY_MERGE_SEGMENTS;
 
+
 import com.google.common.collect.ImmutableList;
 import java.util.List;
 import java.util.UUID;

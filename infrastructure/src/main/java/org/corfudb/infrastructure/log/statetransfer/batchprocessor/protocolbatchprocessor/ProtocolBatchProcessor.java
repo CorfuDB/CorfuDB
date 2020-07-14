@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatc
 import static lombok.Builder.Default;
 import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.FAILED;
 
+
 import com.google.common.annotations.VisibleForTesting;
 import java.time.Duration;
 import java.util.Map;

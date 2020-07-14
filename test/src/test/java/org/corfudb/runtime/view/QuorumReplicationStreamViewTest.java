@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import static org.junit.Assert.assertNotNull;
 
+
 import java.util.Collections;
 import org.junit.Before;
 import org.junit.Test;

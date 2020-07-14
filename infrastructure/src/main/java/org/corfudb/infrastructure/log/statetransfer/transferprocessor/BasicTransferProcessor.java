@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log.statetransfer.transferprocessor;
 import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.TransferProcessorResult.TransferProcessorStatus.TRANSFER_SUCCEEDED;
 
+
 import java.util.Iterator;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;

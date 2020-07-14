@@ -3,6 +3,7 @@ package org.corfudb.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
+
 import com.google.common.reflect.TypeToken;
 import java.time.Duration;
 import java.util.ArrayList;

@@ -5,6 +5,7 @@ import static org.corfudb.runtime.view.TableRegistry.REGISTRY_TABLE_NAME;
 import static org.corfudb.runtime.view.TableRegistry.getFullyQualifiedTableName;
 import static org.corfudb.runtime.view.TableRegistry.getTypeUrl;
 
+
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Any;
 import com.google.protobuf.DescriptorProtos;

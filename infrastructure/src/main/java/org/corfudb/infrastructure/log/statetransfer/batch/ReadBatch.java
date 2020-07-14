@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.log.statetransfer.batch;
 import static lombok.Builder.Default;
 import static lombok.EqualsAndHashCode.Exclude;
 
+
 import com.google.common.collect.ImmutableList;
 import java.util.List;
 import java.util.Optional;

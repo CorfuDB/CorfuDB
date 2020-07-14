@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
 
+
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.Arrays;

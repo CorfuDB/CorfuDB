@@ -5,6 +5,7 @@ import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.C
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_TYPE;
 
+
 import com.esotericsoftware.kryo.NotNull;
 import com.google.common.reflect.TypeToken;
 import java.util.Arrays;

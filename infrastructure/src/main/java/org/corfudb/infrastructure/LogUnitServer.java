@@ -8,6 +8,7 @@ import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 
+
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;

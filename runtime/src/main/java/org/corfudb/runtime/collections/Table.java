@@ -2,8 +2,14 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
-import java.util.*;
+import java.util.AbstractMap;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;

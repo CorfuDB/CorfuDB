@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import java.util.UUID;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;

@@ -2,6 +2,7 @@ package org.corfudb.runtime.view;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import com.google.common.reflect.TypeToken;
 import java.time.Duration;
 import org.corfudb.protocols.wireprotocol.Token;

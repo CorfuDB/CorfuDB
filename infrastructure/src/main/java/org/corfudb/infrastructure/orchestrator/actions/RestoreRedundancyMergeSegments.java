@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.orchestrator.actions;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.TRANSFERRED;
 
+
 import com.google.common.collect.ImmutableList;
 import java.time.Duration;
 import java.util.List;

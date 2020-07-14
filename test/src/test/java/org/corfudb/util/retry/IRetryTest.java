@@ -7,6 +7,7 @@ package org.corfudb.util.retry;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import java.sql.SQLException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.corfudb.AbstractCorfuTest;
