@@ -146,7 +146,7 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Get the most recent ConfigID.
+     * Get the most recent topologyConfigID.
      * @return
      */
     public long getTopologyConfigId() {
