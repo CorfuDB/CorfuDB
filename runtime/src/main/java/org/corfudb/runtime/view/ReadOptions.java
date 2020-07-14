@@ -9,37 +9,20 @@ import lombok.Getter;
  * can be set for that read requests. This ReadOptions objects enables different configurations per
  * read request.
  *
- * <p>Created by Maithem on 7/9/19.</p>
+ * <p>Created by Maithem on 7/9/19.
  */
-
-@Builder(toBuilder=true)
+@Builder(toBuilder = true)
 @Data
 public class ReadOptions {
-    /**
-     * Ignore trimmed exceptions encountered while syncing
-     */
-    @Getter
-    @Builder.Default
-    final boolean ignoreTrim = false;
+  /** Ignore trimmed exceptions encountered while syncing */
+  @Getter @Builder.Default final boolean ignoreTrim = false;
 
-    /**
-     * The readers behavior when a hole is encountered
-     */
-    @Getter
-    @Builder.Default
-    private final boolean waitForHole = true;
+  /** The readers behavior when a hole is encountered */
+  @Getter @Builder.Default private final boolean waitForHole = true;
 
-    /**
-     * Whether to cache the read on the client side
-     */
-    @Getter
-    @Builder.Default
-    private final boolean clientCacheable = true;
+  /** Whether to cache the read on the client side */
+  @Getter @Builder.Default private final boolean clientCacheable = true;
 
-    /**
-     * Cache hint for the server to determine whether to cache the read request or not
-     */
-    @Getter
-    @Builder.Default
-    private final boolean serverCacheable = true;
+  /** Cache hint for the server to determine whether to cache the read request or not */
+  @Getter @Builder.Default private final boolean serverCacheable = true;
 }

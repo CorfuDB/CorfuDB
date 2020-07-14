@@ -10,6 +10,5 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
  */
 @AllArgsConstructor
 public class ValueAdoptedException extends LogUnitException {
-    @Getter
-    private ReadResponse readResponse;
+  @Getter private ReadResponse readResponse;
 }

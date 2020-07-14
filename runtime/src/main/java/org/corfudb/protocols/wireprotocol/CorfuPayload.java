@@ -6,12 +6,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
- * Created by mwei on 8/8/16.
- */
+/** Created by mwei on 8/8/16. */
 @Inherited
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-public @interface CorfuPayload {
-
-}
+public @interface CorfuPayload {}

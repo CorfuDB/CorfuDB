@@ -25,48 +25,39 @@ import lombok.Getter;
 /** An enum representing channel implementation types available to the client. */
 @AllArgsConstructor
 public enum ChannelImplementation {
-    /** Automatically select best channel type (EPOLL/KQUEUE if available, otherwise
-     *  fallback to NIO).
-     */
-    AUTO(Epoll.isAvailable() ? EpollSocketChannel.class :
-        KQueue.isAvailable() ? KQueueSocketChannel.class :
-            NioSocketChannel.class,
-        Epoll.isAvailable() ? EpollServerSocketChannel.class :
-            KQueue.isAvailable() ? KQueueServerSocketChannel.class :
-                NioServerSocketChannel.class,
-        (numThreads, factory) ->
-            Epoll.isAvailable() ? new EpollEventLoopGroup(numThreads, factory) :
-                KQueue.isAvailable() ? new KQueueEventLoopGroup(numThreads, factory) :
-                    new NioEventLoopGroup(numThreads, factory)),
-    NIO(NioSocketChannel.class, NioServerSocketChannel.class, NioEventLoopGroup::new),
-    EPOLL(EpollSocketChannel.class, EpollServerSocketChannel.class, EpollEventLoopGroup::new),
-    KQUEUE(KQueueSocketChannel.class, KQueueServerSocketChannel.class, KQueueEventLoopGroup::new),
-    LOCAL(LocalChannel.class, LocalServerChannel.class, DefaultEventLoopGroup::new)
-    ;
+  /**
+   * Automatically select best channel type (EPOLL/KQUEUE if available, otherwise fallback to NIO).
+   */
+  AUTO(
+      Epoll.isAvailable()
+          ? EpollSocketChannel.class
+          : KQueue.isAvailable() ? KQueueSocketChannel.class : NioSocketChannel.class,
+      Epoll.isAvailable()
+          ? EpollServerSocketChannel.class
+          : KQueue.isAvailable() ? KQueueServerSocketChannel.class : NioServerSocketChannel.class,
+      (numThreads, factory) ->
+          Epoll.isAvailable()
+              ? new EpollEventLoopGroup(numThreads, factory)
+              : KQueue.isAvailable()
+                  ? new KQueueEventLoopGroup(numThreads, factory)
+                  : new NioEventLoopGroup(numThreads, factory)),
+  NIO(NioSocketChannel.class, NioServerSocketChannel.class, NioEventLoopGroup::new),
+  EPOLL(EpollSocketChannel.class, EpollServerSocketChannel.class, EpollEventLoopGroup::new),
+  KQUEUE(KQueueSocketChannel.class, KQueueServerSocketChannel.class, KQueueEventLoopGroup::new),
+  LOCAL(LocalChannel.class, LocalServerChannel.class, DefaultEventLoopGroup::new);
 
-    /**
-     * The {@link Channel} class used by this implementation.
-     */
-    @Getter
-    final Class<? extends Channel> channelClass;
+  /** The {@link Channel} class used by this implementation. */
+  @Getter final Class<? extends Channel> channelClass;
 
-    /**
-     * The {@link ServerChannel} class used by this implementation.
-     */
-    @Getter
-    final Class<? extends ServerChannel> serverChannelClass;
+  /** The {@link ServerChannel} class used by this implementation. */
+  @Getter final Class<? extends ServerChannel> serverChannelClass;
 
-    /**
-     * Given the number of threads to use, generate a new {@link EventLoopGroup}.
-     */
-    @Getter
-    final EventLoopGroupGenerator generator;
+  /** Given the number of threads to use, generate a new {@link EventLoopGroup}. */
+  @Getter final EventLoopGroupGenerator generator;
 
-    /**
-     * A functional interface for generating event loops.
-     */
-    @FunctionalInterface
-    public interface EventLoopGroupGenerator {
-        EventLoopGroup generate(int numThreads, @Nonnull ThreadFactory factory);
-    }
+  /** A functional interface for generating event loops. */
+  @FunctionalInterface
+  public interface EventLoopGroupGenerator {
+    EventLoopGroup generate(int numThreads, @Nonnull ThreadFactory factory);
+  }
 }

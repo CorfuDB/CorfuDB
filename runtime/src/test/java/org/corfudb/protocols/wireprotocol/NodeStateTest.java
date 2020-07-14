@@ -12,30 +12,27 @@ import org.junit.Test;
 
 public class NodeStateTest {
 
-    @Test
-    public void testSerializeDeserialize() {
-        final long epoch = 1;
+  @Test
+  public void testSerializeDeserialize() {
+    final long epoch = 1;
 
-        NodeConnectivity co = NodeConnectivity.builder()
-                .type(NodeConnectivityType.CONNECTED)
-                .endpoint("localhost:9000")
-                .connectivity(ImmutableMap.of())
-                .epoch(epoch)
-                .build();
+    NodeConnectivity co =
+        NodeConnectivity.builder()
+            .type(NodeConnectivityType.CONNECTED)
+            .endpoint("localhost:9000")
+            .connectivity(ImmutableMap.of())
+            .epoch(epoch)
+            .build();
 
-        NodeState nodeState = NodeState.builder()
-                .sequencerMetrics(SequencerMetrics.UNKNOWN)
-                .connectivity(co)
-                .build();
+    NodeState nodeState =
+        NodeState.builder().sequencerMetrics(SequencerMetrics.UNKNOWN).connectivity(co).build();
 
-        ByteBuf buf = Unpooled.buffer();
-        CorfuPayloadMsg<NodeState> msg = CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState);
-        msg.serialize(buf);
+    ByteBuf buf = Unpooled.buffer();
+    CorfuPayloadMsg<NodeState> msg = CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState);
+    msg.serialize(buf);
 
-        CorfuMsg deserializedMsg = CorfuMsg.deserialize(buf);
-        assertEquals(CorfuMsgType.NODE_STATE_RESPONSE, deserializedMsg.msgType);
-        assertNotNull(deserializedMsg.getBuf());
-    }
-
-
+    CorfuMsg deserializedMsg = CorfuMsg.deserialize(buf);
+    assertEquals(CorfuMsgType.NODE_STATE_RESPONSE, deserializedMsg.msgType);
+    assertNotNull(deserializedMsg.getBuf());
+  }
 }
