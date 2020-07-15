@@ -1,8 +1,10 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
+import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -18,6 +20,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -77,29 +80,27 @@ public class LogEntryWriter {
     void processMsg(LogReplicationEntry txMessage) {
         List<OpaqueEntry> opaqueEntryList = txMessage.getOpaqueEntryList();
 
+
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
-        long persistedTopologyConfigId = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-        long persistedSnapshotStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-        long persistedSnapshotDone= logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
-        long persistedLogTs = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_PROCESSED);
+        LogReplicationMetadataVal metadataVal = logReplicationMetadataManager.queryPersistedMetadata();
 
         long topologyConfigId = txMessage.getMetadata().getTopologyConfigId();
         long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
         long entryTs = txMessage.getMetadata().getTimestamp();
         long prevTs = txMessage.getMetadata().getPreviousTimestamp();
 
-        lastMsgTs = Math.max(persistedLogTs, lastMsgTs);
+        lastMsgTs = Math.max(metadataVal.getLastLogEntryProcessedTimestamp(), lastMsgTs);
 
-        if (topologyConfigId != persistedTopologyConfigId || baseSnapshotTs != persistedSnapshotStart ||
-                baseSnapshotTs != persistedSnapshotDone || prevTs != persistedLogTs) {
-            log.warn("Message metadata mismatch. Skip applying message {}, persistedTopologyConfigId={}, persistedSnapshotStart={}, " +
-                            "persistedSnapshotDone={}, persistedLogTs={}", txMessage.getMetadata(), persistedTopologyConfigId,
-                    persistedSnapshotStart, persistedSnapshotDone, persistedLogTs);
+        if (topologyConfigId != metadataVal.getTopologyConfigId() || baseSnapshotTs != metadataVal.getSnapshotStartTimestamp() ||
+                baseSnapshotTs != metadataVal.getSnapshotTransferredTimestamp() || baseSnapshotTs != metadataVal.getSnapshotAppliedTimestamp() ||
+               prevTs != metadataVal.getLastLogEntryProcessedTimestamp()) {
+            log.warn("Skip write this msg {} as its timestamp is later than the persisted one {}.",
+                    txMessage.getMetadata(), logReplicationMetadataManager.getPersistedMetadataStr(metadataVal));
             return;
         }
 
         // Skip Opaque entries with timestamp that are not larger than persistedTs
-        OpaqueEntry[] newOpaqueEntryList = opaqueEntryList.stream().filter(x->x.getVersion() > persistedLogTs).toArray(OpaqueEntry[]::new);
+        OpaqueEntry[] newOpaqueEntryList = opaqueEntryList.stream().filter(x->x.getVersion() > lastMsgTs).toArray(OpaqueEntry[]::new);
 
         // Check that all opaque entries contain the correct streams
         for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
@@ -111,8 +112,7 @@ public class LogEntryWriter {
 
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
 
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_PROCESSED, entryTs);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataName.LAST_LOG_PROCESSED, entryTs);
 
         for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
             for (UUID uuid : opaqueEntry.getEntries().keySet()) {
@@ -123,6 +123,7 @@ public class LogEntryWriter {
         }
 
         txBuilder.commit(timestamp);
+
         lastMsgTs = Math.max(entryTs, lastMsgTs);
     }
 

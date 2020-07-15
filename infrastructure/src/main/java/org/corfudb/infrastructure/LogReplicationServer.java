@@ -4,6 +4,7 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationSinkManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -103,17 +104,14 @@ public class LogReplicationServer extends AbstractServer {
         log.info("Log Replication Negotiation Request received by Server.");
 
         if (isLeader(msg, r)) {
-            LogReplicationMetadataManager metadata = sinkManager.getLogReplicationMetadataManager();
-
-            // TODO (Xiaoqin Ma): That's 6 independent DB calls per one LOG_REPLICATION_NEGOTIATION_REQUEST.
-            //  Can we do just one? Also, It does not look like we handle failures if one of them fails, for example.
+            LogReplicationMetadata.LogReplicationMetadataVal metadataVal = sinkManager.getLogReplicationMetadataManager().queryPersistedMetadata();
             LogReplicationNegotiationResponse response = new LogReplicationNegotiationResponse(
-                    metadata.getTopologyConfigId(),
-                    metadata.getVersion(),
-                    metadata.getLastSnapStartTimestamp(),
-                    metadata.getLastSnapTransferDoneTimestamp(),
-                    metadata.getLastAppliedBaseSnapshotTimestamp(),
-                    metadata.getLastProcessedLogTimestamp());
+                    metadataVal.getTopologyConfigId(),
+                    metadataVal.getVersion(),
+                    metadataVal.getSnapshotStartTimestamp(),
+                    metadataVal.getSnapshotTransferredTimestamp(),
+                    metadataVal.getSnapshotAppliedTimestamp(),
+                    metadataVal.getLastLogEntryProcessedTimestamp());
             log.info("Send Negotiation response");
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE.payloadMsg(response));
         } else {

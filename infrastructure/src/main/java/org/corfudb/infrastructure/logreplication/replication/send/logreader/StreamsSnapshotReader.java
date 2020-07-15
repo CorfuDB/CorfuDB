@@ -107,7 +107,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
 
         log.trace("txMsg {} deepsize sizeInBytes {} entryList.sizeInByres {}  with numEntries {} deepSize sizeInBytes {}",
                 txMsg.getMetadata(), MetricsUtils.sizeOf.deepSizeOf(txMsg), entryList.getSizeInBytes(), entryList.getSmrEntries().size(), MetricsUtils.sizeOf.deepSizeOf(entryList.smrEntries));
-
         return txMsg;
     }
 

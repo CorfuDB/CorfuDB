@@ -3,25 +3,35 @@ package org.corfudb.infrastructure.logreplication.proto;
 
 /**
  * This is used by replication metadata table in corfu store.
- * The metadata table has the following key-value pairs defined both as strings:
- * One example to show the standby is at log entry sync state:
+ * The metadata table has the following key-value pairs:
+ * One example to show the standby is at log entry sync state.
+ *
+ * key: "CORFU-REPLICATION-CURRENT-STATUS"
+ * value:
  * "topologyConfigId": "0"
  * "version": "release-1.0"
  * "snapshotStart": "100"
- * "snapshotSeqNum": " 88"
- * "snapshotTransferred": "100"
- * "snapshotApplied": "100"
- * "lastLogEntryProcessed": "168"
+ * "snapshotTransferred": 100
+ * "snapshotApplied": 100
+ * "lastLogEntryProcessed": 168
+ * "snapshotMessageReceivedSeqNum" : 88
+ * "snapshotMessageAppliedSeqNum" : 88
  */
+
+// "logReplicationCurrentMetadata"
 message LogReplicationMetadataKey {
   string key = 1;
 }
 
-/**
- * This is corresponding values for the keys in the replication
- * metadata table in corfu store. For example:
- * key: "topologyConfigId", val: "1".
- */
 message LogReplicationMetadataVal {
-  string val = 1;
+  int64 topologyConfigId = 1;
+  string version = 2;
+  int64 snapshotStartTimestamp = 3;
+  int64 snapshotTransferredTimestamp = 4;
+  int64 snapshotAppliedTimestamp = 5;
+  int64 lastLogEntryProcessedTimestamp = 6;
+
+  int64 snapshotMessageReceivedSeqNum = 7;
+  int64 snapshotMessageAppliedSeqNum = 8;
 }
+

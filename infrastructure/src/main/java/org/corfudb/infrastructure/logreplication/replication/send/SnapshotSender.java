@@ -80,7 +80,7 @@ public class SnapshotSender {
      */
     public void transmit(UUID snapshotSyncEventId) {
 
-        log.info("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
+        log.trace("Running snapshot sync for {} on baseSnapshot {}", snapshotSyncEventId,
                 baseSnapshotTimestamp);
 
         boolean completed = false;  // Flag indicating the snapshot sync is completed
@@ -104,7 +104,6 @@ public class SnapshotSender {
                     // readProcessor.process(snapshotReadMessage.getMessages())
                 } catch (TrimmedException te) {
                     log.warn("Cancel snapshot sync due to trimmed exception.", te);
-                    dataSenderBufferManager.reset(Address.NON_ADDRESS);
                     snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.TRIM_SNAPSHOT_SYNC);
                     cancel = true;
                     break;
@@ -179,6 +178,7 @@ public class SnapshotSender {
         if (startSnapshotSync) {
             dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
             startSnapshotSync = false;
+            dataSenderBufferManager.reset(Address.NON_ADDRESS);
             numMessages++;
         }
 
@@ -258,6 +258,7 @@ public class SnapshotSender {
 
         stopSnapshotSync = false;
         startSnapshotSync = true;
+        log.info("Reset SnapshotSender");
     }
 
     /**

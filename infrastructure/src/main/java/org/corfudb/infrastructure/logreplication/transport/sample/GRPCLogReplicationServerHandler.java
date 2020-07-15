@@ -113,7 +113,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                 // the one for which a response is being sent.
                 replicationStreamObserverMap.keySet().removeIf(id -> id <= requestId);
             } catch (Exception e) {
-                log.error("Caught exception while trying to send message {}", msg.getRequestID());
+                log.error("Caught an exception while trying to send message {} ", msg.getRequestID(), e);
             }
 
         } else {

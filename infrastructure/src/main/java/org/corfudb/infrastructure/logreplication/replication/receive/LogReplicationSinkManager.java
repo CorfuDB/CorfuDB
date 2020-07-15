@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.ISnapshotSyncPlugin;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -157,11 +158,13 @@ public class LogReplicationSinkManager implements DataReceiver {
         snapshotSyncPlugin = getSnapshotPlugin();
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
-        logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp());
+
+        LogReplicationMetadata.LogReplicationMetadataVal metadataVal = logReplicationMetadataManager.queryPersistedMetadata();
+
+        logEntryWriter.reset(metadataVal.getSnapshotAppliedTimestamp(), metadataVal.getLastLogEntryProcessedTimestamp());
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
+                metadataVal.getLastLogEntryProcessedTimestamp(), this);
     }
 
     private ISnapshotSyncPlugin getSnapshotPlugin() {
@@ -212,13 +215,13 @@ public class LogReplicationSinkManager implements DataReceiver {
         rxMessageCounter++;
         rxMessageCount.setValue(rxMessageCounter);
 
-        log.debug("Sink manager received {} while in {}", message.getMetadata().getMessageMetadataType(), rxState);
+        log.trace("Sink manager received {} while in {}", message.getMetadata(), rxState);
 
          // Ignore messages that have different topologyConfigId.
          // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
          // If there is a siteConfig change, the discovery service will detect it and reset the state.
         if (message.getMetadata().getTopologyConfigId() != topologyConfigId) {
-            log.trace("Sink manager with config id {} ignored msg id {}", topologyConfigId,
+            log.warn("Sink manager with config id {} ignored msg id {}", topologyConfigId,
                     message.getMetadata().getTopologyConfigId());
             return null;
         }
@@ -274,12 +277,14 @@ public class LogReplicationSinkManager implements DataReceiver {
             LogReplicationEntry ack = snapshotSinkBufferManager.processMsgAndBuffer(message);
             // Check to the one persisted...
             if (ack.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_REPLICATED) {
-                long lastAppliedBaseSnapshotTimestamp = logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp();
-                long latestSnapshotSyncCycleId = logReplicationMetadataManager.getCurrentSnapshotSyncCycleId();
+                LogReplicationMetadata.LogReplicationMetadataVal metadataVal = logReplicationMetadataManager.queryPersistedMetadata();
+
+                long lastAppliedBaseSnapshotTimestamp = metadataVal.getSnapshotAppliedTimestamp();
+                //long latestSnapshotSyncCycleId = logReplicationMetadataManager.getCurrentSnapshotSyncCycleId();
                 long ackSnapshotSyncCycleId = ack.getMetadata().getSyncRequestId().getMostSignificantBits() & Long.MAX_VALUE;
                 // Verify this snapshot ACK corresponds to the last initialized/valid snapshot sync
                 // as a previous one could have been canceled but still processed due to messages being out of order
-                if ((ackSnapshotSyncCycleId == latestSnapshotSyncCycleId) &&
+                if (//(ackSnapshotSyncCycleId == latestSnapshotSyncCycleId) &&
                         (ack.getMetadata().getSnapshotTimestamp() == lastAppliedBaseSnapshotTimestamp)) {
                     // Notify end of snapshot sync. This is a blocking call.
                     snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
@@ -355,7 +360,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Setup buffer manager.
         snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastSnapSeqNum(), this);
+                Address.NON_ADDRESS, this);
 
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
@@ -373,8 +378,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         logReplicationMetadataManager.setSnapshotApplied(inputEntry);
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
-
+                logReplicationMetadataManager.queryPersistedMetadata().getLastLogEntryProcessedTimestamp(), this);
 
         log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
                 inputEntry, rxState);
@@ -405,7 +409,8 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param message
      */
     public void processMessage(LogReplicationEntry message) {
-        log.trace("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
+        log.trace("Received dataMessage by Sink Manager. Total [{}] message {} rxState {}",
+                rxMessageCounter, message.getMetadata(), rxState);
 
         switch (rxState) {
             case LOG_ENTRY_SYNC:
@@ -449,11 +454,13 @@ public class LogReplicationSinkManager implements DataReceiver {
      *
      * */
     public void reset() {
-        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp());
-        logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp());
+        LogReplicationMetadata.LogReplicationMetadataVal metadataVal = logReplicationMetadataManager.queryPersistedMetadata();
+
+        snapshotWriter.reset(topologyConfigId, metadataVal.getSnapshotAppliedTimestamp());
+        logEntryWriter.reset(metadataVal.getSnapshotAppliedTimestamp(), metadataVal.getLastLogEntryProcessedTimestamp());
+
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
+                metadataVal.getLastLogEntryProcessedTimestamp(), this);
     }
 
     public void shutdown() {

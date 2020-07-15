@@ -88,6 +88,7 @@ public abstract class SinkBufferManager {
         this.sinkManager = sinkManager;
         this.lastProcessedSeq = lastProcessedSeq;
         buffer = new HashMap<>();
+        log.info("Init with lastProcessedSeq {}", lastProcessedSeq);
     }
 
     /**
@@ -118,7 +119,6 @@ public abstract class SinkBufferManager {
      * @param dataMessage
      */
     public LogReplicationEntry processMsgAndBuffer(LogReplicationEntry dataMessage) {
-
         if (!verifyMessageType(dataMessage)) {
             log.warn("Received invalid message type {}", dataMessage.getMetadata());
             return null;
