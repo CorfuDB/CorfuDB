@@ -420,7 +420,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Fetch current topology from Cluster Manager
      */
     private void fetchTopologyFromClusterManager() {
-
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try {
@@ -648,46 +647,21 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     /**
-     * Query all replicated stream log tails and remember the max
-     * and query each standbySite information according to the ackInformation decide all manay total
-     * msg needs to send out.
+     * No work needs to be done here.  Writes to all replicated streams have stopped at this time.
+     * Following this, the ClusterManagerAdapter can query the status of ongoing snapshot sync on the
+     * local(active) cluster.
      */
     @Override
-    public void prepareToBecomeStandby() {
-        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null) {
-            replicationManager.prepareClusterRoleChange();
-        } else {
-            log.warn("Illegal prepareToBecomeStandby when cluster{} with role {}",
-                    localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
-        }
-    }
+    public void prepareToBecomeStandby() { }
 
     /**
-     * Query all replicated stream log tails and calculate the number of messages to be sent.
-     * If the max tail has changed, return 0%.
+     * Read the shared metadata table to find the status of any ongoing snapshot sync and return a
+     * completion percentage.
      */
     @Override
     public int queryReplicationStatus() {
-        //TODO make sure caller should query all nodes in the cluster and pick the max of these 3 values
-        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-            if (!isLeader.get()) {
-                log.warn("Illegal queryReplicationStatus when node is not a leader " +
-                        "in an ACTIVE Cluster{} ", localClusterDescriptor.getClusterId());
-                return 0;
-            }
-
-            if (replicationManager == null) {
-                log.warn("Illegal queryReplicationStatus when replication manager is null " +
-                        "in an ACTIVE Cluster{} ", localClusterDescriptor.getClusterId());
-                return 0;
-            }
-
-            return replicationManager.queryReplicationStatus();
-        } else {
-            log.warn("Illegal queryReplicationStatus when cluster{} with role {}",
-                    localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
-            return INVALID_REPLICATION_STATUS;
-        }
+        // Read from LogReplicationMetadata and return the value
+        return Integer.parseInt(logReplicationMetadataManager.getReplicationStatus());
     }
 
     public void shutdown() {

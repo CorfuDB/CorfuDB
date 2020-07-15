@@ -1217,10 +1217,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel(), logReplicationMetadataManager);
 
         // Source Manager
-        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(readerRuntime, sourceDataSender,
+        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
                 LogReplicationRuntimeParameters.builder()
-                        .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID, LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT))
-                        .replicationConfig(config).build());
+                        .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
+                                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT))
+                                .replicationConfig(config).build(),
+                null,
+                logReplicationMetadataManager);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)

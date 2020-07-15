@@ -4,6 +4,7 @@ import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -87,10 +88,10 @@ public class LogEntryWriter {
 
 
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
-        long persistSiteConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-        long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-        long persistSnapDone= logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
-        long persistLogTS = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_PROCESSED);
+        long persistSiteConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadata.LogReplicationMetadataKey.KeyType.TOPOLOGY_CONFIG_ID);
+        long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadata.LogReplicationMetadataKey.KeyType.SNAPSHOT_START);
+        long persistSnapDone= logReplicationMetadataManager.query(timestamp, LogReplicationMetadata.LogReplicationMetadataKey.KeyType.SNAPSHOT_APPLIED);
+        long persistLogTS = logReplicationMetadataManager.query(timestamp, LogReplicationMetadata.LogReplicationMetadataKey.KeyType.LAST_LOG_ENTRY_PROCESSED);
 
         long topologyConfigId = txMessage.getMetadata().getTopologyConfigId();
         long ts = txMessage.getMetadata().getSnapshotTimestamp();
@@ -107,8 +108,8 @@ public class LogEntryWriter {
         }
 
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_PROCESSED, entryTS);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadata.LogReplicationMetadataKey.KeyType.TOPOLOGY_CONFIG_ID, topologyConfigId);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadata.LogReplicationMetadataKey.KeyType.LAST_LOG_ENTRY_PROCESSED, entryTS);
 
         for (UUID uuid : opaqueEntry.getEntries().keySet()) {
             for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {

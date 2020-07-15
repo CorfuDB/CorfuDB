@@ -14,7 +14,17 @@ package org.corfudb.infrastructure.logreplication.proto;
  * "lastLogEntryProcessed": "168"
  */
 message LogReplicationMetadataKey {
-  string key = 1;
+  enum KeyType {
+    TOPOLOGY_CONFIG_ID = 0;
+    VERSION = 1;
+    SNAPSHOT_START = 2;
+    SNAPSHOT_SEQ_NUM = 3;
+    SNAPSHOT_TRANSFERRED = 4;
+    SNAPSHOT_APPLIED = 5;
+    LAST_LOG_ENTRY_PROCESSED = 6;
+    REPLICATION_STATUS = 7;
+  }
+  KeyType key = 1;
 }
 
 /**

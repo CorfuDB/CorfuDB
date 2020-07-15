@@ -241,7 +241,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             DefaultClusterManager siteManager = (DefaultClusterManager) serverA.getClusterManagerAdapter();
             siteManager.prepareToBecomeStandby();
             replicationStatus = siteManager.queryReplicationStatus();
-            while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
+            while (replicationStatus != CorfuReplicationManager.PERCENTAGE_HUNDRED) {
                 replicationStatus = siteManager.queryReplicationStatus();
                 System.out.print("\nreplication percentage done " + replicationStatus);
                 sleep(sleepTime);
@@ -260,7 +260,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             replicationStatus = 0;
             siteManager.prepareToBecomeStandby();
             int retry = 0;
-            while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE && retry++ < MAX_RETRY) {
+            while (replicationStatus != CorfuReplicationManager.PERCENTAGE_HUNDRED && retry++ < MAX_RETRY) {
                 replicationStatus = siteManager.queryReplicationStatus();
                 System.out.print("\nreplication percentage done " + replicationStatus);
                 sleep(sleepTime);
@@ -284,7 +284,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             replicationStatus = siteManager.queryReplicationStatus();
 
             System.out.print("\nreplication percentage done " + replicationStatus);
-            assertThat(replicationStatus).isEqualTo(CorfuReplicationManager.PERCENTAGE_BASE);
+            assertThat(replicationStatus).isEqualTo(CorfuReplicationManager.PERCENTAGE_HUNDRED);
 
             TopologyDescriptor topologyDescriptor = new TopologyDescriptor(serverA.getClusterManagerAdapter().queryTopologyConfig(true));
             String active = topologyDescriptor.getActiveClusters().keySet().iterator().next();
@@ -342,7 +342,7 @@ public class CorfuReplicationSiteConfigIT extends AbstractIT {
             sleep(sleepInterval);
 
             siteManager.prepareToBecomeStandby();
-            while (replicationStatus != CorfuReplicationManager.PERCENTAGE_BASE) {
+            while (replicationStatus != CorfuReplicationManager.PERCENTAGE_HUNDRED) {
                 replicationStatus = siteManager.queryReplicationStatus();
                 System.out.print("\nreplication percentage done " + replicationStatus);
                 sleep(sleepInterval);
