@@ -67,7 +67,7 @@ public class SnapshotSender {
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
         this.maxNumSnapshotMsgPerBatch = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_MSG_PER_BATCH : snapshotSyncBatchSize;
-        this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender);
+        this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader());
     }
 
     private CompletableFuture<LogReplicationEntry> snapshotSyncAck;

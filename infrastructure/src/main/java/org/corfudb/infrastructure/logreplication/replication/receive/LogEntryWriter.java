@@ -81,7 +81,7 @@ public class LogEntryWriter {
         long persistedTopologyConfigId = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
         long persistedSnapshotStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
         long persistedSnapshotDone= logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
-        long persistedLogTs = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_PROCESSED);
+        long persistedLogTs = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
 
         long topologyConfigId = txMessage.getMetadata().getTopologyConfigId();
         long baseSnapshotTs = txMessage.getMetadata().getSnapshotTimestamp();
@@ -112,7 +112,7 @@ public class LogEntryWriter {
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
 
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_PROCESSED, entryTs);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, entryTs);
 
         for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
             for (UUID uuid : opaqueEntry.getEntries().keySet()) {

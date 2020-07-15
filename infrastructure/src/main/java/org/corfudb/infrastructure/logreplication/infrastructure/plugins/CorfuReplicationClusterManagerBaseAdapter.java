@@ -5,10 +5,13 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+
+import java.util.Map;
 
 /***
- * This is the base class for CorfuReplicationSiteManager and implements the basic functionality.
- * Any SiteMangerImplementation should extend this class or implements the interface.
+ * This is the base class for CorfuReplicationClusterManagerAdapter and implements the basic functionality.
+ * Any ClusterManger Adapter implementation should extend this class or implement the interface.
  *
  */
 @Slf4j
@@ -45,7 +48,7 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
         corfuReplicationDiscoveryService.prepareToBecomeStandby();
     }
 
-    public int queryReplicationStatus() {
+    public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
         return corfuReplicationDiscoveryService.queryReplicationStatus();
     }
 }

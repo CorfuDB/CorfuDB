@@ -25,14 +25,7 @@ import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Observable;
-import java.util.Observer;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -43,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -1224,10 +1218,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 nettyConfig);
 
         // Source Manager
-        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(readerRuntime, sourceDataSender,
+        LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
                 LogReplicationRuntimeParameters.builder()
-                        .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID, LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT))
-                        .replicationConfig(config).build());
+                        .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID,
+                                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT))
+                                .replicationConfig(config).localCorfuEndpoint(SOURCE_ENDPOINT).build(),
+                logReplicationMetadataManager,
+                sourceDataSender);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
