@@ -426,7 +426,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 try {
                     log.info("Fetching topology from Cluster Manager...");
                     TopologyConfigurationMsg topologyMessage = clusterManagerAdapter.queryTopologyConfig(false);
-                    updateLocalTopology(new TopologyDescriptor(topologyMessage));
+                    topologyDescriptor = new TopologyDescriptor(topologyMessage);
                 } catch (Exception e) {
                     log.error("Caught exception while fetching topology. Retry.", e);
                     throw new RetryNeededException();
