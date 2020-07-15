@@ -88,6 +88,7 @@ public abstract class SinkBufferManager {
         this.sinkManager = sinkManager;
         this.lastProcessedSeq = lastProcessedSeq;
         buffer = new HashMap<>();
+        log.info("Init with lastProcessedSeq {}", lastProcessedSeq);
     }
 
     /**
@@ -134,7 +135,7 @@ public abstract class SinkBufferManager {
      * @param dataMessage
      */
     public LogReplicationEntry processMsgAndBuffer(LogReplicationEntry dataMessage) {
-
+        log.trace("process or buffer message {}", dataMessage.getMetadata());
         if (verifyMessageType(dataMessage) == false)
            return null;
 
@@ -147,6 +148,7 @@ public abstract class SinkBufferManager {
             lastProcessedSeq = getCurrentSeq(dataMessage);
             processBuffer();
         } else if (currentTs > lastProcessedSeq && buffer.size() < maxSize) {
+            log.debug("Buffer message {}", dataMessage.getMetadata());
             buffer.put(preTs, dataMessage);
         }
 

@@ -72,7 +72,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
         }
 
         metadata.setSnapshotSyncSeqNum(lastProcessedSeq);
-        log.debug("SnapshotSinkBufferManager send ACK {} for {}", lastProcessedSeq, metadata);
+        log.info("SnapshotSinkBufferManager send ACK {} for {}", lastProcessedSeq, metadata);
         return metadata;
     }
 

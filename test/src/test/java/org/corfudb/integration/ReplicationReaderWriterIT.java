@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -371,7 +372,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             writer.apply(msg);
         }
 
-        Long seq = writer.getLogReplicationMetadataManager().getLastSnapSeqNum() + 1;
+        Long seq = writer.getLogReplicationMetadataManager().queryPersistedMetadata().getSnapshotMessageReceivedSeqNum() + 1;
         writer.applyShadowStreams(seq);
     }
 
@@ -615,7 +616,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         setupEnv();
         try {
             LogReplicationMetadataManager meta = new LogReplicationMetadataManager(writerRuntime, 0, PRIMARY_SITE_ID);
-            meta.getLastProcessedLogTimestamp();
+            meta.queryPersistedMetadata().getLastLogEntryProcessedTimestamp();
         } catch (Exception e) {
             e.getStackTrace();
             throw e;

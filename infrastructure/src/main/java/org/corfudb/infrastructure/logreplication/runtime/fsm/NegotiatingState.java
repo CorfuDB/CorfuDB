@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationNegotiationException;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
@@ -146,12 +147,14 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
 
+        LogReplicationMetadata.LogReplicationMetadataVal metadataVal = metadataManager.queryPersistedMetadata();
+
         /*
          * If the version are different, report an error.
          */
-        if (!negotiationResponse.getVersion().equals(metadataManager.getVersion())) {
+        if (!negotiationResponse.getVersion().equals(metadataVal.getVersion())) {
             log.error("The active site version {} is different from standby site version {}",
-                    metadataManager.getVersion(), negotiationResponse.getVersion());
+                    metadataVal.getVersion(), negotiationResponse.getVersion());
             throw new LogReplicationNegotiationException(" Mismatch of version number");
         }
 
@@ -159,9 +162,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The standby site has a smaller config ID, redo the discovery for this standby site when
          * getting a new notification of the site config change if this standby is in the new config.
          */
-        if (negotiationResponse.getTopologyConfigId() < metadataManager.getTopologyConfigId()) {
+        if (negotiationResponse.getTopologyConfigId() < metadataVal.getTopologyConfigId()) {
             log.error("The active site configID {} is bigger than the standby configID {} ",
-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigId());
+                    metadataVal.getTopologyConfigId(), negotiationResponse.getTopologyConfigId());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -169,9 +172,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The standby site has larger config ID, redo the whole discovery for the active site
          * it will be triggered by a notification of the site config change.
          */
-        if (negotiationResponse.getTopologyConfigId() > metadataManager.getTopologyConfigId()) {
+        if (negotiationResponse.getTopologyConfigId() > metadataVal.getTopologyConfigId()) {
             log.error("The active site configID {} is smaller than the standby configID {} ",
-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigId());
+                    metadataVal.getTopologyConfigId(), negotiationResponse.getTopologyConfigId());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 

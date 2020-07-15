@@ -94,7 +94,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 preMsgTs, snapshotTimestamp, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
-        log.debug("Generate TxMsg {}", txMsg.getMetadata());
+        log.trace("Generate TxMsg {}", txMsg.getMetadata());
         return txMsg;
     }
 
@@ -131,7 +131,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         //  maximize payload (default 4MB for GRPC case)
         List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
         LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
-        log.info("Successfully pass stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);
+        log.trace("Successfully pass stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);
         return txMsg;
     }
 
@@ -160,7 +160,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                     break;
                 } else {
                     // Skip process this stream as it has no entries to process, will poll the next one.
-                    log.info("Snapshot logreader will skip reading stream {} as there are no entries to send",
+                    log.info("Snapshot log reader will skip reading stream {} as there are no entries to send",
                             currentStreamInfo.uuid);
                 }
             }

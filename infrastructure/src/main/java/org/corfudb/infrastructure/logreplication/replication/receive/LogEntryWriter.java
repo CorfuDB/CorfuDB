@@ -4,6 +4,7 @@ import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -85,30 +86,25 @@ public class LogEntryWriter {
             throw new ReplicationWriterException("Wrong streams set");
         }
 
-
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
-        long persistSiteConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-        long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-        long persistSnapDone= logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
-        long persistLogTS = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_PROCESSED);
+        LogReplicationMetadataVal metadataVal = logReplicationMetadataManager.queryPersistedMetadata();
 
         long topologyConfigId = txMessage.getMetadata().getTopologyConfigId();
         long ts = txMessage.getMetadata().getSnapshotTimestamp();
         long entryTS= txMessage.getMetadata().getTimestamp();
 
-        lastMsgTs = Math.max(persistLogTS, lastMsgTs);
+        lastMsgTs = Math.max(metadataVal.getLastLogEntryProcessedTimestamp(), lastMsgTs);
 
-        if (topologyConfigId != persistSiteConfigID || ts != persistSnapStart || ts != persistSnapDone ||
-                txMessage.getMetadata().getPreviousTimestamp() != persistLogTS) {
-            log.warn("Skip write this msg {} as its timestamp is later than the persisted one " +
-                    txMessage.getMetadata() +  " persisteSiteConfig " + persistSiteConfigID + " persistSnapStart " + persistSnapStart +
-                    " persistSnapDone " + persistSnapDone + " persistLogTs " + persistLogTS);
+        if (topologyConfigId != metadataVal.getTopologyConfigId() || ts != metadataVal.getSnapshotStartTimestamp() ||
+                ts != metadataVal.getSnapshotTransferredTimestamp() || ts != metadataVal.getSnapshotAppliedTimestamp() ||
+                txMessage.getMetadata().getPreviousTimestamp() != metadataVal.getLastLogEntryProcessedTimestamp()) {
+            log.warn("Skip write this msg {} as its timestamp is later than the persisted one {}.",
+                    txMessage.getMetadata(), logReplicationMetadataManager.getPersistedMetadataStr(metadataVal));
             return;
         }
 
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_PROCESSED, entryTS);
+        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataName.LAST_LOG_PROCESSED, entryTS);
 
         for (UUID uuid : opaqueEntry.getEntries().keySet()) {
             for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
@@ -117,6 +113,7 @@ public class LogEntryWriter {
         }
 
         txBuilder.commit(timestamp);
+
         lastMsgTs = Math.max(entryTS, lastMsgTs);
     }
 
