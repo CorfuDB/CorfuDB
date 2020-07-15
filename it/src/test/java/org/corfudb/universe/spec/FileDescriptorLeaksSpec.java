@@ -34,6 +34,10 @@ public class FileDescriptorLeaksSpec {
                 .getBaseClient(server.getEndpoint())
                 .reset();
 
+        return this;
+    }
+
+    public FileDescriptorLeaksSpec timeout() throws InterruptedException {
         TimeUnit.SECONDS.sleep(defaultRestartTimeout.getSeconds());
         return this;
     }

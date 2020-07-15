@@ -1,16 +1,15 @@
 package org.corfudb.runtime.clients;
 
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
+
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * This is a base client which sends basic messages.
@@ -93,8 +92,11 @@ public class BaseClient implements IClient {
      * the endpoint acks, otherwise False or exceptional completion.
      */
     public CompletableFuture<Boolean> reset() {
-        return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESET)
-                .setEpoch(epoch).setClusterID(clusterId));
+        CorfuMsg msg = new CorfuMsg(CorfuMsgType.RESET)
+                .setEpoch(epoch)
+                .setClusterID(clusterId);
+
+        return router.sendMessageAndGetCompletable(msg);
     }
 
     /**

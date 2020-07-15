@@ -945,10 +945,10 @@ public class CorfuRuntime {
 
                 Collections.shuffle(layoutServersCopy);
                 // Iterate through the layout servers, attempting to connect to one
-                for (String s : layoutServersCopy) {
-                    log.trace("Trying connection to layout server {}", s);
+                for (String server : layoutServersCopy) {
+                    log.trace("Trying connection to layout server {}", server);
                     try {
-                        IClientRouter router = getRouter(s);
+                        IClientRouter router = getRouter(server);
                         // Try to get a layout.
                         CompletableFuture<Layout> layoutFuture =
                                 new LayoutClient(router, Layout.INVALID_EPOCH, Layout.INVALID_CLUSTER_ID).getLayout();
@@ -973,7 +973,7 @@ public class CorfuRuntime {
 
                         layout = layoutFuture;
                         latestLayout = l;
-                        log.debug("Layout server {} responded with layout {}", s, l);
+                        log.debug("Layout server {} responded with layout {}", server, latestLayout);
 
                         // Prune away removed node routers from the nodeRouterPool.
                         pruneRemovedRouters(l);
@@ -988,13 +988,13 @@ public class CorfuRuntime {
                         throw we;
                     } catch (ExecutionException ee){
                         if (ee.getCause() instanceof TimeoutException) {
-                            log.warn("Tried to get layout from {} but failed by timeout", s);
+                            log.warn("Tried to get layout from {} but failed by timeout", server);
                         } else {
-                            log.warn("Tried to get layout from {} but failed with exception:", s, ee);
+                            log.warn("Tried to get layout from {} but failed with exception:", server, ee);
                         }
                     }
                     catch (Exception e) {
-                        log.warn("Tried to get layout from {} but failed with exception:", s, e);
+                        log.warn("Tried to get layout from {} but failed with exception:", server, e);
                     }
                 }
 

@@ -63,6 +63,13 @@ public class FileDescriptorLeaksIT extends GenericIntegrationTest {
                 .corfuClient(corfuClient)
                 .build()
                 .resetServer()
+                .timeout()
                 .check();
+
+        corfuClient = corfuCluster.getLocalCorfuClient();
+        table = corfuClient.createDefaultCorfuTable(DEFAULT_STREAM_NAME);
+        for (int i = 0; i < 100; i++) {
+            table.put(String.valueOf(i), String.valueOf(i));
+        }
     }
 }
