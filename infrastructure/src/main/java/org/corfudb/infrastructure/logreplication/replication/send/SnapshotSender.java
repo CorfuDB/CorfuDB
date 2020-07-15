@@ -93,7 +93,7 @@ public class SnapshotSender {
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
             // or snapshot sync is stopped
             dataSenderBufferManager.resend();
-            while (messagesSent < snapshotSyncBatchSize && !dataSenderBufferManager.getPendingMessages().isFull() &&!completed && !stopSnapshotSync) {
+            while (messagesSent < snapshotSyncBatchSize && !dataSenderBufferManager.getPendingMessages().isFull() && !completed && !stopSnapshotSync) {
 
                 try {
                     snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
