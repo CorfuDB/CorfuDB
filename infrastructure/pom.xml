@@ -94,6 +94,30 @@
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>com.github.os72</groupId>
+                <artifactId>protoc-jar-maven-plugin</artifactId>
+                <version>3.7.0.1</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <protocVersion>3.6.1</protocVersion>
+                            <includeStdTypes>true</includeStdTypes>
+                            <addProtoSources>inputs</addProtoSources>
+                            <inputDirectories>
+                                <include>src/proto</include>
+                            </inputDirectories>
+                            <outputDirectory>
+                                target/generated-sources
+                            </outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Make a folder `target/*-shaded.jar/` with this project and all its dependencies -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -138,14 +162,14 @@
             <artifactId>runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.corfudb</groupId>
-            <artifactId>format</artifactId>
-            <version>${project.version}</version>
-        </dependency>
 
 
         <!-- External Dependencies-->
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.6.1</version>
+        </dependency>
         <dependency>
             <groupId>com.offbytwo</groupId>
             <artifactId>docopt</artifactId>

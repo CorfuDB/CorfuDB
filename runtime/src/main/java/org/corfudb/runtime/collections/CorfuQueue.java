@@ -2,16 +2,14 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.InvalidProtocolBufferException;
-import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.format.Types;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.Queue.CorfuQueueIdMsg;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
-import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -22,7 +20,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -99,7 +96,7 @@ public class CorfuQueue<E> {
          * @throws InvalidProtocolBufferException - invalid set of bytes
          */
         public CorfuRecordId(byte[] from) throws InvalidProtocolBufferException {
-            Types.CorfuQueueIdMsg to = Types.CorfuQueueIdMsg.parseFrom(from);
+            CorfuQueueIdMsg to = CorfuQueueIdMsg.parseFrom(from);
             this.txSequence = to.getTxSequence();
             this.entryId = to.getEntryId();
         }
@@ -108,7 +105,7 @@ public class CorfuQueue<E> {
          * @return serialized representation of the CorfuRecordId as a byte[]
          */
         public byte[] toByteArray() {
-            return Types.CorfuQueueIdMsg.newBuilder()
+            return CorfuQueueIdMsg.newBuilder()
                     .setTxSequence(txSequence)
                     .setEntryId(entryId)
                     .build().toByteArray();

@@ -1,4 +1,4 @@
-option java_package = "org.corfudb.format";
+option java_package = "org.corfudb.infrastructure.log";
 
 enum DataType {
     DATA = 0;
@@ -51,11 +51,6 @@ message LogEntry {
 message LogHeader {
     optional int32 version = 1;
     optional bool verify_checksum = 2;
-}
-
-message CorfuQueueIdMsg {
-    optional int64 txSequence = 1;
-    optional int64 entryId = 2;
 }
 
 message Metadata {

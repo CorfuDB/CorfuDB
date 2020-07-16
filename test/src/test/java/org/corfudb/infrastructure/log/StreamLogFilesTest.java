@@ -21,11 +21,11 @@ import java.util.Set;
 import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.format.Types;
-import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
+import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -594,7 +594,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         dir.mkdir();
         RandomAccessFile logFile = new RandomAccessFile(logFilePath, "rw");
 
-        Types.LogHeader header = Types.LogHeader.newBuilder()
+        LogHeader header = LogHeader.newBuilder()
                 .setVersion(StreamLogFiles.VERSION)
                 .setVerifyChecksum(false)
                 .build();
@@ -621,7 +621,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         dir.mkdir();
         RandomAccessFile logFile = new RandomAccessFile(logFilePath, "rw");
 
-        Types.LogHeader header = Types.LogHeader.newBuilder()
+        LogHeader header = LogHeader.newBuilder()
                 .setVersion(StreamLogFiles.VERSION)
                 .setVerifyChecksum(false)
                 .build();
