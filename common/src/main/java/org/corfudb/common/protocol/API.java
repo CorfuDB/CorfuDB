@@ -33,9 +33,8 @@ public class API {
     }
 
     public static Header newHeader(long requestId, Priority priority, MessageType type,
-                                   long epoch, UUID clusterId, boolean ignoreClusterId,
-                                   boolean ignoreEpoch) {
-        /* TODO(ZACH): Incorporate clientId into header? */
+                                   long epoch, UUID clusterId, UUID clientId,
+                                   boolean ignoreClusterId, boolean ignoreEpoch) {
         return Header.newBuilder()
                 .setVersion(CURRENT_VERSION)
                 .setRequestId(requestId)
@@ -43,6 +42,7 @@ public class API {
                 .setType(type)
                 .setEpoch(epoch)
                 .setClusterId(getUUID(clusterId))
+                .setClientId(getUUID(clientId))
                 .setIgnoreClusterId(ignoreClusterId)
                 .setIgnoreEpoch(ignoreEpoch)
                 .build();
