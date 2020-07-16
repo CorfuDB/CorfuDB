@@ -16,6 +16,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.CorfuExceptions;
+import org.corfudb.common.protocol.UniversalMsgDecoder;
+import org.corfudb.common.protocol.UniversalMsgEncoder;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
@@ -26,11 +28,7 @@ import javax.annotation.Nonnull;
 import java.net.InetSocketAddress;
 import java.sql.Time;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -173,13 +171,15 @@ public abstract class ChannelHandler extends ResponseHandler {
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
-                ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
-                        config.getKeepAlivePeriodInMs(), 0));
+                /*ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
+                        config.getKeepAlivePeriodInMs(), 0));*/
 
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
                         0, 4, 0,
                         4));
+                ch.pipeline().addLast(new UniversalMsgDecoder());
+                ch.pipeline().addLast(new UniversalMsgEncoder());
 
                 /**
                  ch.pipeline().addLast(new NettyCorfuMessageDecoder());
@@ -222,22 +222,27 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     protected <T> CompletableFuture<T> sendRequest(Request request) {
         requestLock.readLock().lock();
-
+        CompletableFuture<T> retVal = new CompletableFuture<>();
         try {
             checkArgument(request.hasHeader());
             Header header = request.getHeader();
-            CompletableFuture<T> retVal = new CompletableFuture<>();
+
             pendingRequests.put(header.getRequestId(), retVal);
-            ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+//            ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
             // TODO(Maithem): remove allocation
-            outBuf.writeBytes(request.toByteArray());
+//            outBuf.writeBytes(request.toByteArray());
             // TODO(Maithem): Handle pipeline errors
-            channel.writeAndFlush(outBuf);
+
+            channel.writeAndFlush(request);
+//            System.out.println("test");
             requestTimeoutQueue.add(new RequestTime(System.currentTimeMillis(), header.getRequestId()));
-            return retVal;
+
+        } catch (Exception e) {
+            log.error(e.getMessage());
         } finally {
             requestLock.readLock().unlock();
         }
+        return retVal;
     }
 
     @Override
