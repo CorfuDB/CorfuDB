@@ -171,13 +171,19 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + " --metrics-port=<metrics_port>                                            "
                     + "              Metrics provider server port [default: 9999].\n             "
                     + " --snapshot-batch=<batch-size>                                            "
-                    + "              Snapshot (Full) Sync batch size (number of entries)\n       "
+                    + "              Snapshot (Full) Sync batch size.\n                          "
+                    + "              The max number of message per cycle)\n                      "
+                    + "                                                                          "
+                    + " --max-data-message-size=<msg-size>                                       "
+                    + "              The max size of replication data message size in bytes.\n   "
+                    + "                                                                          "
                     + " --lock-lease=<lease-duration>                                            "
                     + "              Lock lease duration in seconds\n                            "
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
                     + "              Show version\n";
+
 
     // Active Corfu Server Node.
     private volatile CorfuInterClusterReplicationServerNode activeServer;

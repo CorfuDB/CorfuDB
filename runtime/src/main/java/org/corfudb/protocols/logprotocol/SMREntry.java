@@ -7,11 +7,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
+import io.netty.buffer.Unpooled;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
@@ -19,6 +21,7 @@ import org.corfudb.util.serializer.Serializers;
 
 import static com.google.common.base.Preconditions.checkState;
 
+@Slf4j
 /**
  * Created by mwei on 1/8/16.
  */
@@ -100,6 +103,11 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     }
 
     /**
+     * The SMREntry serialized size.
+     */
+    int serializedSize = 0;
+
+    /**
      * This function provides the remaining buffer. Child entries
      * should initialize their contents based on the buffer.
      *
@@ -107,6 +115,8 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      */
     @Override
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
+        int readIndex = b.readerIndex();
+
         super.deserializeBuffer(b, rt);
         short methodLength = b.readShort();
         byte[] methodBytes = new byte[methodLength];
@@ -135,6 +145,23 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
             b.skipBytes(len);
         }
         SMRArguments = arguments;
+        serializedSize = b.readerIndex() - readIndex;
+    }
+
+
+    public void calculateSerializedSize() {
+        ByteBuf buf = Unpooled.buffer();
+        serialize(buf);
+        serializedSize = buf.writerIndex();
+        log.warn("It is an expensive operation");
+    }
+
+    public synchronized int getSerializedSize() {
+        if (serializedSize == 0) {
+            calculateSerializedSize();
+        }
+
+        return serializedSize;
     }
 
     /**
