@@ -175,8 +175,8 @@ public abstract class ChannelHandler extends ResponseHandler {
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
-                /*ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
-                        config.getKeepAlivePeriodInMs(), 0));*/
+                // ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
+                //        config.getKeepAlivePeriodInMs(), 0));
 
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
@@ -230,6 +230,7 @@ public abstract class ChannelHandler extends ResponseHandler {
             CompletableFuture<T> retVal = new CompletableFuture<>();
             pendingRequests.put(header.getRequestId(), retVal);
             ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+            outBuf.writeByte(0x2); // Temporary -- Add Corfu msg marker indicating new message type
             // TODO(Maithem): remove allocation
             outBuf.writeBytes(request.toByteArray());
             // TODO(Maithem): Handle pipeline errors
