@@ -25,7 +25,20 @@ public class NettyCorfuMessageDecoder extends MessageToMessageDecoder<ByteBuf> {
             return;
         }
 
-        byteBuf.readByte();
+        byteBuf.readByte(); // Temporary -- Consume marker that indicates msg as legacy
         list.add(CorfuMsg.deserialize(byteBuf));
+    }
+
+    @Override
+    protected void decodeLast(ChannelHandlerContext ctx, ByteBuf in,
+                              List<Object> out) throws Exception {
+        //log.info("Netty channel handler context goes inactive, received out size is {}",
+        // (out == null) ? null : out.size());
+
+        if (in != Unpooled.EMPTY_BUFFER) {
+            this.decode(ctx, in, out);
+        }
+        // ignore the Netty generated {@link EmptyByteBuf empty ByteBuf message} when channel
+        // handler goes inactive (typically happened after each received burst of batch of messages)
     }
 }

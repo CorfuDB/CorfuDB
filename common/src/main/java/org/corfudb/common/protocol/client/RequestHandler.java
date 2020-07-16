@@ -20,6 +20,15 @@ public abstract class RequestHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;
+
+        // Temporary -- Check Corfu msg marker: 0x1 indicates legacy while 0x2 indicates new
+        if(msgBuf.getByte(msgBuf.readerIndex()) == 0x1) {
+            ctx.fireChannelRead(msgBuf); // Forward legacy corfu msg to next handler
+            return;
+        }
+
+        msgBuf.readByte(); // Temporary -- Consume 0x2 marker
+
         ByteBufInputStream msgInputStream = new ByteBufInputStream(msgBuf);
         
         try {
