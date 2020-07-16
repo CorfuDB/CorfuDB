@@ -33,16 +33,15 @@ public class PeerClient extends ChannelHandler {
 
     volatile long epoch = -1;
 
-    final UUID clusterId = new UUID(1234,1234);
+    final UUID clusterId = null;
 
     public PeerClient(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, ClientConfig config) {
         super(remoteAddress, eventLoopGroup, config);
     }
 
     private Header getHeader(MessageType type, boolean ignoreClusterId, boolean ignoreEpoch) {
-        /* TODO(Zach): Incorporate clientId into header? */
-        return API.newHeader(generateRequestId(), priority, type,
-                epoch, clusterId, ignoreClusterId, ignoreEpoch);
+        return API.newHeader(generateRequestId(), priority, type, epoch,
+               API.DEFAULT_UUID, config.getClientId(), ignoreClusterId, ignoreEpoch);
     }
 
     public CompletableFuture<Void> ping() {
@@ -60,19 +59,30 @@ public class PeerClient extends ChannelHandler {
 
     public CompletableFuture<Response> authenticate() {
         Header header = getHeader(MessageType.AUTHENTICATE, false, true);
-        // TODO(Zach): Where to get serverId in UUID form? When to use which?
         // TODO(Zach): Handle timeout?
-        return sendRequest(API.newAuthenticateRequest(header, config.getClientId(), API.DEFAULT_UUID));
+        return sendRequest(API.newAuthenticateRequest(header, config.getClientId(), config.getNodeId()));
     }
 
-    // TODO: Handled in ClientHandshakeHandler?
     protected void handleAuthenticate(Response response) {
         UUID serverId = new UUID(response.getAuthenticateResponse().getServerId().getMsb(),
                                 response.getAuthenticateResponse().getServerId().getLsb());
         String corfuVersion = response.getAuthenticateResponse().getCorfuVersion();
 
-        // if nodeId == API.DEFAULT_UUID or nodeId == serverId then handshake successful
-        // else handshake failed
+        // Validate handshake, but first verify if node identifier is set to default (all 0's)
+        // which indicates node id matching is not required.
+        if(config.getNodeId().equals(API.DEFAULT_UUID)) {
+            log.info("handleAuthenticate: node id matching is not requested by client.");
+        } else if(!config.getNodeId().equals(serverId)) {
+            log.error("handleAuthenticate: Handshake validation failed. Server node id mismatch.");
+            log.debug("handleAuthenticate: Client opened socket to server [{}] instead, connected to: [{}]",
+                    config.getNodeId(), serverId);
+            // TODO(Zach): Any remaining handling
+            return;
+        }
+
+        log.info("handleAuthenticate: Handshake succeeded. Server Corfu Version: [{}]", corfuVersion);
+        // TODO(Zach): Signal success
+        // completeRequest(response.getHeader().getRequestId(), response.getAuthenticateResponse());
     }
 
     protected void handleSeal(Response response) {
@@ -181,7 +191,8 @@ public class PeerClient extends ChannelHandler {
                 100000,
                 false,
                 false,
-                new UUID(1234,1234)
+                new UUID(1234,1234),
+                API.DEFAULT_UUID
         );
         InetSocketAddress remoteAddress = new InetSocketAddress(InetAddress.getByName("localhost"),9000);
         EventLoopGroup eventLoopGroup = new NioEventLoopGroup();

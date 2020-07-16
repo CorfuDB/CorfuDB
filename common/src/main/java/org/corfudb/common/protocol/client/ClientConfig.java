@@ -32,5 +32,5 @@ public class ClientConfig {
     private final boolean enableTls;
     private final boolean enableSasl;
     private final UUID clientId;
-
+    private final UUID nodeId;
 }
