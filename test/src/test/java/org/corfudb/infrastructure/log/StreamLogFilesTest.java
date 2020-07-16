@@ -24,8 +24,8 @@ import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
-import org.corfudb.infrastructure.log.format.Types;
-import org.corfudb.infrastructure.log.format.Types.Metadata;
+import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -594,7 +594,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         dir.mkdir();
         RandomAccessFile logFile = new RandomAccessFile(logFilePath, "rw");
 
-        Types.LogHeader header = Types.LogHeader.newBuilder()
+        LogHeader header = LogHeader.newBuilder()
                 .setVersion(StreamLogFiles.VERSION)
                 .setVerifyChecksum(false)
                 .build();
@@ -621,7 +621,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         dir.mkdir();
         RandomAccessFile logFile = new RandomAccessFile(logFilePath, "rw");
 
-        Types.LogHeader header = Types.LogHeader.newBuilder()
+        LogHeader header = LogHeader.newBuilder()
                 .setVersion(StreamLogFiles.VERSION)
                 .setVerifyChecksum(false)
                 .build();
