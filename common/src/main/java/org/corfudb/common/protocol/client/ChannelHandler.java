@@ -175,8 +175,8 @@ public abstract class ChannelHandler extends ResponseHandler {
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
-                ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
-                        config.getKeepAlivePeriodInMs(), 0));
+                /*ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
+                        config.getKeepAlivePeriodInMs(), 0));*/
 
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
