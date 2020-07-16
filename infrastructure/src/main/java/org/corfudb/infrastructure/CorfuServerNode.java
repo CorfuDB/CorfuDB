@@ -11,16 +11,11 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
-import io.netty.handler.codec.protobuf.ProtobufDecoder;
-import io.netty.handler.codec.protobuf.ProtobufEncoder;
-import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
-import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.protocol.UniversalMsgDecoder;
-import org.corfudb.common.protocol.UniversalMsgEncoder;
+import org.corfudb.common.protocol.ServerRequestHandler;
 import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
@@ -212,7 +207,7 @@ public class CorfuServerNode implements AutoCloseable {
                     .channel(context.getChannelImplementation().getServerChannelClass());
             bootstrapConfigurer.configure(bootstrap);
 
-            bootstrap.childHandler(getServerChannelInitializerWithProtobuf(context, router)); // Temporary
+            bootstrap.childHandler(getServerChannelInitializerPeer(context, router)); // Temporary
             boolean bindToAllInterfaces =
                     Optional.ofNullable(context.getServerConfig(Boolean.class, "--bind-to-all-interfaces"))
                             .orElse(false);
@@ -343,101 +338,27 @@ public class CorfuServerNode implements AutoCloseable {
         };
     }
 
-    private static ChannelInitializer getServerChannelInitializerWithProtobuf(@Nonnull ServerContext context,
+    private static ChannelInitializer getServerChannelInitializerPeer(@Nonnull ServerContext context,
                                                                   @Nonnull NettyServerRouter router) {
         // Generate the initializer.
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
-
-                // Security variables
-                final SslContext sslContext;
-                final String[] enabledTlsProtocols;
-                final String[] enabledTlsCipherSuites;
-
-                // Security Initialization
-                Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
-                Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
-                        "--enable-tls-mutual-auth");
-                if (tlsEnabled) {
-                    // Get the TLS cipher suites to enable
-                    String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
-                    if (ciphs != null) {
-                        enabledTlsCipherSuites = Pattern.compile(",")
-                                .splitAsStream(ciphs)
-                                .map(String::trim)
-                                .toArray(String[]::new);
-                    } else {
-                        enabledTlsCipherSuites = new String[]{};
-                    }
-
-                    // Get the TLS protocols to enable
-                    String protos = context.getServerConfig(String.class, "--tls-protocols");
-                    if (protos != null) {
-                        enabledTlsProtocols = Pattern.compile(",")
-                                .splitAsStream(protos)
-                                .map(String::trim)
-                                .toArray(String[]::new);
-                    } else {
-                        enabledTlsProtocols = new String[]{};
-                    }
-
-                    try {
-                        sslContext = SslContextConstructor.constructSslContext(true,
-                                context.getServerConfig(String.class, "--keystore"),
-                                context.getServerConfig(String.class, "--keystore-password-file"),
-                                context.getServerConfig(String.class, "--truststore"),
-                                context.getServerConfig(String.class,
-                                        "--truststore-password-file"));
-                    } catch (SSLException e) {
-                        log.error("Could not build the SSL context", e);
-                        throw new RuntimeException("Couldn't build the SSL context", e);
-                    }
-                } else {
-                    enabledTlsCipherSuites = new String[]{};
-                    enabledTlsProtocols = new String[]{};
-                    sslContext = null;
-                }
-
-                Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
-                        "--enable-sasl-plain-text-auth");
-
-                // If TLS is enabled, setup the encryption pipeline.
-                /*if (tlsEnabled) {
-                    SSLEngine engine = sslContext.newEngine(ch.alloc());
-                    engine.setEnabledCipherSuites(enabledTlsCipherSuites);
-                    engine.setEnabledProtocols(enabledTlsProtocols);
-                    if (tlsMutualAuthEnabled) {
-                        engine.setNeedClientAuth(true);
-                    }
-                    ch.pipeline().addLast("ssl", new SslHandler(engine));
-                }*/
                 // Add/parse a length field
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
                         .MAX_VALUE, 0, 4,
                         0, 4));
-                // If SASL authentication is requested, perform a SASL plain-text auth.
-                /*if (saslPlainTextAuth) {
-                    ch.pipeline().addLast("sasl/plain-text", new
-                            PlainTextSaslNettyServer());
-                }*/
 
-                // Encapsulate messages in UniversalMsg -- Temporary
-               // ch.pipeline().addLast(new ProtobufVarint32FrameDecoder());
-               // ch.pipeline().addLast(new ProtobufDecoder(CorfuProtocol.UniversalMsg.getDefaultInstance()));
-               // ch.pipeline().addLast(new ProtobufVarint32LengthFieldPrepender());
-               // ch.pipeline().addLast(new ProtobufEncoder());
-                ch.pipeline().addLast(new UniversalMsgDecoder());
-                ch.pipeline().addLast(new UniversalMsgEncoder());
+                ch.pipeline().addLast((new ServerRequestHandler())); // Handle new message types
 
                 // Transform the framed message into a Corfu message.
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
-                /*ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
-                        Version.getVersionString() + "("
-                                + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
-                        context.getServerConfig(String.class, "--HandshakeTimeout")));*/
+                // ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
+                //        Version.getVersionString() + "("
+                //                + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
+                //        context.getServerConfig(String.class, "--HandshakeTimeout")));
                 // Route the message to the server class.
                 ch.pipeline().addLast(router);
             }

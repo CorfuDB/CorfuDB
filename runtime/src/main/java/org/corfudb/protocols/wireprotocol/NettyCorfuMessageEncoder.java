@@ -22,6 +22,7 @@ public class NettyCorfuMessageEncoder extends MessageToByteEncoder<CorfuMsg> {
                           CorfuMsg corfuMsg,
                           ByteBuf byteBuf) throws Exception {
         try {
+            byteBuf.writeByte(0x1); // Temporary -- Marks the Corfu msg as legacy
             corfuMsg.serialize(byteBuf);
             if(log.isDebugEnabled()) {
                 long prev = maxValue.get();

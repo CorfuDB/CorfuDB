@@ -25,6 +25,7 @@ enum MessageType {
     COMMIT_TRANSACTION = 9;
     BOOTSTRAP = 10;
     QUERY_STREAM = 16;
+
     READ_LOG = 17;
     QUERY_LOG_METADATA = 18;
     TRIM_LOG = 19;
@@ -103,18 +104,19 @@ message SealResponse {
 
 }
 
+// Retrieve layout
 message GetLayoutRequest {
-
+    int64 epoch = 1;
 }
 
 message GetLayoutResponse {
-
+    //TODO: How to represent a layout?
 }
 
-// Request in first phase of Paxos.
+// Request in first phase of Paxos
 message PrepareLayoutRequest {
-    int64 epoch = 1; // Marks the boundary of a layout update.
-    int64 rank = 2; // Denotes a round started by a proposer (within an epoch).
+    int64 epoch = 1;
+    int64 rank = 2;
 }
 
 message PrepareLayoutResponse {
@@ -315,19 +317,5 @@ message Response {
         ReportFailureResponse reportFailureResponse = 118;
         HealFailureResponse healFailureResponse = 119;
         ExecuteWorkflowResponse executeWorkflowResponse = 120;
-    }
-}
-
-// Legacy corfu message serialized in bytes -- Temporary
-message LegacyCorfuMsg {
-    bytes payload = 1;
-}
-
-// Universal wrapper message type -- Temporary
-message UniversalMsg {
-    oneof payload {
-        Request msgRequest = 1;
-        Response msgResponse = 2;
-        LegacyCorfuMsg legacyCorfuMsg = 3;
     }
 }

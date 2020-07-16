@@ -12,6 +12,8 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ProtocolVersion;
 import org.corfudb.common.protocol.proto.CorfuProtocol.StreamAddressRange;
 import org.corfudb.common.protocol.proto.CorfuProtocol.QueryStreamRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.GetLayoutRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.PrepareLayoutRequest;
 
 import java.util.List;
 import java.util.UUID;
@@ -75,6 +77,25 @@ public class API {
         return Response.newBuilder()
                 .setHeader(header)
                 .setAuthenticateResponse(authResponse)
+                .build();
+    }
+
+    public static Request newGetLayoutRequest(Header header, long epoch) {
+        GetLayoutRequest layoutRequest = GetLayoutRequest.newBuilder().setEpoch(epoch).build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setGetLayoutRequest(layoutRequest)
+                .build();
+    }
+
+    public static Request newPrepareLayoutRequest(Header header,long epoch, long rank) {
+        PrepareLayoutRequest prepLayoutRequest = PrepareLayoutRequest.newBuilder()
+                                                            .setEpoch(epoch)
+                                                            .setRank(rank)
+                                                            .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setPrepareLayoutRequest(prepLayoutRequest)
                 .build();
     }
 
