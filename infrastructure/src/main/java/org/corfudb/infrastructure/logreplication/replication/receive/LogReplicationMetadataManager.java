@@ -14,6 +14,8 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
 
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
+
 /**
  * The table persisted at the replication writer side.
  * It records the log reader cluster's snapshot timestamp  and last log entry's timestamp, it has received and processed.
@@ -21,7 +23,7 @@ import org.corfudb.runtime.view.Address;
 @Slf4j
 public class LogReplicationMetadataManager {
 
-    private static final String namespace = "CORFU_SYSTEM";
+    private static final String namespace = CORFU_SYSTEM_NAMESPACE;
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
 
     private CorfuStore corfuStore;
