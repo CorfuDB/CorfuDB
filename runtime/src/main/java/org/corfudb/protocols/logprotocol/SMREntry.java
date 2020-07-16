@@ -103,9 +103,10 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     }
 
     /**
-     * The SMREntry serialized size.
+     * The SMREntry serialized size that only works for opaqueEntry.
+     * If it is not an opaqueEntry, a null pointer exception will be throwed.
      */
-    int serializedSize = 0;
+    Integer serializedSize = null;
 
     /**
      * This function provides the remaining buffer. Child entries
@@ -149,16 +150,35 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     }
 
 
-    public void calculateSerializedSize() {
-        ByteBuf buf = Unpooled.buffer();
-        serialize(buf);
-        serializedSize = buf.writerIndex();
-        log.warn("It is an expensive operation");
+    /**
+     * Calculate an Opaque SMR entry's serialized size.
+     * @throws IllegalAccessException
+     */
+    private int calculateSerializedSize() {
+        if (!opaque) {
+            log.error("This operation only supported for an opaque SMR entry");
+            return 0;
+        }
+
+        int size = 0;
+
+        for (Object smrArg : SMRArguments) {
+            size += ((byte[])smrArg).length;
+        }
+
+        size += (SMRMethod.length() * Character.BYTES);
+        size += Integer.BYTES;
+
+        return size;
     }
 
+    /**
+     * The serialized size of an opaque SMR entry.
+     * @return
+     */
     public synchronized int getSerializedSize() {
-        if (serializedSize == 0) {
-            calculateSerializedSize();
+        if (serializedSize == null) {
+            serializedSize = calculateSerializedSize();
         }
 
         return serializedSize;
@@ -190,6 +210,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
 
     @Override
     public void serialize(ByteBuf b) {
+        int startWriterIndex = b.writerIndex();
         super.serialize(b);
         b.writeShort(SMRMethod.length());
         b.writeBytes(SMRMethod.getBytes());
@@ -217,6 +238,8 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
                     b.writeInt(length);
                     b.writerIndex(lengthIndex + length + 4);
                 });
+
+        serializedSize = b.writerIndex() - startWriterIndex;
     }
 
     @Override

@@ -105,20 +105,22 @@ public class StreamsSnapshotReader implements SnapshotReader {
             currentMsgTs = snapshotTimestamp;
         }
 
-        ByteBuf buf = Unpooled.buffer();
+        ByteBuf buf = Unpooled.buffer(entryList.size);
         OpaqueEntry.serialize(buf, opaqueEntry);
-        ByteBuf newBuf = Unpooled.copiedBuffer(buf.array(), 0, buf.writerIndex());
+
+        // Make a new buf backed by data only.
+        ByteBuf newBuf = Unpooled.wrappedBuffer(buf.array(), 0, buf.writerIndex());
 
         LogReplicationEntry txMsg = new LogReplicationEntry(MessageType.SNAPSHOT_MESSAGE, topologyConfigId, snapshotRequestId, currentMsgTs,
                 preMsgTs, snapshotTimestamp, sequence, newBuf.array());
 
-        log.info("txMsg {} deepsize size {} buf size {} buf.writerIndex {} entryList.size {} numEntries {} deepSize size {}",
+        preMsgTs = currentMsgTs;
+        sequence++;
+
+        log.trace("txMsg {} deepsize size {} buf size {} buf.writerIndex {} entryList.size {} numEntries {} deepSize size {}",
                 txMsg.getMetadata(), MetricsUtils.sizeOf.deepSizeOf(txMsg), MetricsUtils.sizeOf.deepSizeOf(buf),
                 buf.writerIndex(), entryList.getSize(), entryList.getSmrEntries().size(), MetricsUtils.sizeOf.deepSizeOf(entryList.smrEntries));
 
-        preMsgTs = currentMsgTs;
-        sequence++;
-        log.debug("Generate TxMsg {}", txMsg.getMetadata());
         return txMsg;
     }
 
