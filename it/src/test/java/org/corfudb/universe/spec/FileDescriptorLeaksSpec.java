@@ -1,6 +1,7 @@
 package org.corfudb.universe.spec;
 
 import lombok.Builder;
+import lombok.Builder.Default;
 import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.universe.node.client.CorfuClient;
@@ -25,7 +26,7 @@ public class FileDescriptorLeaksSpec {
     @NonNull
     private final CorfuClient corfuClient;
 
-    private final Duration defaultRestartTimeout = Duration.ofSeconds(3);
+    private final Duration defaultRestartTimeout = Duration.ofSeconds(1);
 
     public FileDescriptorLeaksSpec resetServer() throws Exception {
         corfuClient.getRuntime()
@@ -37,8 +38,22 @@ public class FileDescriptorLeaksSpec {
         return this;
     }
 
+    public FileDescriptorLeaksSpec resetLogUnitServer(long epoch) {
+        corfuClient.getRuntime()
+                .getLayoutView()
+                .getRuntimeLayout()
+                .getLogUnitClient(server.getEndpoint())
+                .resetLogUnit(epoch);
+
+        return this;
+    }
+
     public FileDescriptorLeaksSpec timeout() throws InterruptedException {
-        TimeUnit.SECONDS.sleep(defaultRestartTimeout.getSeconds());
+        return timeout(defaultRestartTimeout);
+    }
+
+    public FileDescriptorLeaksSpec timeout(Duration duration) throws InterruptedException {
+        TimeUnit.SECONDS.sleep(duration.getSeconds());
         return this;
     }
 
@@ -50,7 +65,10 @@ public class FileDescriptorLeaksSpec {
                 .collect(Collectors.toList());
 
         for (LsofRecord record : lsOfList) {
-            if (record.path.startsWith("/app/" + server.getParams().getName() + "/db/corfu/log")) {
+            boolean isDeleted = record.state == FileState.DELETED;
+            boolean isCorfuLogFile = record.path.startsWith("/app/" + server.getParams().getName() + "/db/corfu/log");
+
+            if (isCorfuLogFile && isDeleted) {
                 fail("File descriptor leaks has been detected: " + record);
             }
         }
@@ -62,15 +80,33 @@ public class FileDescriptorLeaksSpec {
         private final int numberOfResources;
         private final String process;
         private final String path;
+        @Default
+        private final FileState state = FileState.NA;
 
         public static LsofRecord parse(String rawLsof) {
             String[] components = rawLsof.split("\t");
 
+            String path = components[2];
+            String[] pathAndState = path.split(" ");
+
+            FileState state = FileState.OPEN;
+            if (pathAndState.length > 1) {
+                String stateStr = pathAndState[pathAndState.length - 1].trim();
+                if (stateStr.equals("(deleted)")){
+                    state = FileState.DELETED;
+                }
+            }
+
             return LsofRecord.builder()
                     .numberOfResources(Integer.parseInt(components[0]))
                     .process(components[1])
-                    .path(components[2])
+                    .path(path)
+                    .state(state)
                     .build();
         }
+    }
+
+    enum FileState {
+        DELETED, OPEN, NA
     }
 }
