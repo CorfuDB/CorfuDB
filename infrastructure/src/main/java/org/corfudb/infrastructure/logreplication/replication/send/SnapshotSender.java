@@ -23,6 +23,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_SNAPSHOT_MSG_PER_CYCLE;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT;
+
 /**
  *  This class is responsible of transmitting a consistent view of the data at a given timestamp,
  *  i.e, reading and sending a snapshot of the data for the requested streams.
@@ -39,15 +42,14 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class SnapshotSender {
 
-    public static int DEFAULT_SNAPSHOT_BATCH_SIZE = 100;
-    public static final int DEFAULT_TIMEOUT = 5000;
-
     private CorfuRuntime runtime;
     private SnapshotReader snapshotReader;
     private SenderBufferManager dataSenderBufferManager;
     private LogReplicationFSM fsm;
     private long baseSnapshotTimestamp;
-    private final int snapshotSyncBatchSize;
+
+    // The max number of message can be sent over per cycle run during snapshot full sync state.
+    private final int maxNumSnapshotMsgPerCycle;
 
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
     private boolean startSnapshotSync = true;
@@ -65,7 +67,7 @@ public class SnapshotSender {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
         this.fsm = fsm;
-        this.snapshotSyncBatchSize = snapshotSyncBatchSize <= 0 ? DEFAULT_SNAPSHOT_BATCH_SIZE : snapshotSyncBatchSize;
+        this.maxNumSnapshotMsgPerCycle = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_SNAPSHOT_MSG_PER_CYCLE : snapshotSyncBatchSize;
         this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender);
     }
 
@@ -83,7 +85,7 @@ public class SnapshotSender {
 
         boolean completed = false;  // Flag indicating the snapshot sync is completed
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
-        int messagesSent = 0;       // Limit the number of messages to snapshotSyncBatchSize. The reason we need to limit
+        int messagesSent = 0;       // Limit the number of messages to maxNumSnapshotMsgPerCycle. The reason we need to limit
                                     // is because by design several state machines can share the same thread pool,
                                     // therefore, we need to hand the thread for other workers to execute.
         SnapshotReadMessage snapshotReadMessage;
@@ -93,7 +95,7 @@ public class SnapshotSender {
             // Read and Send Batch Size messages, unless snapshot is completed before (endRead)
             // or snapshot sync is stopped
             dataSenderBufferManager.resend();
-            while (messagesSent < snapshotSyncBatchSize && !dataSenderBufferManager.getPendingMessages().isFull() && !completed && !stopSnapshotSync) {
+            while (messagesSent < maxNumSnapshotMsgPerCycle && !dataSenderBufferManager.getPendingMessages().isFull() && !completed && !stopSnapshotSync) {
 
                 try {
                     snapshotReadMessage = snapshotReader.read(snapshotSyncEventId);
