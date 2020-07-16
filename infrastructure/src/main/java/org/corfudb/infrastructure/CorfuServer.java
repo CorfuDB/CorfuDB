@@ -4,6 +4,7 @@ import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
@@ -346,7 +347,18 @@ public class CorfuServer {
     private static void cleanShutdown() {
         log.info("CleanShutdown: Starting Cleanup.");
         shutdownServer = true;
-        activeServer.close();
+        try {
+            CorfuServerNode current = activeServer;
+            if (current != null) {
+                current.close();
+            }
+        } catch (Throwable th) {
+            log.error("cleanShutdown: failed during shutdown", th);
+        }
+
+        // Flush the async appender before exiting to prevent the loss of logs
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        loggerContext.stop();
     }
 
     /**
