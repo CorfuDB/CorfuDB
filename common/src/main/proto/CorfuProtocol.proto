@@ -111,8 +111,10 @@ message GetLayoutResponse {
 
 }
 
+// Request in first phase of Paxos.
 message PrepareLayoutRequest {
-
+    int64 epoch = 1; // Marks the boundary of a layout update.
+    int64 rank = 2; // Denotes a round started by a proposer (within an epoch).
 }
 
 message PrepareLayoutResponse {
@@ -160,6 +162,7 @@ message BootstrapResponse {
 
 }
 
+// Represents the request sent to the sequencer to retrieve one or several streams address map.
 message QueryStreamRequest {
     enum ReqType {
         STREAMS = 0;
