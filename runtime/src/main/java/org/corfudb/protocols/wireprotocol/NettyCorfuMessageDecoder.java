@@ -21,7 +21,7 @@ public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {
             throw new IllegalStateException("Received incorrectly marked message.");
         }
 
-        byteBuf.readByte();
+        byteBuf.readByte(); // Temporary -- Consume marker that indicates msg as legacy
         list.add(CorfuMsg.deserialize(byteBuf));
     }
 
