@@ -411,7 +411,7 @@ public class CorfuServerNode implements AutoCloseable {
                         "--enable-sasl-plain-text-auth");
 
                 // If TLS is enabled, setup the encryption pipeline.
-                if (tlsEnabled) {
+                /*if (tlsEnabled) {
                     SSLEngine engine = sslContext.newEngine(ch.alloc());
                     engine.setEnabledCipherSuites(enabledTlsCipherSuites);
                     engine.setEnabledProtocols(enabledTlsProtocols);
