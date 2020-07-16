@@ -315,21 +315,21 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
-                ch.pipeline().addLast(new IdleStateHandler(parameters.getIdleConnectionTimeout(),
+                /*ch.pipeline().addLast(new IdleStateHandler(parameters.getIdleConnectionTimeout(),
                         parameters.getKeepAlivePeriod(), 0));
                 if (parameters.isTlsEnabled()) {
                     ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
-                }
+                }*/
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
                         0, 4, 0,
                         4));
-                if (parameters.isSaslPlainTextEnabled()) {
+                /*if (parameters.isSaslPlainTextEnabled()) {
                     PlainTextSaslNettyClient saslNettyClient =
                             SaslUtils.enableSaslPlainText(parameters.getUsernameFile(),
                                     parameters.getPasswordFile());
                     ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
-                }
+                }*/
 
                 // Encapsulate messages in UniversalMsg -- Temporary
                 ch.pipeline().addLast(new ProtobufVarint32FrameDecoder());
@@ -341,15 +341,15 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
 
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
-                ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
-                        node.getNodeId(), parameters.getHandshakeTimeout()));
+                /*ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
+                        node.getNodeId(), parameters.getHandshakeTimeout()));*/
 
                 // If parameters include message filters, add corresponding filter handler
-                if (parameters.getNettyClientInboundMsgFilters() != null) {
+                /*if (parameters.getNettyClientInboundMsgFilters() != null) {
                     final InboundMsgFilterHandler inboundMsgFilterHandler =
                             new InboundMsgFilterHandler(parameters.getNettyClientInboundMsgFilters());
                     ch.pipeline().addLast(inboundMsgFilterHandler);
-                }
+                }*/
                 ch.pipeline().addLast(NettyClientRouter.this);
             }
         };

@@ -403,7 +403,7 @@ public class CorfuServerNode implements AutoCloseable {
                         "--enable-sasl-plain-text-auth");
 
                 // If TLS is enabled, setup the encryption pipeline.
-                if (tlsEnabled) {
+                /*if (tlsEnabled) {
                     SSLEngine engine = sslContext.newEngine(ch.alloc());
                     engine.setEnabledCipherSuites(enabledTlsCipherSuites);
                     engine.setEnabledProtocols(enabledTlsProtocols);
@@ -411,33 +411,33 @@ public class CorfuServerNode implements AutoCloseable {
                         engine.setNeedClientAuth(true);
                     }
                     ch.pipeline().addLast("ssl", new SslHandler(engine));
-                }
+                }*/
                 // Add/parse a length field
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
                         .MAX_VALUE, 0, 4,
                         0, 4));
                 // If SASL authentication is requested, perform a SASL plain-text auth.
-                if (saslPlainTextAuth) {
+                /*if (saslPlainTextAuth) {
                     ch.pipeline().addLast("sasl/plain-text", new
                             PlainTextSaslNettyServer());
-                }
+                }*/
 
                 // Encapsulate messages in UniversalMsg -- Temporary
-                ch.pipeline().addLast(new ProtobufVarint32FrameDecoder());
-                ch.pipeline().addLast(new ProtobufDecoder(CorfuProtocol.UniversalMsg.getDefaultInstance()));
-                ch.pipeline().addLast(new ProtobufVarint32LengthFieldPrepender());
-                ch.pipeline().addLast(new ProtobufEncoder());
+               // ch.pipeline().addLast(new ProtobufVarint32FrameDecoder());
+               // ch.pipeline().addLast(new ProtobufDecoder(CorfuProtocol.UniversalMsg.getDefaultInstance()));
+               // ch.pipeline().addLast(new ProtobufVarint32LengthFieldPrepender());
+               // ch.pipeline().addLast(new ProtobufEncoder());
                 ch.pipeline().addLast(new UniversalMsgDecoder());
                 ch.pipeline().addLast(new UniversalMsgEncoder());
 
                 // Transform the framed message into a Corfu message.
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
-                ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
+                /*ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
                         Version.getVersionString() + "("
                                 + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
-                        context.getServerConfig(String.class, "--HandshakeTimeout")));
+                        context.getServerConfig(String.class, "--HandshakeTimeout")));*/
                 // Route the message to the server class.
                 ch.pipeline().addLast(router);
             }

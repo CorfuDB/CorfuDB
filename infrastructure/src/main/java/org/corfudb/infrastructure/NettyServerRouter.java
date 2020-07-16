@@ -106,6 +106,12 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         return Optional.ofNullable(serverContext.getCurrentLayout());
     }
 
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        log.info("channelActive: Incoming connection established from: {}.",
+                ctx.channel().remoteAddress());
+    }
+
     /**
      * Handle an incoming message read on the channel.
      *
