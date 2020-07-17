@@ -41,10 +41,10 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
             writeToLog(log, address, DataType.DATA, "Payload", x);
         }
         LogData value1 = log.read(address);
-        long size1 = new File(log.getSegmentHandleForAddress(address).getFileName()).length();
+        long size1 = log.getSegmentHandleForAddress(address).getFileName().toFile().length();
         log.compact();
         LogData value2 = log.read(address);
-        long size2 = new File(log.getSegmentHandleForAddress(address).getFileName()).length();
+        long size2 = log.getSegmentHandleForAddress(address).getFileName().toFile().length();
         assertEquals(value1.getRank(), value2.getRank());
         assertNotEquals(size2, size1);
     }

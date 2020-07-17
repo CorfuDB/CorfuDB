@@ -1,24 +1,9 @@
 package org.corfudb.infrastructure.log;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.format.Types;
@@ -35,6 +20,24 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.fail;
+import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
+
 
 /**
  * Created by maithem on 11/2/16.
@@ -48,11 +51,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     private ServerContext getContext() {
         String path = getDirPath();
         return new ServerContextBuilder()
-            .setLogPath(path)
-            .setMemory(false)
-            .build();
+                .setLogPath(path)
+                .setMemory(false)
+                .build();
     }
-    
+
     @Test
     public void testWriteReadWithChecksum() {
         // Enable checksum, then append and read the same entry
@@ -68,11 +71,50 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // An overwrite exception should occur, since we are writing the
         // same entry.
         final StreamLog newLog = new StreamLogFiles(getContext(), true);
-        assertThatThrownBy(() -> {
-            newLog.append(address0, new LogData(DataType.DATA, b));
-        })
+        assertThatThrownBy(() -> newLog.append(address0, new LogData(DataType.DATA, b)))
                 .isInstanceOf(OverwriteException.class);
+
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
+    }
+
+    @Test
+    public void testFileDescriptorsLeak() throws Exception {
+        StreamLogFiles log = new StreamLogFiles(getContext(), false);
+        ByteBuf b = Unpooled.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        long address0 = 0;
+        log.append(address0, new LogData(DataType.DATA, b));
+
+        SegmentSupervisor segmentSupervisor = log.getSegmentSupervisor();
+        SegmentHandle segment = segmentSupervisor.getSegmentByAddress(0, sh -> {});
+        segmentSupervisor.close(segment);
+        log.contains(0);
+        // a resource leak could happen in case of clearing channels
+        // after the fact that `contains` method just added a segment into the Map.
+        // To prevent resources leak don't clean the map (SegmentSupervisor.channels).
+        //segmentSupervisor.getChannels().clear();
+
+        List<SegmentHandle> obsoleteSegments = segmentSupervisor.closeSegmentHandlers(0);
+
+        Process process = new ProcessBuilder()
+                .command("lsof")
+                .start();
+
+        InputStream inputStream = process.getInputStream();
+        String output = IOUtils.toString(inputStream, StandardCharsets.UTF_8.name());
+        inputStream.close();
+
+        String[] arr = output.split("\\r?\\n");
+        for (String record : arr) {
+            if (record.contains("log/0.log")) {
+                fail("File descriptor leak detected: " + record);
+            }
+        }
+
+        if (obsoleteSegments.isEmpty()) {
+            fail("There must be only one opened segment");
+        }
     }
 
     @Test
@@ -391,11 +433,12 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(seg2, new LogData(DataType.DATA, b));
         log.append(seg3, new LogData(DataType.DATA, b));
 
-        assertThat(log.getChannelsToSync().size()).isEqualTo(3);
+        SegmentSupervisor segmentSupervisor = log.getSegmentSupervisor();
+        assertThat(segmentSupervisor.getAmountOfChannelsToSync()).isEqualTo(3);
 
         log.sync(true);
 
-        assertThat(log.getChannelsToSync().size()).isEqualTo(0);
+        assertThat(segmentSupervisor.getAmountOfChannelsToSync()).isZero();
     }
 
     private void writeToLog(StreamLog log, long address) {
@@ -426,7 +469,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Write to multiple segments
         final int segments = 3;
         long lastAddress = segments * StreamLogFiles.RECORDS_PER_LOG_FILE;
-        for (long x = 0; x <= lastAddress; x++){
+        for (long x = 0; x <= lastAddress; x++) {
             writeToLog(log, x);
             assertThat(log.getLogTail()).isEqualTo(x);
         }
@@ -437,7 +480,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Advance the tail some more
         final long tailDelta = 5;
-        for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++){
+        for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++) {
             writeToLog(log, x);
             assertThat(log.getLogTail()).isEqualTo(x);
         }
@@ -451,10 +494,11 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     public void testPrefixTrim() {
         String logDir = getContext().getServerConfig().get("--log-path") + File.separator + "log";
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
+        SegmentSupervisor segmentSupervisor = log.getSegmentSupervisor();
 
         // Write 50 segments and trim the first 25
         final long numSegments = 50;
-        for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
+        for (long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
             writeToLog(log, x);
         }
 
@@ -467,7 +511,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Get references to the segments that will be trimmed
         Set<SegmentHandle> trimmedHandles = new HashSet<>();
-        for (SegmentHandle sh : log.getOpenSegmentHandles()) {
+        for (SegmentHandle sh : segmentSupervisor.getChannels().values()) {
             if (sh.getSegment() < endSegment) {
                 trimmedHandles.add(sh);
             }
@@ -477,7 +521,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.compact();
 
         // Verify that the segments have been removed
-        assertThat(log.getOpenSegmentHandles().size()).isEqualTo((int) endSegment);
+        assertThat(segmentSupervisor.getAmountOfOpenSegments()).isEqualTo((int) endSegment);
 
         // Verify that first 25 segments have been deleted
         String[] afterTrimFiles = logs.list();
@@ -496,9 +540,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         long trimmedExceptions = 0;
 
         // Try to read trimmed addresses
-        for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
+        for (long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
             ILogData logData = log.read(x);
-            if(logData.isTrimmed()) {
+            if (logData.isTrimmed()) {
                 trimmedExceptions++;
             }
         }

@@ -7,9 +7,9 @@ import org.apache.commons.io.IOUtils;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,19 +26,18 @@ class SegmentHandle {
     private final long segment;
 
     @NonNull
-    private  final FileChannel writeChannel;
+    private final FileChannel writeChannel;
 
     @NonNull
     private final FileChannel readChannel;
 
     @NonNull
-    private final String fileName;
+    private final Path fileName;
 
     private final Map<Long, AddressMetaData> knownAddresses = new ConcurrentHashMap<>();
     private final Set<Long> trimmedAddresses = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Set<Long> pendingTrims = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private volatile int refCount = 0;
-
 
     public synchronized void retain() {
         refCount++;
@@ -52,18 +51,14 @@ class SegmentHandle {
     }
 
     public void close() {
-        Set<FileChannel> channels = new HashSet<>(
-                Arrays.asList(writeChannel, readChannel)
-        );
-
-        for (FileChannel channel : channels) {
+        Arrays.asList(writeChannel, readChannel).forEach(channel -> {
             try {
                 channel.force(true);
             } catch (IOException e) {
-                log.debug("Can't force updates in the channel", e.getMessage());
+                log.debug("Can't force updates in the channel: {}", e.getMessage());
             } finally {
                 IOUtils.closeQuietly(channel);
             }
-        }
+        });
     }
 }

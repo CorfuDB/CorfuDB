@@ -11,6 +11,7 @@ import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.scenario.fixture.Fixture;
 import org.corfudb.universe.spec.FileDescriptorLeaksSpec;
 import org.corfudb.universe.universe.UniverseParams;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -29,7 +30,7 @@ public class FileDescriptorLeaksIT extends GenericIntegrationTest {
      * 2) Restart the node
      * 3) Check if there are any resource leaks
      */
-    @Test(timeout = 300000)
+    @Test(timeout = 30000000)
     public void fileDescriptorLeaksBaseServerResetTest() {
 
         workflow(wf -> {
@@ -71,7 +72,11 @@ public class FileDescriptorLeaksIT extends GenericIntegrationTest {
                 .check();
     }
 
+    /**
+     * LogUnitServer - file descriptors leak detector
+     */
     @Test(timeout = 300000)
+    @Ignore
     public void fileDescriptorLeaksLogUnitServerResetTest() {
 
         workflow(wf -> {
@@ -98,22 +103,36 @@ public class FileDescriptorLeaksIT extends GenericIntegrationTest {
         final CorfuTable<String, String> table = corfuClient
                 .createDefaultCorfuTable(DEFAULT_STREAM_NAME);
 
-        CompletableFuture<Void> writingAction = CompletableFuture.runAsync(() -> {
-            for (int i = 0; i < 1_000_000; i++) {
-                String data = RandomStringUtils.randomAlphabetic(1024);
+        CompletableFuture<Void> writes1 = CompletableFuture.runAsync(() -> {
+            for (int i = 0; i < 1_000_000; i += 2) {
+                if (i % 1000 == 0) {
+                    System.out.println((i / 2) + ", of even addresses has written");
+                }
+                String data = RandomStringUtils.randomAlphabetic(128);
+                table.put(String.valueOf(i), data);
+            }
+        });
+
+        CompletableFuture<Void> writes2 = CompletableFuture.runAsync(() -> {
+            for (int i = 1; i < 1_000_000; i += 2) {
+                if (i % 1001 == 0) {
+                    System.out.println((i / 2) + ", of odd addresses has written");
+                }
+                String data = RandomStringUtils.randomAlphabetic(128);
                 table.put(String.valueOf(i), data);
             }
         });
 
         CompletableFuture.runAsync(() -> {
             for (int i = 0; i < 1_000; i++) {
+                log.info("Iteration: " + i);
                 try {
                     FileDescriptorLeaksSpec.builder()
                             .server(server)
                             .corfuClient(corfuClient)
                             .build()
                             .resetLogUnitServer(1)
-                            .timeout(Duration.ofMillis(100))
+                            .timeout(Duration.ofSeconds(180))
                             .check();
                 } catch (InterruptedException e) {
                     fail("Interrupted");
@@ -121,6 +140,7 @@ public class FileDescriptorLeaksIT extends GenericIntegrationTest {
             }
         }).join();
 
-        writingAction.completeExceptionally(new RuntimeException("completed"));
+        writes1.completeExceptionally(new RuntimeException("completed"));
+        writes2.completeExceptionally(new RuntimeException("completed"));
     }
 }
