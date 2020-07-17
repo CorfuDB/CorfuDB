@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.log;
 
-import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.datastore.KvDataStore;
@@ -15,7 +14,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * Keeps stream log related meta information: startingAddress and tailSegment.
  * Provides access to the stream log related meta information.
  */
-@Builder
 @Slf4j
 public class StreamLogDataStore {
     private static final String TAIL_SEGMENT_PREFIX = "TAIL_SEGMENT";
@@ -39,7 +37,7 @@ public class StreamLogDataStore {
             COMMITTED_TAIL_PREFIX, COMMITTED_TAIL_KEY, Long.class
     );
 
-    private static final long ZERO_ADDRESS = Address.getMinAddress();
+    private static final long ZERO_ADDRESS = 0L;
 
     @NonNull
     private final KvDataStore dataStore;
@@ -47,17 +45,24 @@ public class StreamLogDataStore {
     /**
      * Cached starting address.
      */
-    private final AtomicLong startingAddress = new AtomicLong(ZERO_ADDRESS);
+    private final AtomicLong startingAddress;
 
     /**
      * Cached tail segment.
      */
-    private final AtomicLong tailSegment = new AtomicLong(ZERO_ADDRESS);
+    private final AtomicLong tailSegment;
 
     /**
      * Cached committed log tail, up to which the log is consolidated.
      */
-    private final AtomicLong committedTail = new AtomicLong(Address.NON_ADDRESS);
+    private final AtomicLong committedTail;
+
+    public StreamLogDataStore(KvDataStore dataStore) {
+        this.dataStore = dataStore;
+        this.startingAddress = new AtomicLong(dataStore.get(STARTING_ADDRESS_RECORD, ZERO_ADDRESS));
+        this.tailSegment = new AtomicLong(dataStore.get(TAIL_SEGMENT_RECORD, ZERO_ADDRESS));
+        this.committedTail = new AtomicLong(dataStore.get(COMMITTED_TAIL_RECORD, Address.NON_ADDRESS));
+    }
 
     /**
      * Return current cached tail segment or get the segment from the data store if not initialized

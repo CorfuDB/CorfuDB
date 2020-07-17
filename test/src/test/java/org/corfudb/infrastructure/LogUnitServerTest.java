@@ -375,6 +375,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         // Retrieve address space from new initialized log unit server (bootstrap path)
         addressSpace = newServer.getStreamAddressSpace(streamID);
+
         assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(minAddress + 1);
 

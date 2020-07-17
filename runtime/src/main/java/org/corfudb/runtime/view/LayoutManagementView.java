@@ -201,7 +201,8 @@ public class LayoutManagementView extends AbstractView {
             );
 
             // Reset the node to be healed.
-            CFUtils.getUninterruptibly(resetAction);
+            CFUtils.getUninterruptibly(runtime.getLayoutView().getRuntimeLayout(currentLayout)
+                    .getLogUnitClient(endpoint).resetLogUnit(currentLayout.getEpoch()));
 
             LayoutBuilder layoutBuilder = new LayoutBuilder(currentLayout);
             layoutBuilder.addLogunitServer(0,

@@ -114,7 +114,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         segmentSupervisor = SegmentSupervisor.builder().logDir(logDir).build();
 
         this.verify = !noVerify;
-        this.dataStore = StreamLogDataStore.builder().dataStore(serverContext.getDataStore()).build();
+        this.dataStore = new StreamLogDataStore(serverContext.getDataStore());
 
         String logSizeLimitPercentageParam = (String) serverContext.getServerConfig().get("--log-size-quota-percentage");
         final double logSizeLimitPercentage = Double.parseDouble(logSizeLimitPercentageParam);
