@@ -22,13 +22,6 @@
             <artifactId>protobuf-java</artifactId>
             <version>3.6.1</version>
         </dependency>
-
-        <dependency>
-            <groupId>org.corfudb</groupId>
-            <artifactId>format</artifactId>
-            <version>${project.version}</version>
-            <scope>provided</scope>
-        </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
             <artifactId>infrastructure</artifactId>

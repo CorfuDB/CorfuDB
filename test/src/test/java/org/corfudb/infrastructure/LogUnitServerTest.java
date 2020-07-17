@@ -2,8 +2,8 @@ package org.corfudb.infrastructure;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.corfudb.format.Types;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LogUnitException;
@@ -454,7 +454,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     public void writeHeader(FileChannel fileChannel, int version, boolean verify) throws IOException {
 
-        Types.LogHeader header = Types.LogHeader.newBuilder()
+        LogHeader header = LogHeader.newBuilder()
                 .setVersion(version)
                 .setVerifyChecksum(verify)
                 .build();

@@ -85,11 +85,6 @@
         </dependency>
         <dependency>
             <groupId>org.corfudb</groupId>
-            <artifactId>format</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.corfudb</groupId>
             <artifactId>annotations</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -143,6 +138,11 @@
             <groupId>org.roaringbitmap</groupId>
             <artifactId>RoaringBitmap</artifactId>
             <version>0.7.36</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.6.1</version>
         </dependency>
     </dependencies>
 
