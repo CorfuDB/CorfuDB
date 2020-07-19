@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
 import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.Messages.CorfuMessage;
-import org.corfudb.runtime.LogReplicationChannelGrpc;
+import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
