@@ -22,7 +22,7 @@ jobs:
   - stage: Tests
     name: Unit Tests
     script:
-    - ./mvnw clean test -pl \!samples -T 1C -Dtest.travisBuild=true
+    - ./mvnw clean test -pl \!samples -Dtest.travisBuild=true
   - script:
     - ./mvnw -pl :test clean verify -Pit -DskipTests -Dtest.travisBuild=true
     name: Integration Tests
