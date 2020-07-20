@@ -816,7 +816,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t2);
         generateTxCrossTables(crossTables, true, NUM_KEYS, 0);
 
-
         // Start Log Entry Sync
         // We need to block until the error is received and verify the state machine is shutdown
         testConfig.clear();

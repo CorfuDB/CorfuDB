@@ -36,7 +36,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private Set<UUID> streamUUIDs;
 
     // the opaquestream wrapper for the transaction stream.
-    private TxOpaqueStream txStream;
+    private TxOpaqueStream txOpaqueStream;
 
     // the base snapshot the log entry logreader starts to poll transaction logs
     private long globalBaseSnapshot;
@@ -56,6 +56,9 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private OpaqueEntry lastOpaqueEntry = null;
 
+
+    private boolean hasNoiseData = false;
+
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
@@ -70,7 +73,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         }
 
         //create an opaque stream for transaction stream
-        txStream = new TxOpaqueStream(rt);
+        txOpaqueStream = new TxOpaqueStream(rt);
     }
 
     LogReplicationEntry generateMessageWithOpaqueEntryList(List<OpaqueEntry> opaqueEntryList, UUID logEntryRequestId) {
@@ -85,7 +88,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         return txMessage;
     }
 
-    boolean shouldProcess(OpaqueEntry entry) throws ReplicationReaderException {
+    boolean shouldProcess(OpaqueEntry entry) {
         Set<UUID> tmpUUIDs = entry.getEntries().keySet();
 
         //If the entry's stream set is a subset of interested streams, it is the entry we should process
@@ -104,14 +107,15 @@ public class StreamsLogEntryReader implements LogEntryReader {
         log.error("There are noisy streams {} in the entry, expected streams set {}",
                     entry.getEntries().keySet(), streamUUIDs);
 
-        throw new IllegalTransactionStreamsException("There are noisy streams in the transaction log entry");
+        hasNoiseData = true;
+        return false;
     }
 
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         globalBaseSnapshot = snapshot;
         preMsgTs = Math.max(snapshot, ackTimestamp);
         log.info("snapshot {} ackTimestamp {} preMsgTs {} seek {}", snapshot, ackTimestamp, preMsgTs, preMsgTs + 1);
-        txStream.seek(preMsgTs + 1);
+        txOpaqueStream.seek(preMsgTs + 1);
         sequence = 0;
     }
 
@@ -132,7 +136,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         int currentMsgSize = 0;
 
         try {
-            while (currentMsgSize < maxDataSizePerMsg) {
+            while (currentMsgSize < maxDataSizePerMsg && !hasNoiseData) {
 
                 if (lastOpaqueEntry != null && shouldProcess(lastOpaqueEntry)) {
 
@@ -144,8 +148,9 @@ public class StreamsLogEntryReader implements LogEntryReader {
                                 currentEntrySize, maxDataSizePerMsg);
                     }
 
-                    // If the currentEntry is too big to append, will skip it and append it to the next message as the first entry.
-                    if (currentMsgSize != 0 && currentMsgSize + currentEntrySize > maxDataSizePerMsg) {
+                    // If the currentEntry is too big to append the current message, will skip it and
+                    // append it to the next message as the first entry.
+                    if (currentMsgSize != 0 && (currentMsgSize + currentEntrySize > maxDataSizePerMsg)) {
                         break;
                     }
 
@@ -155,15 +160,23 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     lastOpaqueEntry = null;
                 }
 
-                if (!txStream.hasNext()) {
+                if (hasNoiseData) {
                     break;
                 }
 
-                lastOpaqueEntry = txStream.next();
+                if (!txOpaqueStream.hasNext()) {
+                    break;
+                }
+
+                lastOpaqueEntry = txOpaqueStream.next();
             }
 
             log.info("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEnry size {}",
                     currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null? 0 : currentEntrySize);
+
+            if (opaqueEntryList.size() == 0 && hasNoiseData) {
+                throw new IllegalTransactionStreamsException("There are noisy streams in the transaction log entry");
+            }
 
             if (opaqueEntryList.size() == 0) {
                 return null;
