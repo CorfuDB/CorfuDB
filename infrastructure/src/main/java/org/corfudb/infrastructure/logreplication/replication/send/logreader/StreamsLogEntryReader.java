@@ -84,7 +84,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, opaqueEntryList);
         preMsgTs = currentMsgTs;
         sequence++;
-        log.info("Generate a log entry message {} with {} transactions ", txMessage.getMetadata(), opaqueEntryList.size());
+        log.trace("Generate a log entry message {} with {} transactions ", txMessage.getMetadata(), opaqueEntryList.size());
         return txMessage;
     }
 
@@ -171,7 +171,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 lastOpaqueEntry = txOpaqueStream.next();
             }
 
-            log.info("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEnry size {}",
+            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEnry size {}",
                     currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null? 0 : currentEntrySize);
 
             if (opaqueEntryList.size() == 0 && hasNoiseData) {

@@ -146,7 +146,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
             b.skipBytes(len);
         }
         SMRArguments = arguments;
-        serializedSize = b.readerIndex() - readIndex;
+        serializedSize = b.readerIndex() - readIndex + 1;
     }
 
 

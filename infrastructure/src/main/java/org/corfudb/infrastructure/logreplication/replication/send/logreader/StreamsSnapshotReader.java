@@ -169,7 +169,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
             throw e;
         }
 
-        log.info("CurrentMsgSize {} lastEntrySize {}  maxDataSizePerMsg {}",
+        log.trace("CurrentMsgSize {} lastEntrySize {}  maxDataSizePerMsg {}",
                 currentMsgSize, lastEntry == null ? 0 : calculateSize(lastEntry.getEntries().get(stream.uuid)), maxDataSizePerMsg);
         return new SMREntryList(currentMsgSize, smrList);
     }
@@ -184,7 +184,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         SMREntryList entryList = next(stream);
 
         LogReplicationEntry txMsg = generateMessage(stream, entryList, syncRequestId);
-        log.info("Successfully pass stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);
+        log.trace("Successfully generate a txMsg {} for stream {} with snapshotTimestamp {}", stream.name, snapshotTimestamp);
         return txMsg;
     }
 

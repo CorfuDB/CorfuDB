@@ -91,7 +91,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             final String activeEndpoint = DEFAULT_HOST + ":" + activeSiteCorfuPort;
             final String standbyEndpoint = DEFAULT_HOST + ":" + standbySiteCorfuPort;
 
-            final int numWrites = 1000;
+            final int numWrites = 100;
 
             // Start Single Corfu Node Cluster on Active Site
             activeCorfu = runServer(activeSiteCorfuPort, true);
