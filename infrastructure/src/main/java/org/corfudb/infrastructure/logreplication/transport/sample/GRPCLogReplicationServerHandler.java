@@ -111,7 +111,7 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
                 // Remove observer as response was already sent
                 // Since we send summarized ACKs (to avoid memory leaks) remove all observers lower or equal than
                 // the one for which a response is being sent.
-                replicationStreamObserverMap.keySet().removeIf(id -> id < requestId);
+                replicationStreamObserverMap.keySet().removeIf(id -> id <= requestId);
             } catch (Exception e) {
                 log.error("Caught exception while trying to send message {}", msg.getRequestID());
             }

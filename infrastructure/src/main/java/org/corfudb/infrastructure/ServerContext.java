@@ -220,7 +220,7 @@ public class ServerContext implements AutoCloseable {
     }
 
     /**
-     * Get the max number of snapshot message can be sent over per run cycle during full snapshot sync.
+     * Get the max number of messages can be sent over per batch.
      * @return
      */
     public int getMaxNumMsgPerBatch() {

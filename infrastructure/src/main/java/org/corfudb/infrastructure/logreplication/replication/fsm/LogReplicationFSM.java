@@ -216,7 +216,7 @@ public class LogReplicationFSM {
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
-        snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, config.getMaxNumSnapshotMsgPerCycle(), this);
+        snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, config.getMaxNumMsgPerBatch(), this);
         logEntrySender = new LogEntrySender(runtime, logEntryReader, dataSender, readProcessor, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state

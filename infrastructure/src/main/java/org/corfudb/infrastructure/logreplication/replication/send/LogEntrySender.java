@@ -95,7 +95,6 @@ public class LogEntrySender {
             return;
         }
 
-
         while (taskActive && !dataSenderBufferManager.getPendingMessages().isFull()) {
             LogReplicationEntry message;
 

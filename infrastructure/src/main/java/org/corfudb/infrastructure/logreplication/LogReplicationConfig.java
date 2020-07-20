@@ -16,7 +16,7 @@ public class LogReplicationConfig {
     // Log Replication message timeout time in milliseconds.
     public static final int DEFAULT_TIMEOUT = 5000;
 
-    // Log Replication default max number of message generated at the active cluster for each run cycle.
+    // Log Replication default max number of message generated at the active cluster for each batch.
     public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 10;
 
     // Log Replication default max data message size is 64MB.
@@ -33,9 +33,9 @@ public class LogReplicationConfig {
     private Set<String> streamsToReplicate;
 
     /*
-     * Snapshot Sync Batch Size Per Cycle(number of messages)
+     * Snapshot Sync Batch Size(number of messages)
      */
-    private int maxNumSnapshotMsgPerCycle;
+    private int maxNumMsgPerBatch;
 
     /*
      * The Max Size of Log Replication Data Message.
@@ -55,7 +55,7 @@ public class LogReplicationConfig {
      */
     public LogReplicationConfig(Set<String> streamsToReplicate) {
         this.streamsToReplicate = streamsToReplicate;
-        this.maxNumSnapshotMsgPerCycle = DEFAULT_MAX_NUM_MSG_PER_BATCH;
+        this.maxNumMsgPerBatch = DEFAULT_MAX_NUM_MSG_PER_BATCH;
         this.maxMsgSize = DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE;
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
     }
@@ -64,11 +64,11 @@ public class LogReplicationConfig {
      * Constructor
      *
      * @param streamsToReplicate Unique identifiers for all streams to be replicated across sites.
-     * @param maxNumSnapshotMsgPerCycle snapshot sync batch size (number of entries per batch)
+     * @param maxNumMsgPerBatch snapshot sync batch size (number of entries per batch)
      */
-    public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumSnapshotMsgPerCycle, int maxMsgSize) {
+    public LogReplicationConfig(Set<String> streamsToReplicate, int maxNumMsgPerBatch, int maxMsgSize) {
         this(streamsToReplicate);
-        this.maxNumSnapshotMsgPerCycle = maxNumSnapshotMsgPerCycle;
+        this.maxNumMsgPerBatch = maxNumMsgPerBatch;
         this.maxMsgSize = maxMsgSize;
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
     }

@@ -70,7 +70,7 @@ public class LogReplicationEntry implements ICorfuPayload<LogReplicationEntry> {
             opaqueEntryList.add(OpaqueEntry.deserialize(Unpooled.wrappedBuffer(data)));
         }
 
-        log.info("frombuf: opaqueEntryList {}", opaqueEntryList);
+        log.trace("frombuf: opaqueEntryList {}", opaqueEntryList);
     }
 
     public static LogReplicationEntry generateAck(LogReplicationEntryMetadata metadata) {
@@ -89,7 +89,7 @@ public class LogReplicationEntry implements ICorfuPayload<LogReplicationEntry> {
             opaqueEntryList.add(OpaqueEntry.deserialize(dataBuf));
         }
 
-        log.info("Msgtype {} fromProto: opaqueEntryList {}", metadata, opaqueEntryList) ;
+        log.trace("Msgtype {} fromProto: opaqueEntryList {}", metadata, opaqueEntryList) ;
         return new LogReplicationEntry(metadata, opaqueEntryList);
     }
 

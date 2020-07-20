@@ -330,7 +330,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param message
      */
     public void processMessage(LogReplicationEntry message) {
-        log.info("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
+        log.trace("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
 
         switch (rxState) {
             case LOG_ENTRY_SYNC:
