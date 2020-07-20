@@ -482,6 +482,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         isLeader.set(false);
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
         interClusterReplicationService.getLogReplicationServer().setLeadership(false);
+        stopLogReplication();
     }
 
     /**
