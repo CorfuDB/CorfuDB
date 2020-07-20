@@ -60,6 +60,8 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
+    private static final int MSG_SIZE = 131072;
+
     public CorfuRuntime runtime;
 
     public static final Properties PROPERTIES = new Properties();
@@ -313,6 +315,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setPluginConfigFilePath(pluginConfigFilePath)
+                .setMsg_size(MSG_SIZE)
                 .runServer();
     }
 
@@ -507,6 +510,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String compressionCodec = null;
         private String pluginConfigFilePath = null;
         private String logPath = null;
+        private int msg_size = 0;
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -516,6 +520,10 @@ public class AbstractIT extends AbstractCorfuTest {
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
             command.append("-a ").append(host);
+
+            if (msg_size != 0) {
+                command.append(" --max-data-message-size=").append(msg_size);
+            }
 
             if (logPath != null) {
                 command.append(" -l ").append(logPath);
@@ -556,7 +564,7 @@ public class AbstractIT extends AbstractCorfuTest {
          * @throws IOException
          */
         public Process runServer() throws IOException {
-            final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
+            final String serverConsoleLogPath = "/Users/maxi/Projects/tmp/test.result"; //CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
 
             File logPath = new File(getCorfuServerLogPath(host, port));
             if (!logPath.exists()) {

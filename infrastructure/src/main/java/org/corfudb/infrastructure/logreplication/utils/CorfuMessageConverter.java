@@ -44,6 +44,7 @@ public class CorfuMessageConverter {
             case LOG_REPLICATION_ENTRY:
                 CorfuPayloadMsg<LogReplicationEntry> entry = (CorfuPayloadMsg<LogReplicationEntry>) msg;
                 LogReplicationEntry logReplicationEntry = entry.getPayload();
+
                 return protoCorfuMsg
                         .setType(CorfuMessageType.LOG_REPLICATION_ENTRY)
                         // Set Log Replication Entry as payload
@@ -60,6 +61,7 @@ public class CorfuMessageConverter {
                                 .setData(ByteString.copyFrom(logReplicationEntry.getPayload()))
                                 .build()))
                         .build();
+
             case LOG_REPLICATION_NEGOTIATION_RESPONSE:
                 CorfuPayloadMsg<LogReplicationNegotiationResponse> corfuMsg = (CorfuPayloadMsg<LogReplicationNegotiationResponse>) msg;
                 LogReplicationNegotiationResponse negotiationResponse = corfuMsg.getPayload();
@@ -133,6 +135,7 @@ public class CorfuMessageConverter {
                             .setPriorityLevel(priorityLevel)
                             .setBuf(buf)
                             .setEpoch(epoch);
+
                 case LOG_REPLICATION_NEGOTIATION_REQUEST:
                     return new CorfuMsg(clientId, null, requestId, epoch, null,
                             CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST, priorityLevel);

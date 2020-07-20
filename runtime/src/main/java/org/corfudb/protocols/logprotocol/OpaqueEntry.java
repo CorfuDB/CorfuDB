@@ -10,6 +10,7 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.Address;
 
+import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -102,7 +103,7 @@ public class OpaqueEntry {
             // TODO(Maithem) : what if there's always a transaction stream
             case SMR:
                 UUID id =  Iterables.getOnlyElement(logData.getStreams());
-                List<SMREntry> smrEntry = Lists.newArrayList((SMREntry) entry);
+                ArrayList<SMREntry> smrEntry = Lists.newArrayList((SMREntry) entry);
                 res.put(id, smrEntry);
                 break;
             case MULTISMR:

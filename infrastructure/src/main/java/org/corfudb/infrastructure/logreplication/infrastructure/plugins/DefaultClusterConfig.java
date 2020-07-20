@@ -45,7 +45,7 @@ public final class DefaultClusterConfig {
     private static String standbyLogReplicationPort = "9020";
 
     @Getter
-    private static int logSenderBufferSize = 20;
+    private static int logSenderBufferSize = 1;
 
     @Getter
     private static int logSenderRetryCount = 5;
