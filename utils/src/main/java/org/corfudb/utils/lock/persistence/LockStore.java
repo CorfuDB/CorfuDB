@@ -17,6 +17,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.corfudb.utils.lock.Lock.leaseDuration;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * Enables instances of <class>Lock</class> to acquire locks and renew leases.
@@ -33,14 +34,13 @@ import static org.corfudb.utils.lock.Lock.leaseDuration;
 //TODO Add logging everywhere
 @Slf4j
 public class LockStore {
-    //TODO align with common system namespace in corfu
-    //Namespace used by locks
-    private static final String namespace = "CORFU_SYSTEM";
-    //Locks table name
+    // Namespace used by locks
+    private static final String namespace = CORFU_SYSTEM_NAMESPACE;
+    // Locks table name
     private static final String tableName = "LOCK";
 
     private final Uuid clientId;
-    //Corfu store to access data from the Lock table.
+    // Corfu store to access data from the Lock table.
     private final CorfuStore corfuStore;
     /**
      * Cache of all the observed locks/leases. Contains the last timestamp at which the lock was last observed.
