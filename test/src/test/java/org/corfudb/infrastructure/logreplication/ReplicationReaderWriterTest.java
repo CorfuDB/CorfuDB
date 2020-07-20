@@ -19,7 +19,9 @@ import org.corfudb.runtime.collections.Query;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -37,18 +39,28 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
-import static org.corfudb.integration.ReplicationReaderWriterIT.NUM_TRANSACTIONS;
 import static org.corfudb.integration.ReplicationReaderWriterIT.generateTransactions;
 import static org.corfudb.integration.ReplicationReaderWriterIT.openStreams;
 import static org.corfudb.integration.ReplicationReaderWriterIT.printTails;
-import static org.corfudb.integration.ReplicationReaderWriterIT.readLogEntryMsgs;
 import static org.corfudb.integration.ReplicationReaderWriterIT.verifyData;
 import static org.corfudb.integration.ReplicationReaderWriterIT.verifyNoData;
-import static org.corfudb.integration.ReplicationReaderWriterIT.writeLogEntryMsgs;
 
 public class ReplicationReaderWriterTest extends AbstractViewTest {
+    static public final String PRIMARY_SITE_ID = "Cluster-Paris";
+
     static private final int START_VAL = 1;
     static final int NUM_KEYS = 4;
+
+    // Enforce to read each entry for each message
+    // each log entry size is 62, there are 2 log entry per dataMsg
+    // each snapshot entry is 33, there are 4 snapshot entry per dataMsg
+    static public final int MAX_MSG_SIZE = 160;
+    static private final int snapshotEntryPerMsg = MAX_MSG_SIZE / 33;
+    static private final int txEntryPerMsg = MAX_MSG_SIZE / 62;
+
+    static public final int BATCH_SIZE = 2;
+
+    static private final int NUM_TRANSACTIONS = 100;
 
     CorfuRuntime srcDataRuntime = null;
     CorfuRuntime dstDataRuntime = null;
@@ -57,7 +69,6 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
     HashMap<String, CorfuTable<Long, Long>> srcTables = new HashMap<>();
     HashMap<String, CorfuTable<Long, Long>> dstTables = new HashMap<>();
-    HashMap<String, CorfuTable<Long, Long>> shadowTables = new HashMap<>();
     LogEntryReader logEntryReader;
     LogEntryWriter logEntryWriter;
 
@@ -94,6 +105,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         printTails("after writing data to src tables", srcDataRuntime, dstDataRuntime);
 
         readLogEntryMsgs(msgQ, srcTables.keySet(), readerRuntime);
+        assertThat(msgQ.size()).isEqualTo(NUM_TRANSACTIONS/txEntryPerMsg);
 
         writeLogEntryMsgs(msgQ, srcTables.keySet(), writerRuntime);
         printTails("after playing message at dst", srcDataRuntime, dstDataRuntime);
@@ -103,7 +115,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
     }
 
     private void readMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
-        LogReplicationConfig config = new LogReplicationConfig(streams);
+        LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
@@ -125,6 +137,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         printTails("after writing data to src tables", srcDataRuntime, dstDataRuntime);
 
         readMsgs(msgQ, hashMap.keySet(), readerRuntime);
+        assertThat(msgQ.size()).isEqualTo(NUM_TRANSACTIONS*srcTables.size()/snapshotEntryPerMsg);
 
         //call clear table
         for (String name : srcTables.keySet()) {
@@ -135,7 +148,6 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         verifyNoData(srcTables);
 
         ReplicationReaderWriterIT.writeSnapLogMsgs(msgQ, srcTables.keySet(), writerRuntime);
-
 
         //verify data with hashtable
         openStreams(dstTables, dstDataRuntime);
@@ -171,8 +183,6 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
                 Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
 
         UUID uuidA = CorfuRuntime.getStreamID(tableA.getFullyQualifiedTableName());
-        UUID uuidC = CorfuRuntime.getStreamID(tableC.getFullyQualifiedTableName());
-        //System.out.print("\n uuidA " + uuidA + " uuidB " + uuidB + " uuidC " + uuidC);
 
         //update tableA
         for (int i = 0; i < NUM_KEYS; i ++) {
@@ -247,4 +257,39 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
         assertThat(bSet.containsAll(aSet)).isTrue();
         assertThat(aSet.containsAll(bSet)).isTrue();
     }
+
+    public static void readLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) throws
+            TrimmedException {
+        LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
+        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
+        reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
+
+        LogReplicationEntry entry = null;
+
+        do {
+            entry = reader.read(UUID.randomUUID());
+
+            if (entry != null) {
+                msgQ.add(entry);
+            }
+
+            System.out.println(" msgQ size " + msgQ.size());
+
+        } while (entry != null);
+    }
+
+    public static void writeLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
+        org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
+        LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadataManager);
+
+        if (msgQ.isEmpty()) {
+            System.out.println("msgQ is empty");
+        }
+
+        for (LogReplicationEntry msg : msgQ) {
+            writer.apply(msg);
+        }
+    }
+
 }

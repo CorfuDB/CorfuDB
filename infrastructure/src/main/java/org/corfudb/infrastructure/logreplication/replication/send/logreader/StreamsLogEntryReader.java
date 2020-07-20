@@ -1,11 +1,10 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalTransactionStreamsException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
@@ -14,10 +13,15 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE;
+import static org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader.calculateSize;
 
 @Slf4j
 @NotThreadSafe
@@ -33,23 +37,33 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     // the opaquestream wrapper for the transaction stream.
     private TxOpaqueStream txStream;
-   
 
     // the base snapshot the log entry logreader starts to poll transaction logs
     private long globalBaseSnapshot;
+
     // timestamp of the transaction log that is the previous message
     private long preMsgTs;
+
     // the timestamp of the transaction log that is the current message
     private long currentMsgTs;
+
     // the sequence number of the message based on the globalBaseSnapshot
     private long sequence;
 
     private long topologyConfigId;
 
+    private final int maxDataSizePerMsg;
+
+    private OpaqueEntry lastOpaqueEntry = null;
+
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
+
+        this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
+
         Set<String> streams = config.getStreamsToReplicate();
+
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
@@ -59,15 +73,16 @@ public class StreamsLogEntryReader implements LogEntryReader {
         txStream = new TxOpaqueStream(rt);
     }
 
-    LogReplicationEntry generateMessage(OpaqueEntry entry, UUID logEntryRequestId) {
-        ByteBuf buf = Unpooled.buffer();
-        OpaqueEntry.serialize(buf, entry);
-        currentMsgTs = entry.getVersion();
+    LogReplicationEntry generateMessageWithOpaqueEntryList(List<OpaqueEntry> opaqueEntryList, UUID logEntryRequestId) {
+        // Set the last timestamp as the max timestamp
+        currentMsgTs = opaqueEntryList.get(opaqueEntryList.size() - 1).getVersion();
+
         LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, topologyConfigId, logEntryRequestId,
-                currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
+                currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, opaqueEntryList);
         preMsgTs = currentMsgTs;
         sequence++;
-        return  txMessage;
+        log.info("Generate a log entry message {} with {} transactions ", txMessage.getMetadata(), opaqueEntryList.size());
+        return txMessage;
     }
 
     boolean shouldProcess(OpaqueEntry entry) throws ReplicationReaderException {
@@ -100,23 +115,67 @@ public class StreamsLogEntryReader implements LogEntryReader {
         sequence = 0;
     }
 
+    private int calculateOpaqueEntrySize(OpaqueEntry opaqueEntry) {
+        int size = 0;
+
+        for (List<SMREntry> smrEntryList : opaqueEntry.getEntries().values()) {
+            size += calculateSize(smrEntryList);
+        }
+
+        return size;
+    }
+
     @Override
     public LogReplicationEntry read(UUID logEntryRequestId) throws TrimmedException, IllegalTransactionStreamsException {
+        List<OpaqueEntry> opaqueEntryList = new ArrayList<>();
+        int currentEntrySize = 0;
+        int currentMsgSize = 0;
+
         try {
-            while (txStream.hasNext()) {
-                OpaqueEntry opaqueEntry = txStream.next();
-                if (!shouldProcess(opaqueEntry)) {
-                    continue;
+            while (currentMsgSize < maxDataSizePerMsg) {
+
+                if (lastOpaqueEntry != null && shouldProcess(lastOpaqueEntry)) {
+
+                    currentEntrySize = calculateOpaqueEntrySize(lastOpaqueEntry);
+                    if (currentEntrySize > DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE) {
+                        log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported", currentEntrySize, DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE);
+                    } else if (currentEntrySize > maxDataSizePerMsg) {
+                        log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
+                                currentEntrySize, maxDataSizePerMsg);
+                    }
+
+                    // If the currentEntry is too big to append, will skip it and append it to the next message as the first entry.
+                    if (currentMsgSize != 0 && currentMsgSize + currentEntrySize > maxDataSizePerMsg) {
+                        break;
+                    }
+
+                    // Add the lastOpaqueEntry to the current message.
+                    opaqueEntryList.add(lastOpaqueEntry);
+                    currentMsgSize += currentEntrySize;
+                    lastOpaqueEntry = null;
                 }
-                LogReplicationEntry txMessage = generateMessage(opaqueEntry, logEntryRequestId);
-                return txMessage;
+
+                if (!txStream.hasNext()) {
+                    break;
+                }
+
+                lastOpaqueEntry = txStream.next();
             }
+
+            log.info("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEnry size {}",
+                    currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null? 0 : currentEntrySize);
+
+            if (opaqueEntryList.size() == 0) {
+                return null;
+            }
+
+            LogReplicationEntry txMessage = generateMessageWithOpaqueEntryList(opaqueEntryList, logEntryRequestId);
+            return txMessage;
+
         } catch (Exception e) {
             log.warn("Caught an exception {}", e);
             throw e;
         }
-
-        return null;
     }
 
     @Override

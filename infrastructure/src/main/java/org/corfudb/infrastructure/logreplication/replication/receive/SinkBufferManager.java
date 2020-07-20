@@ -32,7 +32,7 @@ public abstract class SinkBufferManager {
      * While processing a message in the buffer, it will call
      * sinkManager to handle it.
      */
-    private LogReplicationSinkManager sinkManager;
+    public LogReplicationSinkManager sinkManager;
 
     /*
      * Could be LOG_ENTRY or SNAPSHOT
@@ -57,7 +57,7 @@ public abstract class SinkBufferManager {
     /*
      * Count the number of messages it has received since last sent ACK.
      */
-    private int ackCnt = 0;
+    public int ackCnt = 0;
 
     /*
      * Time last ack sent.
@@ -141,7 +141,8 @@ public abstract class SinkBufferManager {
         long preTs = getPreSeq(dataMessage);
         long currentTs = getCurrentSeq(dataMessage);
 
-        if (preTs == lastProcessedSeq) {
+        // This message contains entries that haven't applied yet
+        if (preTs <= lastProcessedSeq && currentTs > lastProcessedSeq) {
             sinkManager.processMessage(dataMessage);
             ackCnt++;
             lastProcessedSeq = getCurrentSeq(dataMessage);
@@ -155,7 +156,8 @@ public abstract class SinkBufferManager {
          */
         if (shouldAck()) {
             LogReplicationEntryMetadata metadata = makeAckMessage(dataMessage);
-            return new LogReplicationEntry(metadata, new byte[0]);
+            log.info("Sending an ACK {}", metadata);
+            return new LogReplicationEntry(metadata);
         }
 
         return null;

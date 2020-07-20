@@ -20,7 +20,7 @@ public class CorfuDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
-        log.trace("Send single log entry for request {}", message.getMetadata());
+        log.info("Send single log entry for request {}", message.getMetadata());
         return client.sendLogEntry(message);
     }
 

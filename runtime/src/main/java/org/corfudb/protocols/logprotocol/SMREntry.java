@@ -104,7 +104,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
 
     /**
      * The SMREntry serialized size that only works for opaqueEntry.
-     * If it is not an opaqueEntry, a null pointer exception will be throwed.
+     * If it is not an opaqueEntry, it will give an error message.
      */
     Integer serializedSize = null;
 

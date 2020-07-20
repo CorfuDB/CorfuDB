@@ -36,10 +36,12 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private static final String config_file = "/config/corfu/corfu_replication_config.properties";
 
+    private final int DEFAULT_ACK_CNT = 1;
+
     /*
      * how long in milliseconds a ACK sent back to sender
      */
-    private int ackCycleTime;
+    private int ackCycleTime = DEFAULT_ACK_CNT;
 
     /*
      * how frequent a ACK sent back to sender
@@ -131,15 +133,18 @@ public class LogReplicationSinkManager implements DataReceiver {
          */
         this.rxState = RxState.LOG_ENTRY_SYNC;
         this.config = config;
+
         init();
     }
-
-
 
     /**
      * Init variables.
      */
     private void init() {
+
+        // Read config first before init other components.
+        readConfig();
+
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter.reset(logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
@@ -147,8 +152,6 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
-
-        readConfig();
     }
 
     /**
@@ -215,7 +218,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 if (metadata.getMessageMetadataType() == SNAPSHOT_END) {
                     log.warn("Sink Manager in state {} and received message {}. Resending the ACK for SNAPSHOT_END.", rxState,
                             message.getMetadata());
-                    return new LogReplicationEntry(metadata, new byte[0]);
+                    return new LogReplicationEntry(metadata);
                 }
             }
 
@@ -327,7 +330,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * @param message
      */
     public void processMessage(LogReplicationEntry message) {
-        log.trace("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
+        log.info("Received dataMessage by Sink Manager. Total [{}]", rxMessageCounter);
 
         switch (rxState) {
             case LOG_ENTRY_SYNC:

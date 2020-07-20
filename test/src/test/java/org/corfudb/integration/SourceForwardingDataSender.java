@@ -2,6 +2,7 @@ package org.corfudb.integration;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -17,9 +18,8 @@ import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
+@Slf4j
 public class SourceForwardingDataSender implements DataSender {
     // Runtime to remote/destination Corfu Server
     private CorfuRuntime runtime;
@@ -50,7 +50,9 @@ public class SourceForwardingDataSender implements DataSender {
 
     final static int DROP_INCREMENT = 4;
 
-    private int firstDrop = DROP_INCREMENT;
+    private int firstDrop = 2;
+
+    private int msgCnt = 0;
 
     @Getter
     private ObservableValue errors = new ObservableValue(errorCount);
@@ -63,13 +65,14 @@ public class SourceForwardingDataSender implements DataSender {
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(false, 0));
         this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0), config, metadataManager);
         this.ifDropMsg = ifDropMsg;
+        log.info("Init SourceForwardingDataSender with ifDropMsg {}", ifDropMsg);
     }
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
-        // System.out.println("Send message: " + message.getMetadata().getMessageMetadataType() + " for:: " + message.getMetadata().getTimestamp());
-        if (ifDropMsg > 0 && message.getMetadata().timestamp == firstDrop) {
-            // System.out.println("****** Drop log entry " + message.getMetadata().timestamp);
+        System.out.println("Send message: " + message.getMetadata().getMessageMetadataType() + " for:: " + message.getMetadata().getTimestamp());
+        if (ifDropMsg > 0 && msgCnt == firstDrop) {
+            log.info("****** Drop msg {} log entry ts {}",  msgCnt, message.getMetadata().timestamp);
             if (ifDropMsg == DROP_MSG_ONCE) {
                 firstDrop += DROP_INCREMENT;
             }
@@ -85,6 +88,7 @@ public class SourceForwardingDataSender implements DataSender {
             cf.complete(ack);
         }
         ackMessages.setValue(ack);
+        msgCnt++;
         return cf;
     }
 

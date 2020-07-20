@@ -44,7 +44,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_SNAPSHOT_MSG_PER_CYCLE;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 /**
@@ -223,9 +223,9 @@ public class ServerContext implements AutoCloseable {
      * Get the max number of snapshot message can be sent over per run cycle during full snapshot sync.
      * @return
      */
-    public int getMaxNumSnapshotDataMsgPerCycle() {
-        Integer numMsgPerCycle = getServerConfig(Integer.class, "--snapshot-batch");
-        return numMsgPerCycle == null ? DEFAULT_MAX_NUM_SNAPSHOT_MSG_PER_CYCLE : numMsgPerCycle;
+    public int getMaxNumMsgPerBatch() {
+        String val = getServerConfig(String.class, "--snapshot-batch");
+        return val == null ? DEFAULT_MAX_NUM_MSG_PER_BATCH : Integer.parseInt(val);
     }
 
     public int getLockLeaseDuration() {
@@ -239,8 +239,8 @@ public class ServerContext implements AutoCloseable {
      * @return
      */
     public int getLogReplicationMaxDataMessageSize() {
-        Integer msgSize = getServerConfig(Integer.class, "--max-data-message-size");
-        return msgSize == null ? DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE : msgSize;
+        String val = getServerConfig(String.class, "--max-data-message-size");
+        return val == null ? DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE : Integer.parseInt(val);
     }
 
     /**

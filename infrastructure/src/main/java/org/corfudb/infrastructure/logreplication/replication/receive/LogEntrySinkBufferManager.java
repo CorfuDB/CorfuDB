@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
+import org.corfudb.runtime.Messages;
 
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_MESSAGE;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_REPLICATED;
@@ -55,7 +56,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());
         metadata.setMessageMetadataType(LOG_ENTRY_REPLICATED);
         metadata.setTimestamp(lastProcessedSeq);
-        log.debug("Sink Buffer lastProcessedSeq {}", lastProcessedSeq);
+        log.info("Sink Buffer lastProcessedSeq {}", lastProcessedSeq);
         return metadata;
     }
 
@@ -73,5 +74,26 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
         }
 
         return true;
+    }
+
+    public void processBuffer() {
+
+        /**
+         *  For each message in the  buffer, if its timestamp is smaller than last processed log entry's timestamp,
+         *  skip processing and remove it from buffer.
+         *  If its preTs and currentTs is overlapping with the last processed log entry's timestamp, process it.
+         */
+        for (LogReplicationEntry entry : buffer.values()) {
+            LogReplicationEntryMetadata metadata = entry.getMetadata();
+            if (metadata.getTimestamp() < lastProcessedSeq) {
+                //remove it
+                buffer.remove(metadata.getPreviousTimestamp());
+            } else if (metadata.getPreviousTimestamp() <= lastProcessedSeq && metadata.getTimestamp() > lastProcessedSeq) {
+                sinkManager.processMessage(entry);
+                ackCnt++;
+                buffer.remove(lastProcessedSeq);
+                lastProcessedSeq = getCurrentSeq(entry);
+            }
+        }
     }
 }
