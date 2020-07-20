@@ -182,8 +182,6 @@ public class CorfuServer {
 
     // Flag if set to true - causes the Corfu Server to shutdown.
     private static volatile boolean shutdownServer = false;
-    // If set to true - triggers a reset of the server by wiping off all the data.
-    private static volatile boolean cleanupServer = false;
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
@@ -249,11 +247,6 @@ public class CorfuServer {
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
                 System.exit(EXIT_ERROR_CODE);
-            }
-
-            if (cleanupServer) {
-                clearDataFiles(serverContext);
-                cleanupServer = false;
             }
 
             if (!shutdownServer) {
@@ -332,12 +325,11 @@ public class CorfuServer {
      */
     static void restartServer(boolean resetData) {
 
-        if (resetData) {
-            cleanupServer = true;
-        }
-
         log.info("RestartServer: Shutting down corfu server");
         activeServer.close();
+        if (resetData) {
+            clearDataFiles(activeServer.getServerContext());
+        }
         log.info("RestartServer: Starting corfu server");
     }
 

@@ -96,7 +96,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         //segmentSupervisor.getChannels().clear();
         segmentSupervisor.close();
 
-        List<SegmentHandle> obsoleteSegments = segmentSupervisor.closeSegmentHandlers(0);
+        segmentSupervisor.closeSegmentHandlers(0);
 
         Process process = new ProcessBuilder()
                 .command("lsof")
