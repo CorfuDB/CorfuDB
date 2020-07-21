@@ -13,6 +13,7 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.ResetRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ResetResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.SealRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.SealResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.PingResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.AuthenticateRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.AuthenticateResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
