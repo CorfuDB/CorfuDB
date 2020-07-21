@@ -11,6 +11,7 @@ import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -24,15 +25,15 @@ import java.util.concurrent.atomic.AtomicLong;
 public class TestServerRouter implements IServerRouter, AutoCloseable {
 
     @Getter
-    public List<CorfuMsg> responseMessages;
+    public List<CorfuMsg> responseMessages = new ArrayList<>();
 
     @Getter
-    public Map<CorfuMsgType, AbstractServer> handlerMap;
+    public Map<CorfuMsgType, AbstractServer> handlerMap = new HashMap<>();
 
     @Getter
-    public ArrayList<AbstractServer> servers;
+    public ArrayList<AbstractServer> servers = new ArrayList<>();
 
-    public List<TestRule> rules;
+    public List<TestRule> rules = new ArrayList<>();
 
     AtomicLong requestCounter;
 
@@ -56,6 +57,7 @@ public class TestServerRouter implements IServerRouter, AutoCloseable {
     }
 
     public void reset() {
+        close();
         this.responseMessages = new ArrayList<>();
         this.requestCounter = new AtomicLong();
         this.servers = new ArrayList<>();
@@ -82,10 +84,11 @@ public class TestServerRouter implements IServerRouter, AutoCloseable {
     public void addServer(AbstractServer server) {
         servers.add(server);
         server.getHandler()
-                .getHandledTypes().forEach(x -> {
-            handlerMap.put(x, server);
-            log.trace("Registered {} to handle messages of type {}", server, x);
-        });
+                .getHandledTypes()
+                .forEach(x -> {
+                    handlerMap.put(x, server);
+                    log.trace("Registered {} to handle messages of type {}", server, x);
+                });
     }
 
     @Override
@@ -127,7 +130,7 @@ public class TestServerRouter implements IServerRouter, AutoCloseable {
 
     @Override
     public void close() {
-        handlerMap.values().forEach(server -> {
+        servers.forEach(server -> {
             String serverName = server.getClass().getSimpleName();
             try {
                 server.shutdown();
