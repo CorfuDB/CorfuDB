@@ -28,6 +28,8 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.WrongClusterPayload;
 import java.util.List;
 import java.util.UUID;
 
+import static org.corfudb.common.protocol.proto.CorfuProtocol.*;
+
 /**
  * Created by Maithem on 7/1/20.
  */
@@ -270,5 +272,13 @@ public class API {
 
     public static Request newQueryStreamRequest(Header header, List<StreamAddressRange> ranges) {
         return newQueryStreamRequest(header, QueryStreamRequest.ReqType.STREAMS, ranges);
+    }
+
+    public static Request newRestartRequest(Header header) {
+        RestartRequest restartRequest = RestartRequest.getDefaultInstance();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setRestartRequest(restartRequest)
+                .build();
     }
 }

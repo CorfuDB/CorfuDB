@@ -1,7 +1,10 @@
 package org.corfudb.common.protocol.client;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.ChannelImplementation;
 import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
@@ -41,17 +44,35 @@ public class PeerClient extends ChannelHandler {
                 config.getClientId(), ignoreClusterId, ignoreEpoch);
     }
 
+    /**
+     * Ping the endpoint, asynchronously.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint is reachable, otherwise False or exceptional completion.
+     */
     public CompletableFuture<Void> ping() {
         Header header = getHeader(MessageType.PING, true, true);
         return sendRequest(API.newPingRequest(header));
     }
 
     protected void handlePing(Response response) {
-        completeRequest(response.getHeader().getRequestId(), null);
+        completeRequest(response.getHeader().getRequestId(), true);
+    }
+
+    /**
+     * Restart the endpoint, asynchronously.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint acks, otherwise False or exceptional completion.
+     * TODO(Chetan): confirm if just reachable remote is enough or check ACKs from it?
+     */
+    protected CompletableFuture<Boolean> restart(){
+        Header header = getHeader(MessageType.RESTART, true, true);
+        return sendRequest(API.newRestartRequest(header));
     }
 
     protected void handleRestart(Response response) {
-
+        completeRequest(response.getHeader().getRequestId(), true);
     }
 
     public CompletableFuture<Response> authenticate() {
@@ -168,5 +189,38 @@ public class PeerClient extends ChannelHandler {
         // update stats
         // change client state
         // add a close lock
+    }
+
+    public static void main(String[] args) throws Exception{
+        ClientConfig config = new ClientConfig(
+                100000,
+                100000,
+                100000,
+                100000,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                ChannelImplementation.NIO,
+                false,
+                false,
+                100000,
+                false,
+                false,
+                new UUID(1234,1234),
+                API.DEFAULT_UUID
+        );
+        InetSocketAddress remoteAddress = new InetSocketAddress(InetAddress.getByName("localhost"),9000);
+        EventLoopGroup eventLoopGroup = new NioEventLoopGroup();
+        PeerClient peerClient = new PeerClient(remoteAddress, ChannelImplementation.NIO.getGenerator().generate(10,
+                new ThreadFactoryBuilder()
+                        .setDaemon(true)
+                        .setNameFormat("peer-client-%d")
+                        .build()),
+                config);
+        // log.info(peerClient.ping().get().toString());
+        log.info(peerClient.restart().get().toString());
     }
 }

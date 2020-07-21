@@ -1,28 +1,18 @@
 package org.corfudb.infrastructure;
 
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.client.RequestHandler;
+import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 
 @Slf4j
 public class ServerRequestHandler extends RequestHandler {
     @Override
     protected void handlePing(Request request, ChannelHandlerContext ctx) {
-        log.warn("handlePing: Remote reset requested from client with " +
-                        "LSB: {} MSB:{}", request.getHeader().getClientId().getLsb(),
-                request.getHeader().getClientId().getMsb());
-
-        // send ResetResponse message back to the client
-        ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        // Temporary marker to indicate new Protobuf Message
-        byteBuf.writeByte(0x2);
-        byteBuf.writeBytes(API.newPingResponse(request.getHeader()).toByteArray());
-        ctx.writeAndFlush(byteBuf);
+        log.info("ServerRequestHandler[]: ping message received");
     }
 
     @Override
@@ -111,54 +101,16 @@ public class ServerRequestHandler extends RequestHandler {
     }
 
     @Override
-    protected void handleReset(Request request, ChannelHandlerContext ctx) {
-        log.warn("handleReset: Remote reset requested from client with " +
-                "LSB: {} MSB:{}", request.getHeader().getClientId().getLsb(),
-                request.getHeader().getClientId().getMsb());
-
-        // send ResetResponse message back to the client
-        ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        // Temporary marker to indicate new Protobuf Message
-        byteBuf.writeByte(0x2);
-        byteBuf.writeBytes(API.newResetResponse(request.getHeader()).toByteArray());
-        ctx.writeAndFlush(byteBuf);
-
-        CorfuServer.restartServer(true);
-    }
-
-    @Override
     protected void handleRestart(Request request, ChannelHandlerContext ctx) {
-        log.warn("handleRestart: Remote restart requested from client with " +
-                "LSB: {} MSB:{}", request.getHeader().getClientId().getLsb(),
-                request.getHeader().getClientId().getMsb());
-
-        // send RestartResponse message back to the client
-        ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        // Temporary marker to indicate new Protobuf Message
-        byteBuf.writeByte(0x2);
-        byteBuf.writeBytes(API.newRestartResponse(request.getHeader()).toByteArray());
-        ctx.writeAndFlush(byteBuf);
-
+        log.warn("[ServerRequestHandler]:Remote restart requested from client with " +
+                "LSB: {} MSB:", request.getHeader().getClientId().getLsb(),request.getHeader().getClientId().getMsb());
+        // TODO (Chetan): send ACK message back to the client?
         CorfuServer.restartServer(false);
     }
 
     @Override
     protected void handleSeal(Request request, ChannelHandlerContext ctx) {
-        log.warn("handleSeal: Received SEAL request from client with " +
-                        "LSB: {} MSB:{}, " +
-                        "moving to new epoch {}",
-                request.getHeader().getClientId().getLsb(),
-                request.getHeader().getClientId().getMsb(),
-                request.getSealRequest().getEpoch());
 
-        // TODO(Chetan): Complete the seal process
-
-        // send SealResponse message back to the client
-        ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        // Temporary marker to indicate new Protobuf Message
-        byteBuf.writeByte(0x2);
-        byteBuf.writeBytes(API.newSealResponse(request.getHeader()).toByteArray());
-        ctx.writeAndFlush(byteBuf);
     }
 
     @Override
