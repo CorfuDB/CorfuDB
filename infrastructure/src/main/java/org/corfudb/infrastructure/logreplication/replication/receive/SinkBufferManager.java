@@ -156,7 +156,7 @@ public abstract class SinkBufferManager {
          */
         if (shouldAck()) {
             LogReplicationEntryMetadata metadata = makeAckMessage(dataMessage);
-            log.info("Sending an ACK {}", metadata);
+            log.trace("Sending an ACK {}", metadata);
             return new LogReplicationEntry(metadata);
         }
 

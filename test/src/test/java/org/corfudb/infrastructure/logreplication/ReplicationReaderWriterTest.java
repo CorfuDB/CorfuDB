@@ -60,7 +60,7 @@ public class ReplicationReaderWriterTest extends AbstractViewTest {
 
     static public final int BATCH_SIZE = 2;
 
-    static private final int NUM_TRANSACTIONS = 100;
+    static private final int NUM_TRANSACTIONS = 20;
 
     CorfuRuntime srcDataRuntime = null;
     CorfuRuntime dstDataRuntime = null;

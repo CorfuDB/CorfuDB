@@ -87,9 +87,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // Number of messages per batch
     static private final int BATCH_SIZE = 4;
 
-    // Data message size 68 bytes
-    // each snapshot entry is 33 bytes, so each snapshot message contains two entries.
-    static private final int MSG_SIZE = 88;
+    // each snapshot entry is 33 bytes
+    // log entry size is 66 bytes or more according to how many streams in one transactions
+    static private final int MSG_SIZE = 524288;
+
+    static private final int SMALL_MSG_SIZE = 200;
 
     static private TestConfig testConfig = new TestConfig();
 
@@ -740,7 +742,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
 
         testConfig.clear().setDropMessageLevel(2);
-        startLogEntrySync(crossTables, WAIT.ON_ERROR);
+        startLogEntrySync(crossTables, WAIT.ON_TIMEOUT_ERROR);
     }
 
     /**
@@ -1250,7 +1252,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Block until the snapshot sync completes == one ACK is received by the source manager, or an error occurs
         System.out.println("\n****** Wait until the wait condition is met");
-        if (waitConditions.contains(WAIT.ON_ERROR)) {
+        if (waitConditions.contains(WAIT.ON_ERROR) || waitConditions.contains(WAIT.ON_TIMEOUT_ERROR)) {
             blockUntilExpectedValueReached.acquire();
         } else if (waitConditions.contains(WAIT.ON_ACK)) {
             blockUntilExpectedAckTs.acquire();
@@ -1269,7 +1271,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                                             Set<WAIT> waitConditions) throws InterruptedException {
         // Config
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, BATCH_SIZE, MSG_SIZE);
+        int msg_size = MSG_SIZE;
+        if (waitConditions.contains(WAIT.ON_TIMEOUT_ERROR)) {
+            msg_size = SMALL_MSG_SIZE;
+        }
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, BATCH_SIZE, SMALL_MSG_SIZE);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel(), logReplicationMetadataManager);
@@ -1293,6 +1299,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     ackMessages.addObserver(this);
                     break;
                 case ON_ERROR: // Wait on Error Notifications to Source
+                case ON_TIMEOUT_ERROR:
                     errorsLogEntrySync = sourceDataSender.getErrors();
                     errorsLogEntrySync.addObserver(this);
                     break;
@@ -1398,6 +1405,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         ON_ACK,
         ON_ACK_TS,
         ON_ERROR,
+        ON_TIMEOUT_ERROR,
         ON_DATA_CONTROL_CALL,
         ON_RESCHEDULE_SNAPSHOT_SYNC,
         ON_SINK_RECEIVE,

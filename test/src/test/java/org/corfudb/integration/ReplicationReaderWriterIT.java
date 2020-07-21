@@ -52,7 +52,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     static private final int START_VAL = 11;
     static private final int NUM_KEYS = 10;
     static private final int NUM_STREAMS = 2;
-    static public final int NUM_TRANSACTIONS = 100;
+    static public final int NUM_TRANSACTIONS = 20;
 
     Process server1;
     Process server2;
