@@ -420,4 +420,9 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .assignResponsiveSequencerAsPrimary(Collections.singleton(SERVERS.ENDPOINT_0));
         layoutBuilder.build();
     }
+
+    @Override
+    public void close() {
+        //empty
+    }
 }

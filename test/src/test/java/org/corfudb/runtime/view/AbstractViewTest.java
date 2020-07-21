@@ -184,7 +184,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
 
     @After
     public void cleanupBuffers() {
-        testServerMap.values().forEach(TestServer::close);
+        close();
         // Abort any active transactions...
         while (runtime.getObjectsView().TXActive()) {
             runtime.getObjectsView().TXAbort();
@@ -194,6 +194,11 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtimeRouterMap.clear();
         testServerMap.clear();
         runtime.shutdown();
+    }
+
+    @Override
+    public void close() {
+        testServerMap.values().forEach(TestServer::close);
     }
 
     /**

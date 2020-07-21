@@ -48,7 +48,7 @@ import org.junit.runners.model.Statement;
 /**
  * Created by mwei on 12/13/15.
  */
-public class AbstractCorfuTest {
+public abstract class AbstractCorfuTest implements AutoCloseable {
 
     public Set<Callable<Object>> scheduledThreads;
     public String testStatus = "";
@@ -358,7 +358,8 @@ public class AbstractCorfuTest {
     @After
     public void cleanPerTestTempDir() throws Exception {
         deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR), false);
-        final LsofSpec lsofSpec = new LsofSpec();
+        close();
+        LsofSpec lsofSpec = new LsofSpec();
         lsofSpec.check();
     }
 

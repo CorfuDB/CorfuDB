@@ -15,9 +15,6 @@ import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.junit.Before;
 
-import java.util.AbstractMap;
-import java.util.AbstractMap.SimpleEntry;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -119,6 +116,10 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         requestCounter.set(0);
     }
 
+    @Override
+    public void close() {
+        router.close();
+    }
 
     public CorfuMsg getLastMessage() {
         if (router.getResponseMessages().size() == 0) return null;

@@ -100,10 +100,6 @@ public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
         assertFalse(result.isConflict());
     }
 
-
-
-
-
     @Test
     public void test3FuturesWithFirstWinnerIncompleteComplete() throws Exception {
         CompletableFuture<String> f1 = new CompletableFuture<>();
@@ -120,7 +116,6 @@ public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
         Object value = result.get(PARAMETERS.TIMEOUT_SHORT.toMillis(), TimeUnit.MILLISECONDS);
         assertEquals("ok", value);
     }
-
 
     @Test
     public void testException() throws Exception {
@@ -260,4 +255,8 @@ public class QuorumFuturesFactoryTest extends AbstractCorfuTest {
         assertTrue(result.isConflict());
     }
 
+    @Override
+    public void close() {
+        //empty
+    }
 }

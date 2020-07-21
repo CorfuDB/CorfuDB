@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Created by mwei on 12/13/15.
  */
 @Slf4j
-public class TestServerRouter implements IServerRouter {
+public class TestServerRouter implements IServerRouter, AutoCloseable {
 
     @Getter
     public List<CorfuMsg> responseMessages;
@@ -123,5 +123,17 @@ public class TestServerRouter implements IServerRouter {
             throw new IllegalStateException("ServerContext should be set.");
         }
         return Optional.ofNullable(getServerContext().getCurrentLayout());
+    }
+
+    @Override
+    public void close() {
+        handlerMap.values().forEach(server -> {
+            String serverName = server.getClass().getSimpleName();
+            try {
+                server.shutdown();
+            } catch (Exception ex) {
+                log.error("close: Failed to shutdown: {}", serverName);
+            }
+        });
     }
 }

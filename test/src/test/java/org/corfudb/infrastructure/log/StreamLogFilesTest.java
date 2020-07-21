@@ -762,4 +762,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         assertThat(parentSize).isEqualTo(parentDirFilePayloadSize + childDirFilePayloadSize);
         assertThat(childDirSize).isEqualTo(childDirFilePayloadSize);
     }
+
+    @Override
+    public void close() {
+        //empty
+    }
 }

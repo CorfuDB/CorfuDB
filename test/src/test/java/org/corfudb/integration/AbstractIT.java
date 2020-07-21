@@ -90,10 +90,15 @@ public class AbstractIT extends AbstractCorfuTest {
     /**
      * Cleans up all Corfu instances after the tests.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @After
     public void cleanUp() throws Exception {
+        close();
+    }
+
+    @Override
+    public void close() throws Exception {
         forceShutdownAllCorfuServers();
         if (runtime != null) {
             runtime.shutdown();

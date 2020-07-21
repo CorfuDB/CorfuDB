@@ -71,4 +71,9 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
                 .timer(StreamLogCompaction.STREAM_COMPACT_METRIC)
                 .getCount();
     }
+
+    @Override
+    public void close() {
+        //empty
+    }
 }

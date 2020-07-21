@@ -43,8 +43,13 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
     }
 
     @After
-    public void shutdownServers() {
-        new HashSet<>(serverRouter.handlerMap.values()).forEach(AbstractServer::shutdown);
+    public void shutdownServers() throws Exception {
+        close();
+    }
+
+    @Override
+    public void close() throws Exception {
+        serverRouter.close();
     }
 
     /**

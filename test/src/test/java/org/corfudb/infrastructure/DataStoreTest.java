@@ -172,4 +172,9 @@ public class DataStoreTest extends AbstractCorfuTest {
             assertThat(dataStore.get(TEST_RECORD)).isEqualTo("NEW_VALUE");
         }
     }
+
+    @Override
+    public void close() {
+        //empty
+    }
 }

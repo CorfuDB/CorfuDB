@@ -566,4 +566,9 @@ public class NettyCommTest extends AbstractCorfuTest {
         }
 
     }
+
+    @Override
+    public void close() throws Exception {
+        //empty
+    }
 }

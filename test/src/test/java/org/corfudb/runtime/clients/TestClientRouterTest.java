@@ -60,4 +60,9 @@ public class TestClientRouterTest extends AbstractCorfuTest {
         assertThatThrownBy(() -> bc.sealRemoteServer(NEW_EPOCH).get())
                 .hasCauseInstanceOf(TimeoutException.class);
     }
+
+    @Override
+    public void close() throws Exception {
+        //empty
+    }
 }

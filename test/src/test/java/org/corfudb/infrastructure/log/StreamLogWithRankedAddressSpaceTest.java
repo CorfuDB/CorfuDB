@@ -218,4 +218,9 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
                 .setMemory(false)
                 .build();
     }
+
+    @Override
+    public void close() {
+        //empty
+    }
 }

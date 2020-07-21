@@ -38,4 +38,9 @@ public class IRetryTest extends AbstractCorfuTest {
             throw new SQLException();
         }).run();
     }
+
+    @Override
+    public void close() {
+        //empty
+    }
 }

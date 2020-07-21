@@ -47,4 +47,8 @@ public class AbstractCorfuConcurrencyTest extends AbstractCorfuTest {
                 .isInstanceOf(CancellationException.class);
     }
 
+    @Override
+    public void close() {
+        //empty
+    }
 }

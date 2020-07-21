@@ -180,6 +180,8 @@ public class MultiReadWriteLockTest extends AbstractCorfuTest {
         }
     }
 
-
-
+    @Override
+    public void close() {
+        //empty
+    }
 }
