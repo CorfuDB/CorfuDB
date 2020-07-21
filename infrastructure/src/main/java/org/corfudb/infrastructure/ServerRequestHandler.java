@@ -1,8 +1,11 @@
 package org.corfudb.infrastructure;
 
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.client.RequestHandler;
 import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
@@ -101,10 +104,36 @@ public class ServerRequestHandler extends RequestHandler {
     }
 
     @Override
+    protected void handleReset(Request request, ChannelHandlerContext ctx) {
+        log.warn("handleReset: Remote reset requested from client with " +
+                "LSB: {} MSB:{}", request.getHeader().getClientId().getLsb(),
+                request.getHeader().getClientId().getMsb());
+
+        // send ResetResponse message back to the client
+        ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
+        // Temporary marker to indicate new Protobuf Message
+        byteBuf.writeByte(0x2);
+        CorfuProtocol.Response response = API.newResetResponse(request.getHeader());
+        byteBuf.writeBytes(response.toByteArray());
+        ctx.writeAndFlush(byteBuf);
+
+        CorfuServer.restartServer(true);
+    }
+
+    @Override
     protected void handleRestart(Request request, ChannelHandlerContext ctx) {
-        log.warn("[ServerRequestHandler]:Remote restart requested from client with " +
-                "LSB: {} MSB:", request.getHeader().getClientId().getLsb(),request.getHeader().getClientId().getMsb());
-        // TODO (Chetan): send ACK message back to the client?
+        log.warn("handleRestart: Remote restart requested from client with " +
+                "LSB: {} MSB:{}", request.getHeader().getClientId().getLsb(),
+                request.getHeader().getClientId().getMsb());
+
+        // send RestartResponse message back to the client
+        ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
+        // Temporary marker to indicate new Protobuf Message
+        byteBuf.writeByte(0x2);
+        CorfuProtocol.Response response = API.newRestartResponse(request.getHeader());
+        byteBuf.writeBytes(response.toByteArray());
+        ctx.writeAndFlush(byteBuf);
+
         CorfuServer.restartServer(false);
     }
 

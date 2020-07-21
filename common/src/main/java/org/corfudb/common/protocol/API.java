@@ -282,4 +282,28 @@ public class API {
                 .setRestartRequest(restartRequest)
                 .build();
     }
+
+    public static Response newRestartResponse(Header header) {
+        RestartResponse restartResponse = RestartResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setRestartResponse(restartResponse)
+                .build();
+    }
+
+    public static Request newResetRequest(Header header) {
+        ResetRequest resetRequest = ResetRequest.getDefaultInstance();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setResetRequest(resetRequest)
+                .build();
+    }
+
+    public static Response newResetResponse(Header header) {
+        ResetResponse resetResponse = ResetResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setResetResponse(resetResponse)
+                .build();
+    }
 }
