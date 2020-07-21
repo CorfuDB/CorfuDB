@@ -21,6 +21,8 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.WrongClusterPayload;
 
 import java.util.UUID;
 
+import static org.corfudb.common.protocol.proto.CorfuProtocol.*;
+
 /**
  * Created by Maithem on 7/1/20.
  */
@@ -281,5 +283,13 @@ public class API {
         }
 
         return false;
+    }
+
+    public static Request newRestartRequest(Header header) {
+        RestartRequest restartRequest = RestartRequest.getDefaultInstance();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setRestartRequest(restartRequest)
+                .build();
     }
 }
