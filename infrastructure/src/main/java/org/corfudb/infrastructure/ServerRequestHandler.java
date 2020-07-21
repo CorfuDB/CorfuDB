@@ -1,9 +1,10 @@
-package org.corfudb.common.protocol;
+package org.corfudb.infrastructure;
 
 
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.client.RequestHandler;
+import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 
@@ -101,7 +102,10 @@ public class ServerRequestHandler extends RequestHandler {
 
     @Override
     protected void handleRestart(Request request, ChannelHandlerContext ctx) {
-
+        log.warn("[ServerRequestHandler]:Remote restart requested from client with " +
+                "LSB: {} MSB:", request.getHeader().getClientId().getLsb(),request.getHeader().getClientId().getMsb());
+        // TODO (Chetan): send ACK message back to the client?
+        CorfuServer.restartServer(false);
     }
 
     @Override
