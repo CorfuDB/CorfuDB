@@ -63,11 +63,6 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest {
     private final static int STRING_MIN = 5;
     private final static int STRING_MAX = 10;
 
-    public DiskBackedCorfuClientTest() {
-        AbstractViewTest.initEventGroup();
-        resetTests();
-    }
-
     /**
      * Single type POJO serializer.
      */
