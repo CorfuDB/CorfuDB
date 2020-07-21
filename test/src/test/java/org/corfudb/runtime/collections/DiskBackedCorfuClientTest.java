@@ -55,7 +55,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Disk-backed {@link StreamingMap} tests.
  */
-public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoCloseable {
+public class DiskBackedCorfuClientTest extends AbstractViewTest {
 
     private final static Path persistedCacheLocation = Paths.get("/tmp/", "diskBackedMap2");
     private final static int SAMPLE_SIZE = 100;
@@ -66,12 +66,6 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     public DiskBackedCorfuClientTest() {
         AbstractViewTest.initEventGroup();
         resetTests();
-    }
-
-    @Override
-    public void close() {
-        super.cleanupBuffers();
-        AbstractViewTest.cleanEventGroup();
     }
 
     /**
