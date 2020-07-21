@@ -292,4 +292,54 @@ public class API {
                 .setRestartRequest(restartRequest)
                 .build();
     }
+
+    public static Response newRestartResponse(Header header) {
+        RestartResponse restartResponse = RestartResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setRestartResponse(restartResponse)
+                .build();
+    }
+
+    public static Request newResetRequest(Header header) {
+        ResetRequest resetRequest = ResetRequest.getDefaultInstance();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setResetRequest(resetRequest)
+                .build();
+    }
+
+    public static Response newResetResponse(Header header) {
+        ResetResponse resetResponse = ResetResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setResetResponse(resetResponse)
+                .build();
+    }
+
+    public static Request newSealRequest(Header header, long newEpoch) {
+        SealRequest sealRequest = SealRequest.newBuilder()
+                                        .setEpoch(newEpoch)
+                                        .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setSealRequest(sealRequest)
+                .build();
+    }
+
+    public static Response newSealResponse(Header header){
+        SealResponse sealResponse = SealResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setSealResponse(sealResponse)
+                .build();
+    }
+
+    public static Request newRestartRequest(Header header) {
+        RestartRequest restartRequest = RestartRequest.getDefaultInstance();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setRestartRequest(restartRequest)
+                .build();
+    }
 }
