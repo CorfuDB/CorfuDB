@@ -15,17 +15,15 @@ enum MessageType {
     AUTHENTICATE = 1;
     RESTART = 2;
     SEAL  = 3;
-
     GET_LAYOUT  = 4;
     PREPARE_LAYOUT  = 5;
     PROPOSE_LAYOUT = 6;
     COMMIT_LAYOUT = 7;
-
     GET_TOKEN = 8;
     COMMIT_TRANSACTION = 9;
-    BOOTSTRAP = 10;
+    BOOTSTRAP_SEQUENCER = 10;
+    BOOTSTRAP = 11;
     QUERY_STREAM = 16;
-
     READ_LOG = 17;
     QUERY_LOG_METADATA = 18;
     TRIM_LOG = 19;
@@ -60,11 +58,19 @@ message UUID {
     int64 msb = 2;
 }
 
-// Used to request a range of addresses for a stream -- Range defined by [start, end).
+// Used to request a range of addresses for a stream.
+// Range defined by [start, end).
 message StreamAddressRange {
     UUID streamId = 1;
     int64 startAddress = 2;
     int64 endAddress = 3;
+}
+
+// Token returned by the sequencer.
+// Combination of the sequence number and epoch at which it was acquired.
+message Token {
+    int64 epoch = 1;
+    int64 sequence = 2;
 }
 
 message ServerError {
@@ -93,7 +99,6 @@ message RestartRequest {
 }
 
 message RestartResponse {
-
 }
 
 message SealRequest {
