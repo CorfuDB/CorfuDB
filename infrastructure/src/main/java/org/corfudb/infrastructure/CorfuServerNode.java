@@ -15,17 +15,20 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerThreadFactory.ExceptionHandler;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Version;
 
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -33,6 +36,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 
 /**
@@ -135,28 +139,34 @@ public class CorfuServerNode implements AutoCloseable {
 
         // A executor service to create the shutdown threads
         // plus name the threads correctly.
-        final ExecutorService shutdownService = Executors.newFixedThreadPool(serverMap.size(),
-                new ServerThreadFactory("CorfuServer-shutdown-",
-                        new ServerThreadFactory.ExceptionHandler()));
+        final ExecutorService shutdownService = Executors.newFixedThreadPool(
+                serverMap.size(),
+                new ServerThreadFactory("CorfuServer-shutdown-", new ExceptionHandler())
+        );
 
         // Turn into a list of futures on the shutdown, returning
         // generating a log message to inform of the result.
-        CompletableFuture[] shutdownFutures = serverMap.values().stream()
-                .map(server -> CompletableFuture.runAsync(() -> {
-                    try {
-                        log.info("close: Shutting down {}", server.getClass().getSimpleName());
-                        server.shutdown();
-                        log.info("close: Cleanly shutdown {}", server.getClass().getSimpleName());
-                    } catch (Exception e) {
-                        log.error("close: Failed to cleanly shutdown {}",
-                                server.getClass().getSimpleName(), e);
-                    }
-                }, shutdownService))
-                .toArray(CompletableFuture[]::new);
+        List<CompletableFuture<Void>> shutdownFutures = serverMap.values()
+                .stream()
+                .map(server -> shutdownServer(shutdownService, server))
+                .collect(Collectors.toList());
 
-        CompletableFuture.allOf(shutdownFutures).join();
+        CFUtils.allOf(shutdownFutures).join();
         shutdownService.shutdown();
         log.info("close: Server shutdown and resources released");
+    }
+
+    private CompletableFuture<Void> shutdownServer(ExecutorService shutdownService, AbstractServer server) {
+        String serverName = server.getClass().getSimpleName();
+        return CompletableFuture.runAsync(() -> {
+            try {
+                log.info("close: Shutting down {}", serverName);
+                server.shutdown();
+                log.info("close: Cleanly shutdown {}", serverName);
+            } catch (Exception e) {
+                log.error("close: Failed to cleanly shutdown {}", serverName, e);
+            }
+        }, shutdownService);
     }
 
     /**

@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.log;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.ServerContext;
@@ -17,15 +16,14 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.test.LsofSpec;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -34,7 +32,6 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.assertj.core.api.Assertions.fail;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 
@@ -43,6 +40,8 @@ import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE
  * Created by maithem on 11/2/16.
  */
 public class StreamLogFilesTest extends AbstractCorfuTest {
+
+    private final LsofSpec lsofSpec = new LsofSpec();
 
     private String getDirPath() {
         return PARAMETERS.TEST_TEMP_DIR;
@@ -97,21 +96,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         segmentSupervisor.close();
 
         segmentSupervisor.closeSegmentHandlers(0);
-
-        Process process = new ProcessBuilder()
-                .command("lsof")
-                .start();
-
-        InputStream inputStream = process.getInputStream();
-        String output = IOUtils.toString(inputStream, StandardCharsets.UTF_8.name());
-        inputStream.close();
-
-        String[] arr = output.split("\\r?\\n");
-        for (String record : arr) {
-            if (record.contains("log/0.log")) {
-                fail("File descriptor leak detected: " + record);
-            }
-        }
+        lsofSpec.check();
     }
 
     @Test

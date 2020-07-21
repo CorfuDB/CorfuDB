@@ -32,6 +32,7 @@ import java.util.function.IntConsumer;
 import org.assertj.core.api.AbstractObjectAssert;
 import org.assertj.core.api.AbstractThrowableAssert;
 import org.corfudb.test.DisabledOnTravis;
+import org.corfudb.test.LsofSpec;
 import org.corfudb.test.concurrent.TestThreadGroups;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
@@ -58,11 +59,9 @@ public class AbstractCorfuTest {
      */
     public ArrayList<IntConsumer> testSM = null;
 
-    public static final CorfuTestParameters PARAMETERS =
-            new CorfuTestParameters();
+    public static final CorfuTestParameters PARAMETERS = new CorfuTestParameters();
 
-    public static final CorfuTestServers SERVERS =
-            new CorfuTestServers();
+    public static final CorfuTestServers SERVERS = new CorfuTestServers();
 
     @AfterClass
     public static void shutdownNettyGroups() {
@@ -357,11 +356,11 @@ public class AbstractCorfuTest {
     /** Clean the per test temporary directory (PARAMETERS.TEST_TEMP_DIR)
      */
     @After
-    public void cleanPerTestTempDir() {
-        deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR),
-                false);
+    public void cleanPerTestTempDir() throws Exception {
+        deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR), false);
+        final LsofSpec lsofSpec = new LsofSpec();
+        lsofSpec.check();
     }
-
 
     public void calculateAbortRate(int aborts, int transactions) {
         final float FRACTION_TO_PERCENT = 100.0F;
