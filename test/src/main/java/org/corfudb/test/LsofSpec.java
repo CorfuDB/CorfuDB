@@ -26,6 +26,8 @@ public class LsofSpec {
                 .filter(record -> record.contains("log/0.log"))
                 .collect(Collectors.toList());
 
-        fail("File descriptor leaks detected: " + leaks);
+        if (!leaks.isEmpty()){
+            fail("File descriptor leaks detected: " + leaks);
+        }
     }
 }
