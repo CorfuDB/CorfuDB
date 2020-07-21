@@ -182,9 +182,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtime.getAddressSpaceView().resetCaches();
     }
 
-    @After
-    public void cleanupBuffers() {
-        close();
+    @Override
+    public void close() {
+        testServerMap.values().forEach(TestServer::close);
+
         // Abort any active transactions...
         while (runtime.getObjectsView().TXActive()) {
             runtime.getObjectsView().TXAbort();
@@ -194,11 +195,6 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         runtimeRouterMap.clear();
         testServerMap.clear();
         runtime.shutdown();
-    }
-
-    @Override
-    public void close() {
-        testServerMap.values().forEach(TestServer::close);
     }
 
     /**
@@ -525,6 +521,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         void addToTest(int port, AbstractViewTest test) {
 
             if (test.testServerMap.putIfAbsent("test:" + port, this) != null) {
+                test.close();
                 throw new RuntimeException("Server already registered at port " + port);
             }
 

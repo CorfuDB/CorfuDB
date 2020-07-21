@@ -356,7 +356,7 @@ public abstract class AbstractCorfuTest implements AutoCloseable {
     /** Clean the per test temporary directory (PARAMETERS.TEST_TEMP_DIR)
      */
     @After
-    public void cleanPerTestTempDir() throws Exception {
+    public void cleanUp() throws Exception {
         close();
         deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR), false);
         LsofSpec lsofSpec = new LsofSpec();
