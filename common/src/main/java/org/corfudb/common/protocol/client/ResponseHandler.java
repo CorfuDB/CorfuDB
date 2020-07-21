@@ -48,6 +48,10 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
                     checkArgument(response.hasRestartResponse());
                     handleRestart(response);
                     break;
+                case RESET:
+                    checkArgument(response.hasResetResponse());
+                    handleReset(response);
+                    break;
                 case AUTHENTICATE:
                     checkArgument(response.hasAuthenticateResponse());
                     handleAuthenticate(response);
@@ -139,6 +143,7 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
     protected abstract void handleServerError(Response error);
     protected abstract void handlePing(Response response);
     protected abstract void handleRestart(Response response);
+    protected abstract void handleReset(Response response);
     protected abstract void handleAuthenticate(Response response);
     protected abstract void handleSeal(Response response);
     protected abstract void handleGetLayout(Response response);

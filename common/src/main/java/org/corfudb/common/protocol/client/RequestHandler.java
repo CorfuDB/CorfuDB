@@ -51,6 +51,10 @@ public abstract class RequestHandler extends ChannelInboundHandlerAdapter {
                     checkArgument(request.hasRestartRequest());
                     handleRestart(request, ctx);
                     break;
+                case RESET:
+                    checkArgument(request.hasResetRequest());
+                    handleReset(request, ctx);
+                    break;
                 case AUTHENTICATE:
                     checkArgument(request.hasAuthenticateRequest());
                     handleAuthenticate(request, ctx);
@@ -141,6 +145,7 @@ public abstract class RequestHandler extends ChannelInboundHandlerAdapter {
 
     protected abstract void handlePing(Request request, ChannelHandlerContext ctx);
     protected abstract void handleRestart(Request request, ChannelHandlerContext ctx);
+    protected abstract void handleReset(Request request, ChannelHandlerContext ctx);
     protected abstract void handleAuthenticate(Request request, ChannelHandlerContext ctx);
     protected abstract void handleSeal(Request request, ChannelHandlerContext ctx);
     protected abstract void handleGetLayout(Request request, ChannelHandlerContext ctx);

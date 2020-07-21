@@ -64,7 +64,6 @@ public class PeerClient extends ChannelHandler {
      *
      * @return A completable future which will be completed with True if
      * the endpoint acks, otherwise False or exceptional completion.
-     * TODO(Chetan): confirm if just reachable remote is enough or check ACKs from it?
      */
     protected CompletableFuture<Boolean> restart(){
         Header header = getHeader(MessageType.RESTART, true, true);
@@ -72,6 +71,28 @@ public class PeerClient extends ChannelHandler {
     }
 
     protected void handleRestart(Response response) {
+        log.warn("handleRestart: Restart response received from the server with " +
+                        "LSB: {} MSB:{}", response.getHeader().getClientId().getLsb(),
+                response.getHeader().getClientId().getMsb());
+        completeRequest(response.getHeader().getRequestId(), true);
+    }
+
+    /**
+     * Reset the endpoint, asynchronously.
+     * WARNING: ALL EXISTING DATA ON THIS NODE WILL BE LOST.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint acks, otherwise False or exceptional completion.
+     */
+    protected CompletableFuture<Boolean> reset(){
+        Header header = getHeader(MessageType.RESET, true, true);
+        return sendRequest(API.newResetRequest(header));
+    }
+
+    protected void handleReset(Response response) {
+        log.warn("handleReset: Reset response received from the server with " +
+                        "LSB: {} MSB:{}", response.getHeader().getClientId().getLsb(),
+                response.getHeader().getClientId().getMsb());
         completeRequest(response.getHeader().getRequestId(), true);
     }
 
@@ -209,7 +230,7 @@ public class PeerClient extends ChannelHandler {
                 100000,
                 false,
                 false,
-                new UUID(1234,1234),
+                API.DEFAULT_UUID,
                 API.DEFAULT_UUID
         );
         InetSocketAddress remoteAddress = new InetSocketAddress(InetAddress.getByName("localhost"),9000);
@@ -222,5 +243,6 @@ public class PeerClient extends ChannelHandler {
                 config);
         // log.info(peerClient.ping().get().toString());
         log.info(peerClient.restart().get().toString());
+        // log.info(peerClient.reset().get().toString());
     }
 }
