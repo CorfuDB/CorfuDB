@@ -156,7 +156,6 @@ public class PeerClient extends ChannelHandler {
 
     }
 
-
     public CompletableFuture<Response> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
         Header header = getHeader(MessageType.QUERY_STREAM, false, false);
         return sendRequest(API.newQueryStreamRequest(header, streamsAddressesRange));
