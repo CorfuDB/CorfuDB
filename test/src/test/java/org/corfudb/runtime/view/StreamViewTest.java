@@ -129,7 +129,7 @@ public class StreamViewTest extends AbstractViewTest {
                 .ignoreTrimmed(true)
                 .build();
 
-        IStreamView txStream = runtime.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID, options);
+        IStreamView txStream = getRuntime().getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID, options);
         final int firstIter = 50;
         for (int x = 0; x < firstIter; x++) {
             byte[] data = "Hello World!".getBytes();
@@ -139,6 +139,7 @@ public class StreamViewTest extends AbstractViewTest {
         List<ILogData> entries = txStream.remainingUpTo((firstIter - 1) / 2);
         assertThat(entries.size()).isEqualTo(firstIter / 2);
 
+        CorfuRuntime runtime = getRuntime();
         Token token = new Token(runtime.getLayoutView().getLayout().getEpoch(), (firstIter - 1) / 2);
         runtime.getAddressSpaceView().prefixTrim(token);
         runtime.getAddressSpaceView().invalidateServerCaches();
@@ -372,6 +373,7 @@ public class StreamViewTest extends AbstractViewTest {
         sv.append(testPayload);
 
         // Trim the entry
+        CorfuRuntime runtime = getRuntime();
         Token token = new Token(runtime.getLayoutView().getLayout().getEpoch(), 0);
         runtime.getAddressSpaceView().prefixTrim(token);
         runtime.getAddressSpaceView().gc();
