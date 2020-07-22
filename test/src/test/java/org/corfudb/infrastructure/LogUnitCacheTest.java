@@ -50,23 +50,16 @@ public class LogUnitCacheTest extends AbstractServerTest {
         return s1;
     }
 
-    @Override
-    public void setServer(AbstractServer server) {
-        router.reset();
-        router.addServer(server);
-    }
-
     /**
      * Test non-cacheable reads on log unit sever will not affect server cache.
      */
     @Test
-    public void checkNonCacheableReads() throws Exception {
+    public void checkNonCacheableReads() {
         final int size = 10;
         final long start = 0L;
         final long end = start + size;
 
         LogUnitServer logUnitServer = getDefaultServer();
-        setServer(logUnitServer);
 
         List<Long> addresses = LongStream.range(start, end).boxed().collect(Collectors.toList());
         List<LogData> payloads = new ArrayList<>();
@@ -88,20 +81,23 @@ public class LogUnitCacheTest extends AbstractServerTest {
 
 
         checkReadResponse(future.join(), size);
-        assertThat(logUnitServer.getDataCache().getSize()).isEqualTo(0);
+        assertThat(logUnitServer.getDataCache().getSize()).isZero();
 
         // Cacheable reads should update the data cache on server.
-        future = sendRequest(CorfuMsgType.MULTIPLE_READ_REQUEST
-                .payloadMsg(new MultipleReadRequest(addresses, true)));
+        MultipleReadRequest request = new MultipleReadRequest(addresses, true);
+        future = sendRequest(CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(request));
 
         checkReadResponse(future.join(), size);
         assertThat(logUnitServer.getDataCache().getSize()).isEqualTo(size);
+        logUnitServer.shutdown();
     }
 
     private void checkReadResponse(ReadResponse readResponse, int size) {
-        assertThat(readResponse.getAddresses().size()).isEqualTo(size);
+        assertThat(readResponse.getAddresses()).hasSize(size);
 
-        readResponse.getAddresses().forEach((addr, ld) -> assertThat(ld.getType()).isEqualTo(DataType.DATA));
+        readResponse
+                .getAddresses()
+                .forEach((addr, ld) -> assertThat(ld.getType()).isEqualTo(DataType.DATA));
     }
 
     /**
