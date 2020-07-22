@@ -110,8 +110,8 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
                 }
 
                 log.debug("removeFromQueue[{}]: ignoring trimmed addresses {}", this, te.getTrimmedAddresses());
-                // Ignore trimmed address, remove trimmed addresses and get next from queue
-                te.getTrimmedAddresses().forEach(address -> queue.remove(address));
+                // Ignore trimmed address, remove trimmed addresses and get next from queue.
+                te.getTrimmedAddresses().forEach(queue::remove);
 
                 // If a TrimmedException was caught, the requested address (nextRead) is trimmed (lower of all),
                 // we need to continue reading to retrieve the next valid entry for this stream.
