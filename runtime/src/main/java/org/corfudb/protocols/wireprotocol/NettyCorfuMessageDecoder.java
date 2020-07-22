@@ -8,6 +8,7 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 import java.util.List;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.API;
 
 
 /**
@@ -19,7 +20,13 @@ public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {
     @Override
     protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf,
                           List<Object> list) throws Exception {
-        byteBuf.readByte(); // Temporary -- Consume marker that indicates msg as legacy.
+        // Leave message unchanged if is non-legacy
+        if(byteBuf.getByte(byteBuf.readerIndex()) != API.LEGACY_CORFU_MSG_MARK) {
+            list.add(byteBuf);
+            return;
+        }
+
+        byteBuf.readByte();
         list.add(CorfuMsg.deserialize(byteBuf));
     }
 

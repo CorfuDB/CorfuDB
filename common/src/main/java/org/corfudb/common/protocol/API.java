@@ -22,6 +22,10 @@ public class API {
     public static final ProtocolVersion CURRENT_VERSION = ProtocolVersion.v0;
     public static final UUID DEFAULT_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
+    // Temporary message header markers indicating message type.
+    public static final byte LEGACY_CORFU_MSG_MARK = 0x1;
+    public static final byte PROTO_CORFU_MSG_MARK = 0x2;
+
     public static CorfuProtocol.UUID getUUID(UUID uuid) {
         return CorfuProtocol.UUID.newBuilder()
                 .setLsb(uuid.getLeastSignificantBits())
