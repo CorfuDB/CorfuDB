@@ -3,6 +3,7 @@ package org.corfudb.runtime.exceptions;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -23,19 +24,24 @@ public class TrimmedException extends LogUnitException {
      * List of trimmed addresses.
      */
     @Getter
-    @Setter
-    private List<Long> trimmedAddresses;
+    private final List<Long> trimmedAddresses;
 
     public TrimmedException() {
+        trimmedAddresses = Collections.emptyList();
+    }
+
+    public TrimmedException(long trimmed) {
+        super(String.format("Trimmed address: %s", trimmed));
+        trimmedAddresses = Collections.singletonList(trimmed);
     }
 
     public TrimmedException(List<Long> trimmed) {
-        super(String.format("Trimmed addresses %s", trimmed));
+        super(String.format("Trimmed addresses: %s", trimmed));
         trimmedAddresses = trimmed;
     }
 
     public TrimmedException(String message) {
         super(message);
-        retriable = true;
+        trimmedAddresses = Collections.emptyList();
     }
 }

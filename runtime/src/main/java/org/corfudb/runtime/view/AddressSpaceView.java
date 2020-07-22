@@ -65,7 +65,6 @@ public class AddressSpaceView extends AbstractView {
 
     private final static long CACHE_KEY_SIZE = MetricsUtils.sizeOf.deepSizeOf(0L);
     private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
-    private final static boolean NO_THROW = false;
 
     /**
      * A cache for read results.
@@ -706,7 +705,7 @@ public class AddressSpaceView extends AbstractView {
      */
     private List<Long> filterTrimmedAddresses(Map<Long, ILogData> allData) {
         return allData.entrySet().stream()
-                .filter(entry -> !isLogDataValid(entry.getKey(), entry.getValue(), NO_THROW))
+                .filter(entry -> !isLogDataValid(entry.getKey(), entry.getValue(), false))
                 .map(Entry::getKey).collect(Collectors.toList());
     }
 
@@ -727,7 +726,7 @@ public class AddressSpaceView extends AbstractView {
 
         if (logData.isTrimmed()) {
             if (throwException) {
-                throw new TrimmedException(String.format("Trimmed address %s", address));
+                throw new TrimmedException(address);
             }
             return false;
         }
