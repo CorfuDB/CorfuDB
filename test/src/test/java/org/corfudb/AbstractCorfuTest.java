@@ -50,6 +50,8 @@ import org.junit.runners.model.Statement;
  */
 public abstract class AbstractCorfuTest implements AutoCloseable {
 
+    private final LsofSpec lsofSpec = new LsofSpec();
+
     public Set<Callable<Object>> scheduledThreads;
     public String testStatus = "";
 
@@ -341,8 +343,6 @@ public abstract class AbstractCorfuTest implements AutoCloseable {
         scheduledThreads = ConcurrentHashMap.newKeySet();
     }
 
-
-    @After
     public void cleanupScheduledThreads() {
         try {
             assertThat(scheduledThreads)
@@ -359,7 +359,9 @@ public abstract class AbstractCorfuTest implements AutoCloseable {
     public void cleanUp() throws Exception {
         close();
         deleteFolder(new File(PARAMETERS.TEST_TEMP_DIR), false);
-        LsofSpec lsofSpec = new LsofSpec();
+
+        cleanupScheduledThreads();
+
         lsofSpec.check();
     }
 

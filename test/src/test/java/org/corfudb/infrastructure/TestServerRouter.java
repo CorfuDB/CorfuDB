@@ -85,9 +85,12 @@ public class TestServerRouter implements IServerRouter, AutoCloseable {
         servers.add(server);
         server.getHandler()
                 .getHandledTypes()
-                .forEach(x -> {
-                    handlerMap.put(x, server);
-                    log.trace("Registered {} to handle messages of type {}", server, x);
+                .forEach(msgType -> {
+                    AbstractServer prevServer = handlerMap.put(msgType, server);
+                    if (prevServer != null) {
+                        prevServer.shutdown();
+                    }
+                    log.trace("Registered {} to handle messages of type {}", server, msgType);
                 });
     }
 
@@ -130,13 +133,22 @@ public class TestServerRouter implements IServerRouter, AutoCloseable {
 
     @Override
     public void close() {
+        List<AbstractServer> handlers = new ArrayList<>(handlerMap.values());
+        handlers.forEach(this::shutdownServer);
+
         servers.forEach(server -> {
-            String serverName = server.getClass().getSimpleName();
-            try {
-                server.shutdown();
-            } catch (Exception ex) {
-                log.error("close: Failed to shutdown: {}", serverName);
+            if (!handlers.contains(server)) {
+                shutdownServer(server);
             }
         });
+    }
+
+    private void shutdownServer(AbstractServer server) {
+        String serverName = server.getClass().getSimpleName();
+        try {
+            server.shutdown();
+        } catch (Exception ex) {
+            log.error("close: Failed to shutdown: {}", serverName);
+        }
     }
 }

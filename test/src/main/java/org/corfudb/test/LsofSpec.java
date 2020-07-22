@@ -1,5 +1,6 @@
 package org.corfudb.test;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 
 import java.io.InputStream;
@@ -10,6 +11,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.Assert.fail;
 
+@Slf4j
 public class LsofSpec {
 
     public void check() throws Exception {
@@ -27,7 +29,9 @@ public class LsofSpec {
                 .collect(Collectors.toList());
 
         if (!leaks.isEmpty()){
-            fail("File descriptor leaks detected: " + leaks);
+            log.error("File descriptor leaks detected");
+            leaks.forEach(log::error);
+            fail("File descriptor leaks error");
         }
     }
 }

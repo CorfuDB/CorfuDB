@@ -38,6 +38,7 @@ import org.junit.Test;
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -462,36 +463,38 @@ public class LogUnitHandlerTest extends AbstractClientTest {
     }
 
     @Test
-    public void CorruptedDataReadThrowsException() throws Exception {
+    public void corruptedDataReadThrowsException() throws Exception {
         byte[] testString = "hello world".getBytes();
         client.write(0, null, testString, Collections.emptyMap()).get();
-        client.write(StreamLogFiles.RECORDS_PER_LOG_FILE + 1, null,
-                testString, Collections.emptyMap()).get();
+        client.write(
+                StreamLogFiles.RECORDS_PER_LOG_FILE + 1, null, testString, Collections.emptyMap()
+        ).get();
 
         // Corrupt the written log entry
         String logDir = serverContext.getServerConfig().get("--log-path") + File.separator + "log";
         String logFilePath = logDir + File.separator + "0.log";
-        RandomAccessFile file = new RandomAccessFile(logFilePath, "rw");
 
-        ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
-        file.getChannel().read(metaDataBuf);
-        metaDataBuf.flip();
-
-        LogUnitServer server2 = new LogUnitServer(serverContext);
         serverRouter.reset();
-        serverRouter.addServer(server2);
+        serverRouter.addServer(new LogUnitServer(serverContext));
 
-        Metadata metadata = Metadata.parseFrom(metaDataBuf.array());
-        final int fileOffset = Integer.BYTES + METADATA_SIZE + metadata.getLength() + 20;
-        final int CORRUPT_BYTES = 0xFFFF;
-        file.seek(fileOffset); // Skip file header
-        file.writeInt(CORRUPT_BYTES);
-        file.close();
+        try(RandomAccessFile file = new RandomAccessFile(logFilePath, "rw")) {
+            try (FileChannel channel = file.getChannel()) {
+                ByteBuffer metaDataBuf = ByteBuffer.allocate(METADATA_SIZE);
+                channel.read(metaDataBuf);
+                metaDataBuf.flip();
 
-        // Try to read a corrupted log entry
-        assertThatThrownBy(() -> client.read(0).get())
-                .isInstanceOf(ExecutionException.class)
-                .hasCauseInstanceOf(DataCorruptionException.class);
+                Metadata metadata = Metadata.parseFrom(metaDataBuf.array());
+                final int fileOffset = Integer.BYTES + METADATA_SIZE + metadata.getLength() + 20;
+                final int CORRUPT_BYTES = 0xFFFF;
+                file.seek(fileOffset); // Skip file header
+                file.writeInt(CORRUPT_BYTES);
+
+                // Try to read a corrupted log entry
+                assertThatThrownBy(() -> client.read(0).get())
+                        .isInstanceOf(ExecutionException.class)
+                        .hasCauseInstanceOf(DataCorruptionException.class);
+            }
+        }
     }
 
     /**

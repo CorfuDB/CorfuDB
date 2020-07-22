@@ -29,10 +29,10 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
     }
 
     @Getter
-    TestClientRouter router;
+    protected TestClientRouter router;
 
     @Getter
-    TestServerRouter serverRouter;
+    protected TestServerRouter serverRouter;
 
     @Before
     public void resetTest() {
@@ -42,21 +42,16 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
         getClientsForTest().forEach(router::addClient);
     }
 
-    @After
-    public void shutdownServers() throws Exception {
-        close();
-    }
-
     @Override
-    public void close() throws Exception {
+    public void close() {
         serverRouter.close();
     }
 
     /**
      * A map of maps to endpoint->routers, mapped for each runtime instance captured
      */
-    final Map<CorfuRuntime, Map<String, TestClientRouter>>
-            runtimeRouterMap = new ConcurrentHashMap<>();
+    protected final Map<CorfuRuntime, Map<String, TestClientRouter>> runtimeRouterMap =
+            new ConcurrentHashMap<>();
 
     /**
      * Function for obtaining a router, given a runtime and an endpoint.
@@ -72,8 +67,7 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
         }
         return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
                 x -> {
-                    TestClientRouter tcn =
-                            new TestClientRouter(serverRouter);
+                    TestClientRouter tcn = new TestClientRouter(serverRouter);
                     tcn.addClient(new BaseHandler())
                             .addClient(new SequencerHandler())
                             .addClient(new LayoutHandler())

@@ -69,6 +69,11 @@ public class SegmentSupervisor {
                 IOUtils.closeQuietly(writeCh);
                 IOUtils.closeQuietly(readCh);
                 throw new IllegalStateException(e);
+            } catch (RuntimeException ex) {
+                //Prevents file resources leaks in case of any RuntimeException.
+                IOUtils.closeQuietly(writeCh);
+                IOUtils.closeQuietly(readCh);
+                throw ex;
             }
         });
 
