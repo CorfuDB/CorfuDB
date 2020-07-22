@@ -9,6 +9,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
@@ -96,14 +97,13 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;
 
-        // Temporary -- Check Corfu msg marker: 0x1 indicates legacy while 0x2 indicates new
-        if (msgBuf.getByte(msgBuf.readerIndex()) == 0x1) {
-            ctx.fireChannelRead(msgBuf); // Forward legacy corfu msg to next handler
+        // Temporary -- If message is not a new Protobuf message, forward the message.
+        if (msgBuf.getByte(msgBuf.readerIndex()) != API.PROTO_CORFU_MSG_MARK) {
+            ctx.fireChannelRead(msgBuf);
             return;
         }
 
-        msgBuf.readByte(); // Temporary -- Consume 0x2 marker
-
+        msgBuf.readByte();
         ByteBufInputStream msgInputStream = new ByteBufInputStream(msgBuf);
 
         try {
