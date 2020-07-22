@@ -1,26 +1,23 @@
 package org.corfudb.util;
 
 
+import jdk.internal.org.objectweb.asm.util.Printer;
+import jdk.internal.org.objectweb.asm.util.Textifier;
+import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
+
 import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-
-import jdk.internal.org.objectweb.asm.util.Printer;
-import jdk.internal.org.objectweb.asm.util.Textifier;
-import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ArrayUtils;
-
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-
 /**
  * Created by crossbach on 5/22/15.
  */
@@ -240,40 +237,6 @@ public class Utils {
         }
 
         return aggregateLogAddressSpace(luResponses);
-    }
-
-    /**
-     * Get exception.getCause() with its stacktrace modified to include the outer
-     * exception's stack trace. Prevents losing caller context
-     *
-     * @param throwable the Throwable to extract the causing Throwable from
-     * @return causing Throwable of the input {@code throwable} with the outer throwable's
-     *         stack trace prepended, {@code null} if no causing exception
-     */
-    public static Throwable extractCauseWithCompleteStacktrace(Throwable throwable) {
-        final Throwable cause = throwable.getCause();
-        if (cause == null) {
-            return cause;
-        }
-
-        try {
-            final StackTraceElement[] callerStackTrace = ArrayUtils.addAll(
-                throwable.getStackTrace(),
-                new StackTraceElement("Dummy stack frame", "--- End caller context ---", null, -1)
-            );
-            final StackTraceElement[] entireStackTrace = ArrayUtils.addAll(
-                callerStackTrace,
-                cause.getStackTrace()
-            );
-
-            // Note: Stacktrace might be immutable
-            cause.setStackTrace(entireStackTrace);
-        } catch (Exception e) {
-            log.info("Failed to append outer throwable's stacktrace to "
-                        + "causing throwable's stack trace",
-                     e);
-        }
-        return cause;
     }
 
     static StreamsAddressResponse aggregateLogAddressSpace(Set<StreamsAddressResponse> responses) {
