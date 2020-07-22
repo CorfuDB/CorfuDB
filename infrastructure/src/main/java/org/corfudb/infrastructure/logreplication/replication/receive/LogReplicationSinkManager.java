@@ -37,7 +37,6 @@ public class LogReplicationSinkManager implements DataReceiver {
     private static final String config_file = "/config/corfu/corfu_replication_config.properties";
 
     private final int DEFAULT_ACK_CNT = 1;
-
     /*
      * how long in milliseconds a ACK sent back to sender
      */
@@ -133,7 +132,6 @@ public class LogReplicationSinkManager implements DataReceiver {
          */
         this.rxState = RxState.LOG_ENTRY_SYNC;
         this.config = config;
-
         init();
     }
 

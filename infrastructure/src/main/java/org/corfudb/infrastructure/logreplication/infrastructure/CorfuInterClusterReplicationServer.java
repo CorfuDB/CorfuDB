@@ -44,7 +44,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "\n"
                     + "Usage:\n"
                     + "\tlog_replication_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
-                    + "[--snapshot-batch=<batch-size>] "
+                    + "[--max-num-snapshot-msg-per-batch=<batch-size>] "
                     + "[--max-data-message-size=<msg-size>] "
                     + "[--lock-lease=<lease-duration>]"
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
@@ -184,7 +184,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "              Show this screen\n"
                     + " --version                                                                "
                     + "              Show version\n";
-
 
     // Active Corfu Server Node.
     private volatile CorfuInterClusterReplicationServerNode activeServer;

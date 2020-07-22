@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
 
 /**
  *  This class is responsible of transmitting a consistent view of the data at a given timestamp,
@@ -122,7 +122,7 @@ public class SnapshotSender {
             if (completed) {
                 // Block until ACK from last sent message is received
                 try {
-                    LogReplicationEntry ack = snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                    LogReplicationEntry ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp) {
                         // Snapshot Sync Completed
                         log.info("Snapshot sync completed for {} on timestamp {}, ack{}", snapshotSyncEventId,
@@ -161,7 +161,7 @@ public class SnapshotSender {
             try {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
-                snapshotSyncAck.get(DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                 snapshotSyncComplete(snapshotSyncEventId);
             } catch (Exception e) {
                 //todo: generate an event for discovery service

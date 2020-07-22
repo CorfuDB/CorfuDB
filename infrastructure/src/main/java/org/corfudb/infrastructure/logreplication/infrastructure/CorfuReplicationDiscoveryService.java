@@ -353,7 +353,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
         }
 
-        return new LogReplicationConfig(streamsToReplicate, serverContext.getMaxNumMsgPerBatch(), serverContext.getLogReplicationMaxDataMessageSize());
+        return new LogReplicationConfig(streamsToReplicate, serverContext.getLogReplicationMaxNumMsgPerBatch(), serverContext.getLogReplicationMaxDataMessageSize());
     }
 
     /**

@@ -50,7 +50,7 @@ public class SourceForwardingDataSender implements DataSender {
 
     final static int DROP_INCREMENT = 4;
 
-    private int firstDrop = 2;
+    private int DroppingNum = 2;
 
     private int msgCnt = 0;
 
@@ -71,10 +71,10 @@ public class SourceForwardingDataSender implements DataSender {
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         System.out.println("Send message: " + message.getMetadata().getMessageMetadataType() + " for:: " + message.getMetadata().getTimestamp());
-        if (ifDropMsg > 0 && msgCnt == firstDrop) {
+        if (ifDropMsg > 0 && msgCnt == DroppingNum) {
             log.info("****** Drop msg {} log entry ts {}",  msgCnt, message.getMetadata().timestamp);
             if (ifDropMsg == DROP_MSG_ONCE) {
-                firstDrop += DROP_INCREMENT;
+                DroppingNum += DROP_INCREMENT;
             }
 
             return new CompletableFuture<>();

@@ -7,7 +7,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
-import io.netty.buffer.Unpooled;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -154,7 +153,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      * Calculate an Opaque SMR entry's serialized size.
      * @throws IllegalAccessException
      */
-    private int calculateSerializedSize() {
+    private int calculateOpaqueSMREntrySerializedSize() {
         if (!opaque) {
             log.error("This operation only supported for an opaque SMR entry");
             return 0;
@@ -176,11 +175,10 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      * The serialized size of an opaque SMR entry.
      * @return
      */
-    public synchronized int getSerializedSize() {
-        if (serializedSize == null) {
-            serializedSize = calculateSerializedSize();
-        }
-
+    public synchronized Integer getSerializedSize() {
+        //if (serializedSize == null) {
+        //    serializedSize = calculateOpaqueSMREntrySerializedSize();
+       // }
         return serializedSize;
     }
 
@@ -238,7 +236,6 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
                     b.writeInt(length);
                     b.writerIndex(lengthIndex + length + 4);
                 });
-
         serializedSize = b.writerIndex() - startWriterIndex;
     }
 

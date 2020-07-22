@@ -3,9 +3,11 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -17,6 +19,7 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -33,16 +36,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.stream.Stream;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.ReplicationReaderWriterTest.BATCH_SIZE;
-import static org.corfudb.infrastructure.logreplication.ReplicationReaderWriterTest.MAX_MSG_SIZE;
-import static org.corfudb.infrastructure.logreplication.ReplicationReaderWriterTest.PRIMARY_SITE_ID;
-import static org.corfudb.infrastructure.logreplication.ReplicationReaderWriterTest.readLogEntryMsgs;
-import static org.corfudb.infrastructure.logreplication.ReplicationReaderWriterTest.writeLogEntryMsgs;
-
 
 @Slf4j
 public class ReplicationReaderWriterIT extends AbstractIT {
@@ -53,6 +51,16 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     static private final int NUM_KEYS = 10;
     static private final int NUM_STREAMS = 2;
     static public final int NUM_TRANSACTIONS = 20;
+    static public final String PRIMARY_SITE_ID = "Cluster-Paris";
+
+    static public final int BATCH_SIZE = 2;
+
+    // Enforce to read each entry for each message
+    // each log entry size is 62, there are 2 log entry per dataMsg
+    // each snapshot entry is 33, there are 4 snapshot entry per dataMsg
+    static public final int MAX_MSG_SIZE = 160;
+
+    static Semaphore waitSem = new Semaphore(1);
 
     Process server1;
     Process server2;
@@ -267,31 +275,11 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     }
 
-    @Test
-    public void testTwoServersCanUp () throws IOException {
-        System.out.println("\ntest start");
-        setupEnv();
-
-        openStreams(srcTables, srcDataRuntime);
-        openStreams(srcTestTables, srcTestRuntime);
-        openStreams(dstTables, dstDataRuntime);
-        openStreams(dstTestTables, dstTestRuntime);
-
-        // generate data at server1
-        generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, NUM_KEYS);
-
-        // generate data at server2
-        generateData(dstTables, dstHashMap, NUM_KEYS, dstDataRuntime, NUM_KEYS*2);
-
-        verifyData("srctables", srcTables, srcHashMap);
-        verifyData("srcTestTables", srcTestTables, srcHashMap);
-
-        verifyData("dstCorfuTables", dstTables, dstHashMap);
-        verifyData("dstTestTables", dstTestTables, dstHashMap);
-        return;
+    public static void readSnapLogMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
+        readSnapLogMsgs(msgQ, streams, rt, false);
     }
 
-    public static void readSnapLogMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
+    public static void readSnapLogMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnSem)  {
         LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
         int cnt = 0;
@@ -307,6 +295,15 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
             if (snapshotReadMessage.isEndRead()) {
                 break;
+            }
+
+            if  (blockOnSem) {
+                try {
+                    waitSem.acquire();
+                } catch (InterruptedException e) {
+                    log.info("Caught an interrupted exception ", e);
+                }
+                blockOnSem = false;
             }
         }
     }
@@ -335,6 +332,54 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         writer.applyShadowStreams(seq);
     }
 
+    public static void readLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) throws TrimmedException {
+        readLogEntryMsgs(msgQ, streams, rt, false);
+    }
+
+    public static void readLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnce) throws
+            TrimmedException {
+        LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
+        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
+        reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
+
+        LogReplicationEntry entry = null;
+
+        do {
+            entry = reader.read(UUID.randomUUID());
+
+            if (entry != null) {
+                msgQ.add(entry);
+            }
+
+            if (blockOnce) {
+                try {
+                    waitSem.acquire();
+                } catch (InterruptedException e) {
+                    log.info("Caught an InterruptedException ", e);
+                }
+                blockOnce = false;
+            }
+
+            System.out.println(" msgQ size " + msgQ.size());
+
+        } while (entry != null);
+    }
+
+    public static void writeLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) {
+        org.corfudb.infrastructure.logreplication.LogReplicationConfig config = new LogReplicationConfig(streams);
+        LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
+        LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadataManager);
+
+        if (msgQ.isEmpty()) {
+            System.out.println("msgQ is empty");
+        }
+
+        for (LogReplicationEntry msg : msgQ) {
+            writer.apply(msg);
+        }
+    }
+
+
     void accessTxStream(Iterator iterator, int num) {
 
         int i = 0;
@@ -357,6 +402,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         rt.getAddressSpaceView().gc();
         rt.getAddressSpaceView().invalidateServerCaches();
         rt.getAddressSpaceView().invalidateClientCache();
+        waitSem.release();
         System.out.println("\ntrim at " + token + " currentTail " + rt.getAddressSpaceView().getLogTail());
     }
 
@@ -395,7 +441,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             while(msgQ.isEmpty()) {
                 sleep(1);
             }
-            trim(srcDataRuntime.getAddressSpaceView().getLogTail()- 2, srcDataRuntime);
+            trim(srcDataRuntime.getAddressSpaceView().getLogTail(), srcDataRuntime);
         } catch (Exception e) {
             System.out.println("caught an exception " + e);
         }
@@ -429,7 +475,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         Stream<ILogData> stream = txStream.streamUpTo(tail);
         Iterator iterator = stream.iterator();
 
-        accessTxStream(iterator, reads);
         Exception result = null;
         trim(tail, srcDataRuntime);
 
@@ -469,8 +514,12 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     @Test
-    public void testTrimmedExceptionForLogEntryReader() throws IOException {
+    public void testTrimmedExceptionForLogEntryReader() throws IOException, InterruptedException {
         setupEnv();
+
+        waitSem = new Semaphore(1);
+        waitSem.acquire();
+
         openStreams(srcTables, srcDataRuntime);
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
         long tail = srcDataRuntime.getAddressSpaceView().getLogTail();
@@ -480,7 +529,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         Exception result = null;
 
         try {
-            readLogEntryMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
+            readLogEntryMsgs(msgQ, srcHashMap.keySet(), readerRuntime, true);
         } catch (Exception e) {
             result = e;
             System.out.println("msgQ size " + msgQ.size());
@@ -490,11 +539,11 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-
     @Test
     public void testTrimmedExceptionForSnapshotReader() throws IOException, InterruptedException {
         setupEnv();
-
+        waitSem = new Semaphore(1);
+        waitSem.acquire();
         openStreams(srcTables, srcDataRuntime, 1);
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
 
@@ -505,26 +554,14 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         Exception result = null;
 
         try {
-            readSnapLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
+            readSnapLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime, true);
         } catch (Exception e) {
             result = e;
-            System.out.println("msgQ size " + msgQ.size());
             System.out.println("caught an exception " + e + " tail " + tail);
         } finally {
-            assertThat(result).isInstanceOf(TrimmedException.class);
-        }
-
-
-        try {
-            readSnapLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
-        } catch (Exception e) {
-            result = e;
             System.out.println("msgQ size " + msgQ.size());
-            System.out.println("second time caught an exception " + e + " tail " + tail);
-        } finally {
             assertThat(result).isInstanceOf(TrimmedException.class);
         }
-
     }
 
 
@@ -568,18 +605,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         printTails("after writing to dst", srcDataRuntime, dstDataRuntime);
         openStreams(dstTables, writerRuntime);
         verifyData("after writing to dst", dstTables, srcHashMap);
-    }
-
-    @Test
-    public void testPersistentTable() throws IOException {
-        setupEnv();
-        try {
-            LogReplicationMetadataManager meta = new LogReplicationMetadataManager(writerRuntime, 0, PRIMARY_SITE_ID);
-            meta.getLastProcessedLogTimestamp();
-        } catch (Exception e) {
-            e.getStackTrace();
-            throw e;
-        }
     }
 
     @Test

@@ -14,13 +14,13 @@ import java.util.Set;
 public class LogReplicationConfig {
 
     // Log Replication message timeout time in milliseconds.
-    public static final int DEFAULT_TIMEOUT = 5000;
+    public static final int DEFAULT_TIMEOUT_MS = 5000;
 
     // Log Replication default max number of message generated at the active cluster for each batch.
     public static final int DEFAULT_MAX_NUM_MSG_PER_BATCH = 10;
 
     // Log Replication default max data message size is 64MB.
-    public static final int DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE = (64 << 20);
+    public static final int MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED = (64 << 20);
 
     /**
      * percentage of log data per log replication message
@@ -56,7 +56,7 @@ public class LogReplicationConfig {
     public LogReplicationConfig(Set<String> streamsToReplicate) {
         this.streamsToReplicate = streamsToReplicate;
         this.maxNumMsgPerBatch = DEFAULT_MAX_NUM_MSG_PER_BATCH;
-        this.maxMsgSize = DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE;
+        this.maxMsgSize = MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED;
         this.maxDataSizePerMsg = maxMsgSize * DATA_FRACTION_PER_MSG / 100;
     }
 

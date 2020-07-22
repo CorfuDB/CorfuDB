@@ -43,7 +43,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
@@ -223,7 +223,7 @@ public class ServerContext implements AutoCloseable {
      * Get the max number of messages can be sent over per batch.
      * @return
      */
-    public int getMaxNumMsgPerBatch() {
+    public int getLogReplicationMaxNumMsgPerBatch() {
         String val = getServerConfig(String.class, "--snapshot-batch");
         return val == null ? DEFAULT_MAX_NUM_MSG_PER_BATCH : Integer.parseInt(val);
     }
@@ -240,7 +240,7 @@ public class ServerContext implements AutoCloseable {
      */
     public int getLogReplicationMaxDataMessageSize() {
         String val = getServerConfig(String.class, "--max-data-message-size");
-        return val == null ? DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE : Integer.parseInt(val);
+        return val == null ? MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
     }
 
     /**

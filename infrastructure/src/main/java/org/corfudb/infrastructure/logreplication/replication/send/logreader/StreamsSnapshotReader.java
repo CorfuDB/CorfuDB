@@ -3,7 +3,9 @@ package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -26,7 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED;
 
 @Slf4j
 @NotThreadSafe
@@ -52,6 +54,9 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
     private OpaqueEntry lastEntry = null;
+
+    @Getter
+    private ObservableValue observeBiggerMsg = new ObservableValue(0);
 
     @Setter
     private long topologyConfigId;
@@ -107,21 +112,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
     }
 
     /**
-     * Given a list of SMREntries, calculate the total sizeInBytes.
-     * @param smrEntries
-     * @return
-     */
-    public static int calculateSize(List<SMREntry> smrEntries) {
-        int size = 0;
-        for (SMREntry entry : smrEntries) {
-            size += entry.getSerializedSize();
-        }
-
-        log.trace("current entry sizeInBytes {}", size);
-        return size;
-    }
-
-    /**
      * Read log data from the current stream until the sum of all SMR entries's sizeInBytes reaches the maxDataSizePerMsg.
      * @param stream
      * @return
@@ -135,11 +125,13 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 if (lastEntry != null) {
                     List<SMREntry> smrEntries = lastEntry.getEntries().get(stream.uuid);
                     if (smrEntries != null) {
-                        int currentEntrySize = calculateSize(smrEntries);
+                        int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
 
-                        if (currentEntrySize > DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE) {
-                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported", currentEntrySize, DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE);
+                        if (currentEntrySize > MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED) {
+                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported", currentEntrySize, MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED);
+                            throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
                         } else if (currentEntrySize > maxDataSizePerMsg) {
+                            observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);
                             log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
                                     currentEntrySize, maxDataSizePerMsg);
                         }
@@ -170,7 +162,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         }
 
         log.trace("CurrentMsgSize {} lastEntrySize {}  maxDataSizePerMsg {}",
-                currentMsgSize, lastEntry == null ? 0 : calculateSize(lastEntry.getEntries().get(stream.uuid)), maxDataSizePerMsg);
+                currentMsgSize, lastEntry == null ? 0 : ReaderUtility.calculateSize(lastEntry.getEntries().get(stream.uuid)), maxDataSizePerMsg);
         return new SMREntryList(currentMsgSize, smrList);
     }
 
@@ -284,7 +276,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
     /**
      * Record a list of SMR entries
      */
-    static class SMREntryList {
+    static private class SMREntryList {
 
         // The total sizeInBytes of smrEntries in bytes.
         @Getter

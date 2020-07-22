@@ -23,4 +23,6 @@ public interface LogEntryReader {
     void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp);
 
     void setTopologyConfigId(long topologyConfigId);
+
+    boolean hasNoiseData();
 }

@@ -178,7 +178,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
         if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq ||
                 message.getMetadata().getMessageMetadataType() != MessageType.SNAPSHOT_MESSAGE) {
-            log.error("Received {} Expecting sequencer {} != recvSeq {} or wrong message type {} expecting {}",
+            log.error("Received {} Expecting snapshot message sequencer number {} != recvSeq {} or wrong message type {} expecting {}",
                     message.getMetadata(), message.getMetadata().getSnapshotSyncSeqNum(), recvSeq,
                     message.getMetadata().getMessageMetadataType(), MessageType.SNAPSHOT_MESSAGE);
             throw new ReplicationWriterException("Message is out of order or wrong type");
@@ -190,16 +190,15 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             return;
         }
 
-        for (OpaqueEntry opaqueEntry : message.getOpaqueEntryList()) {
-            if (opaqueEntry.getEntries().keySet().size() != 1) {
-                log.error("The opaqueEntry has more than one entry {}", opaqueEntry);
-                return;
-            }
-            UUID uuid = opaqueEntry.getEntries().keySet().stream().findFirst().get();
-
-            processOpaqueEntry(opaqueEntry.getEntries().get(uuid), message.getMetadata().getSnapshotSyncSeqNum(), uuidMap.get(uuid));
-            recvSeq++;
+        OpaqueEntry opaqueEntry = message.getOpaqueEntryList().get(0);
+        if (opaqueEntry.getEntries().keySet().size() != 1) {
+            log.error("The opaqueEntry has more than one entry {}", opaqueEntry);
+            return;
         }
+        UUID uuid = opaqueEntry.getEntries().keySet().stream().findFirst().get();
+        processOpaqueEntry(opaqueEntry.getEntries().get(uuid), message.getMetadata().getSnapshotSyncSeqNum(), uuidMap.get(uuid));
+        recvSeq++;
+
     }
 
     @Override

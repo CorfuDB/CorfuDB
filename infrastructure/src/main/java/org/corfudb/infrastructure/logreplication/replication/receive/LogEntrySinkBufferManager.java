@@ -77,7 +77,6 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
     }
 
     public void processBuffer() {
-
         /**
          *  For each message in the  buffer, if its timestamp is smaller than last processed log entry's timestamp,
          *  skip processing and remove it from buffer.

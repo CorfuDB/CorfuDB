@@ -4,7 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalTransactionStreamsException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
-import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
@@ -20,8 +19,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE;
-import static org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader.calculateSize;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED;
 
 @Slf4j
 @NotThreadSafe
@@ -56,13 +54,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private OpaqueEntry lastOpaqueEntry = null;
 
-
     private boolean hasNoiseData = false;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
-
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
 
         Set<String> streams = config.getStreamsToReplicate();
@@ -79,7 +75,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
     LogReplicationEntry generateMessageWithOpaqueEntryList(List<OpaqueEntry> opaqueEntryList, UUID logEntryRequestId) {
         // Set the last timestamp as the max timestamp
         currentMsgTs = opaqueEntryList.get(opaqueEntryList.size() - 1).getVersion();
-
         LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, topologyConfigId, logEntryRequestId,
                 currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, opaqueEntryList);
         preMsgTs = currentMsgTs;
@@ -88,6 +83,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
         return txMessage;
     }
 
+
+    // Check if it has the correct streams.
     boolean shouldProcess(OpaqueEntry entry) {
         Set<UUID> tmpUUIDs = entry.getEntries().keySet();
 
@@ -102,13 +99,35 @@ public class StreamsLogEntryReader implements LogEntryReader {
             return false;
         }
 
-        //If the entry's stream set contains both interested streams and other streams, it is not
-        //the expected behavior
+        // If the entry's stream set contains both interested streams and other streams, it is not
+        // the expected behavior
         log.error("There are noisy streams {} in the entry, expected streams set {}",
-                    entry.getEntries().keySet(), streamUUIDs);
+                entry.getEntries().keySet(), streamUUIDs);
 
         hasNoiseData = true;
         return false;
+    }
+
+    boolean checkSizeOK(OpaqueEntry entry, int currentMsgSize, int currentEntrySize) {
+        // For interested entry, if its size is too big we should skip and report error
+        if (currentEntrySize > maxDataSizePerMsg) {
+            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
+                    currentEntrySize, MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED);
+            hasNoiseData = true;
+            return false;
+        }
+
+        if (currentEntrySize > maxDataSizePerMsg) {
+            log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
+                    currentEntrySize, maxDataSizePerMsg);
+        }
+
+        // Skip append this entry, will process it for the next message;
+        if (currentEntrySize + currentMsgSize > maxDataSizePerMsg) {
+            return false;
+        }
+
+        return true;
     }
 
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
@@ -119,15 +138,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
         sequence = 0;
     }
 
-    private int calculateOpaqueEntrySize(OpaqueEntry opaqueEntry) {
-        int size = 0;
-
-        for (List<SMREntry> smrEntryList : opaqueEntry.getEntries().values()) {
-            size += calculateSize(smrEntryList);
-        }
-
-        return size;
-    }
 
     @Override
     public LogReplicationEntry read(UUID logEntryRequestId) throws TrimmedException, IllegalTransactionStreamsException {
@@ -140,17 +150,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
                 if (lastOpaqueEntry != null && shouldProcess(lastOpaqueEntry)) {
 
-                    currentEntrySize = calculateOpaqueEntrySize(lastOpaqueEntry);
-                    if (currentEntrySize > DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE) {
-                        log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported", currentEntrySize, DEFAULT_LOG_REPLICATION_DATA_MSG_SIZE);
-                    } else if (currentEntrySize > maxDataSizePerMsg) {
-                        log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
-                                currentEntrySize, maxDataSizePerMsg);
-                    }
-
                     // If the currentEntry is too big to append the current message, will skip it and
                     // append it to the next message as the first entry.
-                    if (currentMsgSize != 0 && (currentMsgSize + currentEntrySize > maxDataSizePerMsg)) {
+                    currentEntrySize = ReaderUtility.calculateOpaqueEntrySize(lastOpaqueEntry);
+
+                    if (!checkSizeOK(lastOpaqueEntry, currentMsgSize, currentEntrySize)) {
                         break;
                     }
 
@@ -264,5 +268,10 @@ public class StreamsLogEntryReader implements LogEntryReader {
     @Override
     public void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
+    }
+
+    @Override
+    public boolean hasNoiseData() {
+        return hasNoiseData;
     }
 }
