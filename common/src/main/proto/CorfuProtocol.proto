@@ -12,68 +12,65 @@ enum ProtocolVersion {
 
 enum MessageType {
     PING = 0;
-
     AUTHENTICATE = 1;
-
     RESTART = 2;
-
     SEAL  = 3;
-
     GET_LAYOUT  = 4;
-
     PREPARE_LAYOUT  = 5;
-
     PROPOSE_LAYOUT = 6;
-
     COMMIT_LAYOUT = 7;
-
     GET_TOKEN = 8;
-
     COMMIT_TRANSACTION = 9;
-
-    BOOTSTRAP = 10;
-
+    BOOTSTRAP_SEQUENCER = 10;
+    BOOTSTRAP = 11;
     QUERY_STREAM = 16;
-
     READ_LOG = 17;
-
     QUERY_LOG_METADATA = 18;
-
     TRIM_LOG = 19;
-
     COMPACT_LOG = 20;
-
     FLASH = 21;
-
     QUERY_NODE = 22;
-
     REPORT_FAILURE = 23;
-
     HEAL_FAILURE = 24;
-
     EXECUTE_WORKFLOW = 26;
 }
 
 enum ERROR {
     OK = 0;
-
     UNKNOWN = 1;
-
     WRONG_EPOCH = 2;
-
     NOT_READY = 3;
-
     WRONG_CLUSTER = 4;
-
     TRIMMED = 5;
-
     OVERWRITE = 6;
-
     IO = 7;
-
     BOOTSTRAPPED = 8;
-
     NOT_BOOTSTRAPPED = 9;
+}
+
+enum Priority {
+    NORMAL = 0;
+    HIGH = 1;
+}
+
+message UUID {
+    int64 lsb = 1;
+    int64 msb = 2;
+}
+
+// Used to request a range of addresses for a stream.
+// Range defined by [start, end).
+message StreamAddressRange {
+    UUID streamId = 1;
+    int64 startAddress = 2;
+    int64 endAddress = 3;
+}
+
+// Token returned by the sequencer.
+// Combination of the sequence number and epoch at which it was acquired.
+message Token {
+    int64 epoch = 1;
+    int64 sequence = 2;
 }
 
 message ServerError {
@@ -87,12 +84,16 @@ message PingRequest {
 message PingResponse {
 }
 
+// TODO(Zach): Update handshake logic
 message AuthenticateRequest {
-
+    UUID clientId = 1;
+    UUID serverId = 2;
 }
 
+// TODO(Zach): Update handshake logic
 message AuthenticateResponse {
-
+    UUID serverId = 1;
+    string corfuVersion = 2;
 }
 
 message RestartRequest {
@@ -100,7 +101,6 @@ message RestartRequest {
 }
 
 message RestartResponse {
-
 }
 
 message SealRequest {
@@ -111,16 +111,19 @@ message SealResponse {
 
 }
 
+// Retrieve layout
 message GetLayoutRequest {
-
+    int64 epoch = 1;
 }
 
 message GetLayoutResponse {
-
+    //TODO: How to represent a layout?
 }
 
+// Request in first phase of Paxos
 message PrepareLayoutRequest {
-
+    int64 epoch = 1;
+    int64 rank = 2;
 }
 
 message PrepareLayoutResponse {
@@ -168,10 +171,16 @@ message BootstrapResponse {
 
 }
 
+// Represents the request sent to the sequencer to retrieve one or several streams address map.
 message QueryStreamRequest {
+    enum ReqType {
+        STREAMS = 0;
+        ALL_STREAMS = 1;
+    }
 
+    ReqType type = 1;
+    repeated StreamAddressRange streamRanges = 2;
 }
-
 
 message QueryStreamResponse {
 
@@ -249,16 +258,6 @@ message ExecuteWorkflowResponse {
 
 }
 
-message UUID {
-    int64 lsb = 1;
-    int64 msb = 2;
-}
-
-enum Priority {
-    NORMAL = 0;
-    HIGH = 1;
-}
-
 message Header {
     ProtocolVersion version = 1;
     int64 request_id = 2;
@@ -266,58 +265,64 @@ message Header {
     MessageType type = 4;
     int64 epoch = 5;
     UUID cluster_id = 6;
+    UUID client_id = 7;
+    bool ignore_cluster_id = 8;
+    bool ignore_epoch = 9;
 }
 
 message Request {
     Header header = 1;
 
-    PingRequest pingRequest = 100;
-    AuthenticateRequest authenticateRequest = 101;
-    RestartRequest restartRequest = 102;
-    SealRequest sealRequest = 103;
-    GetLayoutRequest getLayoutRequest = 104;
-    PrepareLayoutRequest prepareLayoutRequest = 105;
-    ProposeLayoutRequest proposeLayoutRequest = 106;
-    CommitLayoutRequest commitLayoutRequest = 107;
-    GetTokenRequest getTokenRequest = 108;
-    CommitTransactionRequest commitTransactionRequest = 109;
-    BootstrapRequest bootstrapRequest = 110;
-    QueryStreamRequest queryStreamRequest = 111;
-    ReadLogRequest ReadLogRequest = 112;
-    QueryLogMetadataRequest queryLogMetadataRequest = 113;
-    TrimLogRequest trimLogRequest = 114;
-    CompactRequest compactRequest = 115;
-    FlashRequest flashRequest = 116;
-    QueryNodeRequest queryNodeRequest = 117;
-    ReportFailureRequest reportFailureRequest = 118;
-    HealFailureRequest healFailureRequest = 119;
-    ExecuteWorkflowRequest executeWorkflowRequest = 120;
+    oneof payload {
+        PingRequest pingRequest = 100;
+        AuthenticateRequest authenticateRequest = 101;
+        RestartRequest restartRequest = 102;
+        SealRequest sealRequest = 103;
+        GetLayoutRequest getLayoutRequest = 104;
+        PrepareLayoutRequest prepareLayoutRequest = 105;
+        ProposeLayoutRequest proposeLayoutRequest = 106;
+        CommitLayoutRequest commitLayoutRequest = 107;
+        GetTokenRequest getTokenRequest = 108;
+        CommitTransactionRequest commitTransactionRequest = 109;
+        BootstrapRequest bootstrapRequest = 110;
+        QueryStreamRequest queryStreamRequest = 111;
+        ReadLogRequest ReadLogRequest = 112;
+        QueryLogMetadataRequest queryLogMetadataRequest = 113;
+        TrimLogRequest trimLogRequest = 114;
+        CompactRequest compactRequest = 115;
+        FlashRequest flashRequest = 116;
+        QueryNodeRequest queryNodeRequest = 117;
+        ReportFailureRequest reportFailureRequest = 118;
+        HealFailureRequest healFailureRequest = 119;
+        ExecuteWorkflowRequest executeWorkflowRequest = 120;
+    }
 }
 
 message Response {
     Header header = 1;
     ServerError error = 2;
 
-    PingResponse pingResponse = 100;
-    AuthenticateResponse authenticateResponse = 101;
-    RestartResponse restartResponse = 102;
-    SealResponse sealResponse = 103;
-    GetLayoutResponse getLayoutResponse = 104;
-    PrepareLayoutResponse prepareLayoutResponse = 105;
-    ProposeLayoutResponse proposeLayoutResponse = 106;
-    CommitLayoutResponse commitLayoutResponse = 107;
-    GetTokenResponse getTokenResponse = 108;
-    CommitTransactionResponse commitTransactionResponse = 109;
-    BootstrapResponse bootstrapResponse = 110;
-    QueryStreamResponse queryStreamResponse = 111;
-    ReadLogResponse readLogResponse = 112;
-    QueryLogMetadataResponse queryLogMetadataResponse = 113;
-    TrimLogResponse trimLogResponse = 114;
-    CompactResponse compactResponse = 115;
-    FlashResponse flashResponse = 116;
-    QueryNodeResponse queryNodeResponse = 117;
-    ReportFailureResponse reportFailureResponse = 118;
-    HealFailureResponse healFailureResponse = 119;
-    ExecuteWorkflowResponse executeWorkflowResponse = 120;
+    oneof payload {
+        PingResponse pingResponse = 100;
+        AuthenticateResponse authenticateResponse = 101;
+        RestartResponse restartResponse = 102;
+        SealResponse sealResponse = 103;
+        GetLayoutResponse getLayoutResponse = 104;
+        PrepareLayoutResponse prepareLayoutResponse = 105;
+        ProposeLayoutResponse proposeLayoutResponse = 106;
+        CommitLayoutResponse commitLayoutResponse = 107;
+        GetTokenResponse getTokenResponse = 108;
+        CommitTransactionResponse commitTransactionResponse = 109;
+        BootstrapResponse bootstrapResponse = 110;
+        QueryStreamResponse queryStreamResponse = 111;
+        ReadLogResponse readLogResponse = 112;
+        QueryLogMetadataResponse queryLogMetadataResponse = 113;
+        TrimLogResponse trimLogResponse = 114;
+        CompactResponse compactResponse = 115;
+        FlashResponse flashResponse = 116;
+        QueryNodeResponse queryNodeResponse = 117;
+        ReportFailureResponse reportFailureResponse = 118;
+        HealFailureResponse healFailureResponse = 119;
+        ExecuteWorkflowResponse executeWorkflowResponse = 120;
+    }
 }
-

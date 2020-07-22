@@ -187,7 +187,7 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    int getBaseServerThreadCount() {
+    public int getBaseServerThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--base-server-threads");
         return threadCount == null ? 1 : threadCount;
     }

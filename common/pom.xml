@@ -80,7 +80,7 @@
                             <protocVersion>3.11.4</protocVersion>
                             <includeStdTypes>true</includeStdTypes>
                             <addProtoSources>inputs</addProtoSources>
-                            <outputDirectory>src/main/java</outputDirectory>
+                            <outputDirectory>target/generated-sources</outputDirectory>
                             <inputDirectories>
                                 <include>src/main/proto</include>
                             </inputDirectories>

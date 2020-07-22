@@ -5,7 +5,9 @@ import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.PingRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.PingResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ProtocolVersion;
 
@@ -18,17 +20,18 @@ import java.util.UUID;
 public class API {
 
     public static final ProtocolVersion CURRENT_VERSION = ProtocolVersion.v0;
+    public static final UUID DEFAULT_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
-    private static CorfuProtocol.UUID getUUID(UUID uuid) {
+    public static CorfuProtocol.UUID getUUID(UUID uuid) {
         return CorfuProtocol.UUID.newBuilder()
                 .setLsb(uuid.getLeastSignificantBits())
                 .setMsb(uuid.getMostSignificantBits())
                 .build();
     }
 
-    public static Header newHeader(long requestId,
-                                   Priority priority, MessageType type,
-                                   long epoch, UUID clusterId) {
+    public static Header newHeader(long requestId, Priority priority, MessageType type,
+                                   long epoch, UUID clusterId, UUID clientId,
+                                   boolean ignoreClusterId, boolean ignoreEpoch) {
         return Header.newBuilder()
                 .setVersion(CURRENT_VERSION)
                 .setRequestId(requestId)
@@ -36,6 +39,9 @@ public class API {
                 .setType(type)
                 .setEpoch(epoch)
                 .setClusterId(getUUID(clusterId))
+                .setClientId(getUUID(clientId))
+                .setIgnoreClusterId(ignoreClusterId)
+                .setIgnoreEpoch(ignoreEpoch)
                 .build();
     }
 
@@ -47,4 +53,11 @@ public class API {
                 .build();
     }
 
+    public static Response newPingResponse(Header header) {
+        PingResponse pingResponse = PingResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setPingResponse(pingResponse)
+                .build();
+    }
 }

@@ -20,6 +20,7 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;
+        msgBuf.readByte(); // Temporary -- Consume 0x2 marker.
         ByteBufInputStream msgInputStream = new ByteBufInputStream(msgBuf);
 
         try {

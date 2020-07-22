@@ -67,7 +67,7 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     protected final AtomicLong idGenerator = new AtomicLong();
 
-    private final ClientConfig config;
+    protected final ClientConfig config;
 
     final ReentrantReadWriteLock requestLock = new ReentrantReadWriteLock();
 
@@ -229,6 +229,7 @@ public abstract class ChannelHandler extends ResponseHandler {
             CompletableFuture<T> retVal = new CompletableFuture<>();
             pendingRequests.put(header.getRequestId(), retVal);
             ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+            outBuf.writeByte(0x2); // Temporary -- Add Corfu msg marker indicating new message type
             // TODO(Maithem): remove allocation
             outBuf.writeBytes(request.toByteArray());
             // TODO(Maithem): Handle pipeline errors
