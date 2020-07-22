@@ -52,6 +52,8 @@ public class PeerClient extends ChannelHandler {
      */
     public CompletableFuture<Void> ping() {
         Header header = getHeader(MessageType.PING, true, true);
+        log.info("sealRemoteServer: send PING from me(clientId={}) to the server",
+                header.getClientId());
         return sendRequest(API.newPingRequest(header));
     }
 
@@ -67,6 +69,8 @@ public class PeerClient extends ChannelHandler {
      */
     protected CompletableFuture<Boolean> restart(){
         Header header = getHeader(MessageType.RESTART, true, true);
+        log.warn("sealRemoteServer: send RESTART from me(clientId={}) to the server",
+                header.getClientId());
         return sendRequest(API.newRestartRequest(header));
     }
 
@@ -86,6 +90,8 @@ public class PeerClient extends ChannelHandler {
      */
     protected CompletableFuture<Boolean> reset(){
         Header header = getHeader(MessageType.RESET, true, true);
+        log.warn("sealRemoteServer: send RESET from me(clientId={}) to the server",
+                header.getClientId());
         return sendRequest(API.newResetRequest(header));
     }
 
@@ -124,8 +130,23 @@ public class PeerClient extends ChannelHandler {
         // completeRequest(response.getHeader().getRequestId(), response.getAuthenticateResponse());
     }
 
-    protected void handleSeal(Response response) {
+    /**
+     * Sets the epoch on client router and on the target layout server.
+     *
+     * @param newEpoch New Epoch to be set
+     * @return Completable future which returns true on successful epoch set.
+     */
+    public CompletableFuture<Boolean> sealRemoteServer(long newEpoch) {
+        Header header = getHeader(MessageType.SEAL, false,true );
+        log.info("sealRemoteServer: send SEAL from me(clientId={}) to new epoch {}",
+                header.getClientId(), newEpoch);
+        return sendRequest(API.newSealRequest(header, newEpoch));
+    }
 
+    protected void handleSeal(Response response) {
+        log.warn("handleReset: SealResponse received from the server with " +
+                        "LSB: {} MSB:{}", response.getHeader().getClientId().getLsb(),
+                response.getHeader().getClientId().getMsb());
     }
 
     protected void  handleGetLayout(Response response) {
@@ -241,7 +262,8 @@ public class PeerClient extends ChannelHandler {
                         .build()),
                 config);
         // log.info(peerClient.ping().get().toString());
-        log.info(peerClient.restart().get().toString());
+        // log.info(peerClient.restart().get().toString());
         // log.info(peerClient.reset().get().toString());
+        log.info(peerClient.sealRemoteServer(555555).get().toString());
     }
 }
