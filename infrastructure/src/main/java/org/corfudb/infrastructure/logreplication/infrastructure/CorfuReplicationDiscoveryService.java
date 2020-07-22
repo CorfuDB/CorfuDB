@@ -184,6 +184,8 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.eventQueue.add(new DiscoveryServiceEvent(DISCOVER_INIT_TOPOLOGY));
 
         this.executorService.submit(this::run);
+
+        startDiscovery();
     }
 
     /**
@@ -717,10 +719,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         if(clusterManagerAdapter != null) {
             clusterManagerAdapter.shutdown();
-        }
-
-        if (runtime != null) {
-            runtime.shutdown();
         }
 
         executorService.shutdownNow();

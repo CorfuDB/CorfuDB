@@ -14,7 +14,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationLeadershi
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
-import org.corfudb.runtime.CorfuStoreMetadata;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;

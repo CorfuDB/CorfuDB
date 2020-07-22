@@ -14,7 +14,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMeta
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.view.Address;
 import org.immutables.value.internal.$guava$.annotations.$VisibleForTesting;
 
@@ -150,8 +149,6 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         init();
     }
-
-
 
     /**
      * Init variables.
@@ -306,13 +303,11 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private void completeSnapshotApply(LogReplicationEntry inputEntry) {
         log.debug("Complete of a snapshot apply");
-        //check if the all the expected message has received
-        rxState = RxState.LOG_ENTRY_SYNC;
 
         logReplicationMetadataManager.setSnapshotApplied(inputEntry);
-        //logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-        //        logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
 
+        rxState = RxState.LOG_ENTRY_SYNC;
+        logEntrySinkBufferManager.reset();
         log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
                 inputEntry, rxState);
     }

@@ -6,7 +6,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryMeta
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 /**
  * This Interface comprises Data Path send operations for both Source and Sink.

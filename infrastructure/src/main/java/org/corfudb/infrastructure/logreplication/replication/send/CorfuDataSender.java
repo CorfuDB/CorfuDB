@@ -9,7 +9,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 @Slf4j
 public class CorfuDataSender implements DataSender {

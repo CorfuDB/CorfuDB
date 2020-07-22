@@ -19,8 +19,6 @@ import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 @Slf4j
 public class SourceForwardingDataSender implements DataSender {
