@@ -14,20 +14,16 @@ enum MessageType {
     PING = 0;
     AUTHENTICATE = 1;
     RESTART = 2;
-    RESET = 3;
-    SEAL  = 4;
-
-    GET_LAYOUT  = 5;
-    PREPARE_LAYOUT  = 6;
-    PROPOSE_LAYOUT = 7;
-    COMMIT_LAYOUT = 8;
-
-    GET_TOKEN = 9;
-    COMMIT_TRANSACTION = 10;
-    BOOTSTRAP_SEQUENCER = 11;
-    BOOTSTRAP = 12;
+    SEAL  = 3;
+    GET_LAYOUT  = 4;
+    PREPARE_LAYOUT  = 5;
+    PROPOSE_LAYOUT = 6;
+    COMMIT_LAYOUT = 7;
+    GET_TOKEN = 8;
+    COMMIT_TRANSACTION = 9;
+    BOOTSTRAP_SEQUENCER = 10;
+    BOOTSTRAP = 11;
     QUERY_STREAM = 16;
-
     READ_LOG = 17;
     QUERY_LOG_METADATA = 18;
     TRIM_LOG = 19;
@@ -88,11 +84,13 @@ message PingRequest {
 message PingResponse {
 }
 
+// TODO(Zach): Update handshake logic
 message AuthenticateRequest {
     UUID clientId = 1;
     UUID serverId = 2;
 }
 
+// TODO(Zach): Update handshake logic
 message AuthenticateResponse {
     UUID serverId = 1;
     string corfuVersion = 2;
@@ -103,18 +101,10 @@ message RestartRequest {
 }
 
 message RestartResponse {
-
-}
-message ResetRequest {
-
-}
-
-message ResetResponse {
-
 }
 
 message SealRequest {
-    int64 epoch = 1;
+
 }
 
 message SealResponse {
@@ -287,25 +277,24 @@ message Request {
         PingRequest pingRequest = 100;
         AuthenticateRequest authenticateRequest = 101;
         RestartRequest restartRequest = 102;
-        ResetRequest resetRequest = 103;
-        SealRequest sealRequest = 104;
-        GetLayoutRequest getLayoutRequest = 105;
-        PrepareLayoutRequest prepareLayoutRequest = 106;
-        ProposeLayoutRequest proposeLayoutRequest = 107;
-        CommitLayoutRequest commitLayoutRequest = 108;
-        GetTokenRequest getTokenRequest = 109;
-        CommitTransactionRequest commitTransactionRequest = 110;
-        BootstrapRequest bootstrapRequest = 111;
-        QueryStreamRequest queryStreamRequest = 112;
-        ReadLogRequest ReadLogRequest = 113;
-        QueryLogMetadataRequest queryLogMetadataRequest = 114;
-        TrimLogRequest trimLogRequest = 115;
-        CompactRequest compactRequest = 116;
-        FlashRequest flashRequest = 117;
-        QueryNodeRequest queryNodeRequest = 118;
-        ReportFailureRequest reportFailureRequest = 119;
-        HealFailureRequest healFailureRequest = 120;
-        ExecuteWorkflowRequest executeWorkflowRequest = 121;
+        SealRequest sealRequest = 103;
+        GetLayoutRequest getLayoutRequest = 104;
+        PrepareLayoutRequest prepareLayoutRequest = 105;
+        ProposeLayoutRequest proposeLayoutRequest = 106;
+        CommitLayoutRequest commitLayoutRequest = 107;
+        GetTokenRequest getTokenRequest = 108;
+        CommitTransactionRequest commitTransactionRequest = 109;
+        BootstrapRequest bootstrapRequest = 110;
+        QueryStreamRequest queryStreamRequest = 111;
+        ReadLogRequest ReadLogRequest = 112;
+        QueryLogMetadataRequest queryLogMetadataRequest = 113;
+        TrimLogRequest trimLogRequest = 114;
+        CompactRequest compactRequest = 115;
+        FlashRequest flashRequest = 116;
+        QueryNodeRequest queryNodeRequest = 117;
+        ReportFailureRequest reportFailureRequest = 118;
+        HealFailureRequest healFailureRequest = 119;
+        ExecuteWorkflowRequest executeWorkflowRequest = 120;
     }
 }
 
@@ -317,24 +306,23 @@ message Response {
         PingResponse pingResponse = 100;
         AuthenticateResponse authenticateResponse = 101;
         RestartResponse restartResponse = 102;
-        ResetResponse resetResponse = 103;
-        SealResponse sealResponse = 104;
-        GetLayoutResponse getLayoutResponse = 105;
-        PrepareLayoutResponse prepareLayoutResponse = 106;
-        ProposeLayoutResponse proposeLayoutResponse = 107;
-        CommitLayoutResponse commitLayoutResponse = 108;
-        GetTokenResponse getTokenResponse = 109;
-        CommitTransactionResponse commitTransactionResponse = 110;
-        BootstrapResponse bootstrapResponse = 111;
-        QueryStreamResponse queryStreamResponse = 112;
-        ReadLogResponse readLogResponse = 113;
-        QueryLogMetadataResponse queryLogMetadataResponse = 114;
-        TrimLogResponse trimLogResponse = 115;
-        CompactResponse compactResponse = 116;
-        FlashResponse flashResponse = 117;
-        QueryNodeResponse queryNodeResponse = 118;
-        ReportFailureResponse reportFailureResponse = 119;
-        HealFailureResponse healFailureResponse = 120;
-        ExecuteWorkflowResponse executeWorkflowResponse = 121;
+        SealResponse sealResponse = 103;
+        GetLayoutResponse getLayoutResponse = 104;
+        PrepareLayoutResponse prepareLayoutResponse = 105;
+        ProposeLayoutResponse proposeLayoutResponse = 106;
+        CommitLayoutResponse commitLayoutResponse = 107;
+        GetTokenResponse getTokenResponse = 108;
+        CommitTransactionResponse commitTransactionResponse = 109;
+        BootstrapResponse bootstrapResponse = 110;
+        QueryStreamResponse queryStreamResponse = 111;
+        ReadLogResponse readLogResponse = 112;
+        QueryLogMetadataResponse queryLogMetadataResponse = 113;
+        TrimLogResponse trimLogResponse = 114;
+        CompactResponse compactResponse = 115;
+        FlashResponse flashResponse = 116;
+        QueryNodeResponse queryNodeResponse = 117;
+        ReportFailureResponse reportFailureResponse = 118;
+        HealFailureResponse healFailureResponse = 119;
+        ExecuteWorkflowResponse executeWorkflowResponse = 120;
     }
 }

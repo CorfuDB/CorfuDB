@@ -20,7 +20,7 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;
-        msgBuf.readByte(); // Temporary -- Consume 0x2 marker
+        msgBuf.readByte(); // Temporary -- Consume 0x2 marker.
         ByteBufInputStream msgInputStream = new ByteBufInputStream(msgBuf);
 
         try {
@@ -47,10 +47,6 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
                 case RESTART:
                     checkArgument(response.hasRestartResponse());
                     handleRestart(response);
-                    break;
-                case RESET:
-                    checkArgument(response.hasResetResponse());
-                    handleReset(response);
                     break;
                 case AUTHENTICATE:
                     checkArgument(response.hasAuthenticateResponse());
@@ -143,7 +139,6 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
     protected abstract void handleServerError(Response error);
     protected abstract void handlePing(Response response);
     protected abstract void handleRestart(Response response);
-    protected abstract void handleReset(Response response);
     protected abstract void handleAuthenticate(Response response);
     protected abstract void handleSeal(Response response);
     protected abstract void handleGetLayout(Response response);

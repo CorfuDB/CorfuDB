@@ -19,7 +19,7 @@ public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {
     @Override
     protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf,
                           List<Object> list) throws Exception {
-        byteBuf.readByte(); // Temporary -- Consume marker that indicates msg as legacy
+        byteBuf.readByte(); // Temporary -- Consume marker that indicates msg as legacy.
         list.add(CorfuMsg.deserialize(byteBuf));
     }
 
