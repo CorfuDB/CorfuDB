@@ -99,7 +99,6 @@ public abstract class ChannelHandler extends ResponseHandler {
                     this.channel.closeFuture().addListener(r -> disconnect());
                     state = ChannelHandlerState.CONNECTED;
                     // TODO(Maithem) Complete handshake here
-                    log.info("peer client connected");
                     this.channelCf.complete(this.channel);
                 } else {
                     disconnect();
@@ -175,8 +174,8 @@ public abstract class ChannelHandler extends ResponseHandler {
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
-                // ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
-                //        config.getKeepAlivePeriodInMs(), 0));
+                ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
+                        config.getKeepAlivePeriodInMs(), 0));
 
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
