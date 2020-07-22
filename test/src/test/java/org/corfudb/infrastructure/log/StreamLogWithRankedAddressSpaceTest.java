@@ -35,163 +35,198 @@ public class StreamLogWithRankedAddressSpaceTest extends AbstractCorfuTest {
     @Ignore // compact on ranked address space not activated yet
     public void testCompact() throws Exception {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-
-        long address = 0;
-        for (long x = 0; x < RECORDS_TO_WRITE; x++) {
-            writeToLog(log, address, DataType.DATA, "Payload", x);
+        try {
+            long address = 0;
+            for (long x = 0; x < RECORDS_TO_WRITE; x++) {
+                writeToLog(log, address, DataType.DATA, "Payload", x);
+            }
+            LogData value1 = log.read(address);
+            long size1 = log.getSegmentHandleForAddress(address).getFileName().toFile().length();
+            log.compact();
+            LogData value2 = log.read(address);
+            long size2 = log.getSegmentHandleForAddress(address).getFileName().toFile().length();
+            assertEquals(value1.getRank(), value2.getRank());
+            assertNotEquals(size2, size1);
+        } finally {
+            log.close();
         }
-        LogData value1 = log.read(address);
-        long size1 = log.getSegmentHandleForAddress(address).getFileName().toFile().length();
-        log.compact();
-        LogData value2 = log.read(address);
-        long size2 = log.getSegmentHandleForAddress(address).getFileName().toFile().length();
-        assertEquals(value1.getRank(), value2.getRank());
-        assertNotEquals(size2, size1);
     }
 
     @Test
     public void testHigherRank() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        long address = 0;
-        writeToLog(log, address, DataType.DATA, "v-1", 1);
-        LogData value1 = log.read(address);
-        assertTrue(new String(value1.getData()).contains("v-1"));
-        writeToLog(log, address, DataType.DATA, "v-2", 2);
-        LogData value2 = log.read(address);
-        assertTrue(new String(value2.getData()).contains("v-2"));
-        log.close();
+
+        try {
+            long address = 0;
+            writeToLog(log, address, DataType.DATA, "v-1", 1);
+            LogData value1 = log.read(address);
+            assertTrue(new String(value1.getData()).contains("v-1"));
+            writeToLog(log, address, DataType.DATA, "v-2", 2);
+            LogData value2 = log.read(address);
+            assertTrue(new String(value2.getData()).contains("v-2"));
+        } finally {
+            log.close();
+        }
     }
 
     @Test
     public void testLowerRank() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        long address = 0;
-        writeToLog(log, address, DataType.DATA, "v-1", 2);
-        LogData value1 = log.read(address);
-        assertTrue(new String(value1.getData()).contains("v-1"));
+
         try {
-            writeToLog(log, address, DataType.DATA, "v-2", 1);
-            fail();
-        } catch (DataOutrankedException e) {
-            // expected
+            long address = 0;
+            writeToLog(log, address, DataType.DATA, "v-1", 2);
+            LogData value1 = log.read(address);
+            assertTrue(new String(value1.getData()).contains("v-1"));
+            try {
+                writeToLog(log, address, DataType.DATA, "v-2", 1);
+                fail();
+            } catch (DataOutrankedException e) {
+                // expected
+            }
+            LogData value2 = log.read(address);
+            assertTrue(new String(value2.getData()).contains("v-1"));
+        } finally {
+            log.close();
         }
-        LogData value2 = log.read(address);
-        assertTrue(new String(value2.getData()).contains("v-1"));
-        log.close();
     }
 
     @Test
     public void testHigherRankAgainstProposal() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        long address = 0;
-        writeToLog(log, address, DataType.RANK_ONLY, "v-1", 1);
-        LogData value1 = log.read(address);
-        assertTrue(new String(value1.getData()).contains("v-1"));
-        writeToLog(log, address, DataType.DATA, "v-2", 2);
-        LogData value2 = log.read(address);
-        assertTrue(new String(value2.getData()).contains("v-2"));
-        log.close();
+
+        try {
+            long address = 0;
+            writeToLog(log, address, DataType.RANK_ONLY, "v-1", 1);
+            LogData value1 = log.read(address);
+            assertTrue(new String(value1.getData()).contains("v-1"));
+            writeToLog(log, address, DataType.DATA, "v-2", 2);
+            LogData value2 = log.read(address);
+            assertTrue(new String(value2.getData()).contains("v-2"));
+        } finally {
+            log.close();
+        }
     }
 
     @Test
     public void testLowerRankAgainstProposal() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        long address = 0;
-        writeToLog(log, address, DataType.RANK_ONLY, "v-1", 2);
-        LogData value1 = log.read(address);
-        assertTrue(new String(value1.getData()).contains("v-1"));
         try {
-            writeToLog(log, address, DataType.DATA, "v-2", 1);
-            fail();
-        } catch (DataOutrankedException e) {
-            // expected
+            long address = 0;
+            writeToLog(log, address, DataType.RANK_ONLY, "v-1", 2);
+            LogData value1 = log.read(address);
+            assertTrue(new String(value1.getData()).contains("v-1"));
+            try {
+                writeToLog(log, address, DataType.DATA, "v-2", 1);
+                fail();
+            } catch (DataOutrankedException e) {
+                // expected
+            }
+            LogData value2 = log.read(address);
+            assertTrue(new String(value2.getData()).contains("v-1"));
+        } finally {
+            log.close();
         }
-        LogData value2 = log.read(address);
-        assertTrue(new String(value2.getData()).contains("v-1"));
-        log.close();
     }
 
     @Test
     public void testProposalWithHigherRankAgainstData() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        long address = 0;
-        writeToLog(log, address, DataType.DATA, "v-1", 1);
-        LogData value1 = log.read(address);
-        assertTrue(new String(value1.getData()).contains("v-1"));
         try {
-            writeToLog(log, address, DataType.RANK_ONLY, "v-2", 2);
-            fail();
-        } catch (ValueAdoptedException e) {
-            LogData logData = e.getReadResponse().getAddresses().get(0l);
-            assertTrue(new String(logData.getData()).contains("v-1"));
+            long address = 0;
+            writeToLog(log, address, DataType.DATA, "v-1", 1);
+            LogData value1 = log.read(address);
+            assertTrue(new String(value1.getData()).contains("v-1"));
+            try {
+                writeToLog(log, address, DataType.RANK_ONLY, "v-2", 2);
+                fail();
+            } catch (ValueAdoptedException e) {
+                LogData logData = e.getReadResponse().getAddresses().get(0l);
+                assertTrue(new String(logData.getData()).contains("v-1"));
+            }
+            LogData value2 = log.read(address);
+            assertTrue(new String(value2.getData()).contains("v-1"));
+        } finally {
+            log.close();
         }
-        LogData value2 = log.read(address);
-        assertTrue(new String(value2.getData()).contains("v-1"));
-        log.close();
     }
 
 
     @Test
     public void testProposalWithLowerRankAgainstData() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        long address = 0;
-        writeToLog(log, address, DataType.DATA, "v-1", 2);
-        LogData value1 = log.read(address);
-        assertTrue(new String(value1.getData()).contains("v-1"));
         try {
-            writeToLog(log, address, DataType.RANK_ONLY, "v-2", 1);
-            fail();
-        } catch (DataOutrankedException e) {
-            // expected
+            long address = 0;
+            writeToLog(log, address, DataType.DATA, "v-1", 2);
+            LogData value1 = log.read(address);
+            assertTrue(new String(value1.getData()).contains("v-1"));
+            try {
+                writeToLog(log, address, DataType.RANK_ONLY, "v-2", 1);
+                fail();
+            } catch (DataOutrankedException e) {
+                // expected
+            }
+            LogData value2 = log.read(address);
+            assertTrue(new String(value2.getData()).contains("v-1"));
+        } finally {
+            log.close();
         }
-        LogData value2 = log.read(address);
-        assertTrue(new String(value2.getData()).contains("v-1"));
-        log.close();
     }
 
 
     @Test
     public void testProposalsHigherRank() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        long address = 0;
-        writeToLog(log, address, DataType.RANK_ONLY, "v-1", 1);
-        LogData value1 = log.read(address);
-        assertTrue(new String(value1.getData()).contains("v-1"));
-        writeToLog(log, address, DataType.RANK_ONLY, "v-2", 2);
-        LogData value2 = log.read(address);
-        assertTrue(new String(value2.getData()).contains("v-2"));
-        log.close();
+        try {
+            long address = 0;
+            writeToLog(log, address, DataType.RANK_ONLY, "v-1", 1);
+            LogData value1 = log.read(address);
+            assertTrue(new String(value1.getData()).contains("v-1"));
+            writeToLog(log, address, DataType.RANK_ONLY, "v-2", 2);
+            LogData value2 = log.read(address);
+            assertTrue(new String(value2.getData()).contains("v-2"));
+        } finally {
+            log.close();
+        }
     }
 
     @Test
     public void testProposalsLowerRank() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        long address = 0;
-        writeToLog(log, address, DataType.RANK_ONLY, "v-1", 2);
-        LogData value1 = log.read(address);
-        assertTrue(new String(value1.getData()).contains("v-1"));
         try {
-            writeToLog(log, address, DataType.RANK_ONLY, "v-2", 1);
-            fail();
-        } catch (DataOutrankedException e) {
-            // expected
+            long address = 0;
+            writeToLog(log, address, DataType.RANK_ONLY, "v-1", 2);
+            LogData value1 = log.read(address);
+            assertTrue(new String(value1.getData()).contains("v-1"));
+            try {
+                writeToLog(log, address, DataType.RANK_ONLY, "v-2", 1);
+                fail();
+            } catch (DataOutrankedException e) {
+                // expected
+            }
+            LogData value2 = log.read(address);
+            assertTrue(new String(value2.getData()).contains("v-1"));
+        } finally {
+            log.close();
         }
-        LogData value2 = log.read(address);
-        assertTrue(new String(value2.getData()).contains("v-1"));
-        log.close();
     }
 
     @Test
     public void checkProposalIsIdempotent() {
         StreamLogFiles log = new StreamLogFiles(getContext(), false);
-        long address = 0;
-        IMetadata.DataRank sameRank = new IMetadata.DataRank(1);
-        writeToLog(log, address, DataType.DATA, "v-1", sameRank);
-        LogData value1 = log.read(address);
-        assertTrue(new String(value1.getData()).contains("v-1"));
-        writeToLog(log, address, DataType.DATA, "v-1", sameRank);
-        LogData value2 = log.read(address);
-        assertTrue(new String(value2.getData()).contains("v-1"));
+
+        try {
+            long address = 0;
+            IMetadata.DataRank sameRank = new IMetadata.DataRank(1);
+            writeToLog(log, address, DataType.DATA, "v-1", sameRank);
+            LogData value1 = log.read(address);
+            assertTrue(new String(value1.getData()).contains("v-1"));
+            writeToLog(log, address, DataType.DATA, "v-1", sameRank);
+            LogData value2 = log.read(address);
+            assertTrue(new String(value2.getData()).contains("v-1"));
+        } finally {
+            log.close();
+        }
     }
 
     private void writeToLog(StreamLog log, long address, DataType dataType, String payload, long rank) {
