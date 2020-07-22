@@ -10,6 +10,7 @@ import org.corfudb.common.protocol.client.RequestHandler;
 import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
+import org.corfudb.runtime.CorfuSchema;
 
 @Slf4j
 public class ServerRequestHandler extends RequestHandler {
@@ -113,8 +114,7 @@ public class ServerRequestHandler extends RequestHandler {
         ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
         // Temporary marker to indicate new Protobuf Message
         byteBuf.writeByte(0x2);
-        CorfuProtocol.Response response = API.newResetResponse(request.getHeader());
-        byteBuf.writeBytes(response.toByteArray());
+        byteBuf.writeBytes(API.newResetResponse(request.getHeader()).toByteArray());
         ctx.writeAndFlush(byteBuf);
 
         CorfuServer.restartServer(true);
@@ -130,8 +130,7 @@ public class ServerRequestHandler extends RequestHandler {
         ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
         // Temporary marker to indicate new Protobuf Message
         byteBuf.writeByte(0x2);
-        CorfuProtocol.Response response = API.newRestartResponse(request.getHeader());
-        byteBuf.writeBytes(response.toByteArray());
+        byteBuf.writeBytes(API.newRestartResponse(request.getHeader()).toByteArray());
         ctx.writeAndFlush(byteBuf);
 
         CorfuServer.restartServer(false);
@@ -139,7 +138,21 @@ public class ServerRequestHandler extends RequestHandler {
 
     @Override
     protected void handleSeal(Request request, ChannelHandlerContext ctx) {
+        log.warn("handleSeal: Received SEAL request from client with " +
+                        "LSB: {} MSB:{}, " +
+                        "moving to new epoch {}",
+                request.getHeader().getClientId().getLsb(),
+                request.getHeader().getClientId().getMsb(),
+                request.getSealRequest().getEpoch());
 
+        // TODO(Chetan): Complete the seal process
+
+        // send SealResponse message back to the client
+        ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
+        // Temporary marker to indicate new Protobuf Message
+        byteBuf.writeByte(0x2);
+        byteBuf.writeBytes(API.newSealResponse(request.getHeader()).toByteArray());
+        ctx.writeAndFlush(byteBuf);
     }
 
     @Override

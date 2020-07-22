@@ -158,4 +158,22 @@ public class API {
                 .setResetResponse(resetResponse)
                 .build();
     }
+
+    public static Request newSealRequest(Header header, long newEpoch) {
+        SealRequest sealRequest = SealRequest.newBuilder()
+                                        .setEpoch(newEpoch)
+                                        .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setSealRequest(sealRequest)
+                .build();
+    }
+
+    public static Response newSealResponse(Header header){
+        SealResponse sealResponse = SealResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setSealResponse(sealResponse)
+                .build();
+    }
 }
