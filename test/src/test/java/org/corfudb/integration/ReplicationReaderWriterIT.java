@@ -259,7 +259,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-    public static void readLogEntryMsgs(List<org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) throws
+    public static void readLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) throws
             TrimmedException {
         LogReplicationConfig config = new LogReplicationConfig(streams);
         StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
@@ -504,7 +504,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     @Test
-    public void testTrimmedExceptionForLogEntryReader() throws IOException {
+    public void testTrimmedExceptionForLogEntryReader() throws Exception {
         setupEnv();
         openStreams(srcTables, srcDataRuntime);
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
@@ -523,8 +523,21 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         } finally {
             assertThat(result).isInstanceOf(TrimmedException.class);
         }
+
+        tearDownEnv();
+        cleanUp();
     }
 
+    private void tearDownEnv() {
+        if(srcDataRuntime != null) {
+            srcDataRuntime.shutdown();
+            srcTestRuntime.shutdown();
+            readerRuntime.shutdown();
+            writerRuntime.shutdown();
+            dstDataRuntime.shutdown();
+            dstTestRuntime.shutdown();
+        }
+    }
 
     @Test
     public void testTrimmedExceptionForSnapshotReader() throws IOException, InterruptedException {
