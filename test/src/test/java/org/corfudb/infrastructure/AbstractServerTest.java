@@ -163,10 +163,9 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         if (!endpoint.startsWith("test:")) {
             throw new RuntimeException("Unsupported endpoint in test: " + endpoint);
         }
-        return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint,
-                x -> {
-                    TestClientRouter tcn =
-                            new TestClientRouter(router);
+
+        return runtimeRouterMap.get(runtime).computeIfAbsent(endpoint, x -> {
+                    TestClientRouter tcn = new TestClientRouter(router);
                     tcn.addClient(new BaseHandler())
                             .addClient(new SequencerHandler())
                             .addClient(new LayoutHandler())

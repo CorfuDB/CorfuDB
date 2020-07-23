@@ -1,15 +1,9 @@
 package org.corfudb.infrastructure;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
-
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
-
 import org.assertj.core.api.Assertions;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
@@ -25,6 +19,12 @@ import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
+
 /**
  * Created by mwei on 12/14/15.
  */
@@ -33,8 +33,19 @@ public class LayoutServerTest extends AbstractServerTest {
 
     @Override
     public LayoutServer getDefaultServer() {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        return getDefaultServer(serviceDir);
+        ServerContext sc = new ServerContextBuilder()
+                .setSingle(false)
+                .setMemory(false)
+                .setLogPath(PARAMETERS.TEST_TEMP_DIR)
+                .setServerRouter(getRouter())
+                .build();
+
+        setContext(sc);
+
+        LayoutServer s1 = new LayoutServer(sc);
+        router.addServer(s1);
+        getRouter().addServer(new BaseServer(sc));
+        return s1;
     }
 
     static final long LOW_RANK = 10L;
@@ -46,10 +57,10 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void nonBootstrappedServerNoLayout() {
-        //requestLayout(0);
-        //Assertions.assertThat(getLastMessage().getMsgType()).isEqualTo(CorfuMsgType.LAYOUT_NOBOOTSTRAP);
+        LayoutServer s1 = getDefaultServer();
         CompletableFuture<Layout> resp = requestLayout(0L);
-        assertThatThrownBy(() -> resp.get()).hasCauseExactlyInstanceOf(NoBootstrapException.class);
+        assertThatThrownBy(resp::get).hasCauseExactlyInstanceOf(NoBootstrapException.class);
+        s1.shutdown();
     }
 
     /**
@@ -58,10 +69,12 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void bootstrapServerInstallsNewLayout() {
+        LayoutServer s1 = getDefaultServer();
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         bootstrapServer(layout);
         Layout res = requestLayout(layout.getEpoch()).join();
         Assertions.assertThat(res).isEqualTo(layout);
+        s1.shutdown();
     }
 
     /**
@@ -69,10 +82,12 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void cannotBootstrapServerTwice() {
+        LayoutServer s1 = getDefaultServer();
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         bootstrapServer(layout);
         assertThatThrownBy(() -> bootstrapServer(layout))
                 .hasCauseExactlyInstanceOf(AlreadyBootstrappedException.class);
+        s1.shutdown();
     }
 
 
@@ -83,6 +98,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void prepareRejectsLowerRanks() {
+        LayoutServer s1 = getDefaultServer();
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         long epoch = layout.getEpoch();
         bootstrapServer(layout);
@@ -92,6 +108,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         assertThatThrownBy(() -> sendPrepare(epoch, LOW_RANK, layout.getClusterId()).join())
                 .hasCauseExactlyInstanceOf(OutrankedException.class);
+        s1.shutdown();
     }
 
     /**
@@ -101,14 +118,18 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void proposeRejectsLowerRanks() {
+        LayoutServer s1 = getDefaultServer();
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         long epoch = layout.getEpoch();
         bootstrapServer(layout);
         LayoutPrepareResponse resp = sendPrepare(epoch, HIGH_RANK, layout.getClusterId()).join();
         Assertions.assertThat(resp.getRank()).isEqualTo(-1);
         Assertions.assertThat(resp.getLayout()).isNull();
-        assertThatThrownBy(() -> sendPropose(epoch, LOW_RANK, layout, layout.getClusterId()).join())
-                .hasCauseExactlyInstanceOf(OutrankedException.class);
+        ThrowingCallable propose = () -> sendPropose(
+                epoch, LOW_RANK, layout, layout.getClusterId()).join();
+
+        assertThatThrownBy(propose).hasCauseExactlyInstanceOf(OutrankedException.class);
+        s1.shutdown();
     }
 
     /**
@@ -117,6 +138,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void proposeRejectsAlreadyProposed() {
+        LayoutServer s1 = getDefaultServer();
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         long epoch = layout.getEpoch();
         bootstrapServer(layout);
@@ -129,6 +151,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         assertThatThrownBy(() -> sendPropose(epoch, LOW_RANK, layout, layout.getClusterId()).join())
                 .hasCauseExactlyInstanceOf(OutrankedException.class);
+        s1.shutdown();
     }
 
     /**
@@ -137,6 +160,8 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void commitReturnsAck() {
+        LayoutServer s1 = getDefaultServer();
+
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         bootstrapServer(layout);
 
@@ -147,11 +172,16 @@ public class LayoutServerTest extends AbstractServerTest {
         // set epoch on servers
         setEpoch(newEpoch, layout.getClusterId()).join();
 
-        LayoutPrepareResponse resp = sendPrepare(newEpoch, HIGH_RANK, layout.getClusterId()).join();
+        LayoutPrepareResponse resp = sendPrepare(newEpoch, HIGH_RANK, layout.getClusterId())
+                .join();
         Assertions.assertThat(resp.getRank()).isEqualTo(-1);
         Assertions.assertThat(resp.getLayout()).isNull();
-        Assertions.assertThat(sendPropose(newEpoch, HIGH_RANK, newLayout, layout.getClusterId()).join()).isTrue();
-        Assertions.assertThat(sendCommitted(newEpoch, newLayout, layout.getClusterId()).join()).isTrue();
+        boolean propose = sendPropose(newEpoch, HIGH_RANK, newLayout, layout.getClusterId())
+                .join();
+        Assertions.assertThat(propose).isTrue();
+        boolean committed = sendCommitted(newEpoch, newLayout, layout.getClusterId()).join();
+        Assertions.assertThat(committed).isTrue();
+        s1.shutdown();
     }
 
     /**
@@ -161,6 +191,8 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void checkServerEpochDoesNotRegress() {
+        LayoutServer s1 = getDefaultServer();
+
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         long epoch = layout.getEpoch();
 
@@ -174,6 +206,8 @@ public class LayoutServerTest extends AbstractServerTest {
         setEpoch(1, resp.getClusterId());
         assertThatThrownBy(() -> setEpoch(1, resp.getClusterId()).join())
                 .hasCauseExactlyInstanceOf(WrongEpochException.class);
+
+        s1.shutdown();
     }
 
     /**
@@ -182,13 +216,12 @@ public class LayoutServerTest extends AbstractServerTest {
      * @throws Exception
      */
     @Test
-    public void checkLayoutPersisted() throws Exception {
-        //serviceDirectory from which all instances of corfu server are to be booted.
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-
-        LayoutServer s1 = getDefaultServer(serviceDir);
+    public void checkLayoutPersisted() {
+        log.info("Start server1");
+        LayoutServer s1 = getDefaultServer();
 
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
+        log.info("Bootstrap server1");
         bootstrapServer(layout);
 
         Layout newLayout = TestLayoutBuilder.single(SERVERS.PORT_0);
@@ -199,46 +232,47 @@ public class LayoutServerTest extends AbstractServerTest {
         newLayout.setEpoch(NEW_EPOCH);
         setEpoch(NEW_EPOCH, layout.getClusterId()).join();
 
-        // Start the process of electing a new layout. But that layout will not take effect
-        // till it is committed.
+        log.info("Prepare new layout. Start the process of electing a new layout. " +
+                "But that layout will not take effect till it is committed.");
         LayoutPrepareResponse resp = sendPrepare(NEW_EPOCH, 1, layout.getClusterId()).join();
         Assertions.assertThat(resp.getLayout()).isNull();
         Assertions.assertThat(resp.getRank()).isEqualTo(-1);
 
-        Assertions.assertThat(sendPropose(NEW_EPOCH, 1, newLayout, layout.getClusterId())
-                .join()).isTrue();
+        log.info("Propose new Layout");
+        boolean propose = sendPropose(NEW_EPOCH, 1, newLayout, layout.getClusterId()).join();
+        Assertions.assertThat(propose).isTrue();
         assertThat(s1).isInEpoch(NEW_EPOCH);
         assertThat(s1).isPhase1Rank(new Rank(1L, AbstractServerTest.testClientId));
         assertThat(s1).isPhase2Rank(new Rank(1L, AbstractServerTest.testClientId));
+        log.info("Shutdown server1");
         s1.shutdown();
 
-        LayoutServer s2 = getDefaultServer(serviceDir);
-        this.router.reset();
-        this.router.addServer(s2);
+        log.info("Start server2");
+        LayoutServer s2 = getDefaultServer();
 
+        log.info("Server2: set epoch");
         assertThat(s2).isInEpoch(NEW_EPOCH);
         assertThat(s2).isPhase1Rank(new Rank(1L, AbstractServerTest.testClientId));
         assertThat(s2).isPhase2Rank(new Rank(1L, AbstractServerTest.testClientId));
 
-        // request layout using the old epoch.
+        log.info("Server2: request layout using the old epoch.");
         Layout oldLayout = requestLayout(OLD_EPOCH).join();
-        Assertions.assertThat(oldLayout.getEpoch()).isEqualTo(0);
+        Assertions.assertThat(oldLayout.getEpoch()).isZero();
 
-        // request layout using the new epoch.
+        log.info("server2: request layout using the new epoch.");
         Layout newLayoutResp = requestLayout(NEW_EPOCH).join();
-        Assertions.assertThat(newLayoutResp.getEpoch()).isEqualTo(0);
+        Assertions.assertThat(newLayoutResp.getEpoch()).isZero();
+
+        s2.shutdown();
     }
 
     /**
      * The test verifies that the data in accepted phase1 and phase2 messages
      * is persisted to disk and survives layout server restarts.
-     *
-     * @throws Exception
      */
     @Test
-    public void checkPaxosPhasesPersisted() throws Exception {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        LayoutServer s1 = getDefaultServer(serviceDir);
+    public void checkPaxosPhasesPersisted() {
+        LayoutServer s1 = getDefaultServer();
 
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         bootstrapServer(layout);
@@ -257,7 +291,7 @@ public class LayoutServerTest extends AbstractServerTest {
         //shutdown this instance of server
         s1.shutdown();
         //bring up a new instance of server with the previously persisted data
-        LayoutServer s2 = getDefaultServer(serviceDir);
+        LayoutServer s2 = getDefaultServer();
 
         assertThat(s2).isInEpoch(newEpoch);
         assertThat(s2).isPhase1Rank(new Rank(1L, AbstractServerTest.testClientId));
@@ -268,13 +302,13 @@ public class LayoutServerTest extends AbstractServerTest {
         s2.shutdown();
 
         //bring up a new instance of server with the previously persisted data
-        LayoutServer s3 = getDefaultServer(serviceDir);
+        LayoutServer s3 = getDefaultServer();
 
         assertThat(s3).isInEpoch(newEpoch);
         assertThat(s3).isPhase1Rank(new Rank(1L, AbstractServerTest.testClientId));
         assertThat(s3).isPhase2Rank(new Rank(1L, AbstractServerTest.testClientId));
         assertThat(s3).isProposedLayout(newLayout);
-
+        s3.shutdown();
     }
 
     /**
@@ -285,8 +319,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void checkMessagesValidatedAgainstPhase1PersistedData() throws Exception {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        LayoutServer s1 = getDefaultServer(serviceDir);
+        LayoutServer s1 = getDefaultServer();
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         bootstrapServer(layout);
 
@@ -305,7 +338,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         s1.shutdown();
         // reboot
-        LayoutServer s2 = getDefaultServer(serviceDir);
+        LayoutServer s2 = getDefaultServer();
         assertThat(s2).isInEpoch(newEpoch);
         assertThat(s2).isPhase1Rank(new Rank(HIGH_RANK, AbstractServerTest.testClientId));
 
@@ -318,6 +351,7 @@ public class LayoutServerTest extends AbstractServerTest {
         resp = sendPrepare(newEpoch, HIGH_RANK + 1, layout.getClusterId()).join();
         Assertions.assertThat(resp.getLayout()).isNull();
         Assertions.assertThat(resp.getRank()).isEqualTo(-1);
+        s2.shutdown();
     }
 
     /**
@@ -327,13 +361,10 @@ public class LayoutServerTest extends AbstractServerTest {
      * take part in the prepare phase. It should reject this message.
      * If the persisted phase2 rank is the same as incoming message, it will be rejected as it is a
      * duplicate message.
-     *
-     * @throws Exception
      */
     @Test
-    public void checkMessagesValidatedAgainstPhase2PersistedData() throws Exception {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        LayoutServer s1 = getDefaultServer(serviceDir);
+    public void checkMessagesValidatedAgainstPhase2PersistedData() {
+        LayoutServer s1 = getDefaultServer();
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         bootstrapServer(layout);
 
@@ -353,7 +384,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         s1.shutdown();
 
-        LayoutServer s2 = getDefaultServer(serviceDir);
+        LayoutServer s2 = getDefaultServer();
         assertThat(s2).isInEpoch(newEpoch);
         assertThat(s2).isPhase1Rank(new Rank(HIGH_RANK, AbstractServerTest.testClientId));
 
@@ -372,10 +403,11 @@ public class LayoutServerTest extends AbstractServerTest {
 
         s2.shutdown();
         // data should survive the reboot.
-        LayoutServer s3 = getDefaultServer(serviceDir);
+        LayoutServer s3 = getDefaultServer();
         assertThat(s3).isInEpoch(newEpoch);
         assertThat(s3).isPhase1Rank(new Rank(HIGH_RANK, AbstractServerTest.testClientId));
         assertThat(s3).isProposedLayout(newLayout);
+        s3.shutdown();
     }
 
     /**
@@ -385,14 +417,10 @@ public class LayoutServerTest extends AbstractServerTest {
      * from another client.
      * A phase2 message can only be accepted if the last accepted phase1 message is from the same client and has the
      * same rank.
-     *
-     * @throws Exception
      */
     @Test
-    public void checkPhase1AndPhase2MessagesFromMultipleClients() throws Exception {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-
-        LayoutServer s1 = getDefaultServer(serviceDir);
+    public void checkPhase1AndPhase2MessagesFromMultipleClients() {
+        LayoutServer s1 = getDefaultServer();
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         bootstrapServer(layout);
 
@@ -426,7 +454,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         // testing behaviour after server restart
         s1.shutdown();
-        LayoutServer s2 = getDefaultServer(serviceDir);
+        LayoutServer s2 = getDefaultServer();
         assertThat(s2).isInEpoch(newEpoch);
         assertThat(s2).isPhase1Rank(new Rank(HIGH_RANK + 1, UUID.nameUUIDFromBytes("OTHER_CLIENT".getBytes())));
         //duplicate message to be rejected
@@ -436,7 +464,7 @@ public class LayoutServerTest extends AbstractServerTest {
         /* validate phase 2 */
 
         //phase2 message from a different client than the one whose phase1 was last accepted is rejected
-        assertThatThrownBy(() ->  sendPropose(newEpoch, HIGH_RANK + 1, newLayout, layout.getClusterId()).join())
+        assertThatThrownBy(() -> sendPropose(newEpoch, HIGH_RANK + 1, newLayout, layout.getClusterId()).join())
                 .hasCauseExactlyInstanceOf(OutrankedException.class);
 
         // phase2 from same client with same rank as in phase1 gets accepted
@@ -452,9 +480,8 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
     @Test
-    public void testReboot() throws Exception {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        LayoutServer s1 = getDefaultServer(serviceDir);
+    public void testReboot() {
+        LayoutServer s1 = getDefaultServer();
 
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         final long NEW_EPOCH = 99L;
@@ -468,8 +495,8 @@ public class LayoutServerTest extends AbstractServerTest {
         Assertions.assertThat(resp.getEpoch()).isEqualTo(NEW_EPOCH);
         s1.shutdown();
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
-            LayoutServer s2 = getDefaultServer(serviceDir);
-            commitReturnsAck(s2, i, NEW_EPOCH + 1, s2.getCurrentLayout());
+            LayoutServer s2 = getDefaultServer();
+            commitReturnsAck(i, NEW_EPOCH + 1, s2.getCurrentLayout());
             s2.shutdown();
         }
     }
@@ -480,8 +507,7 @@ public class LayoutServerTest extends AbstractServerTest {
      */
     @Test
     public void testChangeEpochInPhase2ByBaseServer() {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        LayoutServer layoutServer = getDefaultServer(serviceDir);
+        LayoutServer layoutServer = (LayoutServer) router.servers.stream().findFirst().get();
 
         //  Spy on the LayoutServer which will let us trigger race conditions.
         LayoutServer spyLayoutServer = Mockito.spy(layoutServer);
@@ -541,14 +567,18 @@ public class LayoutServerTest extends AbstractServerTest {
                 .isTrue();
     }
 
-    private void commitReturnsAck(LayoutServer s1, Integer reboot, long baseEpoch, Layout bootstrappedLayout) {
+    private void commitReturnsAck(Integer reboot, long baseEpoch, Layout bootstrappedLayout) {
         long newEpoch = baseEpoch + reboot;
-        sendRequestWithClusterId(new CorfuPayloadMsg<>(CorfuMsgType.SEAL, newEpoch), bootstrappedLayout.getClusterId()).join();
+        sendRequestWithClusterId(
+                new CorfuPayloadMsg<>(CorfuMsgType.SEAL, newEpoch),
+                bootstrappedLayout.getClusterId()
+        ).join();
 
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         layout.setEpoch(newEpoch);
 
-        LayoutPrepareResponse prepareResp = sendPrepare(newEpoch, HIGH_RANK, bootstrappedLayout.getClusterId()).join();
+        LayoutPrepareResponse prepareResp = sendPrepare(
+                newEpoch, HIGH_RANK, bootstrappedLayout.getClusterId()).join();
         Assertions.assertThat(prepareResp.getRank()).isEqualTo(-1);
         Assertions.assertThat(prepareResp.getLayout()).isNull();
 
@@ -562,28 +592,13 @@ public class LayoutServerTest extends AbstractServerTest {
         Assertions.assertThat(newLayout).isEqualTo(layout);
     }
 
-    private LayoutServer getDefaultServer(String serviceDir) {
-        ServerContext sc = new ServerContextBuilder()
-                .setSingle(false)
-                .setMemory(false)
-                .setLogPath(serviceDir)
-                .setServerRouter(getRouter())
-                .build();
-
-        sc.setServerRouter(getRouter());
-        setContext(sc);
-
-        LayoutServer s1 = new LayoutServer(sc);
-        setServer(s1);
-        getRouter().addServer(new BaseServer(sc));
-        return s1;
-    }
-
     private void bootstrapServer(Layout l) {
+        log.info("Bootstrap layout: {}", l);
         sendRequest(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l))).join();
     }
 
     private CompletableFuture<Layout> requestLayout(long epoch) {
+        log.info("request layout by epoch: {}", epoch);
         return sendRequest(CorfuMsgType.LAYOUT_REQUEST.payloadMsg(epoch));
     }
 
@@ -610,6 +625,6 @@ public class LayoutServerTest extends AbstractServerTest {
 
     private CompletableFuture<Boolean> sendPropose(UUID clientId, long epoch, long rank, Layout layout, UUID clusterId) {
         return sendRequestWithClusterId(clientId, CorfuMsgType.LAYOUT_PROPOSE
-                .payloadMsg(new LayoutProposeRequest(epoch,rank, layout)), clusterId);
+                .payloadMsg(new LayoutProposeRequest(epoch, rank, layout)), clusterId);
     }
 }
