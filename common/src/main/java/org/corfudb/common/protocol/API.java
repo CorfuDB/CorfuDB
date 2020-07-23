@@ -1,6 +1,5 @@
 package org.corfudb.common.protocol;
 
-
 import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
@@ -10,6 +9,10 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.PingRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.PingResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ProtocolVersion;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ERROR;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ErrorNoPayload;
+import org.corfudb.common.protocol.proto.CorfuProtocol.WrongClusterPayload;
 
 import java.util.UUID;
 
@@ -49,6 +52,41 @@ public class API {
                 .build();
     }
 
+    public static ServerError newNoServerError() {
+        return ServerError.newBuilder()
+                .setCode(ERROR.OK)
+                .setMessage("")
+                .setNone(ErrorNoPayload.getDefaultInstance())
+                .build();
+    }
+
+    public static ServerError newWrongEpochServerError(String errorMsg, long serverEpoch) {
+        return ServerError.newBuilder()
+                .setCode(ERROR.WRONG_EPOCH)
+                .setMessage(errorMsg)
+                .setWrongEpochPayload(serverEpoch)
+                .build();
+    }
+
+    public static ServerError newNotReadyServerError(String errorMsg) {
+        return ServerError.newBuilder()
+                .setCode(ERROR.NOT_READY)
+                .setMessage(errorMsg)
+                .setNone(ErrorNoPayload.getDefaultInstance())
+                .build();
+    }
+
+    public static ServerError newWrongClusterServerError(String errorMsg, UUID serverClusterId, UUID clientClusterId) {
+        return ServerError.newBuilder()
+                .setCode(ERROR.WRONG_CLUSTER)
+                .setMessage(errorMsg)
+                .setWrongClusterPayload(WrongClusterPayload.newBuilder()
+                                        .setServerClusterId(getUUID(serverClusterId))
+                                        .setClientClusterId(getUUID(clientClusterId))
+                                        .build())
+                .build();
+    }
+
     public static Request newPingRequest(Header header) {
         PingRequest pingRequest = PingRequest.getDefaultInstance();
         return Request.newBuilder()
@@ -58,9 +96,14 @@ public class API {
     }
 
     public static Response newPingResponse(Header header) {
+        return newPingResponse(header, newNoServerError());
+    }
+
+    public static Response newPingResponse(Header header, ServerError error) {
         PingResponse pingResponse = PingResponse.getDefaultInstance();
         return Response.newBuilder()
                 .setHeader(header)
+                .setError(error)
                 .setPingResponse(pingResponse)
                 .build();
     }
