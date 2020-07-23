@@ -443,7 +443,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t0);
         crossTables.add(t1);
 
-        generateTxCrossTables(crossTables, true);
+        writeCrossTableTransactions(crossTables, true);
 
         // Start Snapshot Sync
         startSnapshotSync(crossTables);
@@ -501,7 +501,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         replicateTables.add(t0);
         replicateTables.add(t1);
 
-        generateTxCrossTables(crossTables, true);
+        writeCrossTableTransactions(crossTables, true);
 
         // Start Snapshot Sync
         startSnapshotSync(replicateTables);
@@ -529,7 +529,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t1);
         crossTables.add(t2);
 
-        generateTxCrossTables(crossTables, true);
+        writeCrossTableTransactions(crossTables, true);
 
         // Start Snapshot Sync, indicating an empty set of tables to replicate. This is not allowed
         // and we should expect an exception.
@@ -681,7 +681,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t1);
 
         // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
-        generateTxCrossTables(crossTables, true);
+        writeCrossTableTransactions(crossTables, true);
 
         // Start Log Entry Sync
         expectedAckMessages = NUM_KEYS * WRITE_CYCLES;
@@ -710,7 +710,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t0);
         crossTables.add(t1);
 
-        generateTxCrossTables(crossTables, true);
+        writeCrossTableTransactions(crossTables, true);
 
         // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
@@ -736,7 +736,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t0);
         crossTables.add(t1);
 
-        generateTxCrossTables(crossTables, true, NUM_KEYS_LARGE);
+        writeCrossTableTransactions(crossTables, true);
 
         // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
@@ -763,7 +763,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t2);
 
         // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
-        generateTxCrossTables(crossTables, true);
+        writeCrossTableTransactions(crossTables, true);
 
         Set<String> replicateTables = new HashSet<>();
         replicateTables.add(t0);
@@ -807,8 +807,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t0);
         crossTables.add(t1);
 
-        // Generate correct transactions
-        generateTxCrossTables(crossTables, true, NUM_KEYS, 0);
+        // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
+        writeCrossTableTransactions(crossTables, false);
 
         Set<String> replicateTables = new HashSet<>();
         replicateTables.add(t0);
@@ -847,7 +847,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t0);
         crossTables.add(t1);
 
-        generateTxCrossTables(crossTables, true, NUM_KEYS);
+        writeCrossTableTransactions(crossTables, true);
 
         // Start Log Entry Sync
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
@@ -877,6 +877,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         assertThat(expectedAckTimestamp).isEqualTo(logReplicationMetadataManager.getLastProcessedLogTimestamp());
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
+
+        cleanEnv();
     }
 
 
@@ -1098,8 +1100,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         generateTxCrossTables(crossTableTransactions, startCrossTx, numKeys, 0);
     }
 
-        // startCrossTx indicates if we start with a transaction across Tables
-    private void generateTxCrossTables(Set<String> crossTableTransactions, boolean startCrossTx, int numKeys, int startValue) throws Exception {
+    // startCrossTx indicates if we start with a transaction across Tables
+    private void writeCrossTableTransactions(Set<String> crossTableTransactions, boolean startCrossTx) throws Exception {
         // Setup two separate Corfu Servers: source (primary) and destination (standby)
         setupEnv();
 
@@ -1250,7 +1252,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         blockUntilExpectedAckTs.acquire();
         expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
 
-        // Block until the snapshot sync completes == one ACK is received by the source manager, or an error occurs
+        // Block until the expected ACK Timestamp is reached
         System.out.println("\n****** Wait until the wait condition is met");
         if (waitConditions.contains(WAIT.ON_ERROR) || waitConditions.contains(WAIT.ON_TIMEOUT_ERROR)) {
             blockUntilExpectedValueReached.acquire();

@@ -267,7 +267,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         }
     }
 
-
     public static void printTails(String tag, CorfuRuntime rt0, CorfuRuntime rt1) {
         System.out.println("\n" + tag);
         System.out.println("src dataTail " + rt0.getAddressSpaceView().getLogTail());
@@ -514,7 +513,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     @Test
-    public void testTrimmedExceptionForLogEntryReader() throws IOException, InterruptedException {
+    public void testTrimmedExceptionForLogEntryReader() throws Exception {
         setupEnv();
 
         waitSem = new Semaphore(1);
@@ -536,6 +535,20 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             System.out.println("caught an exception " + e + " tail " + tail);
         } finally {
             assertThat(result).isInstanceOf(TrimmedException.class);
+        }
+
+        tearDownEnv();
+        cleanUp();
+    }
+
+    private void tearDownEnv() {
+        if(srcDataRuntime != null) {
+            srcDataRuntime.shutdown();
+            srcTestRuntime.shutdown();
+            readerRuntime.shutdown();
+            writerRuntime.shutdown();
+            dstDataRuntime.shutdown();
+            dstTestRuntime.shutdown();
         }
     }
 
