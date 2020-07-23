@@ -46,7 +46,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
 
     @Override
     public long getLastProcessed() {
-        return logReplicationMetadataManager.getLastProcessedLogTimestamp(null);
+        return logReplicationMetadataManager.getLastProcessedLogTimestamp();
     }
 
     /**

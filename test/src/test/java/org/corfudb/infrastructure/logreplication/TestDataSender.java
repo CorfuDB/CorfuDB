@@ -32,7 +32,7 @@ public class TestDataSender implements DataSender {
                     message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
                 // Ignore, do not account Start and End Markers as messages
                 entryQueue.add(message);
-                log.info("add message to the entryQueue {}", entryQueue.size());
+                log.trace("add message to the entryQueue {}", entryQueue.size());
             }
         }
 

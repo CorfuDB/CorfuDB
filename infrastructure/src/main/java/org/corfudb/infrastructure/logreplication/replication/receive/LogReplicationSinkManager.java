@@ -100,7 +100,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                                      ServerContext context, long topologyConfigId) {
         this.logReplicationMetadataManager = metadataManager;
         this.applySnapshotExecutor = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("log-replication-sink-manager-apply-snapshot").build());
+                ThreadFactoryBuilder().setNameFormat("apply-snapshot-executor").build());
 
 
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
@@ -313,7 +313,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * Process a snapshot transfer end marker:
      * 1. Mark the metadata that snapshot transfer phase is done.
      * 2. Start to apply the snapshot data to the real streams
-     * 3. After appling, transit to log entry sync state.
+     * 3. After applying, transit to log entry sync state.
      * @param message
      */
     private void processSnapshotTransferEndMarker(LogReplicationEntry message) {
@@ -355,7 +355,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 logReplicationMetadataManager.getLastSnapTransferDoneTimestamp(),
                 logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp(),
                 logReplicationMetadataManager.getLastProcessedLogTimestamp());
-        log.info("Query metadata response {}", response);
+        log.trace("Query metadata response {}", response);
         return response;
     }
 

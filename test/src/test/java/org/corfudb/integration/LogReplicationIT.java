@@ -1162,7 +1162,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             while (logReplicationMetadataManager.getLastProcessedLogTimestamp() !=
                     logReplicationMetadataManager.getLastSnapStartTimestamp()) {
                 sleep(SLEEP_INTERVAL);
-                log.info("metadata {}", logReplicationMetadataManager);
+                log.trace("metadata {}", logReplicationMetadataManager);
             }
         }
 
@@ -1350,7 +1350,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogTimestamp(null);
+        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogTimestamp();
 
         System.out.println("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp);
         assertThat(expectedAckTimestamp == lastLogProcessed).isTrue();

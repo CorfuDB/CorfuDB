@@ -106,7 +106,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
         }
     }
 
-    boolean shouldAck(LogReplicationEntry entry) {
+    public boolean shouldAck(LogReplicationEntry entry) {
         // If it has different baseSnapshot, ignore it.
         if (entry.getMetadata().getSnapshotTimestamp() != logReplicationMetadataManager.getLastSnapStartTimestamp()) {
             log.warn("Get a message {} that has different snapshotTime with expecting {}", entry.getMetadata(),

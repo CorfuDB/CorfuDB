@@ -155,7 +155,7 @@ public class SnapshotSender {
             // Query receiver status
             LogReplicationQueryMetadataResponse response = dataSender.sendQueryMetadataRequest().get();
 
-            // If it has finised applying the snapshot, transition to log entry sync
+            // If it has finished applying the snapshot, transition to log entry sync
             // Otherwise query the status in another cycle.
             if (response.getLastLogProcessed() == response.getSnapshotApplied() &&
                 response.getSnapshotApplied() == baseSnapshotTimestamp) {

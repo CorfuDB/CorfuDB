@@ -184,8 +184,6 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
         this.eventQueue.add(new DiscoveryServiceEvent(DISCOVER_INIT_TOPOLOGY));
 
         this.executorService.submit(this::run);
-
-        startDiscovery();
     }
 
     /**
@@ -209,6 +207,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
      */
     public void processEvent(DiscoveryServiceEvent event) {
         switch (event.getType()) {
+            case DISCOVER_INIT_TOPOLOGY:
+                startDiscovery();
+                break;
+
             case ACQUIRE_LOCK:
                 processLockAcquire();
                 break;

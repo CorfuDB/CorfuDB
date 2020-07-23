@@ -35,23 +35,23 @@ import java.util.stream.Stream;
 @NotThreadSafe
 public class StreamsSnapshotWriter implements SnapshotWriter {
     // The suffix used to the corresponding shadow tables.
-    final static String SHADOW_STREAM_NAME_SUFFIX = "_shadow";
+    final static private String SHADOW_STREAM_NAME_SUFFIX = "_shadow";
 
     // It contains all the streams registered for write to.
     // Mapping uuid to table name.
-    HashMap<UUID, String> streamViewMap;
+    private HashMap<UUID, String> streamViewMap;
 
     // It contains all the shadow streams
-    HashMap<UUID, String> shadowMap;
+    private HashMap<UUID, String> shadowMap;
 
-    CorfuRuntime rt;
+    private CorfuRuntime rt;
 
     /*
      * Record the topologyConfigID when the snapshot full sync start.
      * If the topologyConfigID has changed during the snapshot full sync,
      * this snapshot full sync should be aborted and restart a new one.
      */
-    long topologyConfigID;
+    private long topologyConfigID;
 
     /**
      * The current snapshot full sync's snapshot timestamp.
@@ -90,12 +90,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     /**
      * Mapping of the real table's uuid to the corresponding shadow table's uuid.
      */
-    HashMap<UUID, UUID> uuidMap;
+    private HashMap<UUID, UUID> uuidMap;
 
     /**
      * Record the Snapshot Full Sync phase: transfer phase or apply phase.
      */
-    Phase phase;
+    private Phase phase;
 
     public StreamsSnapshotWriter(CorfuRuntime rt, LogReplicationConfig config, LogReplicationMetadataManager logReplicationMetadataManager) {
         this.rt = rt;
@@ -121,13 +121,13 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      */
     void clearShadowTables() {
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
-        long persistSiteConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+        long persistTopologyConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
         long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
         long persistSnapTransferred = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
         long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
 
         // for transfer phase start, verify it hasn't received any message yet.
-        if (topologyConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart || srcGlobalSnapshot <= persistSnapTransferred ||
+        if (topologyConfigID != persistTopologyConfigID || srcGlobalSnapshot != persistSnapStart || srcGlobalSnapshot <= persistSnapTransferred ||
                 persitSeqNum != Address.NON_ADDRESS) {
                 log.warn("Skip current processing as the persistent metadata {} shows the current operation is out of date " +
                         "current topologyConfigID {} srcGlobalSnapshot {}", logReplicationMetadataManager,
@@ -154,7 +154,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * Clear all real tables registered for replication and start SNAPSHOT FULL Sync phase II:
      * applying data to the real tables.
      */
-    void clearTables() {
+    private void clearTables() {
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
         long persistedTopologyId = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
         long persistedSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);

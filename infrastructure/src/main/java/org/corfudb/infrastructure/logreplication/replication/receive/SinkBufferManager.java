@@ -110,7 +110,7 @@ public abstract class SinkBufferManager {
      *
      * @return
      */
-    boolean shouldAck(LogReplicationEntry entry) {
+    public boolean shouldAck(LogReplicationEntry entry) {
         long currentTime = java.lang.System.currentTimeMillis();
         ackCnt++;
 

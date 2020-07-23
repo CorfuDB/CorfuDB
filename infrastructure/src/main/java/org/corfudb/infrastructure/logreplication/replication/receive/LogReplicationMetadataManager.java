@@ -135,15 +135,6 @@ public class LogReplicationMetadataManager {
         return val;
     }
 
-    /**
-     * Given a specific timestamp, get the current topologyConfigId metadata value.
-     * If the timestamp is null, get the most recent value.
-     * @param ts
-     * @return
-     */
-    public long getTopologyConfigId(CorfuStoreMetadata.Timestamp ts) {
-        return query(ts, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-    }
 
     /**
      * Get the most recent topologyConfigID.
@@ -152,13 +143,6 @@ public class LogReplicationMetadataManager {
     public long getTopologyConfigId() {
         return query(null, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
     }
-    /**
-     * Given a specific timestamp, get the current version value.
-     * If the timestamp is null, get the most recent value.
-     * @param ts
-     * @return
-     */
-    public String getVersion(CorfuStoreMetadata.Timestamp ts) { return queryString(ts, LogReplicationMetadataType.VERSION); }
 
     /**
      * Get the most recent version.
@@ -223,37 +207,14 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Given a specific timestamp, get the most recent log that has applied to the
-     * receiver's log.
-     * If the timestamp is null, get the most recent value.
-     * @param ts
-     * @return
-     */
-    public long getLastProcessedLogTimestamp(CorfuStoreMetadata.Timestamp ts) {
-        return query(ts, LogReplicationMetadataType.LAST_LOG_PROCESSED);
-    }
-
-    /**
      * Append a metadata update to the same tx with a long.
      * @param txBuilder
      * @param key the key to be updated.
      * @param val the new value.
      */
-    void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, long val) {
+    public void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, long val) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(Long.toString(val)).build();
-        txBuilder.update(metadataTableName, txKey, txVal, null);
-    }
-
-    /**
-     * Append a metadata update to the same tx with a String.
-     * @param txBuilder
-     * @param key the key to be updated.
-     * @param val the new value.
-     */
-    private void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, String val) {
-        LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
-        LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(val).build();
         txBuilder.update(metadataTableName, txKey, txVal, null);
     }
 
@@ -267,7 +228,8 @@ public class LogReplicationMetadataManager {
         long persistedTopologyConfigId = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
 
         if (topologyConfigId <= persistedTopologyConfigId) {
-            log.warn("Skip setupTopologyConfigId. the current topologyConfigId " + topologyConfigId + " is not larger than the persistedTopologyConfigID " + persistedTopologyConfigId);
+            log.warn("Skip setupTopologyConfigId. the current topologyConfigId {} is not larger than the persistedTopologyConfigID {}",
+                    topologyConfigId, persistedTopologyConfigId);
             return;
         }
 
@@ -352,8 +314,8 @@ public class LogReplicationMetadataManager {
 
         // It means the cluster config has changed, ignore the update operation.
         if (topologyConfigId != persistedTopologyConfigId || ts <= persistedTopologyConfigId) {
-            log.warn("The metadata is older than the persisted one. Set snapshotStart topologyConfigId " + topologyConfigId + " ts " + ts +
-                    " persistedTopologyfigID " + persistedTopologyConfigId + " persistSnapStart " + persistedSnapStart);
+            log.warn("The message metadata is older than the persisted one. Set snapshotStart topologyConfigId={} ts={} " +
+                    "with persistedTopologyConfigId={} persistedSnapShtart {}", topologyConfigId, ts, persistedTopologyConfigId, persistedSnapStart);
             return;
         }
 
@@ -367,8 +329,8 @@ public class LogReplicationMetadataManager {
 
         txBuilder.commit(timestamp);
 
-        log.debug("Commit. Set snapshotStart topologyConfigId " + topologyConfigId + " ts " + ts +
-                " persistedTopologyConfigID " + persistedTopologyConfigId + " persistedSnapStart " + persistedSnapStart);
+        log.debug("Commit. Set snapshotStart topologyConfigId={} ts={} persistedTopologyConfigId={} perstedSnapStart={} ",
+                topologyConfigId, ts , persistedTopologyConfigId, persistedSnapStart);
         return;
     }
 
@@ -386,8 +348,8 @@ public class LogReplicationMetadataManager {
         long ts = entry.getMetadata().getSnapshotTimestamp();
 
         if (topologyConfigId != persistedTopologyConfigId || ts != persistedSnapStart || ts != persistedSnapTranferDone) {
-            log.warn("topologyConfigId " + topologyConfigId + " != " + " persist " + persistedTopologyConfigId +  " ts " + ts +
-                    " != " + "persistedSnapTransferDone " + persistedSnapTranferDone);
+            log.warn("topologyConfigId {}  !=  persistedOne {} or ts {} != persistedSnapStart {} or ts {} != persistedSnapTransferDone {} ",
+                    persistedTopologyConfigId, ts, ts, persistedSnapTranferDone);
             return;
         }
 
@@ -401,8 +363,8 @@ public class LogReplicationMetadataManager {
 
         txBuilder.commit(timestamp);
 
-        log.debug("Commit. Set snapshotStart topologyConfigId " + topologyConfigId + " ts " + ts +
-                " persistTopologyfigID " + persistedTopologyConfigId + " persistedSnapStart " + persistedSnapStart);
+        log.debug("Commit. Set snapshotStart topologyConfigId {} persistedTopologyId {}, ts {} persistedSnapStart {}",
+                topologyConfigId, persistedTopologyConfigId, ts, persistedSnapStart);
 
         return;
     }
