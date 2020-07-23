@@ -344,8 +344,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Block until the snapshot sync completes and next transition occurs.
         while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
-            sleep(100);
-            log.info("stateType {} expected type {}", fsm.getState().getType(), LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+            log.trace("stateType {} expected type {}", fsm.getState().getType(), LogReplicationStateType.IN_LOG_ENTRY_SYNC);
         }
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
