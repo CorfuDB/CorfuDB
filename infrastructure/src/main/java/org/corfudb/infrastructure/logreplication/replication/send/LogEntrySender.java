@@ -33,7 +33,7 @@ public class LogEntrySender {
     /*
      * Implementation of Log Entry Reader. Default implementation reads at the stream layer.
      */
-    private StreamsLogEntryReader logEntryReader;
+    private LogEntryReader logEntryReader;
 
    /*
     * Implementation of buffering messages and sending/resending messages
@@ -68,7 +68,7 @@ public class LogEntrySender {
                           ReadProcessor readProcessor, LogReplicationFSM logReplicationFSM) {
 
         this.runtime = runtime;
-        this.logEntryReader = (StreamsLogEntryReader)logEntryReader;
+        this.logEntryReader = logEntryReader;
         this.dataSenderBufferManager = new LogEntrySenderBufferManager(dataSender);
         this.logReplicationFSM = logReplicationFSM;
     }
@@ -103,7 +103,6 @@ public class LogEntrySender {
              * Read and Send Log Entries
              */
             try {
-                // TODO (Xiaoqin Ma): read batch -> optimization
                 message = logEntryReader.read(logEntrySyncEventId);
 
                 if (message != null) {

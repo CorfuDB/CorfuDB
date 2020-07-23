@@ -102,9 +102,9 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     }
 
     /**
-     * The SMREntry serialized size that only works for opaqueEntry.
-     * If it is not an opaqueEntry, it will give an error message.
+     * The SMREntry's serialized size in bytes. This is set during reading from or writing to the log.
      */
+    @Getter
     Integer serializedSize = null;
 
     /**
@@ -169,17 +169,6 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         size += Integer.BYTES;
 
         return size;
-    }
-
-    /**
-     * The serialized size of an opaque SMR entry.
-     * @return
-     */
-    public synchronized Integer getSerializedSize() {
-        //if (serializedSize == null) {
-        //    serializedSize = calculateOpaqueSMREntrySerializedSize();
-       // }
-        return serializedSize;
     }
 
     /**

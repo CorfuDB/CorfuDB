@@ -48,7 +48,7 @@ public class SnapshotSender {
     private LogReplicationFSM fsm;
     private long baseSnapshotTimestamp;
 
-    // The max number of message can be sent over per cycle run during snapshot full sync state.
+    // The max number of message can be sent over in burst for a snapshot cycle.
     private final int maxNumSnapshotMsgPerBatch;
 
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.

@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 
 @Slf4j
 @NotThreadSafe
@@ -72,7 +72,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         txOpaqueStream = new TxOpaqueStream(rt);
     }
 
-    LogReplicationEntry generateMessageWithOpaqueEntryList(List<OpaqueEntry> opaqueEntryList, UUID logEntryRequestId) {
+    private LogReplicationEntry generateMessageWithOpaqueEntryList(List<OpaqueEntry> opaqueEntryList, UUID logEntryRequestId) {
         // Set the last timestamp as the max timestamp
         currentMsgTs = opaqueEntryList.get(opaqueEntryList.size() - 1).getVersion();
         LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, topologyConfigId, logEntryRequestId,
@@ -85,7 +85,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
 
     // Check if it has the correct streams.
-    boolean shouldProcess(OpaqueEntry entry) {
+    private boolean shouldProcess(OpaqueEntry entry) {
         Set<UUID> tmpUUIDs = entry.getEntries().keySet();
 
         //If the entry's stream set is a subset of interested streams, it is the entry we should process
@@ -108,11 +108,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
         return false;
     }
 
-    boolean checkSizeOK(OpaqueEntry entry, int currentMsgSize, int currentEntrySize) {
+    private boolean checkValidSize(OpaqueEntry entry, int currentMsgSize, int currentEntrySize) {
         // For interested entry, if its size is too big we should skip and report error
         if (currentEntrySize > maxDataSizePerMsg) {
             log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
-                    currentEntrySize, MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED);
+                    currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
             hasNoiseData = true;
             return false;
         }
@@ -154,7 +154,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     // append it to the next message as the first entry.
                     currentEntrySize = ReaderUtility.calculateOpaqueEntrySize(lastOpaqueEntry);
 
-                    if (!checkSizeOK(lastOpaqueEntry, currentMsgSize, currentEntrySize)) {
+                    if (!checkValidSize(lastOpaqueEntry, currentMsgSize, currentEntrySize)) {
                         break;
                     }
 

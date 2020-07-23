@@ -42,7 +42,7 @@ public abstract class SinkBufferManager {
     /*
      * The max number of entries in the buffer.
      */
-    private int maxSize;
+    public int maxSize;
 
     /*
      * How frequent in time, the ack will be sent.
@@ -91,22 +91,6 @@ public abstract class SinkBufferManager {
     }
 
     /**
-     * Go through the buffer to find messages that are in order with the last processed message.
-     */
-    void processBuffer() {
-        while (true) {
-            LogReplicationEntry dataMessage = buffer.get(lastProcessedSeq);
-            if (dataMessage == null)
-                return;
-            sinkManager.processMessage(dataMessage);
-            ackCnt++;
-            buffer.remove(lastProcessedSeq);
-            lastProcessedSeq = getCurrentSeq(dataMessage);
-        }
-    }
-
-
-    /**
      * after receiving a message, it will decide to send an Ack or not
      * according the predefined metrics.
      *
@@ -136,12 +120,12 @@ public abstract class SinkBufferManager {
     public LogReplicationEntry processMsgAndBuffer(LogReplicationEntry dataMessage) {
 
         if (verifyMessageType(dataMessage) == false)
-           return null;
+            return null;
 
         long preTs = getPreSeq(dataMessage);
         long currentTs = getCurrentSeq(dataMessage);
 
-        // This message contains entries that haven't applied yet
+        // This message contains entries that haven't been applied yet
         if (preTs <= lastProcessedSeq && currentTs > lastProcessedSeq) {
             sinkManager.processMessage(dataMessage);
             ackCnt++;
@@ -162,6 +146,9 @@ public abstract class SinkBufferManager {
 
         return null;
     }
+
+    // Process messages in the buffer that are in order
+    abstract void processBuffer();
 
     /**
      * Get the previous inorder message's sequence.

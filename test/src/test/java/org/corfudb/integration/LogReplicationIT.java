@@ -323,6 +323,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             }
     }
 
+    /**
+     * Wait replication data reach at the standby cluster.
+     * @param tables
+     * @param hashMap
+     */
     void waitData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
@@ -998,7 +1003,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Setup Environment: two corfu servers (source & destination)
         setupEnv();
 
-        log.info("Have setutEnv Done");
+        log.trace("Have setutEnv Done");
 
         // Open One Stream
         openStreams(srcCorfuTables, srcDataRuntime, 1);

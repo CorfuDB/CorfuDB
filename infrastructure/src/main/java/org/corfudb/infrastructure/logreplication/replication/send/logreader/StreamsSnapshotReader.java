@@ -28,7 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 
 @Slf4j
 @NotThreadSafe
@@ -127,8 +127,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
                     if (smrEntries != null) {
                         int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
 
-                        if (currentEntrySize > MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED) {
-                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported", currentEntrySize, MAX_LOG_REPLICATION_DATA_MSG_SIZE_SUPPORTED);
+                        if (currentEntrySize > MAX_DATA_MSG_SIZE_SUPPORTED) {
+                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported", currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
                             throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
                         } else if (currentEntrySize > maxDataSizePerMsg) {
                             observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);

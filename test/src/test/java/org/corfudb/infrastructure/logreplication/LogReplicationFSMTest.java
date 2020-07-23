@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication;
 
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
@@ -45,6 +46,7 @@ import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 
+@Slf4j
 /**
  * Test Log Replication FSM.
  */
@@ -342,7 +344,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Block until the snapshot sync completes and next transition occurs.
         while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
-            //
+            sleep(100);
+            log.info("stateType {} expected type {}", fsm.getState().getType(), LogReplicationStateType.IN_LOG_ENTRY_SYNC);
         }
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
