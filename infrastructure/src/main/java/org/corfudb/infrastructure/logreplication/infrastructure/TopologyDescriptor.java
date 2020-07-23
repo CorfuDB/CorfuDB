@@ -104,13 +104,7 @@ public class TopologyDescriptor {
      */
     public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> activeClusters,
                               @NonNull List<ClusterDescriptor> standbyClusters, @NonNull List<ClusterDescriptor> invalidClusters) {
-        this.topologyConfigId = topologyConfigId;
-        this.activeClusters = new HashMap<>();
-        this.standbyClusters = new HashMap<>();
-        this.invalidClusters = new HashMap<>();
-
-        activeClusters.forEach(activeCluster -> this.activeClusters.put(activeCluster.getClusterId(), activeCluster));
-        standbyClusters.forEach(standbyCluster -> this.standbyClusters.put(standbyCluster.getClusterId(), standbyCluster));
+        this(topologyConfigId, activeClusters, standbyClusters);
         invalidClusters.forEach(invalidCluster -> this.invalidClusters.put(invalidCluster.getClusterId(), invalidCluster));
     }
 

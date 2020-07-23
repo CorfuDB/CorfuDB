@@ -189,9 +189,10 @@ public class CorfuReplicationManager {
     /**
      * The notification of change of adding/removing standby's without epoch change.
      *
-     * @param newConfig has the same topologyConfigId as the current config
+     * @param newConfig should have the same topologyConfigId as the current config
      */
     public void processStandbyChange(TopologyDescriptor newConfig) {
+        // ConfigId mismatch could happen if customized cluster manager does not follow protocol
         if (newConfig.getTopologyConfigId() != topology.getTopologyConfigId()) {
             log.warn("Detected changes in the topology. The new topology descriptor {} doesn't have the same " +
                     "topologyConfigId as the current one {}", newConfig, topology);
@@ -201,7 +202,6 @@ public class CorfuReplicationManager {
         Set<String> newStandbys = new HashSet<>(newConfig.getStandbyClusters().keySet());
         Set<String> intersection = Sets.intersection(currentStandbys, newStandbys);
 
-        //standbysToRemove = currentStandbys - intersection
         Set<String> standbysToRemove = new HashSet<>(currentStandbys);
         standbysToRemove.removeAll(intersection);
 

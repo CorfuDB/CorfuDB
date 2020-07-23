@@ -41,9 +41,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  * one active cluster, and one or more standby clusters.
  */
 @Slf4j
-@SuppressWarnings("checkstyle:magicnumber")
 public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAdapter {
-    public static final String CONFIG_FILE_PATH = "/config/corfu/corfu_replication_config.properties";
+    public static final String CONFIG_FILE_PATH = "src/test/resources/corfu_replication_config.properties";
     private static final String DEFAULT_ACTIVE_CLUSTER_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_CLUSTER_NAME = "standby_site";
     private static final int NUM_NODES_PER_CLUSTER = 3;
@@ -68,7 +67,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     public static final CommonTypes.Uuid OP_INVALID = CommonTypes.Uuid.newBuilder().setLsb(4L).setMsb(4L).build();
 
     @Getter
-    private long epoch;
+    private long configId;
 
     @Getter
     private boolean shutdown;
@@ -83,7 +82,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     private CorfuStore corfuStore;
 
     public void start() {
-        epoch = 0L;
+        configId = 0L;
         shutdown = false;
         topologyConfig = constructTopologyConfigMsg();
         clusterManagerCallback = new ClusterManagerCallback(this);
@@ -101,7 +100,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             );
             table.clear();
         } catch (Exception e) {
-            // Ignore
+            throw new RuntimeException(e);
         }
         corfuStore.subscribe(new ConfigStreamListener(this), CONFIG_NAMESPACE,
                 Collections.singletonList(new TableSchema(CONFIG_TABLE_NAME, CommonTypes.Uuid.class, CommonTypes.Uuid.class, CommonTypes.Uuid.class)), ts);
@@ -239,10 +238,15 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         List<ClusterDescriptor> newStandbyClusters = new ArrayList<>();
         currentConfig.getActiveClusters().values().forEach(activeCluster ->
                 newStandbyClusters.add(new ClusterDescriptor(activeCluster, ClusterRole.STANDBY)));
-        currentConfig.getStandbyClusters().values().forEach(standbyCluster ->
-                newActiveClusters.add(new ClusterDescriptor(standbyCluster, ClusterRole.ACTIVE)));
+        for (ClusterDescriptor standbyCluster : currentConfig.getStandbyClusters().values()) {
+            if (newActiveClusters.isEmpty()) {
+                newActiveClusters.add(new ClusterDescriptor(standbyCluster, ClusterRole.ACTIVE));
+            } else {
+                newStandbyClusters.add(new ClusterDescriptor(standbyCluster, ClusterRole.STANDBY));
+            }
+        }
 
-        return new TopologyDescriptor(++epoch, newActiveClusters, newStandbyClusters);
+        return new TopologyDescriptor(++configId, newActiveClusters, newStandbyClusters);
     }
 
     /**
@@ -258,7 +262,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                 newActiveClusters.add(new ClusterDescriptor(standbyCluster, ClusterRole.ACTIVE)));
         newActiveClusters.add(currentActive);
 
-        return new TopologyDescriptor(++epoch, newActiveClusters, new ArrayList<>());
+        return new TopologyDescriptor(++configId, newActiveClusters, new ArrayList<>());
     }
 
     /**
@@ -273,7 +277,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         ClusterDescriptor newStandby = new ClusterDescriptor(currentActive, ClusterRole.STANDBY);
         newStandbyClusters.add(newStandby);
 
-        return new TopologyDescriptor(++epoch, new ArrayList<>(), newStandbyClusters);
+        return new TopologyDescriptor(++configId, new ArrayList<>(), newStandbyClusters);
     }
 
     /**
@@ -288,7 +292,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         currentConfig.getStandbyClusters().values().forEach(standbyCluster ->
                 newInvalidClusters.add(new ClusterDescriptor(standbyCluster, ClusterRole.INVALID)));
 
-        return new TopologyDescriptor(++epoch, newActiveClusters, new ArrayList<>(), newInvalidClusters);
+        return new TopologyDescriptor(++configId, newActiveClusters, new ArrayList<>(), newInvalidClusters);
     }
 
     /**
@@ -299,7 +303,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         List<ClusterDescriptor> activeClusters = new ArrayList<>(defaultTopology.getActiveClusters().values());
         List<ClusterDescriptor> standbyClusters = new ArrayList<>(defaultTopology.getStandbyClusters().values());
 
-        return new TopologyDescriptor(++epoch, activeClusters, standbyClusters);
+        return new TopologyDescriptor(++configId, activeClusters, standbyClusters);
     }
 
     /**
@@ -333,6 +337,11 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         }
     }
 
+    /**
+     * Stream Listener on topology config table, which is for test only.
+     * It enables ITs run as processes and communicate with the cluster manager
+     * to update topology config.
+     **/
     public static class ConfigStreamListener implements StreamListener {
 
         private final DefaultClusterManager clusterManager;

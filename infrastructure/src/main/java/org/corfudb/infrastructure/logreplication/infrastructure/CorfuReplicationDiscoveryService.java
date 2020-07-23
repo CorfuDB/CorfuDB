@@ -489,11 +489,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      *   - Higher config id
      *   - Potential cluster role change
      *
+     * Cluster change from active to standby is a two step process, we first confirm that
+     * we are ready to do the cluster role change, so by the time we receive cluster change
+     * notification, nothing needs to be done, other than stop.
      * @param newTopology new discovered topology
      */
     public void onClusterRoleChange(TopologyDescriptor newTopology) {
-        // TODO: confirm prepare to become standby is a two-step process, otherwise,
-        //  we can't just stop on an intention to switch
         // Stop ongoing replication, stopLogReplication() checks leadership and active
         // We do not update topology until we successfully stop log replication
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
@@ -507,7 +508,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         // Update topology config id in metadata manager
         logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
-        log.debug("Persist new topologyConfigId {}, cluster id={}, status={}", topologyDescriptor.getTopologyConfigId(),
+        log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
 
         // Update replication manager
@@ -591,7 +592,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         updateReplicationManagerTopology(discoveredTopology);
         // Update topology config id in metadata manager
         logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
-        log.debug("Persist new topologyConfigId {}, cluster id={}, status={}", topologyDescriptor.getTopologyConfigId(),
+        log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
     }
 

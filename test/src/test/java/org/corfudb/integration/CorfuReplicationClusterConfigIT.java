@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 
 /**
- * This test suit exercises some topology config change scenarios.
+ * This test suite exercises some topology config change scenarios.
  * Each test will start with two single node corfu servers, and two single node log replicators.
  */
 @Slf4j
@@ -117,7 +117,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     /**
-     * This test verify config change with a role switch.
+     * This test verifies config change with a role switch.
      * <p>
      * 1. Init with corfu 9000 active and 9001 standby
      * 2. Write 10 entries to active map
@@ -130,7 +130,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithSwitchRole() throws Exception {
-        // Write 10 entry to active map
+        // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
             mapActive.put(String.valueOf(i), i);
@@ -200,13 +200,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
         // Double check after 10 seconds
         TimeUnit.SECONDS.sleep(mediumInterval);
-        //assertThat(mapActive.size()).isEqualTo(thirdBatch);
-        waitForReplication(size -> size == thirdBatch, mapActive, thirdBatch);
+        assertThat(mapActive.size()).isEqualTo(thirdBatch);
         assertThat(mapStandby.size()).isEqualTo(thirdBatch);
     }
 
     /**
-     * This test verify config change with a role switch during a snapshot sync transfer phase.
+     * This test verifies config change with a role switch during a snapshot sync transfer phase.
      * <p>
      * 1. Init with corfu 9000 active and 9001 standby
      * 2. Write 50 entries to active map
@@ -259,7 +258,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     /**
-     * This test verify config change with a role switch during a snapshot sync apply phase.
+     * This test verifies config change with a role switch during a snapshot sync apply phase.
      * <p>
      * 1. Init with corfu 9000 active and 9001 standby
      * 2. Write 50 entries to active map
@@ -319,7 +318,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     /**
-     * This test verify config change with two active clusters
+     * This test verifies config change with two active clusters
      * <p>
      * 1. Init with corfu 9000 active and 9001 standby
      * 2. Write 10 entries to active map
@@ -332,7 +331,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithTwoActive() throws Exception {
-        // Write 10 entry to active map
+        // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
             mapActive.put(String.valueOf(i), i);
@@ -387,14 +386,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         log.info("New topology config applied!");
         TimeUnit.SECONDS.sleep(mediumInterval);
 
-        // Append to mapStandby
+        // Append to mapActive
         for (int i = secondBatch; i < thirdBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
             mapActive.put(String.valueOf(i), i);
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
-        log.info("Active map have {} entries now!", thirdBatch);
+        log.info("Active map has {} entries now!", thirdBatch);
 
         // Standby map should still have secondBatch size
         log.info("Standby map should still have {} size", secondBatch);
@@ -407,7 +406,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     /**
-     * This test verify config change with two standby clusters
+     * This test verifies config change with two standby clusters
      * <p>
      * 1. Init with corfu 9000 active and 9001 standby
      * 2. Write 10 entries to active map
@@ -420,7 +419,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithAllStandby() throws Exception {
-        // Write 10 entry to active map
+        // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
             mapActive.put(String.valueOf(i), i);
@@ -481,7 +480,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
             activeRuntime.getObjectsView().TXEnd();
         }
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
-        log.info("Active map have {} entries now!", thirdBatch);
+        log.info("Active map has {} entries now!", thirdBatch);
 
         // Standby map should still have secondBatch size
         log.info("Standby map should still have {} size", secondBatch);
@@ -494,7 +493,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     }
 
     /**
-     * This test verify config change with one active and one invalid
+     * This test verifies config change with one active and one invalid
      * <p>
      * 1. Init with corfu 9000 active and 9001 standby
      * 2. Write 10 entries to active map
@@ -508,7 +507,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      */
     @Test
     public void testNewConfigWithInvalidClusters() throws Exception {
-        // Write 10 entry to active map
+        // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
             mapActive.put(String.valueOf(i), i);
