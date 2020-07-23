@@ -33,7 +33,6 @@ import java.util.Observer;
 import java.util.Set;
 import java.util.UUID;
 
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
@@ -375,7 +374,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         openStreams(srcCorfuTables, srcDataRuntime, NUM_STREAMS);
 
         // Write data into Source Tables
-        //generateData(srcCorfuTables, srcDataForVerification, NUM_KEYS, NUM_KEYS);
         generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS);
 
         // Verify data just written against in-memory copy
@@ -456,30 +454,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         cleanEnv();
     }
-
-    @Test
-    public void testValidSnapshotSyncCrossTablesWithLargeDataSet() throws Exception {
-
-        // Write data in transaction to t0 and t1
-        Set<String> crossTables = new HashSet<>();
-        crossTables.add(t0);
-        crossTables.add(t1);
-
-        generateTxCrossTables(crossTables, true, NUM_KEYS_LARGE);
-        System.out.print("Start log replication");
-
-        // Start Snapshot Sync
-        startSnapshotSync(crossTables);
-
-        // Verify Data on Destination site
-        System.out.println("****** Verify Data on Destination");
-        // Because t2 should not have been replicated remove from expected list
-        srcDataForVerification.get(t2).clear();
-        verifyData(dstCorfuTables, srcDataForVerification);
-
-        cleanEnv();
-    }
-
 
     /**
      * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T0 and T1 are replicated,
@@ -800,12 +774,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      */
     @Test
     public void testLogEntrySyncInvalidCrossTablesPartial() throws Exception {
-        ExecutorService executorService = Executors.newSingleThreadExecutor();
-
         // Write data in transaction to t0, t1 (tables to be replicated) and also include a non-replicated table
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0);
         crossTables.add(t1);
+        crossTables.add(t2);
 
         // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
         writeCrossTableTransactions(crossTables, false);
@@ -813,10 +786,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         Set<String> replicateTables = new HashSet<>();
         replicateTables.add(t0);
         replicateTables.add(t1);
-
-        // Generate wrong transactions
-        crossTables.add(t2);
-        generateTxCrossTables(crossTables, true, NUM_KEYS, 0);
 
         // Start Log Entry Sync
         // We need to block until the error is received and verify the state machine is shutdown
@@ -829,10 +798,18 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         System.out.println("****** Verify Data on Destination");
 
         // Because t2 is not specified as a replicated table, we should not see it on the destination
-        srcDataForVerification.remove(t2);
+        srcDataForVerification.get(t2).clear();
+        // Add partial transaction entries which were transmitted before transactions across non-replicated streams
+        HashMap<String, HashMap<Long, Long>> partialSrcHashMap = new HashMap<>();
+        partialSrcHashMap.put(t0, new HashMap<>());
+        partialSrcHashMap.put(t1, new HashMap<>());
+        for (int i=NUM_KEYS; i<NUM_KEYS*2; i++) {
+            partialSrcHashMap.get(t0).put((long)i, (long)i);
+            partialSrcHashMap.get(t1).put((long)i, (long)i);
+        }
 
-        // Verify Destination the log entries has been applied
-        verifyData(dstCorfuTables, srcDataForVerification);
+        // Verify Destination
+        verifyData(dstCorfuTables, partialSrcHashMap);
     }
 
     /**
@@ -1096,10 +1073,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     /* ********************** AUXILIARY METHODS ********************** */
 
-    private void generateTxCrossTables(Set<String> crossTableTransactions, boolean startCrossTx, int numKeys) throws Exception {
-        generateTxCrossTables(crossTableTransactions, startCrossTx, numKeys, 0);
-    }
-
     // startCrossTx indicates if we start with a transaction across Tables
     private void writeCrossTableTransactions(Set<String> crossTableTransactions, boolean startCrossTx) throws Exception {
         // Setup two separate Corfu Servers: source (primary) and destination (standby)
@@ -1111,20 +1084,20 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Write data across to tables specified in crossTableTransactions in transaction
         if (startCrossTx) {
-            generateTransactionsCrossTables(srcCorfuTables, crossTableTransactions, srcDataForVerification, numKeys, srcDataRuntime, startValue);
+            generateTransactionsCrossTables(srcCorfuTables, crossTableTransactions, srcDataForVerification, NUM_KEYS, srcDataRuntime, 0);
         }
 
         // Write data to t0
-        generateTransactionsCrossTables(srcCorfuTables, Collections.singleton(t0), srcDataForVerification, numKeys, srcDataRuntime, numKeys);
+        generateTransactionsCrossTables(srcCorfuTables, Collections.singleton(t0), srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS);
 
         // Write data to t1
-        generateTransactionsCrossTables(srcCorfuTables, Collections.singleton(t1), srcDataForVerification, numKeys, srcDataRuntime, numKeys);
+        generateTransactionsCrossTables(srcCorfuTables, Collections.singleton(t1), srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS);
 
         // Write data to t2
-        generateTransactionsCrossTables(srcCorfuTables, Collections.singleton(t2), srcDataForVerification, numKeys, srcDataRuntime, 0);
+        generateTransactionsCrossTables(srcCorfuTables, Collections.singleton(t2), srcDataForVerification, NUM_KEYS, srcDataRuntime, 0);
 
         // Write data across to tables specified in crossTableTransactions in transaction
-        generateTransactionsCrossTables(srcCorfuTables, crossTableTransactions, srcDataForVerification, numKeys, srcDataRuntime, numKeys*2);
+        generateTransactionsCrossTables(srcCorfuTables, crossTableTransactions, srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS*2);
 
         // Verify data just written against in-memory copy
         verifyData(srcCorfuTables, srcDataForVerification);
@@ -1135,10 +1108,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyNoData(dstCorfuTables);
     }
 
-    // startCrossTx indicates if we start with a transaction across Tables
-    private void generateTxCrossTables(Set<String> crossTableTransactions, boolean startCrossTx) throws Exception {
-        generateTxCrossTables(crossTableTransactions, startCrossTx, NUM_KEYS);
-    }
 
     void startTxAtSrc() {
         Set<String> crossTables = new HashSet<>();
