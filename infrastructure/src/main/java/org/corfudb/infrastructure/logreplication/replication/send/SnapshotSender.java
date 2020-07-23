@@ -267,7 +267,7 @@ public class SnapshotSender {
      * @return
      */
     private LogReplicationEntry getSnapshotSyncEndMarker(UUID snapshotSyncEventId) {
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_TRANSFER_END, fsm.getTopologyConfigId(), snapshotSyncEventId,
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END, fsm.getTopologyConfigId(), snapshotSyncEventId,
                 Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata, new byte[0]);
         return emptyEntry;

@@ -10,7 +10,7 @@ public enum MessageType {
     SNAPSHOT_START(3, LogReplicationEntryType.SNAPSHOT_START),
     LOG_ENTRY_REPLICATED(4, LogReplicationEntryType.LOG_ENTRY_REPLICATED),
     SNAPSHOT_REPLICATED(5, LogReplicationEntryType.SNAPSHOT_REPLICATED),
-    SNAPSHOT_TRANSFER_END(6, LogReplicationEntryType.SNAPSHOT_TRANSFER_END);
+    SNAPSHOT_END(6, LogReplicationEntryType.SNAPSHOT_END);
 
     @Getter
     int val;

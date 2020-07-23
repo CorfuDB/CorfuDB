@@ -142,7 +142,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // Set per test according to the expected number ti
     private int expectedSinkReceivedMessages = 0;
 
-    private MessageType expectedAckMsgType = MessageType.SNAPSHOT_TRANSFER_END;
+    private MessageType expectedAckMsgType = MessageType.SNAPSHOT_END;
 
     /* ********* Semaphore to block until expected values are reached ********** */
 
@@ -906,7 +906,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckTimestamp = -1;
         testConfig.setWaitOn(WAIT.ON_ACK_TS);
 
-        expectedAckMsgType = MessageType.SNAPSHOT_TRANSFER_END;
+        expectedAckMsgType = MessageType.SNAPSHOT_END;
 
         LogReplicationSourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(),
                 new HashSet<>(Arrays.asList(WAIT.ON_ACK, WAIT.ON_ACK_TS, WAIT.ON_ERROR, WAIT.ON_SINK_RECEIVE)));
@@ -1140,7 +1140,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Observe ACKs on LogReplicationSourceManager, to assess when snapshot sync is completed
         // We only expect one message, related to the snapshot sync complete
-        expectedAckMsgType = MessageType.SNAPSHOT_TRANSFER_END;
+        expectedAckMsgType = MessageType.SNAPSHOT_END;
         blockUntilExpectedAckType.acquire();
 
         LogReplicationSourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,

@@ -25,7 +25,7 @@ import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_TRANSFER_END;
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
 
 /**
@@ -225,7 +225,7 @@ public class LogReplicationSinkManager implements DataReceiver {
             // send the SNAPSHOT_END message again, but the receiver has already transited to
             // the LOG_ENTRY_SYNC state.
             // Reply the SNAPSHOT_ACK again and let sender do the proper transition.
-            if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_TRANSFER_END) {
+            if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
                 log.warn("Sink Manager in state {} and received message {}. Resending the ACK for SNAPSHOT_END.", rxState,
                         message.getMetadata());
                 LogReplicationEntryMetadata metadata = snapshotSinkBufferManager.getAckMetadata(message);
@@ -331,7 +331,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 snapshotWriter.apply(message);
                 return;
 
-            case SNAPSHOT_TRANSFER_END:
+            case SNAPSHOT_END:
                 // Submit a job to the executor
                 applySnapshotExecutor.submit(() -> processSnapshotTransferEndMarker(message));
 
@@ -387,7 +387,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private boolean receivedValidMessage(LogReplicationEntry message) {
         return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE
-                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_TRANSFER_END)
+                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END)
                 || rxState == RxState.LOG_ENTRY_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
 
