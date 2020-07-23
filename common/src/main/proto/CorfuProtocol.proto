@@ -73,9 +73,26 @@ message Token {
     int64 sequence = 2;
 }
 
+// Payload for ERROR types OK, NOT_READY
+message ErrorNoPayload {
+}
+
+// Payload for ERROR type WRONG_CLUSTER
+message WrongClusterPayload {
+    UUID serverClusterId = 1;
+    UUID clientClusterId = 2;
+}
+
+//TODO(Zach): Do we still need a message field?
 message ServerError {
     ERROR code = 1;
     string message = 2;
+
+    oneof payload {
+        ErrorNoPayload none = 10;
+        int64 wrongEpochPayload = 12;
+        WrongClusterPayload wrongClusterPayload = 13;
+    }
 }
 
 message PingRequest {

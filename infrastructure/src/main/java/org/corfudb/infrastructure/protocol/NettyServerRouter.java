@@ -97,10 +97,13 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;
 
-        // Temporary -- If message is not a new Protobuf message, forward the message.
-        if (msgBuf.getByte(msgBuf.readerIndex()) != API.PROTO_CORFU_MSG_MARK) {
+        // Temporary -- If message is a legacy message, forward the message.
+        byte msgMark = msgBuf.getByte(msgBuf.readerIndex());
+        if (msgMark == API.LEGACY_CORFU_MSG_MARK) {
             ctx.fireChannelRead(msgBuf);
             return;
+        } else if(msgMark != API.PROTO_CORFU_MSG_MARK) {
+            throw new IllegalStateException("Received incorrectly marked message.");
         }
 
         msgBuf.readByte();
