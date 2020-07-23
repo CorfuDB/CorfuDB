@@ -353,7 +353,7 @@ public class LogReplicationMetadataManager {
         // It means the cluster config has changed, ignore the update operation.
         if (topologyConfigId != persistedTopologyConfigId || ts <= persistedTopologyConfigId) {
             log.warn("The metadata is older than the persisted one. Set snapshotStart topologyConfigId " + topologyConfigId + " ts " + ts +
-                    " persisteTopologyfigID " + persistedTopologyConfigId + " persistSnapStart " + persistedSnapStart);
+                    " persistedTopologyfigID " + persistedTopologyConfigId + " persistSnapStart " + persistedSnapStart);
             return;
         }
 
@@ -368,7 +368,7 @@ public class LogReplicationMetadataManager {
         txBuilder.commit(timestamp);
 
         log.debug("Commit. Set snapshotStart topologyConfigId " + topologyConfigId + " ts " + ts +
-                " persisteTopologyConfigID " + persistedTopologyConfigId + " persistSnapStart " + persistedSnapStart);
+                " persistedTopologyConfigID " + persistedTopologyConfigId + " persistedSnapStart " + persistedSnapStart);
         return;
     }
 
@@ -387,7 +387,7 @@ public class LogReplicationMetadataManager {
 
         if (topologyConfigId != persistedTopologyConfigId || ts != persistedSnapStart || ts != persistedSnapTranferDone) {
             log.warn("topologyConfigId " + topologyConfigId + " != " + " persist " + persistedTopologyConfigId +  " ts " + ts +
-                    " != " + "persistSnapTransferDone " + persistedSnapTranferDone);
+                    " != " + "persistedSnapTransferDone " + persistedSnapTranferDone);
             return;
         }
 
@@ -402,7 +402,7 @@ public class LogReplicationMetadataManager {
         txBuilder.commit(timestamp);
 
         log.debug("Commit. Set snapshotStart topologyConfigId " + topologyConfigId + " ts " + ts +
-                " persistTopologyfigID " + persistedTopologyConfigId + " persistSnapStart " + persistedSnapStart);
+                " persistTopologyfigID " + persistedTopologyConfigId + " persistedSnapStart " + persistedSnapStart);
 
         return;
     }
@@ -434,7 +434,6 @@ public class LogReplicationMetadataManager {
      * the real values.
      * TOPOLOGY_CONFIG_ID: it is the cluster topologyConfigID
      * VERSION: it is the version of the application data.
-     * L
      */
     public enum LogReplicationMetadataType {
         TOPOLOGY_CONFIG_ID("topologyConfigId"),

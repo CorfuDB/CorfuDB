@@ -14,7 +14,7 @@ public class DiscoveryServiceEvent {
 
     @Getter
     @Setter
-    private ClusterDescriptor remoteSiteInfo;
+    private ClusterDescriptor remoteClusterInfo;
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
        this.type = type;

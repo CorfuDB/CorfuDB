@@ -303,9 +303,6 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private void completeSnapshotApply(LogReplicationEntry inputEntry) {
         log.debug("Complete of a snapshot apply");
-
-        logReplicationMetadataManager.setSnapshotApplied(inputEntry);
-
         rxState = RxState.LOG_ENTRY_SYNC;
         logEntrySinkBufferManager.reset();
         log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",

@@ -652,7 +652,7 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
     private void processUpgrade(DiscoveryServiceEvent event) {
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             // TODO pankti: is this correct?
-            replicationManager.restart(event.getRemoteSiteInfo());
+            replicationManager.restart(event.getRemoteClusterInfo());
         }
     }
 
@@ -719,6 +719,10 @@ public class CorfuReplicationDiscoveryService implements CorfuReplicationDiscove
 
         if(clusterManagerAdapter != null) {
             clusterManagerAdapter.shutdown();
+        }
+
+        if (runtime != null) {
+            runtime.shutdown();
         }
 
         executorService.shutdownNow();

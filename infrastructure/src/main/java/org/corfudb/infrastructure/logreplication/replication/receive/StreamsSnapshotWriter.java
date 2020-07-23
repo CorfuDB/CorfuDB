@@ -156,16 +156,15 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      */
     void clearTables() {
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
-        long persistSiteConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-        long persistSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-        long persistSnapTransferred = logReplicationMetadataManager.query(timestamp,
+        long persistedTopologyId = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
+        long persistedSnapStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        long persistedSnapTransferred = logReplicationMetadataManager.query(timestamp,
                 LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
-        long persitSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM);
-        long persitAppliedSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM);
+        long persitedAppliedSeqNum = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED_SEQ_NUM);
 
         //If the metadata shows it is in the apply start phase and other metadata is consistent.
-        if (topologyConfigID != persistSiteConfigID || srcGlobalSnapshot != persistSnapStart ||
-                persistSnapTransferred != srcGlobalSnapshot || persitAppliedSeqNum != Address.NON_ADDRESS) {
+        if (topologyConfigID != persistedTopologyId || srcGlobalSnapshot != persistedSnapStart ||
+                persistedSnapTransferred != srcGlobalSnapshot || persitedAppliedSeqNum != Address.NON_ADDRESS) {
             log.warn("Skip current processing as the persistent metadata {} shows the current operation is out of date " +
                             "current topologyConfigID {} srcGlobalSnapshot {}", logReplicationMetadataManager,
                     topologyConfigID, srcGlobalSnapshot);
@@ -409,6 +408,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
         // Apply phase is done, update the metadata
         logReplicationMetadataManager.setSnapshotApplied(message);
+        phase = Phase.TransferPhase;
     }
 
     enum Phase {
