@@ -70,13 +70,6 @@ public class ClusterReconfigIT extends AbstractIT {
         corfuSingleNodeHost = (String) PROPERTIES.get("corfuSingleNodeHost");
     }
 
-    @After
-    public void tearDown() {
-        if (runtime != null) {
-            runtime.shutdown();
-        }
-    }
-
     private String getServerEndpoint(int port) {
         return corfuSingleNodeHost + ":" + port;
     }
