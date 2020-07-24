@@ -25,7 +25,6 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
-import org.corfudb.utils.lock.Lock;
 
 import javax.annotation.Nonnull;
 import java.io.File;
@@ -164,15 +163,8 @@ public class ServerContext implements AutoCloseable {
         this.serverConfig = serverConfig;
         this.dataStore = new DataStore(serverConfig, this::dataStoreFileCleanup);
 
-        if (serverConfig.get("--node-id") != null) {
-            UUID serverId = UuidUtils.fromBase64(getServerConfig(String.class, "--node-id"));
-            generateNodeId(serverId);
-        }
-        else {
-            generateNodeId();
-        }
         this.failureHandlerPolicy = new ConservativeFailureHandlerPolicy();
-
+        generateNodeId();
         // Setup the netty event loops. In tests, these loops may be provided by
         // a test framework to save resources.
         final boolean providedEventLoops =
@@ -308,16 +300,16 @@ public class ServerContext implements AutoCloseable {
      * Generate a Node Id if not present.
      */
     private void generateNodeId() {
-        generateNodeId(UUID.randomUUID());
-    }
-
-    /**
-     * Generate a Node Id if not present.
-     */
-    private void generateNodeId(UUID nodeId) {
+        UUID serverId;
+        if (serverConfig.get("--node-id") != null) {
+            serverId = UuidUtils.fromBase64(getServerConfig(String.class, "--node-id"));
+        }
+        else{
+            serverId = UUID.randomUUID();
+        }
         String currentId = getDataStore().get(NODE_ID_RECORD);
         if (currentId == null) {
-            String idString = UuidUtils.asBase64(nodeId);
+            String idString = UuidUtils.asBase64(serverId);
             log.info("No Node Id, setting to new Id={}", idString);
             getDataStore().put(NODE_ID_RECORD, idString);
         } else {

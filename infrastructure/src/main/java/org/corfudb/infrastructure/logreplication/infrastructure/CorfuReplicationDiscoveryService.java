@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
@@ -192,7 +193,19 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     private LockConfig createLockConfig(String pluginFilePath) {
-        try (InputStream input = new FileInputStream(pluginFilePath)) {
+        LogReplicationPluginConfig logReplicationPluginConfig =
+                new LogReplicationPluginConfig(pluginFilePath);
+        if (!logReplicationPluginConfig.getTopologyConfigPath().isPresent()) {
+            LockConfig config = LockConfig.builder().build();
+            log.info("Using default lock config: {}", config);
+            return config;
+        }
+
+        String topologyConfigFilePath = logReplicationPluginConfig
+                .getTopologyConfigPath().get();
+
+        log.debug("Topology config file path: {}", topologyConfigFilePath);
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream(topologyConfigFilePath)) {
             Properties prop = new Properties();
             prop.load(input);
             String lockGroup = prop.getProperty("lock_group");
@@ -215,7 +228,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             return config;
         } catch (Exception e) {
             LockConfig config = LockConfig.builder().build();
-            log.debug("Using default lock config: {}.", config);
+            log.warn("Error occurred parsing the lock config. " +
+                    "Using default lock config: {}.", config, e);
             return config;
         }
     }
@@ -743,7 +757,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     private LockClient createLockClient(LockStateType initState) throws Exception {
-
         LockConfig lockConfig = createLockConfig(serverContext.getPluginConfigFilePath());
         LockClient lockClient =
                 new LockClient(logReplicationNodeId,
@@ -779,7 +792,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     @VisibleForTesting
-    public void resumeInterestToLockReplicationLock() throws Exception {
+    public void resumeInterestToLogReplicationLock() throws Exception {
         LockClient lockClient = createLockClient(LockStateType.NO_LEASE);
         lockClient.resumeInterest();
 

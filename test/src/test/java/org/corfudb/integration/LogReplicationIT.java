@@ -24,6 +24,7 @@ import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -1221,7 +1222,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(readerRuntime, sourceDataSender,
                 LogReplicationRuntimeParameters.builder()
-                        .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID, LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT))
+                        .remoteClusterDescriptor(new ClusterDescriptor(REMOTE_CLUSTER_ID, LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT, new ArrayList<>()))
                         .replicationConfig(config).build());
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required

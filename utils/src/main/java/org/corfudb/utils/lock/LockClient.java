@@ -18,6 +18,7 @@ import org.corfudb.utils.lock.LockDataTypes.LockId;
 import org.corfudb.utils.lock.persistence.LockStore;
 import org.corfudb.utils.lock.persistence.LockStoreException;
 import org.corfudb.utils.lock.states.LockEvent;
+import org.corfudb.utils.lock.states.LockStateType;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
@@ -130,6 +131,11 @@ public class LockClient {
         }
         Lock lock = locks.get(lockId);
 
+        if (lock.getState().getType() != LockStateType.HAS_LEASE) {
+            throw new IllegalStateException("Can only deregister if the lock " +
+                    "is in HAS_LEASE state.");
+        }
+
         lock.input(LockEvent.LEASE_EXPIRED);
     }
 
@@ -145,6 +151,11 @@ public class LockClient {
         }
 
         Lock lock = locks.get(lockId);
+
+        if (lock.getState().getType() != LockStateType.NO_LEASE) {
+            throw new IllegalStateException("Can only resume interest if the lock " +
+                    "is in NO_LEASE state.");
+        }
 
         monitorLocks();
 
@@ -163,6 +174,11 @@ public class LockClient {
         }
 
         Lock lock = locks.get(lockId);
+
+        if (lock.getState().getType() != LockStateType.NO_LEASE) {
+            throw new IllegalStateException("Can only force acquire if the lock " +
+                    "is in NO_LEASE state.");
+        }
 
         lock.input(LockEvent.FORCE_LEASE_ACQUIRED);
     }

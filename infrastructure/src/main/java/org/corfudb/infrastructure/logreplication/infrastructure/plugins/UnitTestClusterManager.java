@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +12,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
@@ -26,7 +24,7 @@ import static org.corfudb.infrastructure.logreplication.proto.LogReplicationClus
 public class UnitTestClusterManager extends CorfuReplicationClusterManagerBaseAdapter {
 
     @Getter
-    private class SiteConfigKeys {
+    private class ClusterConfigKeys {
         @NonNull
         private final String rolePrefix;
 
@@ -43,7 +41,7 @@ public class UnitTestClusterManager extends CorfuReplicationClusterManagerBaseAd
             }
         }
 
-        public SiteConfigKeys(ClusterRole role) {
+        public ClusterConfigKeys(ClusterRole role) {
             this.rolePrefix = clusterRoleToRolePrefix(role);
             this.role = role;
         }
@@ -69,8 +67,6 @@ public class UnitTestClusterManager extends CorfuReplicationClusterManagerBaseAd
         }
     }
 
-    private static final String STANDBY_SITE_KEY = "standby_site";
-
     private final String configPath;
 
 
@@ -79,7 +75,7 @@ public class UnitTestClusterManager extends CorfuReplicationClusterManagerBaseAd
         this.configPath = configPath;
     }
 
-    private ImmutableList<NodeDescriptor> getNodeDescriptors(SiteConfigKeys keys, Properties props) {
+    private ImmutableList<NodeDescriptor> getNodeDescriptors(ClusterConfigKeys keys, Properties props) {
         String primarySiteName = props.getProperty(keys.getSiteKey());
         int numPrimaryNodes = Integer.parseInt(props.getProperty(keys.getNumNodesKey()));
         return IntStream.range(0, numPrimaryNodes).boxed().map(i -> {
@@ -90,7 +86,7 @@ public class UnitTestClusterManager extends CorfuReplicationClusterManagerBaseAd
     }
 
     private ClusterDescriptor createClusterDescriptor(ClusterRole role, Properties props) {
-        SiteConfigKeys keys = new SiteConfigKeys(role);
+        ClusterConfigKeys keys = new ClusterConfigKeys(role);
         ImmutableList<NodeDescriptor> nodeDescriptors = getNodeDescriptors(keys, props);
         int corfuPort = Integer.parseInt(props.getProperty(keys.getCorfuPortKey()));
         return new ClusterDescriptor(UUID.randomUUID().toString(), role, corfuPort, nodeDescriptors);

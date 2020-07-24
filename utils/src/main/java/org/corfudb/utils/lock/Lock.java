@@ -27,7 +27,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * Lock Finite State Machine:
  *
  * <pre>
- *      +------------+      LEASE_ACQUIRED           +------------+
+ *      +------------+      (FORCE_)LEASE_ACQUIRED   +------------+
  *      |            |+----------------------------->|            |+----------+
  *      |            |      LEASE_REVOKED            |            |           |
  *      |  NO_LEASE  |<------------------------------+  HAS_LEASE |           |

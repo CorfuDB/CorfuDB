@@ -455,7 +455,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
                 new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET), new ClusterDescriptor("Cluster-Local",
-                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),
+                LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT, new ArrayList<>()),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);

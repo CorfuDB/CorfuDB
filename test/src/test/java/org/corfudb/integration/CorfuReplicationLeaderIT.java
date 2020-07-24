@@ -19,9 +19,11 @@ import org.junit.Test;
 import org.junit.contrib.java.lang.system.ExpectedSystemExit;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -137,10 +139,131 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
         return runReplicationFuture(port, uuid, pluginConfigPath);
     }
 
+    private void cleanUpResources(List<CorfuRuntime> runtimes,
+                                  List<CorfuInterClusterReplicationServer> replicationServers,
+                                  List<Process> corfuProcesses) {
+        runtimes.forEach(CorfuRuntime::shutdown);
+        replicationServers.forEach(CorfuInterClusterReplicationServer::cleanShutdown);
+        corfuProcesses.forEach(Process::destroy);
+    }
+
+    private void forceLockReleaseAndAcquire(LockClient lockClient,
+                                            ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> lockCompetitors,
+                                            Duration mainThreadSleepDuration) throws Exception {
+        Uuid firstLeaseOwnerId;
+        while (true) {
+            Optional<LockDataTypes.LockData> currentLockData =
+                    lockClient.getCurrentLockData("Log_Replication_Group",
+                            "Log_Replication_Lock");
+            if (currentLockData.isPresent() && currentLockData.get().hasLeaseOwnerId()) {
+                firstLeaseOwnerId = currentLockData.get().getLeaseOwnerId();
+                final Uuid id = firstLeaseOwnerId;
+                Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> first = lockCompetitors
+                        .stream()
+                        .filter(tuple -> convertUUID(tuple.first)
+                                .equals(id)).findFirst();
+                if (first.isPresent()) {
+
+                    Tuple<UUID, CorfuInterClusterReplicationServer> server = first.get();
+                    log.info("Found lease holder: {}. Deregestering interest.", firstLeaseOwnerId);
+                    server.second.getReplicationDiscoveryService()
+                            .deregisterToLogReplicationLock();
+                    Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> second = lockCompetitors
+                            .stream()
+                            .filter(tuple -> !convertUUID(tuple.first).equals(convertUUID(server.first)))
+                            .findFirst();
+                    if (second.isPresent()) {
+                        Tuple<UUID, CorfuInterClusterReplicationServer> server2 = second.get();
+                        final int waitTime = 3;
+                        log.info("Waiting a few seconds before force acquire.");
+                        Sleep.sleepUninterruptibly(Duration.ofSeconds(waitTime));
+                        server2.second.getReplicationDiscoveryService()
+                                .forceAcquireLogReplicationLock();
+                        log.info("{} force-acquired a lock.", convertUUID(server2.first));
+                        break;
+                    } else {
+                        throw new IllegalStateException("There should be at least " +
+                                "another primary present.");
+                    }
+                }
+            }
+            Sleep.sleepUninterruptibly(mainThreadSleepDuration);
+        }
+    }
+
+    private void forceLockReleaseAndAcquireFlapping(int numFlaps, LockClient client,
+                                                    ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> lockCompetitors,
+                                                    Duration mainThreadSleepDuration,
+                                                    Duration durationBetweenFlaps) throws Exception {
+        int flaps = numFlaps;
+        while (flaps > 0) {
+            Optional<LockDataTypes.LockData> currentLockData =
+                    client.getCurrentLockData("Log_Replication_Group",
+                            "Log_Replication_Lock");
+            if (currentLockData.isPresent() && currentLockData.get().hasLeaseOwnerId()) {
+                Uuid firstLeaseOwnerId = currentLockData.get().getLeaseOwnerId();
+                final Uuid id = firstLeaseOwnerId;
+                Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> first = lockCompetitors
+                        .stream()
+                        .filter(tuple -> convertUUID(tuple.first)
+                                .equals(id)).findFirst();
+                if (first.isPresent()) {
+                    Tuple<UUID, CorfuInterClusterReplicationServer> server = first.get();
+                    log.info("Found lease holder: {}, {}. Deregestering interest.", firstLeaseOwnerId,
+                            server.first);
+                    server.second.getReplicationDiscoveryService()
+                            .deregisterToLogReplicationLock();
+                    Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> second = lockCompetitors
+                            .stream()
+                            .filter(tuple -> !convertUUID(tuple.first).equals(convertUUID(server.first)))
+                            .findFirst();
+                    if (second.isPresent()) {
+                        final Duration sleepDur = Duration.ofSeconds(3);
+                        log.info("Sleeping {} before force acquiring a lock.", sleepDur);
+                        Sleep.sleepUninterruptibly(sleepDur);
+                        Tuple<UUID, CorfuInterClusterReplicationServer> server2 = second.get();
+                        server2.second.getReplicationDiscoveryService()
+                                .forceAcquireLogReplicationLock();
+                        log.info("{} force-acquired a lock.", convertUUID(server2.first));
+                        Sleep.sleepUninterruptibly(durationBetweenFlaps);
+                        flaps -= 1;
+                    } else {
+                        throw new IllegalStateException("There should be at least " +
+                                "another primary present.");
+                    }
+                }
+            }
+            Sleep.sleepUninterruptibly(mainThreadSleepDuration);
+        }
+    }
+
+    private void forceLockRelease(LockClient lockClient,
+                                 ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> lockCompetitors) throws Exception {
+        while (true) {
+            Optional<LockDataTypes.LockData> currentLockData =
+                    lockClient.getCurrentLockData("Log_Replication_Group",
+                            "Log_Replication_Lock");
+            if (currentLockData.isPresent() && currentLockData.get().hasLeaseOwnerId()) {
+                Uuid firstLeaseOwnerId = currentLockData.get().getLeaseOwnerId();
+                final Uuid id = firstLeaseOwnerId;
+                Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> first = lockCompetitors
+                        .stream()
+                        .filter(tuple -> convertUUID(tuple.first)
+                                .equals(id)).findFirst();
+                if (first.isPresent()) {
+                    Tuple<UUID, CorfuInterClusterReplicationServer> server = first.get();
+                    log.info("Found lease holder: {}. Deregestering interest.", firstLeaseOwnerId);
+                    server.second.getReplicationDiscoveryService()
+                            .deregisterToLogReplicationLock();
+                    break;
+                }
+            }
+        }
+    }
+
     @Test
     public void testLockHolderChangesSourceDuringLogEntrySync() throws Exception {
         final int corfuExitErrorCode = 100;
-
         exit.expectSystemExitWithStatus(corfuExitErrorCode);
 
         final int numWriteIterations = 20;
@@ -193,45 +316,7 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
             LockClient lockClient = new LockClient(UUID.randomUUID(), LockConfig.builder().build(),
                     activeRuntime);
 
-            Uuid firstLeastOwnerId;
-            while (true) {
-                Optional<LockDataTypes.LockData> currentLockData =
-                        lockClient.getCurrentLockData("Log_Replication_Group",
-                                "Log_Replication_Lock");
-                if (currentLockData.isPresent() && currentLockData.get().hasLeaseOwnerId()) {
-                    firstLeastOwnerId = currentLockData.get().getLeaseOwnerId();
-                    final Uuid id = firstLeastOwnerId;
-                    Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> first = primaries
-                            .stream()
-                            .filter(tuple -> convertUUID(tuple.first)
-                                    .equals(id)).findFirst();
-                    if (first.isPresent()) {
-
-                        Tuple<UUID, CorfuInterClusterReplicationServer> server = first.get();
-                        log.info("Found lease holder: {}. Deregestering interest.", firstLeastOwnerId);
-                        server.second.getReplicationDiscoveryService()
-                                .deregisterToLogReplicationLock();
-                        Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> second = primaries
-                                .stream()
-                                .filter(tuple -> !convertUUID(tuple.first).equals(convertUUID(server.first)))
-                                .findFirst();
-                        if (second.isPresent()) {
-                            Tuple<UUID, CorfuInterClusterReplicationServer> server2 = second.get();
-                            final int waitTime = 3;
-                            log.info("Waiting a few seconds before force acquire.");
-                            Sleep.sleepUninterruptibly(Duration.ofSeconds(waitTime));
-                            server2.second.getReplicationDiscoveryService()
-                                    .forceAcquireLogReplicationLock();
-                            log.info("{} force-acquired a lock.", convertUUID(server2.first));
-                            break;
-                        } else {
-                            throw new IllegalStateException("There should be at least " +
-                                    "another primary present.");
-                        }
-                    }
-                }
-                Sleep.sleepUninterruptibly(mainThreadSleepDuration);
-            }
+            forceLockReleaseAndAcquire(lockClient, primaries, mainThreadSleepDuration);
 
             while (replicationTableStandby.size() < numWriteIterations) {
                 log.info("Standby table size: {}", replicationTableStandby.size());
@@ -239,26 +324,11 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
             }
             backGroundWriter.join();
         } finally {
-            activeRuntime.shutdown();
-            standbyRuntime.shutdown();
-            primaries.forEach(primary -> {
-                try {
-                    primary.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-
-            });
-            standBys.forEach(standby -> {
-                try {
-                    standby.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-            });
-            corfuPrimary.destroy();
-            corfuStandBy.destroy();
-
+            cleanUpResources(
+                    ImmutableList.of(activeRuntime, standbyRuntime),
+                    Stream.concat(primaries.stream(), standBys.stream()).map(t -> t.second)
+                            .collect(ImmutableList.toImmutableList()),
+                    ImmutableList.of(corfuPrimary, corfuStandBy));
         }
 
     }
@@ -272,7 +342,7 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
         final Duration waitBetweenWrites = Duration.ofSeconds(2);
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
         final Duration durationBetweenFlaps = Duration.ofSeconds(10);
-        int flaps = 2;
+        final int flaps = 2;
 
         String pluginConfigPath = "src/test/resources/topology/two_primaries.properties";
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> primaries =
@@ -321,45 +391,8 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
             LockClient lockClient = new LockClient(UUID.randomUUID(), LockConfig.builder().build(),
                     activeRuntime);
 
-            while (flaps > 0) {
-                Optional<LockDataTypes.LockData> currentLockData =
-                        lockClient.getCurrentLockData("Log_Replication_Group",
-                                "Log_Replication_Lock");
-                if (currentLockData.isPresent() && currentLockData.get().hasLeaseOwnerId()) {
-                    Uuid firstLeastOwnerId = currentLockData.get().getLeaseOwnerId();
-                    final Uuid id = firstLeastOwnerId;
-                    Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> first = primaries
-                            .stream()
-                            .filter(tuple -> convertUUID(tuple.first)
-                                    .equals(id)).findFirst();
-                    if (first.isPresent()) {
-                        Tuple<UUID, CorfuInterClusterReplicationServer> server = first.get();
-                        log.info("Found lease holder: {}, {}. Deregestering interest.", firstLeastOwnerId,
-                                server.first);
-                        server.second.getReplicationDiscoveryService()
-                                .deregisterToLogReplicationLock();
-                        Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> second = primaries
-                                .stream()
-                                .filter(tuple -> !convertUUID(tuple.first).equals(convertUUID(server.first)))
-                                .findFirst();
-                        if (second.isPresent()) {
-                            final Duration sleepDur = Duration.ofSeconds(3);
-                            log.info("Sleeping {} before force acquiring a lock.", sleepDur);
-                            Sleep.sleepUninterruptibly(sleepDur);
-                            Tuple<UUID, CorfuInterClusterReplicationServer> server2 = second.get();
-                            server2.second.getReplicationDiscoveryService()
-                                    .forceAcquireLogReplicationLock();
-                            log.info("{} force-acquired a lock.", convertUUID(server2.first));
-                            Sleep.sleepUninterruptibly(durationBetweenFlaps);
-                            flaps -= 1;
-                        } else {
-                            throw new IllegalStateException("There should be at least " +
-                                    "another primary present.");
-                        }
-                    }
-                }
-                Sleep.sleepUninterruptibly(mainThreadSleepDuration);
-            }
+            forceLockReleaseAndAcquireFlapping(flaps, lockClient,
+                    primaries, mainThreadSleepDuration, durationBetweenFlaps);
 
             while (replicationTableStandby.size() < numWriteIterations) {
                 log.info("Standby table size: {}", replicationTableStandby.size());
@@ -368,25 +401,11 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
 
             backGroundWriter.join();
         } finally {
-            activeRuntime.shutdown();
-            standbyRuntime.shutdown();
-            primaries.forEach(primary -> {
-                try {
-                    primary.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-
-            });
-            standBys.forEach(standby -> {
-                try {
-                    standby.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-            });
-            corfuPrimary.destroy();
-            corfuStandBy.destroy();
+            cleanUpResources(
+                    ImmutableList.of(activeRuntime, standbyRuntime),
+                    Stream.concat(primaries.stream(), standBys.stream()).map(t -> t.second)
+                            .collect(ImmutableList.toImmutableList()),
+                    ImmutableList.of(corfuPrimary, corfuStandBy));
         }
     }
 
@@ -398,8 +417,7 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
         final Duration waitBetweenWrites = Duration.ofSeconds(2);
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
         final Duration durationBetweenFlaps = Duration.ofSeconds(10);
-        final int flapNum = 2;
-        int flaps = flapNum;
+        final int flaps = 2;
         String pluginConfigPath = "src/test/resources/topology/two_standbys.properties";
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> primaries =
                 ONE_PRIMARY_REPLICATION_SERVER_PORT.stream()
@@ -446,43 +464,8 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
             LockClient lockClient = new LockClient(UUID.randomUUID(), LockConfig.builder().build(),
                     standbyRuntime);
 
-            while (flaps > 0) {
-                Optional<LockDataTypes.LockData> currentLockData =
-                        lockClient.getCurrentLockData("Log_Replication_Group",
-                                "Log_Replication_Lock");
-                if (currentLockData.isPresent() && currentLockData.get().hasLeaseOwnerId()) {
-                    Uuid firstLeastOwnerId = currentLockData.get().getLeaseOwnerId();
-                    final Uuid id = firstLeastOwnerId;
-                    Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> first = standBys
-                            .stream()
-                            .filter(tuple -> convertUUID(tuple.first)
-                                    .equals(id)).findFirst();
-                    if (first.isPresent()) {
-                        Tuple<UUID, CorfuInterClusterReplicationServer> server = first.get();
-                        log.info("Found lease holder: {}. Deregestering interest.", firstLeastOwnerId);
-                        server.second.getReplicationDiscoveryService()
-                                .deregisterToLogReplicationLock();
-                        Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> second = standBys
-                                .stream()
-                                .filter(tuple -> !convertUUID(tuple.first).equals(convertUUID(server.first)))
-                                .findFirst();
-                        if (second.isPresent()) {
-                            Tuple<UUID, CorfuInterClusterReplicationServer> server2 = second.get();
-                            server2.second.getReplicationDiscoveryService()
-                                    .forceAcquireLogReplicationLock();
-                            server.second.getReplicationDiscoveryService()
-                                    .resumeInterestToLockReplicationLock();
-                            log.info("{} force-acquired a lock.", convertUUID(server2.first));
-                            Sleep.sleepUninterruptibly(durationBetweenFlaps);
-                            flaps -= 1;
-                        } else {
-                            throw new IllegalStateException("There should be at least " +
-                                    "another primary present.");
-                        }
-                    }
-                }
-                Sleep.sleepUninterruptibly(mainThreadSleepDuration);
-            }
+            forceLockReleaseAndAcquireFlapping(flaps, lockClient,
+                    standBys, mainThreadSleepDuration, durationBetweenFlaps);
 
             while (replicationTableStandby.size() < numWriteIterations) {
                 log.info("Standby table size: {}", replicationTableStandby.size());
@@ -491,36 +474,24 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
 
             backGroundWriter.join();
         } finally {
-            activeRuntime.shutdown();
-            standbyRuntime.shutdown();
-            primaries.forEach(primary -> {
-                try {
-                    primary.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-
-            });
-            standBys.forEach(standby -> {
-                try {
-                    standby.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-            });
-            corfuPrimary.destroy();
-            corfuStandBy.destroy();
+            cleanUpResources(
+                    ImmutableList.of(activeRuntime, standbyRuntime),
+                    Stream.concat(primaries.stream(), standBys.stream()).map(t -> t.second)
+                            .collect(ImmutableList.toImmutableList()),
+                    ImmutableList.of(corfuPrimary, corfuStandBy));
         }
     }
 
     @Test
     public void testNoLockHolderOnSource() throws Exception {
+        final int corfuExitErrorCode = 100;
+        exit.expectSystemExitWithStatus(corfuExitErrorCode);
         final int numWriteIterations = 10;
         final Duration waitBetweenWrites = Duration.ofSeconds(1);
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
         final Duration replicationDuration = Duration.ofSeconds(5);
         String pluginConfigPath =
-                "src/test/resources/topology/two_primaries_no_lock_holder.properties";
+                "src/test/resources/topology/two_primaries.properties";
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> primaries =
                 TWO_PRIMARY_REPLICATION_SERVER_PORTS.stream()
                         .map(port -> runReplicationFuture(port, pluginConfigPath))
@@ -580,28 +551,9 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
             LockClient lockClient = new LockClient(UUID.randomUUID(), LockConfig.builder().build(),
                     activeRuntime);
 
-            Optional<LockDataTypes.LockData> currentLockData =
-                    lockClient.getCurrentLockData("Log_Replication_Group",
-                            "Log_Replication_Lock");
+            forceLockRelease(lockClient, primaries);
 
-            while (true) {
-                if (currentLockData.isPresent() && currentLockData.get().hasLeaseOwnerId()) {
-                    Uuid firstLeastOwnerId = currentLockData.get().getLeaseOwnerId();
-                    final Uuid id = firstLeastOwnerId;
-                    Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> first = primaries
-                            .stream()
-                            .filter(tuple -> convertUUID(tuple.first)
-                                    .equals(id)).findFirst();
-                    if (first.isPresent()) {
-                        Tuple<UUID, CorfuInterClusterReplicationServer> server = first.get();
-                        log.info("Found lease holder: {}. Deregestering interest.", firstLeastOwnerId);
-                        server.second.getReplicationDiscoveryService()
-                                .deregisterToLogReplicationLock();
-                        break;
-                    }
-                }
-            }
-
+            final int standByTableSizeBeforeWrites = replicationTableStandby.size();
             for (int i = numWriteIterations; i < numWriteIterations + numWriteIterations; i++) {
                 log.info("Writer: writing iteration: " + i);
                 activeRuntime.getObjectsView().TXBegin();
@@ -613,26 +565,13 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
             Sleep.sleepUninterruptibly(replicationDuration);
 
             assertThat(replicationTableStandby.size()).isNotEqualTo(replicationTable.size());
+            assertThat(replicationTableStandby.size()).isEqualTo(standByTableSizeBeforeWrites);
         } finally {
-            activeRuntime.shutdown();
-            standbyRuntime.shutdown();
-            primaries.forEach(primary -> {
-                try {
-                    primary.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-
-            });
-            standBys.forEach(standby -> {
-                try {
-                    standby.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-            });
-            corfuPrimary.destroy();
-            corfuStandBy.destroy();
+            cleanUpResources(
+                    ImmutableList.of(activeRuntime, standbyRuntime),
+                    Stream.concat(primaries.stream(), standBys.stream()).map(t -> t.second)
+                            .collect(ImmutableList.toImmutableList()),
+                    ImmutableList.of(corfuPrimary, corfuStandBy));
         }
     }
 
@@ -683,42 +622,7 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
             LockClient lockClient = new LockClient(UUID.randomUUID(), LockConfig.builder().build(),
                     standbyRuntime);
 
-            Uuid firstLeastOwnerId;
-            while (true) {
-                Optional<LockDataTypes.LockData> currentLockData =
-                        lockClient.getCurrentLockData("Log_Replication_Group",
-                                "Log_Replication_Lock");
-                if (currentLockData.isPresent() && currentLockData.get().hasLeaseOwnerId()) {
-                    firstLeastOwnerId = currentLockData.get().getLeaseOwnerId();
-                    final Uuid id = firstLeastOwnerId;
-                    Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> first = standBys
-                            .stream()
-                            .filter(tuple -> convertUUID(tuple.first)
-                                    .equals(id)).findFirst();
-                    if (first.isPresent()) {
-                        Tuple<UUID, CorfuInterClusterReplicationServer> server = first.get();
-                        log.info("Found lease holder: {}, {}. Deregestering interest.", firstLeastOwnerId, server.first);
-                        server.second.getReplicationDiscoveryService()
-                                .deregisterToLogReplicationLock();
-                        Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> second = standBys
-                                .stream()
-                                .filter(tuple -> !convertUUID(tuple.first).equals(convertUUID(server.first)))
-                                .findFirst();
-                        if (second.isPresent()) {
-                            final int wait = 3;
-                            Sleep.sleepUninterruptibly(Duration.ofSeconds(wait));
-                            Tuple<UUID, CorfuInterClusterReplicationServer> server2 = second.get();
-                            server2.second.getReplicationDiscoveryService().forceAcquireLogReplicationLock();
-                            log.info("{} force-acquired a lock.", convertUUID(server2.first));
-                            break;
-                        } else {
-                            throw new IllegalStateException("There should be at least " +
-                                    "another primary present.");
-                        }
-                    }
-                }
-                Sleep.sleepUninterruptibly(mainThreadSleepDuration);
-            }
+            forceLockReleaseAndAcquire(lockClient, standBys, mainThreadSleepDuration);
 
             while (replicationTableStandby.size() < numWriteIterations) {
                 log.info("Standby table size: {}", replicationTableStandby.size());
@@ -726,24 +630,11 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
             }
             backGroundWriter.join();
         } finally {
-            standbyRuntime.shutdown();
-            primaries.forEach(primary -> {
-                try {
-                    primary.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-
-            });
-            standBys.forEach(standby -> {
-                try {
-                    standby.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-            });
-            corfuPrimary.destroy();
-            corfuStandBy.destroy();
+            cleanUpResources(
+                    ImmutableList.of(standbyRuntime),
+                    Stream.concat(primaries.stream(), standBys.stream()).map(t -> t.second)
+                            .collect(ImmutableList.toImmutableList()),
+                    ImmutableList.of(corfuPrimary, corfuStandBy));
         }
     }
 
@@ -813,27 +704,9 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
             LockClient lockClient = new LockClient(UUID.randomUUID(), LockConfig.builder().build(),
                     standbyRuntime);
 
-            Optional<LockDataTypes.LockData> currentLockData =
-                    lockClient.getCurrentLockData("Log_Replication_Group",
-                            "Log_Replication_Lock");
+            forceLockRelease(lockClient, standBys);
 
-            while (true) {
-                if (currentLockData.isPresent() && currentLockData.get().hasLeaseOwnerId()) {
-                    Uuid firstLeastOwnerId = currentLockData.get().getLeaseOwnerId();
-                    final Uuid id = firstLeastOwnerId;
-                    Optional<Tuple<UUID, CorfuInterClusterReplicationServer>> first = standBys
-                            .stream()
-                            .filter(tuple -> convertUUID(tuple.first)
-                                    .equals(id)).findFirst();
-                    if (first.isPresent()) {
-                        Tuple<UUID, CorfuInterClusterReplicationServer> server = first.get();
-                        log.info("Found lease holder: {}. Deregestering interest.", firstLeastOwnerId);
-                        server.second.getReplicationDiscoveryService()
-                                .deregisterToLogReplicationLock();
-                        break;
-                    }
-                }
-            }
+            final int standByTableSizeBeforeWrites = replicationTableStandby.size();
 
             for (int i = numWriteIterations; i < numWriteIterations + numWriteIterations; i++) {
                 log.info("Writer: writing iteration: " + i);
@@ -846,26 +719,13 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
             Sleep.sleepUninterruptibly(replicationDuration);
 
             assertThat(replicationTableStandby.size()).isNotEqualTo(replicationTable.size());
+            assertThat(replicationTableStandby.size()).isEqualTo(standByTableSizeBeforeWrites);
         } finally {
-            activeRuntime.shutdown();
-            standbyRuntime.shutdown();
-            primaries.forEach(primary -> {
-                try {
-                    primary.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-
-            });
-            standBys.forEach(standby -> {
-                try {
-                    standby.second.cleanShutdown();
-                } catch (Exception e) {
-                    // ignore;
-                }
-            });
-            corfuPrimary.destroy();
-            corfuStandBy.destroy();
+            cleanUpResources(
+                    ImmutableList.of(activeRuntime, standbyRuntime),
+                    Stream.concat(primaries.stream(), standBys.stream()).map(t -> t.second)
+                            .collect(ImmutableList.toImmutableList()),
+                    ImmutableList.of(corfuPrimary, corfuStandBy));
         }
     }
 }

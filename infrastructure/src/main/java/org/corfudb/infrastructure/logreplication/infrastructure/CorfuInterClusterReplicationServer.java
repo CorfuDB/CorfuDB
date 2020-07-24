@@ -393,7 +393,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
             Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
             if (config.getTopologyConfigPath().isPresent()) {
                 String param = config.getTopologyConfigPath().get();
-                log.info("Using static config path: {}", param);
                 // If topology config path is configured, there is a constructor that accepts
                 // this path as an argument.
                 Constructor declaredConstructor = adapter
