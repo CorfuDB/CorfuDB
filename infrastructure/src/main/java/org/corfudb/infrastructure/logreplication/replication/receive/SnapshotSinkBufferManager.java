@@ -94,6 +94,22 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
         }
     }
 
+    /**
+     * Go through the buffer to find messages that are in order with the last processed message.
+     */
+    void processBuffer() {
+        while (true) {
+            LogReplicationEntry dataMessage = buffer.get(lastProcessedSeq);
+            if (dataMessage == null) {
+                return;
+            }
+            sinkManager.processMessage(dataMessage);
+            ackCnt++;
+            buffer.remove(lastProcessedSeq);
+            lastProcessedSeq = getCurrentSeq(dataMessage);
+        }
+    }
+
     boolean shouldAck() {
         if (lastProcessedSeq == snapshotEndSeq) {
             return true;

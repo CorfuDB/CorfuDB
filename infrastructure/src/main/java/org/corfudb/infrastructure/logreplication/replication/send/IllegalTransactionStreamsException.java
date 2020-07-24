@@ -6,3 +6,4 @@ public class IllegalTransactionStreamsException extends RuntimeException {
         super(message);
     }
 }
+

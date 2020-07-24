@@ -32,7 +32,7 @@ public abstract class SinkBufferManager {
      * While processing a message in the buffer, it will call
      * sinkManager to handle it.
      */
-    private LogReplicationSinkManager sinkManager;
+    public LogReplicationSinkManager sinkManager;
 
     /*
      * Could be LOG_ENTRY or SNAPSHOT
@@ -42,7 +42,7 @@ public abstract class SinkBufferManager {
     /*
      * The max number of entries in the buffer.
      */
-    private int maxSize;
+    public int maxSize;
 
     /*
      * How frequent in time, the ack will be sent.
@@ -57,7 +57,7 @@ public abstract class SinkBufferManager {
     /*
      * Count the number of messages it has received since last sent ACK.
      */
-    private int ackCnt = 0;
+    public int ackCnt = 0;
 
     /*
      * Time last ack sent.
@@ -91,22 +91,6 @@ public abstract class SinkBufferManager {
     }
 
     /**
-     * Go through the buffer to find messages that are in order with the last processed message.
-     */
-    void processBuffer() {
-        while (true) {
-            LogReplicationEntry dataMessage = buffer.get(lastProcessedSeq);
-            if (dataMessage == null)
-                return;
-            sinkManager.processMessage(dataMessage);
-            ackCnt++;
-            buffer.remove(lastProcessedSeq);
-            lastProcessedSeq = getCurrentSeq(dataMessage);
-        }
-    }
-
-
-    /**
      * after receiving a message, it will decide to send an Ack or not
      * according the predefined metrics.
      *
@@ -136,12 +120,13 @@ public abstract class SinkBufferManager {
     public LogReplicationEntry processMsgAndBuffer(LogReplicationEntry dataMessage) {
 
         if (verifyMessageType(dataMessage) == false)
-           return null;
+            return null;
 
         long preTs = getPreSeq(dataMessage);
         long currentTs = getCurrentSeq(dataMessage);
 
-        if (preTs == lastProcessedSeq) {
+        // This message contains entries that haven't been applied yet
+        if (preTs <= lastProcessedSeq && currentTs > lastProcessedSeq) {
             sinkManager.processMessage(dataMessage);
             ackCnt++;
             lastProcessedSeq = getCurrentSeq(dataMessage);
@@ -155,11 +140,15 @@ public abstract class SinkBufferManager {
          */
         if (shouldAck()) {
             LogReplicationEntryMetadata metadata = makeAckMessage(dataMessage);
-            return new LogReplicationEntry(metadata, new byte[0]);
+            log.trace("Sending an ACK {}", metadata);
+            return new LogReplicationEntry(metadata);
         }
 
         return null;
     }
+
+    // Process messages in the buffer that are in order
+    abstract void processBuffer();
 
     /**
      * Get the previous inorder message's sequence.

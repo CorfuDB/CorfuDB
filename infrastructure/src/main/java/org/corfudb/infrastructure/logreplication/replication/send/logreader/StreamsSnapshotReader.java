@@ -1,10 +1,11 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -14,6 +15,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
+import org.corfudb.util.MetricsUtils;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.ArrayList;
@@ -26,6 +28,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 
 @Slf4j
 @NotThreadSafe
@@ -36,7 +39,12 @@ import java.util.stream.Stream;
  *  It generates TxMessages which will be transmitted by the DataSender (provided by the application).
  */
 public class StreamsSnapshotReader implements SnapshotReader {
-    public static final int MAX_NUM_SMR_ENTRY = 5;
+
+    /**
+     * The max size of data for SMR entries in data message.
+     */
+    private final int maxDataSizePerMsg;
+
     private long snapshotTimestamp;
     private Set<String> streams;
     private PriorityQueue<String> streamsToSend;
@@ -45,7 +53,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private long currentMsgTs;
     private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
+    private OpaqueEntry lastEntry = null;
 
+    @Getter
+    private ObservableValue observeBiggerMsg = new ObservableValue(0);
 
     @Setter
     private long topologyConfigId;
@@ -56,18 +67,20 @@ public class StreamsSnapshotReader implements SnapshotReader {
     public StreamsSnapshotReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
+        this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         streams = config.getStreamsToReplicate();
+        log.debug("The maxDataSizePerMsg {} ", maxDataSizePerMsg);
     }
 
     /**
      * Given a streamID and list of smrEntries, generate an OpaqueEntry
      * @param streamID
-     * @param smrEntries
+     * @param entryList
      * @return
      */
-    private OpaqueEntry generateOpaqueEntry(long version, UUID streamID, List smrEntries) {
+    private OpaqueEntry generateOpaqueEntry(long version, UUID streamID,  SMREntryList entryList) {
         Map<UUID, List<SMREntry>> map = new HashMap<>();
-        map.put(streamID, smrEntries);
+        map.put(streamID, entryList.getSmrEntries());
         return new OpaqueEntry(version, map);
     }
 
@@ -75,49 +88,82 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * Given a list of entries with the same stream, will generate an OpaqueEntry and
      * use the opaque entry to generate a TxMessage.
      * @param stream
-     * @param entries
+     * @param entryList
      * @return
      */
-    private LogReplicationEntry generateMessage(OpaqueStreamIterator stream, List<SMREntry> entries, UUID snapshotRequestId) {
+    private LogReplicationEntry generateMessage(OpaqueStreamIterator stream, SMREntryList entryList, UUID snapshotRequestId) {
         currentMsgTs = stream.maxVersion;
-        OpaqueEntry opaqueEntry = generateOpaqueEntry(currentMsgTs, stream.uuid, entries);
+        OpaqueEntry opaqueEntry = generateOpaqueEntry(currentMsgTs, stream.uuid, entryList);
         if (!stream.iterator.hasNext()) {
             //mark the end of the current stream.
             currentMsgTs = snapshotTimestamp;
         }
 
-        ByteBuf buf = Unpooled.buffer();
-        OpaqueEntry.serialize(buf, opaqueEntry);
+        LogReplicationEntry txMsg = new LogReplicationEntry(MessageType.SNAPSHOT_MESSAGE, topologyConfigId, snapshotRequestId, currentMsgTs,
+                preMsgTs, snapshotTimestamp, sequence, opaqueEntry);
 
-        org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry txMsg = new org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry
-                (MessageType.SNAPSHOT_MESSAGE, topologyConfigId, snapshotRequestId, currentMsgTs,
-                preMsgTs, snapshotTimestamp, sequence, buf.array());
         preMsgTs = currentMsgTs;
         sequence++;
-        log.debug("Generate TxMsg {}", txMsg.getMetadata());
+
+        log.trace("txMsg {} deepsize sizeInBytes {} entryList.sizeInByres {}  with numEntries {} deepSize sizeInBytes {}",
+                txMsg.getMetadata(), MetricsUtils.sizeOf.deepSizeOf(txMsg), entryList.getSizeInBytes(), entryList.getSmrEntries().size(), MetricsUtils.sizeOf.deepSizeOf(entryList.smrEntries));
+
         return txMsg;
     }
 
     /**
-     * Read numEntries from the current stream.
+     * Read log data from the current stream until the sum of all SMR entries's sizeInBytes reaches the maxDataSizePerMsg.
      * @param stream
-     * @param numEntries
      * @return
      */
-    private List<SMREntry> next(OpaqueStreamIterator stream, int numEntries) {
-        //if it is the end of the stream, set an end of stream mark, the current
-        List<SMREntry> list = new ArrayList<>();
+    private SMREntryList next(OpaqueStreamIterator stream) {
+        List<SMREntry> smrList = new ArrayList<>();
+        int currentMsgSize = 0;
+
         try {
-            while (stream.iterator.hasNext() && list.size() < numEntries) {
-                OpaqueEntry entry = (OpaqueEntry) stream.iterator.next();
-                stream.maxVersion = Math.max(stream.maxVersion, entry.getVersion());
-                list.addAll(entry.getEntries().get(stream.uuid));
+            while (currentMsgSize < maxDataSizePerMsg) {
+                if (lastEntry != null) {
+                    List<SMREntry> smrEntries = lastEntry.getEntries().get(stream.uuid);
+                    if (smrEntries != null) {
+                        int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
+
+                        if (currentEntrySize > MAX_DATA_MSG_SIZE_SUPPORTED) {
+                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported", currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
+                            throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
+                        } else if (currentEntrySize > maxDataSizePerMsg) {
+                            observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);
+                            log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
+                                    currentEntrySize, maxDataSizePerMsg);
+                        }
+
+                        // Skip append this entry in this message. Will process it first at the next round.
+                        if (currentEntrySize + currentMsgSize > maxDataSizePerMsg && currentMsgSize != 0) {
+                            break;
+                        }
+
+                        smrList.addAll(smrEntries);
+                        currentMsgSize += currentEntrySize;
+                        stream.maxVersion = Math.max(stream.maxVersion, lastEntry.getVersion());
+                    }
+                    lastEntry = null;
+                }
+
+                if (stream.iterator.hasNext()) {
+                    lastEntry = (OpaqueEntry) stream.iterator.next();
+                }
+
+                if (lastEntry == null) {
+                    break;
+                }
             }
         } catch (TrimmedException e) {
             log.error("Catch an TrimmedException exception ", e);
             throw e;
         }
-        return list;
+
+        log.trace("CurrentMsgSize {} lastEntrySize {}  maxDataSizePerMsg {}",
+                currentMsgSize, lastEntry == null ? 0 : ReaderUtility.calculateSize(lastEntry.getEntries().get(stream.uuid)), maxDataSizePerMsg);
+        return new SMREntryList(currentMsgSize, smrList);
     }
 
     /**
@@ -127,11 +173,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @return
      */
     private LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
-        // TODO (Xiaoqin Ma): maybe not number based but size based (consider the case of large entries)
-        //  maximize payload (default 4MB for GRPC case)
-        List<SMREntry> entries = next(stream, MAX_NUM_SMR_ENTRY);
-        LogReplicationEntry txMsg = generateMessage(stream, entries, syncRequestId);
-        log.info("Successfully pass stream {} for snapshotTimestamp {}", stream.name, snapshotTimestamp);
+        SMREntryList entryList = next(stream);
+
+        LogReplicationEntry txMsg = generateMessage(stream, entryList, syncRequestId);
+        log.trace("Successfully generate a txMsg {} for stream {} with snapshotTimestamp {}", stream.name, snapshotTimestamp);
         return txMsg;
     }
 
@@ -160,20 +205,20 @@ public class StreamsSnapshotReader implements SnapshotReader {
                     break;
                 } else {
                     // Skip process this stream as it has no entries to process, will poll the next one.
-                    log.info("Snapshot logreader will skip reading stream {} as there are no entries to send",
+                    log.info("Snapshot stream log reader will skip reading stream {} as there are no entries to send",
                             currentStreamInfo.uuid);
                 }
             }
         }
 
-        if (currentStreamInfo.iterator.hasNext()) {
+        if (currentStreamHasNext()) {
             msg = read(currentStreamInfo, syncRequestId);
             if (msg != null) {
                 messages.add(msg);
             }
         }
 
-        if (!currentStreamInfo.iterator.hasNext()) {
+        if (!currentStreamHasNext()) {
             log.debug("Snapshot log reader finished reading stream {}", currentStreamInfo.uuid);
             currentStreamInfo = null;
 
@@ -186,6 +231,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
         return new SnapshotReadMessage(messages, endSnapshotSync);
     }
 
+    private boolean currentStreamHasNext() {
+        return currentStreamInfo.iterator.hasNext() || lastEntry != null;
+    }
+
     @Override
     public void reset(long snapshotTimestamp) {
         streamsToSend = new PriorityQueue<>(streams);
@@ -194,6 +243,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.snapshotTimestamp = snapshotTimestamp; //rt.getAddressSpaceView().getLogTail();
         currentStreamInfo = null;
         sequence = 0;
+        lastEntry = null;
     }
 
     /**
@@ -223,4 +273,21 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.topologyConfigId = topologyConfigId;
     }
 
+    /**
+     * Record a list of SMR entries
+     */
+    static private class SMREntryList {
+
+        // The total sizeInBytes of smrEntries in bytes.
+        @Getter
+        private int sizeInBytes;
+
+        @Getter
+        private List<SMREntry> smrEntries;
+
+        public SMREntryList (int size, List<SMREntry> smrEntries) {
+            this.sizeInBytes = size;
+            this.smrEntries = smrEntries;
+        }
+    }
 }

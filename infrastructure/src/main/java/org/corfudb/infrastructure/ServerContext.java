@@ -11,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
-import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
@@ -44,6 +43,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 /**
@@ -88,8 +89,10 @@ public class ServerContext implements AutoCloseable {
     // Corfu Replication Server
     public static final String PLUGIN_CONFIG_FILE_PATH = "../resources/corfu_plugin_config.properties";
 
+
     /** The node Id, stored as a base64 string. */
     private static final String NODE_ID = "NODE_ID";
+
 
     private static final KvRecord<String> NODE_ID_RECORD = KvRecord.of(NODE_ID, String.class);
 
@@ -216,14 +219,28 @@ public class ServerContext implements AutoCloseable {
         return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
     }
 
-    public int getSnapshotSyncBatchSize() {
-        Integer snapshotSyncBatchSize = getServerConfig(Integer.class, "--snapshot-batch");
-        return snapshotSyncBatchSize == null ? SnapshotSender.DEFAULT_SNAPSHOT_BATCH_SIZE : snapshotSyncBatchSize;
+    /**
+     * Get the max number of messages can be sent over per batch.
+     * @return
+     */
+    public int getLogReplicationMaxNumMsgPerBatch() {
+        String val = getServerConfig(String.class, "--snapshot-batch");
+        return val == null ? DEFAULT_MAX_NUM_MSG_PER_BATCH : Integer.parseInt(val);
     }
 
     public int getLockLeaseDuration() {
         Integer lockLeaseDuration = getServerConfig(Integer.class, "--lock-lease");
         return lockLeaseDuration == null ? Lock.leaseDuration : lockLeaseDuration;
+    }
+
+    /**
+     * Get the max size of the log replication data message used by both snapshot data message and
+     * log entry sync data message.
+     * @return
+     */
+    public int getLogReplicationMaxDataMessageSize() {
+        String val = getServerConfig(String.class, "--max-data-message-size");
+        return val == null ? MAX_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
     }
 
     /**

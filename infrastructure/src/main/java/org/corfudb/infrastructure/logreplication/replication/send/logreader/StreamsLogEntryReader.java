@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalTransactionStreamsException;
@@ -14,10 +12,14 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 
 @Slf4j
 @NotThreadSafe
@@ -32,45 +34,58 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private Set<UUID> streamUUIDs;
 
     // the opaquestream wrapper for the transaction stream.
-    private TxOpaqueStream txStream;
-   
+    private TxOpaqueStream txOpaqueStream;
 
     // the base snapshot the log entry logreader starts to poll transaction logs
     private long globalBaseSnapshot;
+
     // timestamp of the transaction log that is the previous message
     private long preMsgTs;
+
     // the timestamp of the transaction log that is the current message
     private long currentMsgTs;
+
     // the sequence number of the message based on the globalBaseSnapshot
     private long sequence;
 
     private long topologyConfigId;
 
+    private final int maxDataSizePerMsg;
+
+    private OpaqueEntry lastOpaqueEntry = null;
+
+    private boolean hasNoiseData = false;
+
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
+        this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
+
         Set<String> streams = config.getStreamsToReplicate();
+
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
 
         //create an opaque stream for transaction stream
-        txStream = new TxOpaqueStream(rt);
+        txOpaqueStream = new TxOpaqueStream(rt);
     }
 
-    LogReplicationEntry generateMessage(OpaqueEntry entry, UUID logEntryRequestId) {
-        ByteBuf buf = Unpooled.buffer();
-        OpaqueEntry.serialize(buf, entry);
-        currentMsgTs = entry.getVersion();
+    private LogReplicationEntry generateMessageWithOpaqueEntryList(List<OpaqueEntry> opaqueEntryList, UUID logEntryRequestId) {
+        // Set the last timestamp as the max timestamp
+        currentMsgTs = opaqueEntryList.get(opaqueEntryList.size() - 1).getVersion();
         LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, topologyConfigId, logEntryRequestId,
-                currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, buf.array());
+                currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, opaqueEntryList);
         preMsgTs = currentMsgTs;
         sequence++;
-        return  txMessage;
+        log.trace("Generate a log entry message {} with {} transactions ", txMessage.getMetadata(), opaqueEntryList.size());
+        return txMessage;
     }
 
-    boolean shouldProcess(OpaqueEntry entry) throws ReplicationReaderException {
+
+    // Check if it has the correct streams.
+    private boolean shouldProcess(OpaqueEntry entry) {
         Set<UUID> tmpUUIDs = entry.getEntries().keySet();
 
         //If the entry's stream set is a subset of interested streams, it is the entry we should process
@@ -84,39 +99,100 @@ public class StreamsLogEntryReader implements LogEntryReader {
             return false;
         }
 
-        //If the entry's stream set contains both interested streams and other streams, it is not
-        //the expected behavior
+        // If the entry's stream set contains both interested streams and other streams, it is not
+        // the expected behavior
         log.error("There are noisy streams {} in the entry, expected streams set {}",
-                    entry.getEntries().keySet(), streamUUIDs);
+                entry.getEntries().keySet(), streamUUIDs);
 
-        throw new IllegalTransactionStreamsException("There are noisy streams in the transaction log entry");
+        hasNoiseData = true;
+        return false;
+    }
+
+    private boolean checkValidSize(OpaqueEntry entry, int currentMsgSize, int currentEntrySize) {
+        // For interested entry, if its size is too big we should skip and report error
+        if (currentEntrySize > maxDataSizePerMsg) {
+            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
+                    currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
+            hasNoiseData = true;
+            return false;
+        }
+
+        if (currentEntrySize > maxDataSizePerMsg) {
+            log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
+                    currentEntrySize, maxDataSizePerMsg);
+        }
+
+        // Skip append this entry, will process it for the next message;
+        if (currentEntrySize + currentMsgSize > maxDataSizePerMsg) {
+            return false;
+        }
+
+        return true;
     }
 
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         globalBaseSnapshot = snapshot;
         preMsgTs = Math.max(snapshot, ackTimestamp);
         log.info("snapshot {} ackTimestamp {} preMsgTs {} seek {}", snapshot, ackTimestamp, preMsgTs, preMsgTs + 1);
-        txStream.seek(preMsgTs + 1);
+        txOpaqueStream.seek(preMsgTs + 1);
         sequence = 0;
     }
 
+
     @Override
     public LogReplicationEntry read(UUID logEntryRequestId) throws TrimmedException, IllegalTransactionStreamsException {
+        List<OpaqueEntry> opaqueEntryList = new ArrayList<>();
+        int currentEntrySize = 0;
+        int currentMsgSize = 0;
+
         try {
-            while (txStream.hasNext()) {
-                OpaqueEntry opaqueEntry = txStream.next();
-                if (!shouldProcess(opaqueEntry)) {
-                    continue;
+            while (currentMsgSize < maxDataSizePerMsg && !hasNoiseData) {
+
+                if (lastOpaqueEntry != null && shouldProcess(lastOpaqueEntry)) {
+
+                    // If the currentEntry is too big to append the current message, will skip it and
+                    // append it to the next message as the first entry.
+                    currentEntrySize = ReaderUtility.calculateOpaqueEntrySize(lastOpaqueEntry);
+
+                    if (!checkValidSize(lastOpaqueEntry, currentMsgSize, currentEntrySize)) {
+                        break;
+                    }
+
+                    // Add the lastOpaqueEntry to the current message.
+                    opaqueEntryList.add(lastOpaqueEntry);
+                    currentMsgSize += currentEntrySize;
+                    lastOpaqueEntry = null;
                 }
-                LogReplicationEntry txMessage = generateMessage(opaqueEntry, logEntryRequestId);
-                return txMessage;
+
+                if (hasNoiseData) {
+                    break;
+                }
+
+                if (!txOpaqueStream.hasNext()) {
+                    break;
+                }
+
+                lastOpaqueEntry = txOpaqueStream.next();
             }
+
+            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEnry size {}",
+                    currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null? 0 : currentEntrySize);
+
+            if (opaqueEntryList.size() == 0 && hasNoiseData) {
+                throw new IllegalTransactionStreamsException("There are noisy streams in the transaction log entry");
+            }
+
+            if (opaqueEntryList.size() == 0) {
+                return null;
+            }
+
+            LogReplicationEntry txMessage = generateMessageWithOpaqueEntryList(opaqueEntryList, logEntryRequestId);
+            return txMessage;
+
         } catch (Exception e) {
             log.warn("Caught an exception {}", e);
             throw e;
         }
-
-        return null;
     }
 
     @Override
@@ -192,5 +268,10 @@ public class StreamsLogEntryReader implements LogEntryReader {
     @Override
     public void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
+    }
+
+    @Override
+    public boolean hasNoiseData() {
+        return hasNoiseData;
     }
 }

@@ -26,4 +26,9 @@ public class TestLogEntryReader implements LogEntryReader {
     public void setTopologyConfigId(long siteConfigID) {
 
     }
+
+    @Override
+    public boolean hasNoiseData() {
+        return false;
+    }
 }
