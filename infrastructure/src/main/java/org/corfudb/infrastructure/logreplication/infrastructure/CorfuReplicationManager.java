@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.collect.Sets;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -178,34 +180,40 @@ public class CorfuReplicationManager {
     }
 
     /**
+     * Update Log Replication Runtime config id.
+     */
+    public void updateRuntimeConfigId(TopologyDescriptor newConfig) {
+        runtimeToRemoteCluster.values().forEach(runtime -> runtime.updateFSMConfigId(newConfig));
+    }
+
+    /**
      * The notification of change of adding/removing standby's without epoch change.
      *
-     * @param newConfig has the same topologyConfigId as the current config
+     * @param newConfig should have the same topologyConfigId as the current config
      */
     public void processStandbyChange(TopologyDescriptor newConfig) {
+        // ConfigId mismatch could happen if customized cluster manager does not follow protocol
         if (newConfig.getTopologyConfigId() != topology.getTopologyConfigId()) {
-            log.error("Detected changes in the topology. The new topology descriptor {} doesn't have the same " +
+            log.warn("Detected changes in the topology. The new topology descriptor {} doesn't have the same " +
                     "topologyConfigId as the current one {}", newConfig, topology);
-            return;
         }
 
-        Map<String, ClusterDescriptor> newStandbys = newConfig.getStandbyClusters();
-        Map<String, ClusterDescriptor> currentStandbys = topology.getStandbyClusters();
-        newStandbys.keySet().retainAll(currentStandbys.keySet());
-        Set<String> standbysToRemove = currentStandbys.keySet();
-        standbysToRemove.removeAll(newStandbys.keySet());
+        Set<String> currentStandbys = new HashSet<>(topology.getStandbyClusters().keySet());
+        Set<String> newStandbys = new HashSet<>(newConfig.getStandbyClusters().keySet());
+        Set<String> intersection = Sets.intersection(currentStandbys, newStandbys);
 
-        /*
-         * Remove standbys that are not in the new config
-         */
+        Set<String> standbysToRemove = new HashSet<>(currentStandbys);
+        standbysToRemove.removeAll(intersection);
+
+        //Remove standbys that are not in the new config
         for (String clusterId : standbysToRemove) {
             stopLogReplicationRuntime(clusterId);
             topology.removeStandbyCluster(clusterId);
         }
 
         //Start the standbys that are in the new config but not in the current config
-        for (String clusterId : newConfig.getStandbyClusters().keySet()) {
-            if (runtimeToRemoteCluster.get(clusterId) == null) {
+        for (String clusterId : newStandbys) {
+            if (!runtimeToRemoteCluster.containsKey(clusterId)) {
                 ClusterDescriptor clusterInfo = newConfig.getStandbyClusters().get(clusterId);
                 topology.addStandbyCluster(clusterInfo);
                 startLogReplicationRuntime(clusterInfo);
