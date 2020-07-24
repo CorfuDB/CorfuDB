@@ -29,7 +29,7 @@ public class RequestHandlerMethods {
     private final Map<MessageType, HandlerMethod> handlerMap;
 
     /**
-     * A functional interface for server message handlers. Server message handlers should
+     * A functional interface for server request handlers. Server request handlers should
      * be fast and not block. If a handler blocks for an extended period of time, it will
      * exhaust the server's thread pool. I/O and other long operations should be handled
      * on another thread.
@@ -55,7 +55,7 @@ public class RequestHandlerMethods {
         handlerMap = new EnumMap<>(MessageType.class);
     }
 
-    /** Handle an incoming Corfu request.
+    /** Handle an incoming Corfu request message.
      *
      * @param req       The request message to handle.
      * @param ctx       The channel handler context.
@@ -76,7 +76,7 @@ public class RequestHandlerMethods {
      *
      * @param caller    The context that is being used. Call MethodHandles.lookup() to obtain.
      * @param server    The object that implements the server.
-     * @return          New message handler for caller class.
+     * @return          New request handlers for caller class.
      */
     public static RequestHandlerMethods generateHandler(@Nonnull final MethodHandles.Lookup caller,
                                                         @NonNull final AbstractServer server) {
