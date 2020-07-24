@@ -98,8 +98,8 @@ public class CorfuMessageConverter {
                 return protoCorfuMsg
                         .setType(CorfuMessageType.LOG_REPLICATION_LEADERSHIP_LOSS)
                         .setPayload(Any.pack(Messages.LogReplicationLeadershipLoss.newBuilder()
-                        .setEndpoint(leadershipLoss.getEndpoint())
-                        .build()))
+                                .setEndpoint(leadershipLoss.getEndpoint())
+                                .build()))
                         .build();
             default:
                 throw new IllegalArgumentException(String.format("{} type is not supported", msg.getMsgType()));
@@ -140,25 +140,25 @@ public class CorfuMessageConverter {
                     return new CorfuMsg(clientId, null, requestId, epoch, null,
                             CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP, priorityLevel);
                 case LOG_REPLICATION_NEGOTIATION_RESPONSE:
-                        LogReplicationNegotiationResponse negotiationResponse = LogReplicationNegotiationResponse
-                                .fromProto(protoMessage.getPayload().unpack(Messages.LogReplicationNegotiationResponse.class));
+                    LogReplicationNegotiationResponse negotiationResponse = LogReplicationNegotiationResponse
+                            .fromProto(protoMessage.getPayload().unpack(Messages.LogReplicationNegotiationResponse.class));
 
-                        return new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE, negotiationResponse)
-                                .setClientID(clientId)
-                                .setRequestID(requestId)
-                                .setPriorityLevel(priorityLevel)
-                                .setBuf(buf)
-                                .setEpoch(epoch);
+                    return new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE, negotiationResponse)
+                            .setClientID(clientId)
+                            .setRequestID(requestId)
+                            .setPriorityLevel(priorityLevel)
+                            .setBuf(buf)
+                            .setEpoch(epoch);
                 case LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE:
-                        LogReplicationQueryLeaderShipResponse leadershipResponse = LogReplicationQueryLeaderShipResponse
-                                .fromProto(protoMessage.getPayload().unpack(Messages.LogReplicationQueryLeadershipResponse.class));
+                    LogReplicationQueryLeaderShipResponse leadershipResponse = LogReplicationQueryLeaderShipResponse
+                            .fromProto(protoMessage.getPayload().unpack(Messages.LogReplicationQueryLeadershipResponse.class));
 
-                        return new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE, leadershipResponse)
-                                .setClientID(clientId)
-                                .setRequestID(requestId)
-                                .setPriorityLevel(priorityLevel)
-                                .setBuf(buf)
-                                .setEpoch(epoch);
+                    return new CorfuPayloadMsg<>(CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE, leadershipResponse)
+                            .setClientID(clientId)
+                            .setRequestID(requestId)
+                            .setPriorityLevel(priorityLevel)
+                            .setBuf(buf)
+                            .setEpoch(epoch);
                 case LOG_REPLICATION_LEADERSHIP_LOSS:
                     LogReplicationLeadershipLoss leadershipLoss = LogReplicationLeadershipLoss
                             .fromProto(protoMessage.getPayload().unpack(Messages.LogReplicationLeadershipLoss.class));
@@ -169,7 +169,7 @@ public class CorfuMessageConverter {
                             .setBuf(buf)
                             .setEpoch(epoch);
                 default:
-                    throw new IllegalArgumentException(String.format("{} type is not supported", protoMessage.getType().name()));
+                    throw new IllegalArgumentException(String.format("%s type is not supported", protoMessage.getType().name()));
             }
         } catch (Exception e) {
             throw new CorfuMessageProtoBufException(e);

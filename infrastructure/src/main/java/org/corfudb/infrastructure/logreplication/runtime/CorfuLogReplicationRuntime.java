@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
@@ -255,6 +256,10 @@ public class CorfuLogReplicationRuntime {
         from.onExit(to);
         to.clear();
         to.onEntry(from);
+    }
+
+    public synchronized void updateFSMConfigId(TopologyDescriptor newConfig) {
+        sourceManager.getLogReplicationFSM().setTopologyConfigId(newConfig.getTopologyConfigId());
     }
 
     public synchronized void updateConnectedEndpoints(String endpoint) {
