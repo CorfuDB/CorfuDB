@@ -1,18 +1,13 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
-import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.MetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.util.GitRepositoryState;
-import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
@@ -20,6 +15,8 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+
+import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 
 /**
@@ -65,6 +62,13 @@ public class CorfuServer {
 
         log.debug("Started with arguments: {}", opts);
 
+        setupNetwork(opts);
+        createServiceDirectory(opts);
+        validateMetadataRetention(opts);
+        startCorfuServer(opts);
+    }
+
+    private static void setupNetwork(Map<String, Object> opts) {
         // Bind to all interfaces only if no address or interface specified by the user.
         // Fetch the address if given a network interface.
         if (opts.get("--network-interface") != null) {
@@ -79,37 +83,28 @@ public class CorfuServer {
             // Address is specified by the user.
             opts.put("--bind-to-all-interfaces", false);
         }
+    }
 
-        createServiceDirectory(opts);
+    /**
+     * Manages the lifecycle of the Corfu Server.
+     * @param opts cmd line params
+     */
+    private static void startCorfuServer(Map<String, Object> opts) {
 
-        // Check the specified number of datastore files to retain
-        if (Integer.parseInt((String) opts.get("--metadata-retention")) < 1) {
-            throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
-        }
-
-        // Manages the lifecycle of the Corfu Server.
         while (!shutdownServer) {
-            final ServerContext serverContext = new ServerContext(opts);
+            ServerContext serverContext = new ServerContext(opts);
             try {
                 setupMetrics(opts);
                 CorfuServerNode node = new CorfuServerNode(serverContext);
                 activeServer = node;
-
-                // Register shutdown handler
-                Thread shutdownThread = new Thread(() -> cleanShutdown(node));
-                shutdownThread.setName("ShutdownThread");
-                Runtime.getRuntime().addShutdownHook(shutdownThread);
-
+                setupShutdownHook(node);
                 activeServer.startAndListen();
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
                 System.exit(EXIT_ERROR_CODE);
             }
 
-            if (cleanupServer) {
-                clearDataFiles(serverContext);
-                cleanupServer = false;
-            }
+            clearDataFiles(serverContext);
 
             if (!shutdownServer) {
                 log.info("main: Server restarting.");
@@ -120,6 +115,23 @@ public class CorfuServer {
     }
 
     /**
+     *  Register shutdown handler
+     * @param node corfu server node
+     */
+    private static void setupShutdownHook(CorfuServerNode node) {
+        Thread shutdownThread = new Thread(() -> cleanShutdown(node));
+        shutdownThread.setName("ShutdownThread");
+        Runtime.getRuntime().addShutdownHook(shutdownThread);
+    }
+
+    private static void validateMetadataRetention(Map<String, Object> opts) {
+        // Check the specified number of datastore files to retain
+        if (Integer.parseInt((String) opts.get("--metadata-retention")) < 1) {
+            throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
+        }
+    }
+
+    /**
      * Setup logback logger
      * - pick the correct logging level before outputting error messages
      * - add serverEndpoint information
@@ -127,8 +139,8 @@ public class CorfuServer {
      * @param opts command line parameters
      */
     private static void configureLogger(Map<String, Object> opts) {
-        final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
+        Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
         root.setLevel(level);
     }
 
@@ -165,15 +177,23 @@ public class CorfuServer {
      * @param serverContext Server context.
      */
     private static void clearDataFiles(ServerContext serverContext) {
-        log.warn("main: cleanup requested, DELETE server data files");
-        if (!serverContext.getServerConfig(Boolean.class, "--memory")) {
+        if (serverContext.getServerConfig(Boolean.class, "--memory")) {
+            return;
+        }
+
+        if (cleanupServer) {
+            log.warn("main: cleanup requested, DELETE server data files");
+
             File serviceDir = new File(serverContext.getServerConfig(String.class, "--log-path"));
             try {
                 FileUtils.cleanDirectory(serviceDir);
             } catch (IOException ioe) {
                 throw new UnrecoverableCorfuError(ioe);
             }
+
+            cleanupServer = false;
         }
+
         log.warn("main: cleanup completed, expect clean startup");
     }
 
