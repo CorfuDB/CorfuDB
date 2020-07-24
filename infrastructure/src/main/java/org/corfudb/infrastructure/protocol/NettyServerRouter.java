@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.protocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import com.google.common.collect.ImmutableList;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -13,6 +14,7 @@ import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.view.Layout;
@@ -58,6 +60,17 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     @Override
     public Optional<Layout> getCurrentLayout() {
         return Optional.ofNullable(serverContext.getCurrentLayout());
+    }
+
+
+
+    @Override
+    public void sendResponse(Response response, ChannelHandlerContext ctx) {
+        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+        outBuf.writeByte(API.PROTO_CORFU_MSG_MARK);
+        outBuf.writeBytes(response.toByteArray());
+        //TODO(Zach): Where to remove allocation?
+        ctx.writeAndFlush(outBuf);
     }
 
     /**
@@ -119,18 +132,21 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
 
             AbstractServer handler = handlerMap.get(header.getType());
             if (handler == null) {
-                log.warn("Received unregistered message {}, dropping", header.getType());
+                log.warn("Received unregistered request message {}, dropping", header.getType());
             } else {
-                //TODO(Zach): Check if request is valid.
-                try {
-                    handler.handleRequest(request, ctx, this);
-                } catch(Throwable t) {
-                    log.error("channelRead: Handling {} failed due to {}:{}",
-                            header.getType(),t.getClass().getSimpleName(),
-                            t.getMessage(), t);
+                if(requestIsValid(request, ctx)) {
+                    if(log.isTraceEnabled()) {
+                        log.trace("Request message routed to {}: {}", handler.getClass().getSimpleName(), request);
+                    }
+
+                    try {
+                        handler.handleRequest(request, ctx, this);
+                    } catch(Throwable t) {
+                        log.error("channelRead: Handling {} failed due to {}:{}",
+                                header.getType(),t.getClass().getSimpleName(), t.getMessage(), t);
+                    }
                 }
             }
-
         } catch (Exception e) {
             log.error("Exception during read!", e);
         } finally {

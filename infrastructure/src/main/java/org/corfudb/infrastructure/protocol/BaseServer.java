@@ -3,11 +3,13 @@ package org.corfudb.infrastructure.protocol;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.protocol.proto.CorfuProtocol;
+import org.corfudb.common.protocol.API;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerThreadFactory;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
@@ -20,12 +22,12 @@ public class BaseServer extends AbstractServer {
     final ServerContext serverContext;
     private final ExecutorService executor;
 
-    /** HandlerMethod for the base server. */
+    /** RequestHandlerMethods for the base server. */
     @Getter
     private final RequestHandlerMethods handler = RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @Override
-    public boolean isServerReadyToHandleReq(Request req) {
+    public boolean isServerReadyToHandleReq(Header reqHeader) {
         return getState() == ServerState.READY;
     }
 
@@ -55,10 +57,14 @@ public class BaseServer extends AbstractServer {
      */
     @AnnotatedServerHandler(type = MessageType.PING)
     private void handlePing(Request req, ChannelHandlerContext ctx, IServerRouter r) {
-        //TODO(Zach): Handle request and send response
-        //TODO: checkArgument(req.hasPingRequest());
         log.info("Ping message received from {} {}", req.getHeader().getClientId().getMsb(),
                 req.getHeader().getClientId().getLsb());
+
+        //TODO(Zach): checkArgument(req.hasPingRequest());
+
+        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+        Response response = API.newPingResponse(responseHeader);
+        r.sendResponse(response, ctx);
     }
 
     /**
@@ -73,6 +79,6 @@ public class BaseServer extends AbstractServer {
     @AnnotatedServerHandler(type = MessageType.RESTART)
     private void handleRestart(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         //TODO(Zach): Handle request and send response
-        //TODO: checkArgument(req.hasRestartRequest());
+        // checkArgument(req.hasRestartRequest());
     }
 }

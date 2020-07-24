@@ -36,8 +36,8 @@ public class API {
                 .build();
     }
 
-    public static Header newHeader(long requestId, Priority priority, MessageType type,
-                                   long epoch, UUID clusterId, UUID clientId,
+    public static Header newHeader(long requestId, Priority priority, MessageType type, long epoch,
+                                   CorfuProtocol.UUID clusterId, CorfuProtocol.UUID clientId,
                                    boolean ignoreClusterId, boolean ignoreEpoch) {
         return Header.newBuilder()
                 .setVersion(CURRENT_VERSION)
@@ -45,11 +45,29 @@ public class API {
                 .setPriority(priority)
                 .setType(type)
                 .setEpoch(epoch)
-                .setClusterId(getUUID(clusterId))
-                .setClientId(getUUID(clientId))
+                .setClusterId(clusterId)
+                .setClientId(clientId)
                 .setIgnoreClusterId(ignoreClusterId)
                 .setIgnoreEpoch(ignoreEpoch)
                 .build();
+    }
+
+    public static Header newHeader(long requestId, Priority priority, MessageType type,
+                                   long epoch, UUID clusterId, UUID clientId,
+                                   boolean ignoreClusterId, boolean ignoreEpoch) {
+        return newHeader(requestId, priority, type, epoch,
+                getUUID(clusterId), getUUID(clientId), ignoreClusterId, ignoreEpoch);
+    }
+
+    public static Header generateResponseHeader(Header requestHeader, boolean ignoreClusterId, boolean ignoreEpoch) {
+        return newHeader(requestHeader.getRequestId(),
+                requestHeader.getPriority(),
+                requestHeader.getType(),
+                requestHeader.getEpoch(),
+                requestHeader.getClusterId(),
+                requestHeader.getClientId(),
+                ignoreClusterId,
+                ignoreEpoch);
     }
 
     public static ServerError newNoServerError() {

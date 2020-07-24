@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.protocol;
 
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 
 import java.util.concurrent.atomic.AtomicReference;
@@ -15,9 +16,9 @@ public abstract class AbstractServer {
     private final AtomicReference<ServerState> state = new AtomicReference<>(ServerState.READY);
 
     /**
-     * Get the message handler for this instance.
+     * Get the request handlers for this instance.
      *
-     * @return A message handler.
+     * @return The request handlers
      */
     public abstract RequestHandlerMethods getHandler();
 
@@ -30,7 +31,12 @@ public abstract class AbstractServer {
         // Overridden in log unit to flush operations stamped with an old epoch
     }
 
-    public abstract boolean isServerReadyToHandleReq(Request req);
+    /**
+     * Determine if the server is ready to handle a request.
+     * @param reqHeader The incoming request message header.
+     * @return True if the server is ready to handle this request, and false otherwise.
+     */
+    public abstract boolean isServerReadyToHandleReq(Header reqHeader);
 
     /**
      * A stub that handlers can override to manage their threading, otherwise
@@ -44,11 +50,11 @@ public abstract class AbstractServer {
     }
 
     /**
-     * Handle a incoming Netty message.
+     * Handle a incoming request message.
      *
      * @param req An incoming request message.
      * @param ctx The channel handler context.
-     * @param r   The router that took in the message.
+     * @param r   The router that took in the request message.
      */
     public final void handleRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         if (getState() == ServerState.SHUTDOWN) {
@@ -56,7 +62,11 @@ public abstract class AbstractServer {
             return;
         }
 
-        //TODO(Zach): Check if server is ready to handle request messages and handle appropriately.
+        if(!isServerReadyToHandleReq(req.getHeader())) {
+            //TODO(Zach): Send NOT_READY error response
+            // r.sendResponse(...);
+            return;
+        }
 
         processRequest(req, ctx, r);
     }
@@ -71,6 +81,9 @@ public abstract class AbstractServer {
         });
     }
 
+    /**
+     * Get the server state.
+     */
     public ServerState getState() {
         return state.get();
     }
@@ -84,10 +97,9 @@ public abstract class AbstractServer {
 
     /**
      * The server state.
-     * Represents server in a particular state: READY, NOT_READY, SHUTDOWN.
+     * Represents server in a particular state: READY, SHUTDOWN.
      */
     public enum ServerState {
-        //TODO(Zach): What about NOT_READY?
         READY, SHUTDOWN
     }
 }

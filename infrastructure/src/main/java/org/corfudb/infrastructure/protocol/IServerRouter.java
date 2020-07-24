@@ -1,18 +1,25 @@
 package org.corfudb.infrastructure.protocol;
 
+import io.netty.channel.ChannelHandlerContext;
+import org.corfudb.common.protocol.API;
+import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface IServerRouter {
 
     Logger log = LoggerFactory.getLogger(IServerRouter.class);
 
-    //TODO(Zach): void sendResponse(ChannelHandlerContext ctx, ...)
+    void sendResponse(Response response, ChannelHandlerContext ctx);
 
     /**
      * Get the current epoch.
@@ -46,6 +53,39 @@ public interface IServerRouter {
      */
     void setServerContext(ServerContext serverContext);
 
-    //TODO(Zach): default implementations of sendWrongEpochMessage, sendNoBootstrapMessage,
-    //TODO: sendWrongClusterIdMessage, epochIsValid, clusterIdIsValid, messageIsValid.
+    default boolean epochIsValid(Request req, ChannelHandlerContext ctx) {
+        long serverEpoch = getServerEpoch();
+        if(req.getHeader().getEpoch() != serverEpoch) {
+            //TODO(Zach): send WrongEpoch error
+            return false;
+        }
+
+        return true;
+    }
+
+    default boolean clusterIdIsValid(Request req, ChannelHandlerContext ctx, Layout layout) {
+        UUID currentClusterID = layout.getClusterId();
+        boolean match = req.getHeader().getClusterId().equals(API.getUUID(currentClusterID));
+
+        if(!match) {
+            //TODO(Zach): send WrongClusterId error
+        }
+
+        return match;
+    }
+
+    default boolean requestIsValid(Request req, ChannelHandlerContext ctx) {
+        if(!req.getHeader().getIgnoreEpoch() && epochIsValid(req, ctx)) return false;
+        if(!req.getHeader().getIgnoreClusterId()) {
+            return getCurrentLayout()
+                    .map(layout -> clusterIdIsValid(req, ctx, layout))
+                    .orElseGet(() -> {
+                        //TODO(Zach): send NotBootstrapped error
+                        return false;
+                    });
+        }
+        return true;
+    }
+
+    //TODO(Zach): default implementations of sendWrongEpochMessage, sendNoBootstrapMessage, sendWrongClusterIdMessage.
 }
