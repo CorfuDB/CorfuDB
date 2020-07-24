@@ -58,12 +58,9 @@ public class CorfuServer {
     }
 
     private static void startServer(String[] args) {
-        // Parse the options given, using docopt.
-        Map<String, Object> opts = new Docopt(CorfuServerCmdLine.USAGE)
-                .withVersion(GitRepositoryState.getRepositoryState().describe)
-                .parse(args);
-        // Print a nice welcome message.
-        printStartupMsg(opts);
+        CorfuServerCmdLine cmdLine = new CorfuServerCmdLine(args);
+        Map<String, Object> opts = cmdLine.getOpts();
+        cmdLine.printStartupMsg();
         configureLogger(opts);
 
         log.debug("Started with arguments: {}", opts);
@@ -128,7 +125,6 @@ public class CorfuServer {
      * - add serverEndpoint information
      *
      * @param opts command line parameters
-     * @throws JoranException logback exception
      */
     private static void configureLogger(Map<String, Object> opts) {
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
@@ -212,51 +208,6 @@ public class CorfuServer {
         // Flush the async appender before exiting to prevent the loss of logs
         LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
         loggerContext.stop();
-    }
-
-    /**
-     * Print the corfu logo.
-     */
-    private static void printLogo() {
-        println("▄████████  ▄██████▄     ▄████████    ▄████████ ███    █▄");
-        println("███    ███ ███    ███   ███    ███   ███    ██████    ███");
-        println("███    █▀  ███    ███   ███    ███   ███    █▀ ███    ███");
-        println("███        ███    ███  ▄███▄▄▄▄██▀  ▄███▄▄▄    ███    ███");
-        println("███        ███    ███ ▀▀███▀▀▀▀▀   ▀▀███▀▀▀    ███    ███");
-        println("███    █▄  ███    ███ ▀███████████   ███       ███    ███");
-        println("███    ███ ███    ███   ███    ███   ███       ███    ███");
-        println("████████▀   ▀██████▀    ███    ███   ███       ████████▀ ");
-        println("                        ███    ███");
-    }
-
-    /**
-     * Print an object to the console, followed by a newline.
-     * Call this method instead of calling System.out.println().
-     *
-     * @param line The object to print.
-     */
-    @SuppressWarnings("checkstyle:printLine")
-    private static void println(Object line) {
-        System.out.println(line);
-        log.info(line.toString());
-    }
-
-    /**
-     * Print the welcome message, logo and the arguments.
-     *
-     * @param opts Arguments.
-     */
-    private static void printStartupMsg(Map<String, Object> opts) {
-        printLogo();
-        println("Welcome to CORFU SERVER");
-        println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
-
-        final int port = Integer.parseInt((String) opts.get("<port>"));
-        final String dataLocation = (Boolean) opts.get("--memory") ? "MEMORY mode" :
-                opts.get("--log-path").toString();
-
-        println("Serving on port " + port);
-        println("Data location: " + dataLocation);
     }
 
     /**

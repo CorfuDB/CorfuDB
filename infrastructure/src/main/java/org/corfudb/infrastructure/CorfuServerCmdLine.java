@@ -1,5 +1,16 @@
 package org.corfudb.infrastructure;
 
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.util.GitRepositoryState;
+import org.docopt.Docopt;
+
+import java.util.Map;
+
+/**
+ * Command line helper class
+ */
+@Slf4j
 public class CorfuServerCmdLine {
 
     /**
@@ -148,4 +159,66 @@ public class CorfuServerCmdLine {
                     + "              Show this screen\n"
                     + " --version                                                                "
                     + "              Show version\n";
+
+    @Getter
+    private final Map<String, Object> opts;
+
+    public CorfuServerCmdLine(String[] args) {
+        this.opts = buildOpts(args);
+    }
+
+    /**
+     * Print the corfu logo.
+     */
+    private void printLogo() {
+        println("▄████████  ▄██████▄     ▄████████    ▄████████ ███    █▄");
+        println("███    ███ ███    ███   ███    ███   ███    ██████    ███");
+        println("███    █▀  ███    ███   ███    ███   ███    █▀ ███    ███");
+        println("███        ███    ███  ▄███▄▄▄▄██▀  ▄███▄▄▄    ███    ███");
+        println("███        ███    ███ ▀▀███▀▀▀▀▀   ▀▀███▀▀▀    ███    ███");
+        println("███    █▄  ███    ███ ▀███████████   ███       ███    ███");
+        println("███    ███ ███    ███   ███    ███   ███       ███    ███");
+        println("████████▀   ▀██████▀    ███    ███   ███       ████████▀ ");
+        println("                        ███    ███");
+    }
+
+    /**
+     * Print an object to the console, followed by a newline.
+     * Call this method instead of calling System.out.println().
+     *
+     * @param line The object to print.
+     */
+    @SuppressWarnings("checkstyle:printLine")
+    private static void println(String line) {
+        System.out.println(line);
+        log.info(line);
+    }
+
+    /**
+     * Print the welcome message, logo and the arguments.
+     */
+    public void printStartupMsg() {
+        printLogo();
+        println("Welcome to CORFU SERVER");
+        println("Version (" + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")");
+
+        int port = Integer.parseInt((String) opts.get("<port>"));
+        String dataLocation = (Boolean) opts.get("--memory") ? "MEMORY mode" :
+                opts.get("--log-path").toString();
+
+        println("Serving on port " + port);
+        println("Data location: " + dataLocation);
+    }
+
+    /**
+     * Parse the options given, using docopt.
+     *
+     * @param args command line arguments
+     * @return Docopt object
+     */
+    private Map<String, Object> buildOpts(String[] args) {
+        return new Docopt(USAGE)
+                .withVersion(GitRepositoryState.getRepositoryState().describe)
+                .parse(args);
+    }
 }
