@@ -17,11 +17,13 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 
 /**
@@ -77,14 +79,7 @@ public class LogEntryWriter {
      * @param txMessage
      */
     void processMsg(LogReplicationEntry txMessage) {
-        OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(Unpooled.wrappedBuffer(txMessage.getPayload()));
-        Map<UUID, List<SMREntry>> map = opaqueEntry.getEntries();
-
-        if (!streamMap.keySet().containsAll(map.keySet())) {
-            log.error("txMessage contains noisy streams {}, expecting {}", map.keySet(), streamMap);
-            throw new ReplicationWriterException("Wrong streams set");
-        }
-
+        List<OpaqueEntry> opaqueEntryList = txMessage.getOpaqueEntryList();
 
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
         long persistSiteConfigID = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
@@ -98,21 +93,37 @@ public class LogEntryWriter {
 
         lastMsgTs = Math.max(persistLogTS, lastMsgTs);
 
+
+        // If this entry's max timestamp is not bigger than the persistLogTs, skip the whole message.
         if (topologyConfigId != persistSiteConfigID || ts != persistSnapStart || ts != persistSnapDone ||
-                txMessage.getMetadata().getPreviousTimestamp() != persistLogTS) {
+                entryTS <= persistLogTS) {
             log.warn("Skip write this msg {} as its timestamp is later than the persisted one " +
                     txMessage.getMetadata() +  " persisteSiteConfig " + persistSiteConfigID + " persistSnapStart " + persistSnapStart +
                     " persistSnapDone " + persistSnapDone + " persistLogTs " + persistLogTS);
             return;
         }
 
+        // Skip Opaque entries with timestamp that are not larger than persistedTs
+        OpaqueEntry[] newOpaqueEntryList = opaqueEntryList.stream().filter(x->x.getVersion() > persistLogTS).toArray(OpaqueEntry[]::new);
+
+        // Check that all opaque entries contain the correct streams
+        for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
+            if (!streamMap.keySet().containsAll(opaqueEntry.getEntries().keySet())) {
+                log.error("txMessage contains noisy streams {}, expecting {}", opaqueEntry.getEntries().keySet(), streamMap);
+                throw new ReplicationWriterException("Wrong streams set");
+            }
+        }
+
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
+
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_PROCESSED, entryTS);
 
-        for (UUID uuid : opaqueEntry.getEntries().keySet()) {
-            for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
-                txBuilder.logUpdate(uuid, smrEntry);
+        for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
+            for (UUID uuid : opaqueEntry.getEntries().keySet()) {
+                for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
+                    txBuilder.logUpdate(uuid, smrEntry);
+                }
             }
         }
 

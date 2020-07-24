@@ -68,7 +68,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static final int CORFU_PORT = 9000;
     static final String TABLE_PREFIX = "test";
 
-    static private final int NUM_KEYS = 4;
+    static private final int NUM_KEYS = 10;
 
     static private final int NUM_KEYS_LARGE = 1000;
     static private final int NUM_KEYS_VERY_LARGE = 20000;
@@ -82,6 +82,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     // If testConfig set deleteOp enabled, will have one delete operation for four put operations.
     static private final int DELETE_PACE = 4;
+
+    // Number of messages per batch
+    static private final int BATCH_SIZE = 4;
+
+    // each snapshot entry is 33 bytes
+    // log entry size is 66 bytes or more according to how many streams in one transactions
+    static private final int MSG_SIZE = 524288;
+
+    static private final int SMALL_MSG_SIZE = 200;
 
     static private TestConfig testConfig = new TestConfig();
 
@@ -154,6 +163,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private LogReplicationMetadataManager logReplicationMetadataManager;
 
+    private static final int SLEEP_INTERVAL = 1000;
+
     /**
      * Setup Test Environment
      *
@@ -206,6 +217,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         dstTestRuntime.connect();
 
         logReplicationMetadataManager = new LogReplicationMetadataManager(dstTestRuntime, 0, ACTIVE_CLUSTER_ID);
+        testConfig.clear();
     }
 
     private void cleanEnv() {
@@ -311,6 +323,21 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             }
     }
 
+    /**
+     * Wait replication data reach at the standby cluster.
+     * @param tables
+     * @param hashMap
+     */
+    void waitData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
+        for (String name : hashMap.keySet()) {
+            CorfuTable<Long, Long> table = tables.get(name);
+            HashMap<Long, Long> mapKeys = hashMap.get(name);
+            while (table.size() < mapKeys.size()) {
+                //
+            }
+        }
+    }
+
     void verifyData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
@@ -352,7 +379,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         openStreams(srcCorfuTables, srcDataRuntime, NUM_STREAMS);
 
         // Write data into Source Tables
-        //generateData(srcCorfuTables, srcDataForVerification, NUM_KEYS, NUM_KEYS);
         generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS);
 
         // Verify data just written against in-memory copy
@@ -695,7 +721,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
 
         testConfig.clear().setDropMessageLevel(2);
-        startLogEntrySync(crossTables, WAIT.ON_ERROR);
+        startLogEntrySync(crossTables, WAIT.ON_TIMEOUT_ERROR);
     }
 
     /**
@@ -811,16 +837,22 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         testConfig.clear();
         testConfig.setWritingSrc(true);
         testConfig.setDeleteOP(true);
-
         testConfig.setWaitOn(WAIT.ON_ACK);
-        startLogEntrySync(crossTables, WAIT.ON_ACK, false);
+
+        HashSet<WAIT> waitHashSet = new HashSet<>();
+        waitHashSet.add(WAIT.ON_ACK);
+        startLogEntrySync(crossTables, waitHashSet, true);
 
         expectedAckTimestamp = Long.MAX_VALUE;
-        // Verify Data on Destination site
-        System.out.println("****** Verify Data on Destination");
+
         // Because t2 is not specified as a replicated table, we should not see it on the destination
         srcDataForVerification.get(t2).clear();
 
+        // Verify Data on Destination site
+        System.out.println("****** Wait Data on Destination");
+        waitData(dstCorfuTables, srcDataForVerification);
+
+        System.out.println("****** Verify Data on Destination");
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
         expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
@@ -971,6 +1003,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Setup Environment: two corfu servers (source & destination)
         setupEnv();
 
+        log.trace("Have setutEnv Done");
+
         // Open One Stream
         openStreams(srcCorfuTables, srcDataRuntime, 1);
         openStreams(dstCorfuTables, dstDataRuntime, 1);
@@ -1044,7 +1078,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     /* ********************** AUXILIARY METHODS ********************** */
 
-
     // startCrossTx indicates if we start with a transaction across Tables
     private void writeCrossTableTransactions(Set<String> crossTableTransactions, boolean startCrossTx) throws Exception {
         // Setup two separate Corfu Servers: source (primary) and destination (standby)
@@ -1079,6 +1112,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         System.out.println("****** Verify No Data in Destination Site");
         verifyNoData(dstCorfuTables);
     }
+
 
     void startTxAtSrc() {
         Set<String> crossTables = new HashSet<>();
@@ -1194,7 +1228,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Block until the expected ACK Timestamp is reached
         System.out.println("\n****** Wait until the wait condition is met");
-        if (waitConditions.contains(WAIT.ON_ERROR)) {
+        if (waitConditions.contains(WAIT.ON_ERROR) || waitConditions.contains(WAIT.ON_TIMEOUT_ERROR)) {
             blockUntilExpectedValueReached.acquire();
         } else if (waitConditions.contains(WAIT.ON_ACK)) {
             blockUntilExpectedAckTs.acquire();
@@ -1213,7 +1247,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                                             Set<WAIT> waitConditions) throws InterruptedException {
         // Config
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate);
+        int msg_size = MSG_SIZE;
+        if (waitConditions.contains(WAIT.ON_TIMEOUT_ERROR)) {
+            msg_size = SMALL_MSG_SIZE;
+        }
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, BATCH_SIZE, SMALL_MSG_SIZE);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel(), logReplicationMetadataManager);
@@ -1237,6 +1275,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     ackMessages.addObserver(this);
                     break;
                 case ON_ERROR: // Wait on Error Notifications to Source
+                case ON_TIMEOUT_ERROR:
                     errorsLogEntrySync = sourceDataSender.getErrors();
                     errorsLogEntrySync.addObserver(this);
                     break;
@@ -1342,6 +1381,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         ON_ACK,
         ON_ACK_TS,
         ON_ERROR,
+        ON_TIMEOUT_ERROR,
         ON_DATA_CONTROL_CALL,
         ON_RESCHEDULE_SNAPSHOT_SYNC,
         ON_SINK_RECEIVE,

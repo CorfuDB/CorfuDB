@@ -12,6 +12,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
@@ -19,6 +20,7 @@ import org.corfudb.util.serializer.Serializers;
 
 import static com.google.common.base.Preconditions.checkState;
 
+@Slf4j
 /**
  * Created by mwei on 1/8/16.
  */
@@ -100,6 +102,12 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     }
 
     /**
+     * The SMREntry's serialized size in bytes. This is set during reading from or writing to the log.
+     */
+    @Getter
+    Integer serializedSize = null;
+
+    /**
      * This function provides the remaining buffer. Child entries
      * should initialize their contents based on the buffer.
      *
@@ -107,6 +115,8 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      */
     @Override
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
+        int readIndex = b.readerIndex();
+
         super.deserializeBuffer(b, rt);
         short methodLength = b.readShort();
         byte[] methodBytes = new byte[methodLength];
@@ -135,6 +145,30 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
             b.skipBytes(len);
         }
         SMRArguments = arguments;
+        serializedSize = b.readerIndex() - readIndex + 1;
+    }
+
+
+    /**
+     * Calculate an Opaque SMR entry's serialized size.
+     * @throws IllegalAccessException
+     */
+    private int calculateOpaqueSMREntrySerializedSize() {
+        if (!opaque) {
+            log.error("This operation only supported for an opaque SMR entry");
+            return 0;
+        }
+
+        int size = 0;
+
+        for (Object smrArg : SMRArguments) {
+            size += ((byte[])smrArg).length;
+        }
+
+        size += (SMRMethod.length() * Character.BYTES);
+        size += Integer.BYTES;
+
+        return size;
     }
 
     /**
@@ -163,6 +197,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
 
     @Override
     public void serialize(ByteBuf b) {
+        int startWriterIndex = b.writerIndex();
         super.serialize(b);
         b.writeShort(SMRMethod.length());
         b.writeBytes(SMRMethod.getBytes());
@@ -190,6 +225,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
                     b.writeInt(length);
                     b.writerIndex(lengthIndex + length + 4);
                 });
+        serializedSize = b.writerIndex() - startWriterIndex;
     }
 
     @Override

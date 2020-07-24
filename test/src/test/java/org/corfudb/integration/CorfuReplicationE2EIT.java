@@ -21,6 +21,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @RunWith(Parameterized.class)
 public class CorfuReplicationE2EIT extends AbstractIT {
 
+    private static final int MSG_SIZE = 65536;
+
     private String pluginConfigFilePath;
 
     // Note: this flag is kept for debugging purposes only.
@@ -89,7 +91,7 @@ public class CorfuReplicationE2EIT extends AbstractIT {
             final String activeEndpoint = DEFAULT_HOST + ":" + activeSiteCorfuPort;
             final String standbyEndpoint = DEFAULT_HOST + ":" + standbySiteCorfuPort;
 
-            final int numWrites = 10;
+            final int numWrites = 100;
 
             // Start Single Corfu Node Cluster on Active Site
             activeCorfu = runServer(activeSiteCorfuPort, true);
@@ -143,11 +145,15 @@ public class CorfuReplicationE2EIT extends AbstractIT {
                 standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath);
             } else {
                 executorService.submit(() -> {
-                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=localhost", String.valueOf(activeReplicationServerPort)});
+                    String[] options = new String[]{"-m", "--max-data-message-size=" + MSG_SIZE, "--plugin=" + pluginConfigFilePath, "--address=localhost",
+                            String.valueOf(activeReplicationServerPort)};
+                    CorfuInterClusterReplicationServer.main(options);
                 });
 
                 executorService.submit(() -> {
-                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath, "--address=localhost", String.valueOf(standbyReplicationServerPort)});
+                    String[] options = new String[]{"-m", "--max-data-message-size=" + MSG_SIZE, "--plugin=" + pluginConfigFilePath, "--address=localhost",
+                            String.valueOf(standbyReplicationServerPort)};
+                    CorfuInterClusterReplicationServer.main(options);
                 });
             }
 

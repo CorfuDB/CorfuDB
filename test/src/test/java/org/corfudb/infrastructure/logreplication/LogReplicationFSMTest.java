@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication;
 
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
@@ -18,7 +19,6 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.TestLogEntryRea
 import org.corfudb.infrastructure.logreplication.replication.fsm.TestReaderConfiguration;
 import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
-import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
@@ -44,7 +44,9 @@ import java.util.concurrent.Semaphore;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 
+@Slf4j
 /**
  * Test Log Replication FSM.
  */
@@ -221,7 +223,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
-        int numTransition = (NUM_ENTRIES/(batchSize* SnapshotSender.DEFAULT_SNAPSHOT_BATCH_SIZE)) + 1;
+        int numTransition = (NUM_ENTRIES/(batchSize* DEFAULT_MAX_NUM_MSG_PER_BATCH)) + 1;
         Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
 
@@ -296,7 +298,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #2: This time the snapshot sync completes
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
-        for (int i = 0; i<(NUM_ENTRIES/(BATCH_SIZE * SnapshotSender.DEFAULT_SNAPSHOT_BATCH_SIZE)) + 1; i++) {
+        for (int i = 0; i<(NUM_ENTRIES/(BATCH_SIZE * DEFAULT_MAX_NUM_MSG_PER_BATCH)) + 1; i++) {
             transitionAvailable.acquire();
         }
 
@@ -342,14 +344,12 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Block until the snapshot sync completes and next transition occurs.
         while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
-            //
+            log.trace("stateType {} expected type {}", fsm.getState().getType(), LogReplicationStateType.IN_LOG_ENTRY_SYNC);
         }
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
-
-        assertThat(LARGE_NUM_ENTRIES/ StreamsSnapshotReader.MAX_NUM_SMR_ENTRY).isLessThanOrEqualTo(listenerQueue.size());
 
         // Transactional puts into the stream (incremental updates)
         writeTxIncrementalUpdates();
