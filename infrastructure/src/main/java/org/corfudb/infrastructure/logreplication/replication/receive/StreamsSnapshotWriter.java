@@ -241,6 +241,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         for (UUID uuid : streamViewMap.keySet()) {
             seqNum = applyShadowStream(uuid, seqNum, snapshot);
         }
+        phase = Phase.TransferPhase;
     }
 
     /**
@@ -270,5 +271,5 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     enum Phase {
         TransferPhase,
         ApplyPhase
-    };
+    }
 }
