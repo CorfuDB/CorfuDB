@@ -8,7 +8,8 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterConfigurationMsg;
 
-import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,16 +30,16 @@ public class TopologyDescriptor {
 
     // Represents a state of the topology configuration (a topology epoch)
     @Getter
-    private long topologyConfigId;
+    private final long topologyConfigId;
 
     @Getter
-    private Map<String, ClusterDescriptor> activeClusters;
+    private final Map<String, ClusterDescriptor> activeClusters;
 
     @Getter
-    private Map<String, ClusterDescriptor> standbyClusters;
+    private final Map<String, ClusterDescriptor> standbyClusters;
 
     @Getter
-    private Map<String, ClusterDescriptor> invalidClusters;
+    private final Map<String, ClusterDescriptor> invalidClusters;
 
     /**
      * Constructor
@@ -72,7 +73,7 @@ public class TopologyDescriptor {
      */
     public TopologyDescriptor(long topologyConfigId, @NonNull ClusterDescriptor activeCluster,
                               @NonNull List<ClusterDescriptor> standbyClusters) {
-        this(topologyConfigId, Arrays.asList(activeCluster), standbyClusters);
+        this(topologyConfigId, Collections.singletonList(activeCluster), standbyClusters);
     }
 
     /**
@@ -89,13 +90,22 @@ public class TopologyDescriptor {
         this.standbyClusters = new HashMap<>();
         this.invalidClusters = new HashMap<>();
 
-        if(activeClusters != null) {
-            activeClusters.forEach(activeCluster -> this.activeClusters.put(activeCluster.getClusterId(), activeCluster));
-        }
+        activeClusters.forEach(activeCluster -> this.activeClusters.put(activeCluster.getClusterId(), activeCluster));
+        standbyClusters.forEach(standbyCluster -> this.standbyClusters.put(standbyCluster.getClusterId(), standbyCluster));
+    }
 
-        if(standbyClusters != null) {
-            standbyClusters.forEach(standbyCluster -> this.standbyClusters.put(standbyCluster.getClusterId(), standbyCluster));
-        }
+    /**
+     * Constructor
+     *
+     * @param topologyConfigId topology configuration identifier (epoch)
+     * @param activeClusters active cluster's
+     * @param standbyClusters standby cluster's
+     * @param invalidClusters invalid cluster's
+     */
+    public TopologyDescriptor(long topologyConfigId, @NonNull List<ClusterDescriptor> activeClusters,
+                              @NonNull List<ClusterDescriptor> standbyClusters, @NonNull List<ClusterDescriptor> invalidClusters) {
+        this(topologyConfigId, activeClusters, standbyClusters);
+        invalidClusters.forEach(invalidCluster -> this.invalidClusters.put(invalidCluster.getClusterId(), invalidCluster));
     }
 
     /**
@@ -107,15 +117,13 @@ public class TopologyDescriptor {
 
         List<ClusterConfigurationMsg> clusterConfigurationMsgs = Stream.of(activeClusters.values(),
                 standbyClusters.values(), invalidClusters.values())
-                .flatMap(x -> x.stream())
-                .map(cluster -> cluster.convertToMessage())
+                .flatMap(Collection::stream)
+                .map(ClusterDescriptor::convertToMessage)
                 .collect(Collectors.toList());
 
-        TopologyConfigurationMsg topologyConfig = TopologyConfigurationMsg.newBuilder()
+        return TopologyConfigurationMsg.newBuilder()
                 .setTopologyConfigID(topologyConfigId)
                 .addAllClusters(clusterConfigurationMsgs).build();
-
-        return topologyConfig;
     }
 
     /**
@@ -149,7 +157,7 @@ public class TopologyDescriptor {
     public ClusterDescriptor getClusterDescriptor(String endpoint) {
         List<ClusterDescriptor> clusters = Stream.of(activeClusters.values(), standbyClusters.values(),
                 invalidClusters.values())
-                .flatMap(x -> x.stream())
+                .flatMap(Collection::stream)
                 .collect(Collectors.toList());
 
         for(ClusterDescriptor cluster : clusters) {
