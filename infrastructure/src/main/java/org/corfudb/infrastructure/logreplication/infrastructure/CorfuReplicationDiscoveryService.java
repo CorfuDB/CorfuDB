@@ -17,7 +17,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.NodeLocator;
-import org.corfudb.util.Sleep;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
@@ -354,7 +353,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
         }
 
-        return new LogReplicationConfig(streamsToReplicate, serverContext.getSnapshotSyncBatchSize());
+        return new LogReplicationConfig(streamsToReplicate, serverContext.getLogReplicationMaxNumMsgPerBatch(), serverContext.getLogReplicationMaxDataMessageSize());
     }
 
     /**

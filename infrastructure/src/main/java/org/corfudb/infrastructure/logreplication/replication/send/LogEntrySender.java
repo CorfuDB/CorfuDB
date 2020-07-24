@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationF
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -102,7 +103,6 @@ public class LogEntrySender {
              * Read and Send Log Entries
              */
             try {
-                // TODO (Xiaoqin Ma): read batch -> optimization
                 message = logEntryReader.read(logEntrySyncEventId);
 
                 if (message != null) {
@@ -117,6 +117,11 @@ public class LogEntrySender {
                     // Request full sync (something is wrong I cant deliver)
                     // (Optimization):
                     // Back-off for couple of seconds and retry n times if not require full sync
+                }
+
+                if (logEntryReader.hasNoiseData()) {
+                    cancelLogEntrySync(LogReplicationError.ILLEGAL_TRANSACTION, LogReplicationEventType.REPLICATION_SHUTDOWN, logEntrySyncEventId);
+                    return;
                 }
 
             } catch (TrimmedException te) {

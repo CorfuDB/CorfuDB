@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.transport.sample;
 import io.grpc.stub.StreamObserver;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
@@ -65,14 +66,17 @@ public class GRPCLogReplicationServerHandler extends LogReplicationChannelGrpc.L
             @Override
             public void onNext(CorfuMessage replicationCorfuMessage) {
                 log.trace("Received[{}]: {}", replicationCorfuMessage.getRequestID(), replicationCorfuMessage.getType().name());
-                // Forward the received message to the router
-                router.receive(replicationCorfuMessage);
+
+                // Register at the observable first.
                 try {
                     replicationStreamObserverMap.putIfAbsent(replicationCorfuMessage.getRequestID(), responseObserver);
                 } catch (Exception e) {
                     log.error("Exception caught when unpacking log replication entry {}. Skipping message.",
                             replicationCorfuMessage.getRequestID(), e);
                 }
+
+                // Forward the received message to the router
+                router.receive(replicationCorfuMessage);
             }
 
             @Override
