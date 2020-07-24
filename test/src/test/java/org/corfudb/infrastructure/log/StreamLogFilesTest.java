@@ -92,7 +92,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(address0, new LogData(DataType.DATA, b));
 
         SegmentSupervisor segmentSupervisor = log.getSegmentSupervisor();
-        SegmentHandle segment = segmentSupervisor.getSegmentByAddress(0, sh -> {});
+        SegmentHandle segment = segmentSupervisor.getSegmentByAddress(0, sh -> {
+        });
         segmentSupervisor.close(segment);
         log.contains(0);
         // a resource leak could happen in case of clearing channels

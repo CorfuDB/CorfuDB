@@ -112,7 +112,7 @@ public interface StreamLog {
      *
      * @param force force data to secondary storage if true
      */
-    void sync(boolean force) throws IOException;
+    void sync(boolean force);
 
     /**
      * Close the stream log.

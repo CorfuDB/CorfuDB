@@ -182,6 +182,8 @@ public class CorfuServer {
 
     // Flag if set to true - causes the Corfu Server to shutdown.
     private static volatile boolean shutdownServer = false;
+    // If set to true - triggers a reset of the server by wiping off all the data.
+    private static volatile boolean cleanupServer = false;
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
@@ -232,21 +234,28 @@ public class CorfuServer {
             throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
         }
 
-        // Register shutdown handler
-        Thread shutdownThread = new Thread(CorfuServer::cleanShutdown);
-        shutdownThread.setName("ShutdownThread");
-        Runtime.getRuntime().addShutdownHook(shutdownThread);
-
         // Manages the lifecycle of the Corfu Server.
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             try {
                 setupMetrics(opts);
-                activeServer = new CorfuServerNode(serverContext);
+                CorfuServerNode node = new CorfuServerNode(serverContext);
+                activeServer = node;
+
+                // Register shutdown handler
+                Thread shutdownThread = new Thread(() -> cleanShutdown(node));
+                shutdownThread.setName("ShutdownThread");
+                Runtime.getRuntime().addShutdownHook(shutdownThread);
+
                 activeServer.startAndListen();
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
                 System.exit(EXIT_ERROR_CODE);
+            }
+
+            if (cleanupServer) {
+                clearDataFiles(serverContext);
+                cleanupServer = false;
             }
 
             if (!shutdownServer) {
@@ -325,25 +334,23 @@ public class CorfuServer {
      */
     static void restartServer(boolean resetData) {
 
+        if (resetData) {
+            cleanupServer = true;
+        }
+
         log.info("RestartServer: Shutting down corfu server");
         activeServer.close();
-        if (resetData) {
-            clearDataFiles(activeServer.getServerContext());
-        }
         log.info("RestartServer: Starting corfu server");
     }
 
     /**
      * Attempt to cleanly shutdown all the servers.
      */
-    private static void cleanShutdown() {
+    private static void cleanShutdown(CorfuServerNode corfuServer) {
         log.info("CleanShutdown: Starting Cleanup.");
         shutdownServer = true;
         try {
-            CorfuServerNode current = activeServer;
-            if (current != null) {
-                current.close();
-            }
+            corfuServer.close();
         } catch (Throwable th) {
             log.error("cleanShutdown: failed during shutdown", th);
         }

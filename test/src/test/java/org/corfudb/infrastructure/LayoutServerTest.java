@@ -212,8 +212,6 @@ public class LayoutServerTest extends AbstractServerTest {
 
     /**
      * Verifies that a layout is persisted across server reboots.
-     *
-     * @throws Exception
      */
     @Test
     public void checkLayoutPersisted() {

@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -35,12 +34,6 @@ public class CompressionTest extends AbstractViewTest {
     public static Collection<Codec.Type> input() {
         return Stream.of(Codec.Type.values())
                 .collect(Collectors.toList());
-    }
-
-    @Before
-    public void initialize() {
-        // Set a single node Corfu
-        addSingleServer(SERVERS.PORT_0);
     }
 
     private CorfuRuntime getRuntimeWithCodec(Codec.Type codecType) {

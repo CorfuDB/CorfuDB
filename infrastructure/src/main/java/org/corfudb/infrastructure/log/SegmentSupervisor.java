@@ -121,11 +121,16 @@ public class SegmentSupervisor {
         segment.close();
     }
 
-    void sync(boolean force) throws IOException {
+    void sync(boolean force) {
         if (force) {
             for (FileChannel ch : channelsToSync) {
-                ch.force(true);
-                channelsToSync.remove(ch);
+                try {
+                    ch.force(true);
+                } catch (Exception ex) {
+                    log.warn("Error - can't sync a file channel");
+                } finally {
+                    channelsToSync.remove(ch);
+                }
             }
         }
         log.trace("Sync'd {} channels", channelsToSync.size());
