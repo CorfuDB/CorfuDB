@@ -1,17 +1,14 @@
 package org.corfudb.infrastructure;
 
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.LoggerContext;
+
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.MetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
+import org.corfudb.common.util.LoggerUtil;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.slf4j.LoggerFactory;
+import org.corfudb.util.Utils;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
@@ -58,7 +55,9 @@ public class CorfuServer {
         CorfuServerCmdLine cmdLine = new CorfuServerCmdLine(args);
         Map<String, Object> opts = cmdLine.getOpts();
         cmdLine.printStartupMsg();
-        configureLogger(opts);
+
+        String logLevel = ((String) opts.get("--log-level")).toUpperCase();
+        LoggerUtil.configureLogger(logLevel);
 
         log.debug("Started with arguments: {}", opts);
 
@@ -98,13 +97,18 @@ public class CorfuServer {
                 CorfuServerNode node = new CorfuServerNode(serverContext);
                 activeServer = node;
                 setupShutdownHook(node);
-                activeServer.startAndListen();
+                node.startAndListen();
             } catch (Throwable th) {
                 log.error("CorfuServer: Server exiting due to unrecoverable error: ", th);
                 System.exit(EXIT_ERROR_CODE);
             }
 
-            clearDataFiles(serverContext);
+            File logPath = new File(serverContext.getServerConfig(String.class, "--log-path"));
+
+            if (cleanupServer && !serverContext.getServerConfig(Boolean.class, "--memory")) {
+                Utils.clearDataFiles(logPath);
+                cleanupServer = false;
+            }
 
             if (!shutdownServer) {
                 log.info("main: Server restarting.");
@@ -129,19 +133,6 @@ public class CorfuServer {
         if (Integer.parseInt((String) opts.get("--metadata-retention")) < 1) {
             throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
         }
-    }
-
-    /**
-     * Setup logback logger
-     * - pick the correct logging level before outputting error messages
-     * - add serverEndpoint information
-     *
-     * @param opts command line parameters
-     */
-    private static void configureLogger(Map<String, Object> opts) {
-        Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-        Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
-        root.setLevel(level);
     }
 
     /**
@@ -172,32 +163,6 @@ public class CorfuServer {
     }
 
     /**
-     * Clear all data files to reset the server.
-     *
-     * @param serverContext Server context.
-     */
-    private static void clearDataFiles(ServerContext serverContext) {
-        if (serverContext.getServerConfig(Boolean.class, "--memory")) {
-            return;
-        }
-
-        if (cleanupServer) {
-            log.warn("main: cleanup requested, DELETE server data files");
-
-            File serviceDir = new File(serverContext.getServerConfig(String.class, "--log-path"));
-            try {
-                FileUtils.cleanDirectory(serviceDir);
-            } catch (IOException ioe) {
-                throw new UnrecoverableCorfuError(ioe);
-            }
-
-            cleanupServer = false;
-        }
-
-        log.warn("main: cleanup completed, expect clean startup");
-    }
-
-    /**
      * Cleanly shuts down the server and restarts.
      *
      * @param resetData Resets and clears all data if True.
@@ -224,10 +189,7 @@ public class CorfuServer {
         } catch (Throwable th) {
             log.error("cleanShutdown: failed during shutdown", th);
         }
-
-        // Flush the async appender before exiting to prevent the loss of logs
-        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
-        loggerContext.stop();
+        LoggerUtil.stopLogger();
     }
 
     /**

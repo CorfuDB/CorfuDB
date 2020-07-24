@@ -5,15 +5,19 @@ import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.FileUtils;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
+import java.io.File;
+import java.io.IOException;
 import java.text.DecimalFormat;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -336,5 +340,22 @@ public class Utils {
             streamAddressSpace = aggregateStreamAddressMap(res.getAddressMap(), streamAddressSpace);
         }
         return new StreamsAddressResponse(logTail, streamAddressSpace);
+    }
+
+    /**
+     * Clear all data files to reset the server.
+     *
+     * @param logPath corfu log path.
+     */
+    public static void clearDataFiles(File logPath) {
+        log.warn("main: cleanup requested, DELETE server data files");
+
+        try {
+            FileUtils.cleanDirectory(logPath);
+        } catch (IOException ioe) {
+            throw new UnrecoverableCorfuError(ioe);
+        }
+
+        log.warn("Cleanup completed, expect clean startup");
     }
 }
