@@ -44,43 +44,22 @@ public class CorfuServer {
      */
     public static void main(String[] args) {
         try {
-            startServer(args);
+            CorfuServerCmdLine cmdLine = new CorfuServerCmdLine(args);
+            Map<String, Object> opts = cmdLine.getOpts();
+            cmdLine.printStartupMsg();
+
+            String logLevel = ((String) opts.get("--log-level")).toUpperCase();
+            LoggerUtil.configureLogger(logLevel);
+
+            log.debug("Started with arguments: {}", opts);
+
+            setupNetwork(opts);
+            createServiceDirectory(opts);
+            validateMetadataRetention(opts);
+            startCorfuServer(opts);
         } catch (Throwable err) {
             log.error("Exit. Unrecoverable error", err);
             throw err;
-        }
-    }
-
-    private static void startServer(String[] args) {
-        CorfuServerCmdLine cmdLine = new CorfuServerCmdLine(args);
-        Map<String, Object> opts = cmdLine.getOpts();
-        cmdLine.printStartupMsg();
-
-        String logLevel = ((String) opts.get("--log-level")).toUpperCase();
-        LoggerUtil.configureLogger(logLevel);
-
-        log.debug("Started with arguments: {}", opts);
-
-        setupNetwork(opts);
-        createServiceDirectory(opts);
-        validateMetadataRetention(opts);
-        startCorfuServer(opts);
-    }
-
-    private static void setupNetwork(Map<String, Object> opts) {
-        // Bind to all interfaces only if no address or interface specified by the user.
-        // Fetch the address if given a network interface.
-        if (opts.get("--network-interface") != null) {
-            opts.put("--address", getAddressFromInterfaceName((String) opts.get("--network-interface")));
-            opts.put("--bind-to-all-interfaces", false);
-        } else if (opts.get("--address") == null) {
-            // Default the address to localhost and set the bind to all interfaces flag to true,
-            // if the address and interface is not specified.
-            opts.put("--bind-to-all-interfaces", true);
-            opts.put("--address", "localhost");
-        } else {
-            // Address is specified by the user.
-            opts.put("--bind-to-all-interfaces", false);
         }
     }
 
@@ -119,20 +98,32 @@ public class CorfuServer {
     }
 
     /**
-     *  Register shutdown handler
-     * @param node corfu server node
+     * Cleanly shuts down the server and restarts.
+     *
+     * @param resetData Resets and clears all data if True.
      */
-    private static void setupShutdownHook(CorfuServerNode node) {
-        Thread shutdownThread = new Thread(() -> cleanShutdown(node));
-        shutdownThread.setName("ShutdownThread");
-        Runtime.getRuntime().addShutdownHook(shutdownThread);
+    static void restartServer(boolean resetData) {
+        if (resetData) {
+            cleanupServer = true;
+        }
+
+        log.info("RestartServer: Shutting down corfu server");
+        activeServer.close();
+        log.info("RestartServer: Starting corfu server");
     }
 
-    private static void validateMetadataRetention(Map<String, Object> opts) {
-        // Check the specified number of datastore files to retain
-        if (Integer.parseInt((String) opts.get("--metadata-retention")) < 1) {
-            throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
+    /**
+     * Attempt to cleanly shutdown all the servers.
+     */
+    private static void cleanShutdown(CorfuServerNode corfuServer) {
+        log.info("CleanShutdown: Starting Cleanup.");
+        shutdownServer = true;
+        try {
+            corfuServer.close();
+        } catch (Throwable th) {
+            log.error("cleanShutdown: failed during shutdown", th);
         }
+        LoggerUtil.stopLogger();
     }
 
     /**
@@ -162,34 +153,38 @@ public class CorfuServer {
         }
     }
 
-    /**
-     * Cleanly shuts down the server and restarts.
-     *
-     * @param resetData Resets and clears all data if True.
-     */
-    static void restartServer(boolean resetData) {
-
-        if (resetData) {
-            cleanupServer = true;
+    private static void setupNetwork(Map<String, Object> opts) {
+        // Bind to all interfaces only if no address or interface specified by the user.
+        // Fetch the address if given a network interface.
+        if (opts.get("--network-interface") != null) {
+            opts.put("--address", getAddressFromInterfaceName((String) opts.get("--network-interface")));
+            opts.put("--bind-to-all-interfaces", false);
+        } else if (opts.get("--address") == null) {
+            // Default the address to localhost and set the bind to all interfaces flag to true,
+            // if the address and interface is not specified.
+            opts.put("--bind-to-all-interfaces", true);
+            opts.put("--address", "localhost");
+        } else {
+            // Address is specified by the user.
+            opts.put("--bind-to-all-interfaces", false);
         }
-
-        log.info("RestartServer: Shutting down corfu server");
-        activeServer.close();
-        log.info("RestartServer: Starting corfu server");
     }
 
     /**
-     * Attempt to cleanly shutdown all the servers.
+     *  Register shutdown handler
+     * @param node corfu server node
      */
-    private static void cleanShutdown(CorfuServerNode corfuServer) {
-        log.info("CleanShutdown: Starting Cleanup.");
-        shutdownServer = true;
-        try {
-            corfuServer.close();
-        } catch (Throwable th) {
-            log.error("cleanShutdown: failed during shutdown", th);
+    private static void setupShutdownHook(CorfuServerNode node) {
+        Thread shutdownThread = new Thread(() -> cleanShutdown(node));
+        shutdownThread.setName("ShutdownThread");
+        Runtime.getRuntime().addShutdownHook(shutdownThread);
+    }
+
+    private static void validateMetadataRetention(Map<String, Object> opts) {
+        // Check the specified number of datastore files to retain
+        if (Integer.parseInt((String) opts.get("--metadata-retention")) < 1) {
+            throw new IllegalArgumentException("Max number of metadata files to retain must be greater than 0.");
         }
-        LoggerUtil.stopLogger();
     }
 
     /**
