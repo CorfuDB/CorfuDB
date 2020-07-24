@@ -60,6 +60,11 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
 
+    // Config the msg size for log replication data
+    // sent from active cluster to the standby cluster.
+    // We set it as 128KB to make multiple messages during the tests.
+    private static final int MSG_SIZE = 131072;
+
     public CorfuRuntime runtime;
 
     public static final Properties PROPERTIES = new Properties();
@@ -313,6 +318,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setPluginConfigFilePath(pluginConfigFilePath)
+                .setMsg_size(MSG_SIZE)
                 .runServer();
     }
 
@@ -507,6 +513,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String compressionCodec = null;
         private String pluginConfigFilePath = null;
         private String logPath = null;
+        private int msg_size = 0;
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -516,6 +523,10 @@ public class AbstractIT extends AbstractCorfuTest {
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
             command.append("-a ").append(host);
+
+            if (msg_size != 0) {
+                command.append(" --max-data-message-size=").append(msg_size);
+            }
 
             if (logPath != null) {
                 command.append(" -l ").append(logPath);
