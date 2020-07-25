@@ -1,11 +1,11 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
+import org.corfudb.infrastructure.logreplication.replication.send.IllegalLogDataSizeException;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
@@ -28,29 +28,19 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-
 @Slf4j
 @NotThreadSafe
 /**
- *  Default snapshot logreader implementation
+ *  Default snapshot log reader implementation
  *
  *  This implementation provides reads at the stream level (no coalesced state).
  *  It generates TxMessages which will be transmitted by the DataSender (provided by the application).
  */
-public class StreamsSnapshotReader implements SnapshotReader {
-
-    /**
-     * The max size of data for SMR entries in data message.
-     */
-    private final int maxDataSizePerMsg;
+public class StreamsSnapshotReader extends StreamsReader {
 
     private long snapshotTimestamp;
     private Set<String> streams;
     private PriorityQueue<String> streamsToSend;
-    private CorfuRuntime rt;
-    private long preMsgTs;
-    private long currentMsgTs;
     private OpaqueStreamIterator currentStreamInfo;
     private long sequence;
     private OpaqueEntry lastEntry = null;
@@ -58,8 +48,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
     @Getter
     private ObservableValue observeBiggerMsg = new ObservableValue(0);
 
-    @Setter
-    private long topologyConfigId;
+    @VisibleForTesting
+    public StreamsSnapshotReader() { }
 
     /**
      * Init runtime and streams to read
@@ -69,7 +59,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         streams = config.getStreamsToReplicate();
-        log.debug("The maxDataSizePerMsg {} ", maxDataSizePerMsg);
     }
 
     /**
@@ -125,20 +114,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 if (lastEntry != null) {
                     List<SMREntry> smrEntries = lastEntry.getEntries().get(stream.uuid);
                     if (smrEntries != null) {
-                        int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
-
-                        if (currentEntrySize > MAX_DATA_MSG_SIZE_SUPPORTED) {
-                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported", currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
-                            throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
-                        } else if (currentEntrySize > maxDataSizePerMsg) {
-                            observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);
-                            log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
-                                    currentEntrySize, maxDataSizePerMsg);
-                        }
+                        int currentEntrySize = calculateSize(smrEntries);
 
                         // Skip append this entry in this message. Will process it first at the next round.
-                        if (currentEntrySize + currentMsgSize > maxDataSizePerMsg && currentMsgSize != 0) {
-                            break;
+                        if (!shouldAppend(currentMsgSize, currentEntrySize)) {
+                           break;
                         }
 
                         smrList.addAll(smrEntries);
@@ -148,13 +128,15 @@ public class StreamsSnapshotReader implements SnapshotReader {
                     lastEntry = null;
                 }
 
-                if (stream.iterator.hasNext()) {
-                    lastEntry = (OpaqueEntry) stream.iterator.next();
+                if (hasInvalidDataSize) {
+                    throw new IllegalLogDataSizeException("The log data size is not supported");
                 }
 
-                if (lastEntry == null) {
+                if (!stream.iterator.hasNext()) {
                     break;
                 }
+
+                lastEntry = (OpaqueEntry) stream.iterator.next();
             }
         } catch (TrimmedException e) {
             log.error("Catch an TrimmedException exception ", e);
@@ -162,7 +144,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         }
 
         log.trace("CurrentMsgSize {} lastEntrySize {}  maxDataSizePerMsg {}",
-                currentMsgSize, lastEntry == null ? 0 : ReaderUtility.calculateSize(lastEntry.getEntries().get(stream.uuid)), maxDataSizePerMsg);
+                currentMsgSize, lastEntry == null ? 0 : calculateSize(lastEntry.getEntries().get(stream.uuid)), maxDataSizePerMsg);
         return new SMREntryList(currentMsgSize, smrList);
     }
 
@@ -172,7 +154,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * @param stream bookkeeping of the current stream information.
      * @return
      */
-    private LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
+    LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
         SMREntryList entryList = next(stream);
 
         LogReplicationEntry txMsg = generateMessage(stream, entryList, syncRequestId);
@@ -186,9 +168,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * Otherwise, continue to process the current stream and generate one message only.
      * @return
      */
-    @Override
     public SnapshotReadMessage read(UUID syncRequestId) {
-        List<LogReplicationEntry> messages = new ArrayList<>();
+        checkValidStreams();
+
+        List<LogReplicationEntry> messages = new ArrayList();
 
         boolean endSnapshotSync = false;
         LogReplicationEntry msg = null;
@@ -235,7 +218,6 @@ public class StreamsSnapshotReader implements SnapshotReader {
         return currentStreamInfo.iterator.hasNext() || lastEntry != null;
     }
 
-    @Override
     public void reset(long snapshotTimestamp) {
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;

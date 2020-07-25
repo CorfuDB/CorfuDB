@@ -32,7 +32,7 @@ public class LogReplicationEntry implements ICorfuPayload<LogReplicationEntry> {
 
     // Only used by test cases
     @VisibleForTesting
-    byte[] payload;
+    private byte[] payload;
 
     @VisibleForTesting
     public LogReplicationEntry(LogReplicationEntryMetadata metadata, byte[] data) {
@@ -48,7 +48,6 @@ public class LogReplicationEntry implements ICorfuPayload<LogReplicationEntry> {
         this.metadata = metadata;
         this.opaqueEntryList = opaqueEntryList;
     }
-
 
     public LogReplicationEntry(MessageType type, long epoch, UUID syncRequestId, long entryTS, long preTS, long snapshot, long sequence,
                                OpaqueEntry opaqueEntry) {

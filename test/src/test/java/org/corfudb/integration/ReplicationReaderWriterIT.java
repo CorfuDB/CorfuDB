@@ -7,7 +7,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWri
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.StreamsSnapshotWriter;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.TxStreamReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -285,18 +285,19 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
-            cnt++;
             SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
             for (LogReplicationEntry data : snapshotReadMessage.getMessages()) {
                 msgQ.add(data);
-                System.out.println("generate msg " + cnt);
+                cnt++;
             }
 
-            if (snapshotReadMessage.isEndRead()) {
+            log.info("generate snapshot msg cnt {}", cnt);
+
+            if(snapshotReadMessage.isEndRead()) {
                 break;
             }
 
-            if  (blockOnSem) {
+            if (blockOnSem) {
                 try {
                     waitSem.acquire();
                 } catch (InterruptedException e) {
@@ -338,7 +339,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     public static void readLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnce) throws
             TrimmedException {
         LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
-        StreamsLogEntryReader reader = new StreamsLogEntryReader(rt, config);
+        TxStreamReader reader = new TxStreamReader(rt, config);
         reader.setGlobalBaseSnapshot(Address.NON_ADDRESS, Address.NON_ADDRESS);
 
         LogReplicationEntry entry = null;
@@ -520,7 +521,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         waitSem.acquire();
 
         openStreams(srcTables, srcDataRuntime);
-        generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
+        generateTransactions(srcTables, srcHashMap, 2*NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
         long tail = srcDataRuntime.getAddressSpaceView().getLogTail();
 
         ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);

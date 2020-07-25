@@ -9,12 +9,10 @@ import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.TxStreamReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
@@ -140,12 +138,12 @@ public class LogReplicationFSM {
     /**
      * Log Entry Reader (read incremental updated from Corfu Datatore)
      */
-    private LogEntryReader logEntryReader;
+    private TxStreamReader logEntryReader;
 
     /**
      * Snapshot Reader (read data from Corfu Datastore)
      */
-    private SnapshotReader snapshotReader;
+    private StreamsSnapshotReader snapshotReader;
 
     /**
      * Version on which snapshot sync is based on.
@@ -189,7 +187,7 @@ public class LogReplicationFSM {
                              ReadProcessor readProcessor, ExecutorService workers) {
         // Use stream-based readers for snapshot and log entry sync reads
         this(runtime, new StreamsSnapshotReader(runtime, config), dataSender,
-                new StreamsLogEntryReader(runtime, config), readProcessor, config, remoteCluster, workers);
+                new TxStreamReader(runtime, config), readProcessor, config, remoteCluster, workers);
 
     }
 
@@ -206,8 +204,8 @@ public class LogReplicationFSM {
      * @param workers FSM executor service for state tasks
      */
     @VisibleForTesting
-    public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
-                             LogEntryReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
+    public LogReplicationFSM(CorfuRuntime runtime, StreamsSnapshotReader snapshotReader, DataSender dataSender,
+                             TxStreamReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
                              ClusterDescriptor remoteCluster, ExecutorService workers) {
 
         this.snapshotReader = snapshotReader;

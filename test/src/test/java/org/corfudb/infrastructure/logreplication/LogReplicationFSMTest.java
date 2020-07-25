@@ -20,10 +20,9 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.TestReaderConfi
 import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.TxStreamReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
@@ -74,8 +73,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private LogReplicationFSM fsm;
     private CorfuRuntime runtime;
     private DataSender dataSender;
-    private SnapshotReader snapshotReader;
-    private LogEntryReader logEntryReader;
+    private StreamsSnapshotReader snapshotReader;
+    private TxStreamReader logEntryReader;
 
     @Before
     public void setRuntime() {

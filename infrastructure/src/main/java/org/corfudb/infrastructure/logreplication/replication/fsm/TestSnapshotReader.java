@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -17,7 +17,7 @@ import java.util.UUID;
  * This log reader attempts to access n entries in the log in a continuous address space and
  * wraps the payload in the LogReplicationEntry.
  */
-public class TestSnapshotReader implements SnapshotReader {
+public class TestSnapshotReader extends StreamsSnapshotReader {
 
     private long topologyConfigId = 0;
 
@@ -28,9 +28,12 @@ public class TestSnapshotReader implements SnapshotReader {
     // Initialized to 2, as 0, 1 are always used to persist metadata
     private int globalIndex = FIRST_ADDRESS;
 
+    private int curentIndex = globalIndex;
+
     private CorfuRuntime runtime;
 
     public TestSnapshotReader(TestReaderConfiguration config) {
+        super();
         this.config = config;
         this.runtime = new CorfuRuntime(config.getEndpoint()).connect();
     }
@@ -40,14 +43,14 @@ public class TestSnapshotReader implements SnapshotReader {
         // Connect to endpoint
         List<LogReplicationEntry> messages = new ArrayList<>();
 
-        // Read numEntries in consecutive address space and add to messages to return
-        for (int i= globalIndex; i < (config.getNumEntries() + FIRST_ADDRESS) ; i++) {
-            Object data = runtime.getAddressSpaceView().read((long)i).getPayload(runtime);
+        while (globalIndex < (config.getNumEntries() + FIRST_ADDRESS)) {
+            // Read numEntries in consecutive address space and add to messages to return
+            Object data = runtime.getAddressSpaceView().read((long) globalIndex).getPayload(runtime);
             // For testing we don't have access to the snapshotSyncId so we fill in with a random UUID
             // and overwrite it in the TestDataSender with the correct one, before sending the message out
             LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_MESSAGE, topologyConfigId,
-                    snapshotRequestId, i, config.getNumEntries(), UUID.randomUUID());
-            messages.add(new LogReplicationEntry(metadata, (byte[])data));
+                    snapshotRequestId, globalIndex, config.getNumEntries(), UUID.randomUUID());
+            messages.add(new LogReplicationEntry(metadata, (byte[]) data));
             globalIndex++;
         }
 

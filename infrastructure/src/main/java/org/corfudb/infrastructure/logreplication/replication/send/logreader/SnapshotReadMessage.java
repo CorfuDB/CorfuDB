@@ -33,7 +33,7 @@ public class SnapshotReadMessage {
 
         // Enforce end of read if there is no data
         if(messages.isEmpty() && !endRead) {
-            throw new IllegalArgumentException("List of messages is empty and no end read marker found.");
+            throw new IllegalArgumentException("There is no more messages, but no end read marker found.");
         }
     }
 }

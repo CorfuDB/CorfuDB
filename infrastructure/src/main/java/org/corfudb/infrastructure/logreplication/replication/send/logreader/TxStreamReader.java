@@ -1,7 +1,9 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.replication.send.IllegalLogDataSizeException;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalTransactionStreamsException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
@@ -19,17 +21,15 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-
 @Slf4j
 @NotThreadSafe
 /**
  * Reading transaction log changes after a snapshot transfer for a specific set of streams.
  */
-public class StreamsLogEntryReader implements LogEntryReader {
+public class TxStreamReader extends StreamsReader {
 
-    private CorfuRuntime rt;
     private final MessageType MSG_TYPE = MessageType.LOG_ENTRY_MESSAGE;
+
     // the set of uuids for the corresponding streams.
     private Set<UUID> streamUUIDs;
 
@@ -48,20 +48,16 @@ public class StreamsLogEntryReader implements LogEntryReader {
     // the sequence number of the message based on the globalBaseSnapshot
     private long sequence;
 
-    private long topologyConfigId;
-
-    private final int maxDataSizePerMsg;
-
     private OpaqueEntry lastOpaqueEntry = null;
 
-    private boolean hasNoiseData = false;
+    @VisibleForTesting
+    public TxStreamReader() { }
 
-    public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
+    public TxStreamReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
-
-        Set<String> streams = config.getStreamsToReplicate();
+        streams = config.getStreamsToReplicate();
 
         streamUUIDs = new HashSet<>();
         for (String s : streams) {
@@ -73,16 +69,19 @@ public class StreamsLogEntryReader implements LogEntryReader {
     }
 
     private LogReplicationEntry generateMessageWithOpaqueEntryList(List<OpaqueEntry> opaqueEntryList, UUID logEntryRequestId) {
+        if (opaqueEntryList.size() == 0) {
+            return null;
+        }
+
         // Set the last timestamp as the max timestamp
         currentMsgTs = opaqueEntryList.get(opaqueEntryList.size() - 1).getVersion();
         LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, topologyConfigId, logEntryRequestId,
                 currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, opaqueEntryList);
         preMsgTs = currentMsgTs;
         sequence++;
-        log.trace("Generate a log entry message {} with {} transactions ", txMessage.getMetadata(), opaqueEntryList.size());
+        log.info("Generate a log entry message {} with {} transactions ", txMessage.getMetadata(), opaqueEntryList.size());
         return txMessage;
     }
-
 
     // Check if it has the correct streams.
     private boolean shouldProcess(OpaqueEntry entry) {
@@ -108,28 +107,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
         return false;
     }
 
-    private boolean checkValidSize(OpaqueEntry entry, int currentMsgSize, int currentEntrySize) {
-        // For interested entry, if its size is too big we should skip and report error
-        if (currentEntrySize > maxDataSizePerMsg) {
-            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
-                    currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
-            hasNoiseData = true;
-            return false;
-        }
-
-        if (currentEntrySize > maxDataSizePerMsg) {
-            log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
-                    currentEntrySize, maxDataSizePerMsg);
-        }
-
-        // Skip append this entry, will process it for the next message;
-        if (currentEntrySize + currentMsgSize > maxDataSizePerMsg) {
-            return false;
-        }
-
-        return true;
-    }
-
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
         globalBaseSnapshot = snapshot;
         preMsgTs = Math.max(snapshot, ackTimestamp);
@@ -138,23 +115,19 @@ public class StreamsLogEntryReader implements LogEntryReader {
         sequence = 0;
     }
 
+    public LogReplicationEntry read(UUID logEntryRequestId) throws TrimmedException, IllegalTransactionStreamsException, IllegalLogDataSizeException {
+        checkValidStreams();
 
-    @Override
-    public LogReplicationEntry read(UUID logEntryRequestId) throws TrimmedException, IllegalTransactionStreamsException {
         List<OpaqueEntry> opaqueEntryList = new ArrayList<>();
-        int currentEntrySize = 0;
         int currentMsgSize = 0;
+        int currentEntrySize = 0;
 
         try {
-            while (currentMsgSize < maxDataSizePerMsg && !hasNoiseData) {
-
+            while (currentMsgSize < maxDataSizePerMsg && !hasNoiseData &&
+                    (lastOpaqueEntry != null || txOpaqueStream.hasNext())) {
                 if (lastOpaqueEntry != null && shouldProcess(lastOpaqueEntry)) {
-
-                    // If the currentEntry is too big to append the current message, will skip it and
-                    // append it to the next message as the first entry.
-                    currentEntrySize = ReaderUtility.calculateOpaqueEntrySize(lastOpaqueEntry);
-
-                    if (!checkValidSize(lastOpaqueEntry, currentMsgSize, currentEntrySize)) {
+                    currentEntrySize = calculateOpaqueEntrySize(lastOpaqueEntry);
+                    if (!shouldAppend(currentMsgSize, currentEntrySize)) {
                         break;
                     }
 
@@ -164,27 +137,15 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     lastOpaqueEntry = null;
                 }
 
-                if (hasNoiseData) {
-                    break;
-                }
-
-                if (!txOpaqueStream.hasNext()) {
-                    break;
-                }
-
                 lastOpaqueEntry = txOpaqueStream.next();
             }
 
-            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEnry size {}",
+            if (hasNoiseData) {
+                throw new IllegalTransactionStreamsException("The transaction log has illegal streams");
+            }
+
+            log.info("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEnry size {}",
                     currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null? 0 : currentEntrySize);
-
-            if (opaqueEntryList.size() == 0 && hasNoiseData) {
-                throw new IllegalTransactionStreamsException("There are noisy streams in the transaction log entry");
-            }
-
-            if (opaqueEntryList.size() == 0) {
-                return null;
-            }
 
             LogReplicationEntry txMessage = generateMessageWithOpaqueEntryList(opaqueEntryList, logEntryRequestId);
             return txMessage;
@@ -195,7 +156,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
         }
     }
 
-    @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
     }
@@ -263,15 +223,5 @@ public class StreamsLogEntryReader implements LogEntryReader {
             txStream.seek(firstAddress);
             streamUpTo();
         }
-    }
-
-    @Override
-    public void setTopologyConfigId(long topologyConfigId) {
-        this.topologyConfigId = topologyConfigId;
-    }
-
-    @Override
-    public boolean hasNoiseData() {
-        return hasNoiseData;
     }
 }

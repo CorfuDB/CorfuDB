@@ -10,7 +10,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -43,7 +43,7 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEF
 public class SnapshotSender {
 
     private CorfuRuntime runtime;
-    private SnapshotReader snapshotReader;
+    private StreamsSnapshotReader snapshotReader;
     private SenderBufferManager dataSenderBufferManager;
     private LogReplicationFSM fsm;
     private long baseSnapshotTimestamp;
@@ -62,7 +62,7 @@ public class SnapshotSender {
 
     private volatile boolean stopSnapshotSync = false;
 
-    public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
+    public SnapshotSender(CorfuRuntime runtime, StreamsSnapshotReader snapshotReader, DataSender dataSender,
                           ReadProcessor readProcessor, int snapshotSyncBatchSize, LogReplicationFSM fsm) {
         this.runtime = runtime;
         this.snapshotReader = snapshotReader;
@@ -171,9 +171,8 @@ public class SnapshotSender {
     }
 
     private int processReads(List<LogReplicationEntry> logReplicationEntries, UUID snapshotSyncEventId, boolean completed) {
-        int numMessages = 0;
-
         //dataSenderBufferManager.resend();
+        int numMessages = 0;
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {

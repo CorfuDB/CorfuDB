@@ -86,11 +86,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // Number of messages per batch
     static private final int BATCH_SIZE = 4;
 
-    // each snapshot entry is 33 bytes
-    // log entry size is 66 bytes or more according to how many streams in one transactions
-    static private final int MSG_SIZE = 524288;
+    static private final int MSG_SIZE = 200;
 
-    static private final int SMALL_MSG_SIZE = 200;
+    // Log data size for int stream
+    static private final int LOG_ENTRY_SIZE = 34;
+    int msgSize = 0;
 
     static private TestConfig testConfig = new TestConfig();
 
@@ -328,7 +328,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * @param tables
      * @param hashMap
      */
-    void waitData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
+    private void waitData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
@@ -346,10 +346,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             System.out.println("Table[" + name + "]: " + table.keySet().size() + " keys; Expected "
                     + mapKeys.size() + " keys");
 
-            assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
-            assertThat(table.keySet().containsAll(mapKeys.keySet())).isTrue();
             assertThat(table.keySet().size() == mapKeys.keySet().size()).isTrue();
-
             for (Long key : mapKeys.keySet()) {
                 assertThat(table.get(key)).isEqualTo(mapKeys.get(key));
             }
@@ -721,7 +718,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
 
         testConfig.clear().setDropMessageLevel(2);
-        startLogEntrySync(crossTables, WAIT.ON_TIMEOUT_ERROR);
+        startLogEntrySync(crossTables, WAIT.ON_ERROR);
     }
 
     /**
@@ -772,8 +769,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * transactions across federated and non-federated tables.
      *
      * In this test, we first initiate transactions on valid replicated streams, and then introduce
-     * transactions across replicated and non-replicated tables, we verify log entry sync is
-     * achieved partially and then stopped due to error.
+     * transactions across replicated and non-replicated tables, we verify the transfer stopped due to error.
      *
      * @throws Exception
      */
@@ -785,6 +781,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t1);
         crossTables.add(t2);
 
+        msgSize = LOG_ENTRY_SIZE;
         // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
         writeCrossTableTransactions(crossTables, false);
 
@@ -808,7 +805,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         HashMap<String, HashMap<Long, Long>> partialSrcHashMap = new HashMap<>();
         partialSrcHashMap.put(t0, new HashMap<>());
         partialSrcHashMap.put(t1, new HashMap<>());
-        for (int i=NUM_KEYS; i<NUM_KEYS*2; i++) {
+
+        for (int i= NUM_KEYS; i< NUM_KEYS*2; i++) {
             partialSrcHashMap.get(t0).put((long)i, (long)i);
             partialSrcHashMap.get(t1).put((long)i, (long)i);
         }
@@ -1228,7 +1226,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Block until the expected ACK Timestamp is reached
         System.out.println("\n****** Wait until the wait condition is met");
-        if (waitConditions.contains(WAIT.ON_ERROR) || waitConditions.contains(WAIT.ON_TIMEOUT_ERROR)) {
+        if (waitConditions.contains(WAIT.ON_ERROR)) {
             blockUntilExpectedValueReached.acquire();
         } else if (waitConditions.contains(WAIT.ON_ACK)) {
             blockUntilExpectedAckTs.acquire();
@@ -1247,11 +1245,11 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                                             Set<WAIT> waitConditions) throws InterruptedException {
         // Config
-        int msg_size = MSG_SIZE;
-        if (waitConditions.contains(WAIT.ON_TIMEOUT_ERROR)) {
-            msg_size = SMALL_MSG_SIZE;
+        // If the msgSize is not set, using the default MSG_SIZE.
+        if (msgSize == 0) {
+            msgSize = MSG_SIZE;
         }
-        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, BATCH_SIZE, SMALL_MSG_SIZE);
+        LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, BATCH_SIZE, msgSize);
 
         // Data Sender
         sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel(), logReplicationMetadataManager);
@@ -1275,7 +1273,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     ackMessages.addObserver(this);
                     break;
                 case ON_ERROR: // Wait on Error Notifications to Source
-                case ON_TIMEOUT_ERROR:
                     errorsLogEntrySync = sourceDataSender.getErrors();
                     errorsLogEntrySync.addObserver(this);
                     break;
@@ -1381,7 +1378,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         ON_ACK,
         ON_ACK_TS,
         ON_ERROR,
-        ON_TIMEOUT_ERROR,
         ON_DATA_CONTROL_CALL,
         ON_RESCHEDULE_SNAPSHOT_SYNC,
         ON_SINK_RECEIVE,

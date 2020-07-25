@@ -8,10 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
-import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.junit.After;
@@ -318,7 +316,7 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setHost(DEFAULT_HOST)
                 .setPort(port)
                 .setPluginConfigFilePath(pluginConfigFilePath)
-                .setMsg_size(MSG_SIZE)
+                .setMsgSize(MSG_SIZE)
                 .runServer();
     }
 
@@ -513,7 +511,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String compressionCodec = null;
         private String pluginConfigFilePath = null;
         private String logPath = null;
-        private int msg_size = 0;
+        private int msgSize = 0;
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -524,8 +522,8 @@ public class AbstractIT extends AbstractCorfuTest {
             StringBuilder command = new StringBuilder();
             command.append("-a ").append(host);
 
-            if (msg_size != 0) {
-                command.append(" --max-data-message-size=").append(msg_size);
+            if (msgSize != 0) {
+                command.append(" --max-data-message-size=").append(msgSize);
             }
 
             if (logPath != null) {

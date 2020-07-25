@@ -44,8 +44,8 @@
     </logger>
 
     <!--<root level="DEBUG">-->
-        <!--<appender-ref ref="FILE" />-->
+        <!--&lt;!&ndash;<appender-ref ref="FILE" />&ndash;&gt;-->
         <!--<appender-ref ref="STDOUT" />-->
-        <!--<appender-ref ref="MetricsRollingFile" />-->
+        <!--&lt;!&ndash;<appender-ref ref="MetricsRollingFile" />&ndash;&gt;-->
     <!--</root>-->
 </configuration>

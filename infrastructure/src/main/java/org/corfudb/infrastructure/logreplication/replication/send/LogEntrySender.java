@@ -6,9 +6,8 @@ import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.TxStreamReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -33,7 +32,7 @@ public class LogEntrySender {
     /*
      * Implementation of Log Entry Reader. Default implementation reads at the stream layer.
      */
-    private LogEntryReader logEntryReader;
+    private TxStreamReader logEntryReader;
 
    /*
     * Implementation of buffering messages and sending/resending messages
@@ -64,7 +63,7 @@ public class LogEntrySender {
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
      */
-    public LogEntrySender(CorfuRuntime runtime, LogEntryReader logEntryReader, DataSender dataSender,
+    public LogEntrySender(CorfuRuntime runtime, TxStreamReader logEntryReader, DataSender dataSender,
                           ReadProcessor readProcessor, LogReplicationFSM logReplicationFSM) {
 
         this.runtime = runtime;
@@ -118,12 +117,6 @@ public class LogEntrySender {
                     // (Optimization):
                     // Back-off for couple of seconds and retry n times if not require full sync
                 }
-
-                if (logEntryReader.hasNoiseData()) {
-                    cancelLogEntrySync(LogReplicationError.ILLEGAL_TRANSACTION, LogReplicationEventType.REPLICATION_SHUTDOWN, logEntrySyncEventId);
-                    return;
-                }
-
             } catch (TrimmedException te) {
                 log.error("Caught Trimmed Exception while reading for {}", logEntrySyncEventId);
                 cancelLogEntrySync(LogReplicationError.TRIM_LOG_ENTRY_SYNC, LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);

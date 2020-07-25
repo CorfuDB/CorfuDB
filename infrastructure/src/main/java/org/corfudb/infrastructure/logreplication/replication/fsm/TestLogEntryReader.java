@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.TxStreamReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.UUID;
@@ -8,10 +8,7 @@ import java.util.UUID;
 /**
  * Test Implementation of Log Entry Reader
  */
-public class TestLogEntryReader implements LogEntryReader {
-
-    public TestLogEntryReader() {}
-
+public class TestLogEntryReader extends TxStreamReader {
     @Override
     public LogReplicationEntry read(UUID logEntryRequestId) {
         return null;
@@ -20,15 +17,5 @@ public class TestLogEntryReader implements LogEntryReader {
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         // Read everything from start
-    }
-
-    @Override
-    public void setTopologyConfigId(long siteConfigID) {
-
-    }
-
-    @Override
-    public boolean hasNoiseData() {
-        return false;
     }
 }
