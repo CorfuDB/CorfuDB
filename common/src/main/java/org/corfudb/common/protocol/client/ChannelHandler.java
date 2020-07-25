@@ -14,6 +14,8 @@ import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.timeout.IdleStateHandler;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.CorfuExceptions;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
@@ -41,11 +43,12 @@ import static com.google.common.base.Preconditions.checkArgument;
  */
 
 @Slf4j
+@NoArgsConstructor
 public abstract class ChannelHandler extends ResponseHandler {
 
-    protected final InetSocketAddress remoteAddress;
+    protected InetSocketAddress remoteAddress;
 
-    protected final EventLoopGroup eventLoopGroup;
+    protected EventLoopGroup eventLoopGroup;
 
     private volatile Channel channel;
 
@@ -65,7 +68,8 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     protected final AtomicLong idGenerator = new AtomicLong();
 
-    protected final ClientConfig config;
+    @Setter
+    protected ClientConfig config;
 
     final ReentrantReadWriteLock requestLock = new ReentrantReadWriteLock();
 
