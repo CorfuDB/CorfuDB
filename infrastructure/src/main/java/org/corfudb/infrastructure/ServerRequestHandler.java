@@ -16,7 +16,7 @@ import org.corfudb.runtime.CorfuSchema;
 public class ServerRequestHandler extends RequestHandler {
     @Override
     protected void handlePing(Request request, ChannelHandlerContext ctx) {
-        log.info("ServerRequestHandler[]: ping message received");
+        log.info("handlePing: ping message received");
     }
 
     @Override

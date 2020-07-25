@@ -3,6 +3,12 @@ package org.corfudb.common.protocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import org.mockito.MockitoAnnotations;
 
 import java.util.Random;

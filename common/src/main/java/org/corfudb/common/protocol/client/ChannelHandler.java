@@ -14,6 +14,8 @@ import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.timeout.IdleStateHandler;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.CorfuExceptions;
@@ -42,13 +44,14 @@ import static com.google.common.base.Preconditions.checkArgument;
  */
 
 @Slf4j
+@NoArgsConstructor
 public abstract class ChannelHandler extends ResponseHandler {
 
     //TODO(Maithem): what if the consuming client is using a different protobuf lib version?
 
-    protected final InetSocketAddress remoteAddress;
+    protected InetSocketAddress remoteAddress;
 
-    protected final EventLoopGroup eventLoopGroup;
+    protected EventLoopGroup eventLoopGroup;
 
     private volatile Channel channel;
 
@@ -68,7 +71,8 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     protected final AtomicLong idGenerator = new AtomicLong();
 
-    protected final ClientConfig config;
+    @Setter
+    protected ClientConfig config;
 
     final ReentrantReadWriteLock requestLock = new ReentrantReadWriteLock();
 
@@ -225,6 +229,7 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     protected <T> CompletableFuture<T> sendRequest(Request request) {
         requestLock.readLock().lock();
+
         try {
             checkArgument(request.hasHeader());
             Header header = request.getHeader();

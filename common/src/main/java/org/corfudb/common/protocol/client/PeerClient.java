@@ -3,6 +3,8 @@ package org.corfudb.common.protocol.client;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.ChannelImplementation;
 import org.corfudb.common.protocol.API;
@@ -23,6 +25,7 @@ import java.util.concurrent.CompletableFuture;
  */
 
 @Slf4j
+@NoArgsConstructor
 public class PeerClient extends ChannelHandler {
 
     // set epoch
@@ -33,15 +36,15 @@ public class PeerClient extends ChannelHandler {
 
     volatile long epoch = -1;
 
-    final UUID clusterId = new UUID(1234,1234);
+    final UUID clusterId = API.DEFAULT_UUID;
 
     public PeerClient(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, ClientConfig config) {
         super(remoteAddress, eventLoopGroup, config);
     }
 
     private Header getHeader(MessageType type, boolean ignoreClusterId, boolean ignoreEpoch) {
-        return API.newHeader(generateRequestId(), priority, type, epoch, API.DEFAULT_UUID,
-                config.getClientId(), ignoreClusterId, ignoreEpoch);
+        return API.newHeader(generateRequestId(), priority, type, epoch,
+                clusterId, config.getClientId(), ignoreClusterId, ignoreEpoch);
     }
 
     /**
@@ -50,7 +53,7 @@ public class PeerClient extends ChannelHandler {
      * @return A completable future which will be completed with True if
      * the endpoint is reachable, otherwise False or exceptional completion.
      */
-    public CompletableFuture<Void> ping() {
+    protected CompletableFuture<Void> ping() {
         Header header = getHeader(MessageType.PING, true, true);
         log.info("sealRemoteServer: send PING from me(clientId={}) to the server",
                 header.getClientId());
@@ -67,7 +70,7 @@ public class PeerClient extends ChannelHandler {
      * @return A completable future which will be completed with True if
      * the endpoint acks, otherwise False or exceptional completion.
      */
-    protected CompletableFuture<Boolean> restart(){
+    protected CompletableFuture<Boolean> restart() {
         Header header = getHeader(MessageType.RESTART, true, true);
         log.warn("sealRemoteServer: send RESTART from me(clientId={}) to the server",
                 header.getClientId());
@@ -88,7 +91,7 @@ public class PeerClient extends ChannelHandler {
      * @return A completable future which will be completed with True if
      * the endpoint acks, otherwise False or exceptional completion.
      */
-    protected CompletableFuture<Boolean> reset(){
+    protected CompletableFuture<Boolean> reset() {
         Header header = getHeader(MessageType.RESET, true, true);
         log.warn("sealRemoteServer: send RESET from me(clientId={}) to the server",
                 header.getClientId());
@@ -110,14 +113,14 @@ public class PeerClient extends ChannelHandler {
 
     protected void handleAuthenticate(Response response) {
         UUID serverId = new UUID(response.getAuthenticateResponse().getServerId().getMsb(),
-                                response.getAuthenticateResponse().getServerId().getLsb());
+                response.getAuthenticateResponse().getServerId().getLsb());
         String corfuVersion = response.getAuthenticateResponse().getCorfuVersion();
 
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
         // which indicates node id matching is not required.
-        if(config.getNodeId().equals(API.DEFAULT_UUID)) {
+        if (config.getNodeId().equals(API.DEFAULT_UUID)) {
             log.info("handleAuthenticate: node id matching is not requested by client.");
-        } else if(!config.getNodeId().equals(serverId)) {
+        } else if (!config.getNodeId().equals(serverId)) {
             log.error("handleAuthenticate: Handshake validation failed. Server node id mismatch.");
             log.debug("handleAuthenticate: Client opened socket to server [{}] instead, connected to: [{}]",
                     config.getNodeId(), serverId);
@@ -137,7 +140,7 @@ public class PeerClient extends ChannelHandler {
      * @return Completable future which returns true on successful epoch set.
      */
     public CompletableFuture<Boolean> sealRemoteServer(long newEpoch) {
-        Header header = getHeader(MessageType.SEAL, false,true );
+        Header header = getHeader(MessageType.SEAL, false, true);
         log.info("sealRemoteServer: send SEAL from me(clientId={}) to new epoch {}",
                 header.getClientId(), newEpoch);
         return sendRequest(API.newSealRequest(header, newEpoch));
@@ -149,7 +152,7 @@ public class PeerClient extends ChannelHandler {
                 response.getHeader().getClientId().getMsb());
     }
 
-    protected void  handleGetLayout(Response response) {
+    protected void handleGetLayout(Response response) {
 
     }
 
@@ -230,40 +233,5 @@ public class PeerClient extends ChannelHandler {
         // update stats
         // change client state
         // add a close lock
-    }
-
-    public static void main(String[] args) throws Exception{
-        ClientConfig config = new ClientConfig(
-                100000,
-                100000,
-                100000,
-                100000,
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                ChannelImplementation.NIO,
-                false,
-                false,
-                100000,
-                false,
-                false,
-                API.DEFAULT_UUID,
-                API.DEFAULT_UUID
-        );
-        InetSocketAddress remoteAddress = new InetSocketAddress(InetAddress.getByName("localhost"),9000);
-        EventLoopGroup eventLoopGroup = new NioEventLoopGroup();
-        PeerClient peerClient = new PeerClient(remoteAddress, ChannelImplementation.NIO.getGenerator().generate(10,
-                new ThreadFactoryBuilder()
-                        .setDaemon(true)
-                        .setNameFormat("peer-client-%d")
-                        .build()),
-                config);
-        // log.info(peerClient.ping().get().toString());
-        // log.info(peerClient.restart().get().toString());
-        // log.info(peerClient.reset().get().toString());
-        log.info(peerClient.sealRemoteServer(555555).get().toString());
     }
 }
