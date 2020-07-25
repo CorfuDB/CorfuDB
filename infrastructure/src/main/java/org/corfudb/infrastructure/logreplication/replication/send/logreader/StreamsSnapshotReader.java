@@ -33,7 +33,7 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX
 @Slf4j
 @NotThreadSafe
 /**
- *  Default snapshot logreader implementation
+ *  Default snapshot reader implementation
  *
  *  This implementation provides reads at the stream level (no coalesced state).
  *  It generates TxMessages which will be transmitted by the DataSender (provided by the application).
@@ -128,7 +128,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
                         int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
 
                         if (currentEntrySize > MAX_DATA_MSG_SIZE_SUPPORTED) {
-                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported", currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
+                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
+                                    currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
                             throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
                         } else if (currentEntrySize > maxDataSizePerMsg) {
                             observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);
@@ -174,9 +175,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     private LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
         SMREntryList entryList = next(stream);
-
         LogReplicationEntry txMsg = generateMessage(stream, entryList, syncRequestId);
-        log.trace("Successfully generate a txMsg {} for stream {} with snapshotTimestamp {}", stream.name, snapshotTimestamp);
+        log.info("Successfully generate a snapshot message for stream {} with snapshotTimestamp={}, numEntries={}, " +
+                        "entriesBytes={}, streamId={}", stream.name, snapshotTimestamp,
+                entryList.getSmrEntries().size(), entryList.getSizeInBytes(), stream.uuid);
         return txMsg;
     }
 
@@ -191,21 +193,24 @@ public class StreamsSnapshotReader implements SnapshotReader {
         List<LogReplicationEntry> messages = new ArrayList<>();
 
         boolean endSnapshotSync = false;
-        LogReplicationEntry msg = null;
+        LogReplicationEntry msg;
 
         // If the currentStreamInfo still has entry to process, it will reuse the currentStreamInfo
         // and process the remaining entries.
         if (currentStreamInfo == null) {
             while (!streamsToSend.isEmpty()) {
                 // Setup a new stream
-                currentStreamInfo = new OpaqueStreamIterator(streamsToSend.poll(), rt, snapshotTimestamp);
+                String streamToReplicate = streamsToSend.poll();
+                currentStreamInfo = new OpaqueStreamIterator(streamToReplicate, rt, snapshotTimestamp);
+                log.info("Start Snapshot Sync replication for stream name={}, id={}", streamToReplicate,
+                        CorfuRuntime.getStreamID(streamToReplicate));
 
                 // If the new stream has entries to be processed, go to the next step
                 if (currentStreamInfo.iterator.hasNext()) {
                     break;
                 } else {
                     // Skip process this stream as it has no entries to process, will poll the next one.
-                    log.info("Snapshot stream log reader will skip reading stream {} as there are no entries to send",
+                    log.info("Snapshot reader will skip reading stream {} as there are no entries to send",
                             currentStreamInfo.uuid);
                 }
             }
@@ -219,11 +224,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
         }
 
         if (!currentStreamHasNext()) {
-            log.debug("Snapshot log reader finished reading stream {}", currentStreamInfo.uuid);
+            log.debug("Snapshot log reader finished reading stream id={}, name={}", currentStreamInfo.uuid, currentStreamInfo.name);
             currentStreamInfo = null;
 
             if (streamsToSend.isEmpty()) {
-                log.info("Snapshot log reader finished reading all streams {}", streams);
+                log.info("Snapshot log reader finished reading ALL streams, total={}", streams.size());
                 endSnapshotSync = true;
             }
         }
@@ -236,11 +241,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
     }
 
     @Override
-    public void reset(long snapshotTimestamp) {
+    public void reset(long ts) {
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;
-        this.snapshotTimestamp = snapshotTimestamp; //rt.getAddressSpaceView().getLogTail();
+        snapshotTimestamp = ts;
         currentStreamInfo = null;
         sequence = 0;
         lastEntry = null;
@@ -250,10 +255,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * Used to bookkeeping the stream information for the current processing stream
      */
     public static class OpaqueStreamIterator {
-        String name;
-        UUID uuid;
-        Iterator iterator;
-        long maxVersion; //the max address of the log entries processed for this stream.
+        private String name;
+        private UUID uuid;
+        private Iterator iterator;
+        private long maxVersion; // the max address of the log entries processed for this stream.
 
         OpaqueStreamIterator(String name, CorfuRuntime rt, long snapshot) {
             this.name = name;

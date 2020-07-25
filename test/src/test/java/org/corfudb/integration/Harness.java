@@ -10,7 +10,6 @@ import org.corfudb.integration.cluster.Harness.Action;
 import org.corfudb.integration.cluster.Harness.Node;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.view.Layout;
 
 import java.io.IOException;
@@ -187,8 +186,8 @@ public class Harness {
 
         final Layout layout = getLayoutForNodes(n);
         final int retries = 3;
-        RuntimeParameters runtimeParameters = createRuntimeParameters();
-        BootstrapUtil.bootstrap(layout, (CorfuRuntime.CorfuRuntimeParameters)runtimeParameters, retries, PARAMETERS.TIMEOUT_LONG);
+        CorfuRuntime.CorfuRuntimeParameters runtimeParameters = createRuntimeParameters();
+        BootstrapUtil.bootstrap(layout, runtimeParameters, retries, PARAMETERS.TIMEOUT_LONG);
         return nodes;
     }
 
@@ -200,22 +199,22 @@ public class Harness {
      *
      * @return an instance of {@link org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters}
      */
-    private RuntimeParameters createRuntimeParameters() {
-        if (tlsEnabled) {
-            return RuntimeParameters
-                            .builder()
-                            .connectionTimeout(Duration.ofMillis(connectionTimeout))
-                    .tlsEnabled(tlsEnabled)
-                    .keyStore(serverPathToKeyStore)
-                    .ksPasswordFile(serverPathToKeyStorePassword)
-                    .trustStore(serverPathToTrustStore)
-                    .tsPasswordFile(serverPathToTrustStorePassword)
-                    .build();
-        } else {
-            return RuntimeParameters
-                    .builder()
-                    .connectionTimeout(Duration.ofMillis(connectionTimeout)).build();
-        }
+    private CorfuRuntime.CorfuRuntimeParameters createRuntimeParameters() {
+        final CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder runtimeParametersBuilder =
+                CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .connectionTimeout(Duration.ofMillis(connectionTimeout));
+
+        return tlsEnabled ?
+                runtimeParametersBuilder
+                        .tlsEnabled(tlsEnabled)
+                        .keyStore(serverPathToKeyStore)
+                        .ksPasswordFile(serverPathToKeyStorePassword)
+                        .trustStore(serverPathToTrustStore)
+                        .tsPasswordFile(serverPathToTrustStorePassword)
+                        .build() :
+                runtimeParametersBuilder
+                        .build();
     }
 
     /**

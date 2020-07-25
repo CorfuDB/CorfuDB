@@ -54,7 +54,6 @@ public class SnapshotSender {
     // This flag will indicate the start of a snapshot sync, so start snapshot marker is sent once.
     private boolean startSnapshotSync = true;
 
-
     @Getter
     @VisibleForTesting
     // For testing purposes, used to count the number of messages sent in order to interrupt snapshot sync
@@ -125,7 +124,7 @@ public class SnapshotSender {
                     LogReplicationEntry ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp) {
                         // Snapshot Sync Completed
-                        log.info("Snapshot sync completed for {} on timestamp {}, ack{}", snapshotSyncEventId,
+                        log.info("Snapshot sync completed for {} on timestamp={}, ack={}", snapshotSyncEventId,
                                 baseSnapshotTimestamp, ack.getMetadata());
                         snapshotSyncComplete(snapshotSyncEventId);
                     } else {
@@ -156,8 +155,6 @@ public class SnapshotSender {
         } else {
             log.info("Snapshot sync completed for {} as there is no data in the log.", snapshotSyncEventId);
 
-            // Generate a special LogReplicationEntry with only metadata (used as start marker on receiver side
-            // to complete snapshot sync and send the right ACK)
             try {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
                 snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
@@ -172,8 +169,6 @@ public class SnapshotSender {
 
     private int processReads(List<LogReplicationEntry> logReplicationEntries, UUID snapshotSyncEventId, boolean completed) {
         int numMessages = 0;
-
-        //dataSenderBufferManager.resend();
 
         // If we are starting a snapshot sync, send a start marker.
         if (startSnapshotSync) {
@@ -225,7 +220,7 @@ public class SnapshotSender {
         // We need to bind the internal event (COMPLETE) to the snapshotSyncEventId that originated it, this way
         // the state machine can correlate to the corresponding state (in case of delayed events)
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
-                new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp)));
+                new LogReplicationEventMetadata(snapshotSyncEventId, baseSnapshotTimestamp, baseSnapshotTimestamp)));
     }
 
     /**
@@ -237,6 +232,8 @@ public class SnapshotSender {
     private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error) {
         // Report error to the application through the dataSender
         dataSenderBufferManager.onError(error);
+
+        log.error("SNAPSHOT SYNC is being CANCELED, due to {}", error.getDescription());
 
         // Enqueue cancel event, this will cause a transition to the require snapshot sync request, which
         // will notify application through the data control about this request.

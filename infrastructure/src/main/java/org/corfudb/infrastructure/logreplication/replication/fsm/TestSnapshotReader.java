@@ -12,26 +12,26 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Dummy implementation of snapshot log reader for testing purposes.
+ * Dummy implementation of snapshot reader for testing purposes.
  *
- * This log reader attempts to access n entries in the log in a continuous address space and
+ * This reader attempts to access n entries in the log in a continuous address space and
  * wraps the payload in the LogReplicationEntry.
  */
 public class TestSnapshotReader implements SnapshotReader {
 
     private long topologyConfigId = 0;
 
-    private final int FIRST_ADDRESS = 0;
-
     private TestReaderConfiguration config;
 
-    // Initialized to 2, as 0, 1 are always used to persist metadata
-    private int globalIndex = FIRST_ADDRESS;
+    private int globalIndex = 0;
 
     private CorfuRuntime runtime;
 
+    private final long baseSnapshot;
+
     public TestSnapshotReader(TestReaderConfiguration config) {
         this.config = config;
+        this.baseSnapshot = config.getNumEntries();
         this.runtime = new CorfuRuntime(config.getEndpoint()).connect();
     }
 
@@ -40,23 +40,24 @@ public class TestSnapshotReader implements SnapshotReader {
         // Connect to endpoint
         List<LogReplicationEntry> messages = new ArrayList<>();
 
+        int index = globalIndex;
+
+        // Limit to read as max as BatchSize and until the maximum baseSnapshot
+        for (int i=index; (i<(index+config.getBatchSize()) && index<baseSnapshot) ; i++) {
         // Read numEntries in consecutive address space and add to messages to return
-        for (int i= globalIndex; i < (config.getNumEntries() + FIRST_ADDRESS) ; i++) {
             Object data = runtime.getAddressSpaceView().read((long)i).getPayload(runtime);
-            // For testing we don't have access to the snapshotSyncId so we fill in with a random UUID
-            // and overwrite it in the TestDataSender with the correct one, before sending the message out
-            LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_MESSAGE, topologyConfigId,
-                    snapshotRequestId, i, config.getNumEntries(), UUID.randomUUID());
+            LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_MESSAGE,
+                    topologyConfigId, i, baseSnapshot, snapshotRequestId);
             messages.add(new LogReplicationEntry(metadata, (byte[])data));
             globalIndex++;
         }
 
-        return new SnapshotReadMessage(messages, globalIndex == (config.getNumEntries() + FIRST_ADDRESS));
+        return new SnapshotReadMessage(messages, globalIndex == baseSnapshot);
     }
 
     @Override
     public void reset(long snapshotTimestamp) {
-        globalIndex = FIRST_ADDRESS;
+        globalIndex = 0;
     }
 
     @Override
