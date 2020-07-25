@@ -49,6 +49,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[--lock-lease=<lease-duration>]"
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
                     + "[--node-id=<nodeId>]"
+                    + "[--log-replication-config=<log-replication-config-file-path>]"
                     + "[--plugin=<plugin-config-file-path>]"
                     + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
                     + "[--log-size-quota-percentage=<max_log_size_percentage>]"
@@ -391,18 +392,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
         try (URLClassLoader child = new URLClassLoader(new URL[]{jar.toURI().toURL()}, this.getClass().getClassLoader())) {
             Class adapter = Class.forName(config.getTopologyManagerAdapterName(), true, child);
-            if (config.getTopologyConfigPath().isPresent()) {
-                String param = config.getTopologyConfigPath().get();
-                // If topology config path is configured, there is a constructor that accepts
-                // this path as an argument.
-                Constructor declaredConstructor = adapter
-                        .getDeclaredConstructor(String.class);
-                return (CorfuReplicationClusterManagerAdapter)
-                        declaredConstructor.newInstance(param);
-            } else {
-                return (CorfuReplicationClusterManagerAdapter) adapter.newInstance();
-            }
-
+            return (CorfuReplicationClusterManagerAdapter) adapter.getDeclaredConstructor().newInstance();
         } catch (Exception e) {
             log.error("Fatal error: Failed to create serverAdapter", e);
             throw new UnrecoverableCorfuError(e);

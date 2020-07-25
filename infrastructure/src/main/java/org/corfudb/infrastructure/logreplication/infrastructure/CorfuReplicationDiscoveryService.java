@@ -34,6 +34,7 @@ import javax.annotation.Nonnull;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
@@ -192,20 +193,14 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
     }
 
-    private LockConfig createLockConfig(String pluginFilePath) {
-        LogReplicationPluginConfig logReplicationPluginConfig =
-                new LogReplicationPluginConfig(pluginFilePath);
-        if (!logReplicationPluginConfig.getTopologyConfigPath().isPresent()) {
-            LockConfig config = LockConfig.builder().build();
-            log.info("Using default lock config: {}", config);
-            return config;
+    private LockConfig createLockConfig(Optional<String> maybeConfigFile) {
+        if (!maybeConfigFile.isPresent()) {
+            log.info("No config file provided. Creating default lock config.");
+            return LockConfig.builder().build();
         }
-
-        String topologyConfigFilePath = logReplicationPluginConfig
-                .getTopologyConfigPath().get();
-
-        log.debug("Topology config file path: {}", topologyConfigFilePath);
-        try (InputStream input = getClass().getClassLoader().getResourceAsStream(topologyConfigFilePath)) {
+        String configFile = maybeConfigFile.get();
+        log.info("Configuring lock with a file: {}", configFile);
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream(configFile)) {
             Properties prop = new Properties();
             prop.load(input);
             String lockGroup = prop.getProperty("lock_group");
@@ -412,7 +407,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 try {
                     LockClient lockClient =
                             new LockClient(logReplicationNodeId,
-                                    createLockConfig(serverContext.getPluginConfigFilePath()),
+                                    createLockConfig(serverContext.getLogReplicationConfig()),
                                     runtime.get());
                     LockListener logReplicationLockListener =
                             new LogReplicationLockListener(this);
@@ -757,7 +752,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     private LockClient createLockClient(LockStateType initState) throws Exception {
-        LockConfig lockConfig = createLockConfig(serverContext.getPluginConfigFilePath());
+        LockConfig lockConfig = createLockConfig(serverContext.getLogReplicationConfig());
         LockClient lockClient =
                 new LockClient(logReplicationNodeId,
                         lockConfig, runtime.get());

@@ -215,6 +215,11 @@ public class ServerContext implements AutoCloseable {
         return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
     }
 
+    public Optional<String> getLogReplicationConfig() {
+        return Optional.ofNullable(getServerConfig(String.class,
+                "--log-replication-config"));
+    }
+
     public int getSnapshotSyncBatchSize() {
         Integer snapshotSyncBatchSize = getServerConfig(Integer.class, "--snapshot-batch");
         return snapshotSyncBatchSize == null ? SnapshotSender.DEFAULT_SNAPSHOT_BATCH_SIZE : snapshotSyncBatchSize;

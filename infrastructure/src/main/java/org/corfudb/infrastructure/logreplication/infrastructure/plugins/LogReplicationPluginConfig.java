@@ -8,7 +8,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.File;
-import java.util.Optional;
 import java.util.Properties;
 
 /**
@@ -44,7 +43,6 @@ public class LogReplicationPluginConfig {
 
     private String topologyManagerAdapterJARPath;
     private String topologyManagerAdapterName;
-    private Optional<String> topologyConfigPath;
 
     public LogReplicationPluginConfig(String filepath) {
         try (InputStream input = new FileInputStream(filepath)) {
@@ -59,7 +57,6 @@ public class LogReplicationPluginConfig {
 
             this.topologyManagerAdapterJARPath = prop.getProperty("topology_manager_adapter_JAR_path");
             this.topologyManagerAdapterName = prop.getProperty("topology_manager_adapter_class_name");
-            this.topologyConfigPath = Optional.ofNullable(prop.getProperty("topology_manager_adapter_resource_config_path"));
         } catch (IOException e) {
             log.warn("Exception caught while trying to load adapter configuration from {}. Default configuration " +
                     "will be used.", filepath);
@@ -72,7 +69,6 @@ public class LogReplicationPluginConfig {
 
             this.topologyManagerAdapterJARPath = getParentDir() + DEFAULT_JAR_PATH;
             this.topologyManagerAdapterName = DEFAULT_CLUSTER_MANAGER_CLASSNAME;
-            this.topologyConfigPath = Optional.empty();
         }
 
         log.debug("Log Replication Plugins :: {} ", this);

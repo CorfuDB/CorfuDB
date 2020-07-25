@@ -118,12 +118,15 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
 
     private Tuple<UUID, CorfuInterClusterReplicationServer> runReplicationFuture(int port,
                                                                                  UUID uuid,
-                                                                                 String pluginConfigPath) {
+                                                                                 String pluginConfigPath,
+                                                                                 String logReplicationConfigPath) {
         final int duration = 3000;
         String configuredUUID = UuidUtils.asBase64(uuid);
         Sleep.sleepUninterruptibly(Duration.ofMillis(duration));
         String[] args = new String[]{"-m", "--address=localhost", String.valueOf(port),
-                "--plugin=" + pluginConfigPath, "--node-id=" + configuredUUID};
+                "--plugin=" + pluginConfigPath,
+                "--log-replication-config=" + logReplicationConfigPath,
+                "--node-id=" + configuredUUID};
 
         CorfuInterClusterReplicationServer server =
                 new CorfuInterClusterReplicationServer(args);
@@ -134,9 +137,10 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
     }
 
     private Tuple<UUID, CorfuInterClusterReplicationServer> runReplicationFuture(int port,
-                                                                                 String pluginConfigPath) {
+                                                                                 String pluginConfigPath,
+                                                                                 String logReplicationConfigPath) {
         UUID uuid = UUID.randomUUID();
-        return runReplicationFuture(port, uuid, pluginConfigPath);
+        return runReplicationFuture(port, uuid, pluginConfigPath, logReplicationConfigPath);
     }
 
     private void cleanUpResources(List<CorfuRuntime> runtimes,
@@ -271,15 +275,16 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
 
         String pluginConfigPath = "src/test/resources/topology/two_primaries.properties";
+        String configPath = "config.properties";
 
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> primaries =
                 TWO_PRIMARY_REPLICATION_SERVER_PORTS.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> standBys =
                 ONE_STANDBY_REPLICATION_SERVER_PORT.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
@@ -345,14 +350,15 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
         final int flaps = 2;
 
         String pluginConfigPath = "src/test/resources/topology/two_primaries.properties";
+        String configPath = "config.properties";
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> primaries =
                 TWO_PRIMARY_REPLICATION_SERVER_PORTS.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> standBys =
                 ONE_STANDBY_REPLICATION_SERVER_PORT.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
@@ -419,14 +425,15 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
         final Duration durationBetweenFlaps = Duration.ofSeconds(10);
         final int flaps = 2;
         String pluginConfigPath = "src/test/resources/topology/two_standbys.properties";
+        String configPath = "config.properties";
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> primaries =
                 ONE_PRIMARY_REPLICATION_SERVER_PORT.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> standBys =
                 TWO_STANDBY_REPLICATION_SERVER_PORTS.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
@@ -492,14 +499,15 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
         final Duration replicationDuration = Duration.ofSeconds(5);
         String pluginConfigPath =
                 "src/test/resources/topology/two_primaries.properties";
+        String configPath = "config.properties";
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> primaries =
                 TWO_PRIMARY_REPLICATION_SERVER_PORTS.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> standBys =
                 ONE_STANDBY_REPLICATION_SERVER_PORT.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
@@ -584,14 +592,15 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
 
         String pluginConfigPath = "src/test/resources/topology/two_standbys.properties";
+        String configPath = "config.properties";
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> primaries =
                 ONE_PRIMARY_REPLICATION_SERVER_PORT.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> standBys =
                 TWO_STANDBY_REPLICATION_SERVER_PORTS.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
@@ -645,14 +654,15 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
         final Duration replicationDuration = Duration.ofSeconds(5);
         String pluginConfigPath = "src/test/resources/topology/two_standbys_no_lock_holder.properties";
+        String configPath = "config.properties";
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> primaries =
                 ONE_PRIMARY_REPLICATION_SERVER_PORT.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> standBys =
                 TWO_STANDBY_REPLICATION_SERVER_PORTS.stream()
-                        .map(port -> runReplicationFuture(port, pluginConfigPath))
+                        .map(port -> runReplicationFuture(port, pluginConfigPath, configPath))
                         .collect(ImmutableList.toImmutableList());
 
         CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters

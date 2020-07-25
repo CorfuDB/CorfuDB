@@ -182,7 +182,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
             standbySiteName = DefaultClusterConfig.getStandbyClusterId();
             standbyCorfuPort = DefaultClusterConfig.getStandbyCorfuPort();
             standbyLogReplicationPort = DefaultClusterConfig.getStandbyLogReplicationPort();
-            standbyNodeNames.addAll(DefaultClusterConfig.getActiveNodeNames());
+            standbyNodeNames.addAll(DefaultClusterConfig.getStandbyNodeNames());
             standbyNodeHosts.addAll(DefaultClusterConfig.getStandbyIpAddresses());
             standbyNodeIds.addAll(DefaultClusterConfig.getStandbyNodesUuid());
         }
