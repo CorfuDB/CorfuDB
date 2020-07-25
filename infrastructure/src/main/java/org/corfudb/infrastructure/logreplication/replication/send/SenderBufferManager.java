@@ -130,8 +130,9 @@ public abstract class SenderBufferManager {
     }
 
     /**
-     * process all Acks that have recieved.
-     * @return the max Ack
+     * Process all ack's that have been received.
+     *
+     * @return the max ack
      * @throws InterruptedException
      * @throws ExecutionException
      * @throws TimeoutException

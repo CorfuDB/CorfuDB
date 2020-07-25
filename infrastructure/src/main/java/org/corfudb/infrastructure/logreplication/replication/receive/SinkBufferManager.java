@@ -91,8 +91,8 @@ public abstract class SinkBufferManager {
     }
 
     /**
-     * after receiving a message, it will decide to send an Ack or not
-     * according the predefined metrics.
+     * After receiving a message, it will decide to send an Ack or not
+     * according to the predefined metrics.
      *
      * @return
      */
@@ -119,19 +119,23 @@ public abstract class SinkBufferManager {
      */
     public LogReplicationEntry processMsgAndBuffer(LogReplicationEntry dataMessage) {
 
-        if (verifyMessageType(dataMessage) == false)
+        if (!verifyMessageType(dataMessage)) {
+            log.warn("Received invalid message type {}", dataMessage.getMetadata());
             return null;
+        }
 
         long preTs = getPreSeq(dataMessage);
         long currentTs = getCurrentSeq(dataMessage);
 
         // This message contains entries that haven't been applied yet
         if (preTs <= lastProcessedSeq && currentTs > lastProcessedSeq) {
+            log.trace("Received in order message={}, lastProcessed={}", currentTs, lastProcessedSeq);
             sinkManager.processMessage(dataMessage);
             ackCnt++;
             lastProcessedSeq = getCurrentSeq(dataMessage);
             processBuffer();
         } else if (currentTs > lastProcessedSeq && buffer.size() < maxSize) {
+            log.debug("Received unordered message, currentTs={}, lastProcessed={}", currentTs, lastProcessedSeq);
             buffer.put(preTs, dataMessage);
         }
 
@@ -151,11 +155,11 @@ public abstract class SinkBufferManager {
     abstract void processBuffer();
 
     /**
-     * Get the previous inorder message's sequence.
+     * Get the previous in order message's sequence.
      * @param entry
      * @return
      */
-    abstract long getPreSeq(org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry entry);
+    abstract long getPreSeq(LogReplicationEntry entry);
 
     /**
      * Get the current message's sequence.

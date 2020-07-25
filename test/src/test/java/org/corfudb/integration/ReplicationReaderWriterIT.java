@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Stre
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -23,6 +24,8 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.runtime.view.stream.OpaqueStream;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -61,6 +64,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     static public final int MAX_MSG_SIZE = 160;
 
     static Semaphore waitSem = new Semaphore(1);
+
+    private static UUID snapshotSyncId = UUID.randomUUID();
 
     Process server1;
     Process server2;
@@ -279,14 +284,15 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void readSnapLogMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt, boolean blockOnSem)  {
+        int cnt = 0;
         LogReplicationConfig config = new LogReplicationConfig(streams, BATCH_SIZE, MAX_MSG_SIZE);
         StreamsSnapshotReader reader = new StreamsSnapshotReader(rt, config);
-        int cnt = 0;
 
         reader.reset(rt.getAddressSpaceView().getLogTail());
         while (true) {
             cnt++;
-            SnapshotReadMessage snapshotReadMessage = reader.read(UUID.randomUUID());
+
+            SnapshotReadMessage snapshotReadMessage = reader.read(snapshotSyncId);
             for (LogReplicationEntry data : snapshotReadMessage.getMessages()) {
                 msgQ.add(data);
                 System.out.println("generate msg " + cnt);
@@ -312,18 +318,16 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         LogReplicationMetadataManager logReplicationMetadataManager = new LogReplicationMetadataManager(rt, 0, PRIMARY_SITE_ID);
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
-
-
         if (msgQ.isEmpty()) {
             System.out.println("msgQ is empty");
         }
 
-        long siteConfigID = msgQ.get(0).getMetadata().getTopologyConfigId();
+        long topologyConfigId = msgQ.get(0).getMetadata().getTopologyConfigId();
         long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
-        logReplicationMetadataManager.setSrcBaseSnapshotStart(siteConfigID, snapshot);
-        writer.reset(siteConfigID, snapshot);
+        logReplicationMetadataManager.setSrcBaseSnapshotStart(topologyConfigId, snapshot);
+        writer.reset(topologyConfigId, snapshot);
 
-        for (org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry msg : msgQ) {
+        for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
         }
 
@@ -421,7 +425,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         return checkpointAddress;
     }
 
-    public void trim(long address, CorfuRuntime rt) {
+    public void checkpointAndTrim(CorfuRuntime rt) {
         Token token = ckStreamsAndTrim(rt, srcTables);
 
         Token trimMark = rt.getAddressSpaceView().getTrimMark();
@@ -440,7 +444,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             while(msgQ.isEmpty()) {
                 sleep(1);
             }
-            trim(srcDataRuntime.getAddressSpaceView().getLogTail(), srcDataRuntime);
+            checkpointAndTrim( srcDataRuntime);
         } catch (Exception e) {
             System.out.println("caught an exception " + e);
         }
@@ -475,7 +479,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         Iterator iterator = stream.iterator();
 
         Exception result = null;
-        trim(tail, srcDataRuntime);
+        checkpointAndTrim(srcDataRuntime);
 
         try {
             accessTxStream(iterator, (int)tail);
@@ -621,7 +625,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     @Test
-    public void testSnapTransfer() throws Exception {
+    public void testSnapshotTransfer() throws Exception {
         // setup environment
         System.out.println("\ntest start ok");
         setupEnv();
@@ -630,20 +634,20 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         generateData(srcTables, srcHashMap, NUM_KEYS, srcDataRuntime, START_VAL);
         verifyData("after writing to src", srcTables, srcHashMap);
 
-        //generate dump data at dst
+        // generate dump data at dst
         openStreams(dstTables, dstDataRuntime);
         generateData(dstTables, dstHashMap, NUM_KEYS, dstDataRuntime, START_VAL + NUM_KEYS);
         verifyData("after writing to dst", dstTables, dstHashMap);
 
         printTails("after writing to server1", srcDataRuntime, dstDataRuntime);
 
-        //read snapshot from srcServer and put msgs into Queue
+        // read snapshot from srcServer and put msgs into Queue
         readSnapLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime);
 
         long dstEntries = msgQ.size()*srcHashMap.keySet().size();
         long dstPreTail = dstDataRuntime.getAddressSpaceView().getLogTail();
 
-        //play messages at dst server
+        // play messages at dst server
         writeSnapLogMsgs(msgQ, srcHashMap.keySet(), writerRuntime);
 
         long diff = dstDataRuntime.getAddressSpaceView().getLogTail() - dstPreTail;

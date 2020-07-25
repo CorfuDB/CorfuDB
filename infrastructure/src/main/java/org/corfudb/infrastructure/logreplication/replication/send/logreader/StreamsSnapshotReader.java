@@ -33,7 +33,7 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX
 @Slf4j
 @NotThreadSafe
 /**
- *  Default snapshot logreader implementation
+ *  Default snapshot reader implementation
  *
  *  This implementation provides reads at the stream level (no coalesced state).
  *  It generates TxMessages which will be transmitted by the DataSender (provided by the application).
@@ -205,7 +205,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                     break;
                 } else {
                     // Skip process this stream as it has no entries to process, will poll the next one.
-                    log.info("Snapshot stream log reader will skip reading stream {} as there are no entries to send",
+                    log.info("Snapshot reader will skip reading stream {} as there are no entries to send",
                             currentStreamInfo.uuid);
                 }
             }
@@ -236,11 +236,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
     }
 
     @Override
-    public void reset(long snapshotTimestamp) {
+    public void reset(long ts) {
         streamsToSend = new PriorityQueue<>(streams);
         preMsgTs = Address.NON_ADDRESS;
         currentMsgTs = Address.NON_ADDRESS;
-        this.snapshotTimestamp = snapshotTimestamp; //rt.getAddressSpaceView().getLogTail();
+        snapshotTimestamp = ts;
         currentStreamInfo = null;
         sequence = 0;
         lastEntry = null;
@@ -250,10 +250,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * Used to bookkeeping the stream information for the current processing stream
      */
     public static class OpaqueStreamIterator {
-        String name;
-        UUID uuid;
-        Iterator iterator;
-        long maxVersion; //the max address of the log entries processed for this stream.
+        private String name;
+        private UUID uuid;
+        private Iterator iterator;
+        private long maxVersion; // the max address of the log entries processed for this stream.
 
         OpaqueStreamIterator(String name, CorfuRuntime rt, long snapshot) {
             this.name = name;

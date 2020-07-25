@@ -14,6 +14,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
@@ -58,6 +59,8 @@ import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim
  */
 @Slf4j
 public class LogReplicationIT extends AbstractIT implements Observer {
+
+    public final static String nettyConfig = "src/test/resources/transport/nettyConfig.properties";
 
     static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     static final int WRITER_PORT = DEFAULT_PORT + 1;
@@ -162,8 +165,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
     private LogReplicationMetadataManager logReplicationMetadataManager;
-
-    private static final int SLEEP_INTERVAL = 1000;
 
     /**
      * Setup Test Environment
@@ -841,7 +842,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         HashSet<WAIT> waitHashSet = new HashSet<>();
         waitHashSet.add(WAIT.ON_ACK);
-        startLogEntrySync(crossTables, waitHashSet, true);
+        startLogEntrySync(crossTables, waitHashSet, false);
 
         expectedAckTimestamp = Long.MAX_VALUE;
 
@@ -1216,7 +1217,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Start Log Entry Sync
         System.out.println("****** Start Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
                 + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
-        logReplicationSourceManager.startReplication(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START));
+        logReplicationSourceManager.startReplication(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START,
+                new LogReplicationEventMetadata(UUID.randomUUID(), -1, -1)));
 
         // Start TX's in parallel, while log entry sync is running
         if (injectTxData) {
@@ -1254,7 +1256,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, BATCH_SIZE, SMALL_MSG_SIZE);
 
         // Data Sender
-        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel(), logReplicationMetadataManager);
+        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel(), logReplicationMetadataManager,
+                nettyConfig);
 
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(readerRuntime, sourceDataSender,
@@ -1364,7 +1367,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private void verifyPersistedSnapshotMetadata() {
         long lastSnapStart = logReplicationMetadataManager.getLastSnapStartTimestamp();
-        long lastSnapDone = logReplicationMetadataManager.getLastSrcBaseSnapshotTimestamp();
+        long lastSnapDone = logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp();
 
         System.out.println("\nlastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
         assertThat(lastSnapStart == lastSnapDone).isTrue();
