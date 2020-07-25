@@ -5,7 +5,6 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.WrongClusterMsg;
-import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.view.Layout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

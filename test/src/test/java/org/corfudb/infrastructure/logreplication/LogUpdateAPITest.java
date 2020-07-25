@@ -21,10 +21,7 @@ import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -33,7 +30,6 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 public class LogUpdateAPITest extends AbstractViewTest {
     static final private int NUM_KEYS = 10;
-
 
     /**
      * Test the TxBuilder logUpdate API work properly.
@@ -58,7 +54,6 @@ public class LogUpdateAPITest extends AbstractViewTest {
 
         Table<Uuid, Uuid, Uuid> tableA = corfuStore1.openTable(namespace, tableAName,
                 Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
-
 
         UUID uuidA = CorfuRuntime.getStreamID(tableA.getFullyQualifiedTableName());
 

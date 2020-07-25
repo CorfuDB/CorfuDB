@@ -44,7 +44,6 @@ public abstract class SenderBufferManager {
      */
     private int maxRetry;
 
-
     /*
      * Max time to wait an ACK for a message.
      */
@@ -53,8 +52,7 @@ public abstract class SenderBufferManager {
     /*
      * If there is a timeout for a message, should generate an error or not
      */
-    private boolean errorOnMsgTimeout = true;
-
+    private boolean errorOnMsgTimeout;
 
     /*
      * the max ACK timestamp received. Used by log entry sync.
@@ -67,7 +65,6 @@ public abstract class SenderBufferManager {
     private long maxAckForSnapshotSync = Address.NON_ADDRESS;
 
     private DataSender dataSender;
-
 
     /*
      * The messages sent to the receiver but hasn't been ACKed yet.
@@ -121,7 +118,7 @@ public abstract class SenderBufferManager {
             reader.close();
 
         } catch (Exception e) {
-            log.warn("The config file is not available {} , will use the default vaules for config.", e.getCause());
+            log.warn("The config file is not available {} , will use the default values for config.", config_file, e.getCause());
 
         } finally {
             log.info("Sender Buffer config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",
@@ -130,8 +127,9 @@ public abstract class SenderBufferManager {
     }
 
     /**
-     * process all Acks that have recieved.
-     * @return the max Ack
+     * Process all ack's that have been received.
+     *
+     * @return the max ack
      * @throws InterruptedException
      * @throws ExecutionException
      * @throws TimeoutException
