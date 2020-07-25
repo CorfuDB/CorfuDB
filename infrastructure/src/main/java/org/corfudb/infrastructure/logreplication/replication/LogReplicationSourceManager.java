@@ -252,7 +252,8 @@ public class LogReplicationSourceManager implements DataReceiver {
         } else if (message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_REPLICATED) {
             log.debug("Snapshot sync ACK received on base timestamp {}", message.getMetadata().getSnapshotTimestamp());
             logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE,
-                    new LogReplicationEventMetadata(message.getMetadata().getSyncRequestId(), message.getMetadata().getTimestamp())));
+                    new LogReplicationEventMetadata(message.getMetadata().getSyncRequestId(), message.getMetadata().getTimestamp(),
+                            message.getMetadata().getTimestamp())));
         } else {
             log.debug("Received data message of type {} not an ACK", message.getMetadata().getMessageMetadataType());
         }

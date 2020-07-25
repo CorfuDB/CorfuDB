@@ -7,7 +7,6 @@ import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.Messages;
 
 import java.util.LinkedList;
 import java.util.Queue;

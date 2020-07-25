@@ -4,6 +4,7 @@ import lombok.Getter;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import java.util.LinkedList;
@@ -13,7 +14,8 @@ import java.util.concurrent.CompletableFuture;
 
 
 /**
- * Test Implementation of Snapshot Data Sender
+ * Test Implementation of Snapshot Data Sender which emulates sending messages by placing directly
+ * in an entry queue, and sends ACKs right away.
  */
 public class TestDataSender implements DataSender {
 
@@ -34,7 +36,18 @@ public class TestDataSender implements DataSender {
         }
 
         CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
-        LogReplicationEntry ack = LogReplicationEntry.generateAck(message.getMetadata());
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(message.getMetadata());
+
+        // Emulate behavior from Sink, send ACK per received message
+        if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END)) {
+            metadata.setMessageMetadataType(MessageType.SNAPSHOT_END);
+        } else if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_MESSAGE)) {
+            metadata.setMessageMetadataType(MessageType.SNAPSHOT_REPLICATED);
+        } else if (message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
+            metadata.setMessageMetadataType(MessageType.LOG_ENTRY_REPLICATED);
+        }
+
+        LogReplicationEntry ack = LogReplicationEntry.generateAck(metadata);
         cf.complete(ack);
 
         return cf;

@@ -40,7 +40,7 @@ public class CorfuProcessManager {
                 " | " +
                 "awk '{print $2}'" +
                 " | " +
-                "xargs kill -STOPPING";
+                "xargs kill -STOP";
     }
 
     public String startCommand(String commandLineParams) {

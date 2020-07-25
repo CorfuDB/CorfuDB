@@ -14,6 +14,8 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
 
+import java.util.UUID;
+
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
@@ -23,7 +25,7 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LogReplicationMetadataManager {
 
-    private static final String namespace = CORFU_SYSTEM_NAMESPACE;
+    private static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
 
     private CorfuStore corfuStore;
@@ -39,14 +41,14 @@ public class LogReplicationMetadataManager {
         this.corfuStore = new CorfuStore(runtime);
         metadataTableName = getPersistedWriterMetadataTableName(localClusterId);
         try {
-            metadataTable = this.corfuStore.openTable(namespace,
+            metadataTable = this.corfuStore.openTable(NAMESPACE,
                             metadataTableName,
                             LogReplicationMetadataKey.class,
                             LogReplicationMetadataVal.class,
                             null,
                             TableOptions.builder().build());
         } catch (Exception e) {
-            log.error("Caught an exception while opening the table namespace={}, name={}", namespace, metadataTableName);
+            log.error("Caught an exception while opening the table NAMESPACE={}, name={}", NAMESPACE, metadataTableName, e);
             throw new ReplicationWriterException(e);
         }
         setupTopologyConfigId(topologyConfigId);
@@ -57,16 +59,16 @@ public class LogReplicationMetadataManager {
     }
 
     public TxBuilder getTxBuilder() {
-        return corfuStore.tx(namespace);
+        return corfuStore.tx(NAMESPACE);
     }
 
     private String queryString(CorfuStoreMetadata.Timestamp timestamp, LogReplicationMetadataType key) {
         LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
         CorfuRecord record;
         if (timestamp == null) {
-            record = corfuStore.query(namespace).getRecord(metadataTableName, txKey);
+            record = corfuStore.query(NAMESPACE).getRecord(metadataTableName, txKey);
         } else {
-            record = corfuStore.query(namespace).getRecord(metadataTableName, timestamp, txKey);
+            record = corfuStore.query(NAMESPACE).getRecord(metadataTableName, timestamp, txKey);
         }
 
         LogReplicationMetadataVal metadataVal = null;
@@ -102,12 +104,11 @@ public class LogReplicationMetadataManager {
         return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
     }
 
-
     public long getLastSnapTransferDoneTimestamp() {
         return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED);
     }
 
-    public long getLastSrcBaseSnapshotTimestamp() {
+    public long getLastAppliedBaseSnapshotTimestamp() {
         return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
     }
 
@@ -140,7 +141,7 @@ public class LogReplicationMetadataManager {
             return;
         }
 
-        TxBuilder txBuilder = corfuStore.tx(namespace);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
         for (LogReplicationMetadataType key : LogReplicationMetadataType.values()) {
             long val = Address.NON_ADDRESS;
@@ -163,7 +164,7 @@ public class LogReplicationMetadataManager {
             return;
         }
 
-        TxBuilder txBuilder = corfuStore.tx(namespace);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
         for (LogReplicationMetadataType key : LogReplicationMetadataType.values()) {
             long val = Address.NON_ADDRESS;
@@ -211,7 +212,7 @@ public class LogReplicationMetadataManager {
             return false;
         }
 
-        TxBuilder txBuilder = corfuStore.tx(namespace);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
         // Update the topologyConfigId to fence all other transactions that update the metadata at the same time
         appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
@@ -255,7 +256,7 @@ public class LogReplicationMetadataManager {
             return;
         }
 
-        TxBuilder txBuilder = corfuStore.tx(namespace);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
         //Update the topologyConfigId to fence all other transactions that update the metadata at the same time
         appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
@@ -267,7 +268,6 @@ public class LogReplicationMetadataManager {
 
         log.debug("Commit. Set snapshotStart topologyConfigId " + topologyConfigId + " ts " + ts +
                 " persisteSiteConfigID " + persistedTopologyConfigId + " persistSnapStart " + persistSnapStart);
-        return;
     }
 
     public void setSnapshotApplied(LogReplicationEntry entry) {
@@ -284,7 +284,7 @@ public class LogReplicationMetadataManager {
             return;
         }
 
-        TxBuilder txBuilder = corfuStore.tx(namespace);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
         //Update the topologyConfigId to fence all other transactions that update the metadata at the same time
         appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
@@ -299,8 +299,6 @@ public class LogReplicationMetadataManager {
 
         log.debug("Commit. Set snapshotStart topologyConfigId " + siteConfigID + " ts " + ts +
                 " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
-
-        return;
     }
 
     @Override
@@ -309,7 +307,7 @@ public class LogReplicationMetadataManager {
         s.concat(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID.getVal() + " " + getTopologyConfigId() +" ");
         s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED.getVal() + " " + getLastSnapStartTimestamp() +" ");
         s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
-        s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED.getVal() + " " + getLastSrcBaseSnapshotTimestamp() + " ");
+        s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED.getVal() + " " + getLastAppliedBaseSnapshotTimestamp() + " ");
         s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM.getVal() + " " + getLastSnapSeqNum() + " ");
         s.concat(LogReplicationMetadataType.LAST_LOG_PROCESSED.getVal() + " " + getLastProcessedLogTimestamp() + " ");
 
@@ -324,6 +322,40 @@ public class LogReplicationMetadataManager {
         return runtime.getAddressSpaceView().getTrimMark().getSequence();
     }
 
+    /**
+     * Set the snapshot sync start marker, i.e., a unique identification of the current snapshot sync cycle.
+     * Identified by the snapshot sync Id and the min shadow stream update timestamp for this cycle.
+     *
+     * @param currentSnapshotSyncId
+     * @param shadowStreamTs
+     */
+    public void setSnapshotSyncStartMarker(UUID currentSnapshotSyncId, CorfuStoreMetadata.Timestamp shadowStreamTs, TxBuilder txBuilder) {
+
+        long currentSnapshotSyncIdLong = currentSnapshotSyncId.getMostSignificantBits() & Long.MAX_VALUE;
+        long persistedSnapshotId = query(null, LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID);
+
+        if (persistedSnapshotId != currentSnapshotSyncIdLong) {
+            // Update if current Snapshot Sync differs from the persisted one, otherwise ignore.
+            // It could have already been updated in the case that leader changed in between a snapshot sync cycle
+            appendUpdate(txBuilder, LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID, currentSnapshotSyncIdLong);
+            appendUpdate(txBuilder, LogReplicationMetadataType.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS, shadowStreamTs.getSequence());
+        }
+    }
+
+    /**
+     * Retrieve the snapshot sync start marker
+     **/
+    public long getMinSnapshotSyncShadowStreamTs() {
+        return query(null, LogReplicationMetadataType.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS);
+    }
+
+    /**
+     * Retrieve the current snapshot sync cycle Id
+     */
+    public long getCurrentSnapshotSyncCycleId() {
+        return query(null, LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID);
+    }
+
     public enum LogReplicationMetadataType {
         TOPOLOGY_CONFIG_ID("topologyConfigId"),
         VERSION("version"),
@@ -331,6 +363,8 @@ public class LogReplicationMetadataManager {
         LAST_SNAPSHOT_TRANSFERRED("lastSnapTransferred"),
         LAST_SNAPSHOT_APPLIED("lastSnapApplied"),
         LAST_SNAPSHOT_SEQ_NUM("lastSnapSeqNum"),
+        CURRENT_SNAPSHOT_CYCLE_ID("currentSnapshotCycleId"),
+        CURRENT_CYCLE_MIN_SHADOW_STREAM_TS("minShadowStreamTimestamp"),
         LAST_LOG_PROCESSED("lastLogProcessed");
 
         @Getter

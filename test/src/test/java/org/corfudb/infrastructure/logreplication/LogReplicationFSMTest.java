@@ -33,7 +33,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Observable;
 import java.util.Observer;
@@ -44,7 +46,6 @@ import java.util.concurrent.Semaphore;
 
 import static java.lang.Thread.sleep;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 
 @Slf4j
 /**
@@ -223,12 +224,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
-        int numTransition = (NUM_ENTRIES/(batchSize* DEFAULT_MAX_NUM_MSG_PER_BATCH)) + 1;
         Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
-
-        for (int i = 0; i < numTransition; i++) {
-            System.out.print("\nnumTransitions " + numTransition + " i " + i);
+        while(!fsm.getState().getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
             transitionAvailable.acquire();
         }
 
@@ -281,11 +279,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
         fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
 
-        boolean transitionOccurred = true;
-        while (transitionOccurred) {
-            if (fsm.getState().getType() == LogReplicationStateType.INITIALIZED) {
-                transitionOccurred = false;
-            }
+        transitionAvailable.acquire();
+
+        while (fsm.getState().getType() != LogReplicationStateType.INITIALIZED) {
+            // Wait on a FSM transition to occur
+            transitionAvailable.acquire();
         }
 
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.INITIALIZED);
@@ -298,7 +296,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #2: This time the snapshot sync completes
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
-        for (int i = 0; i<(NUM_ENTRIES/(BATCH_SIZE * DEFAULT_MAX_NUM_MSG_PER_BATCH)) + 1; i++) {
+        while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
+            // Block until FSM moves back to in log entry (delta) sync state
             transitionAvailable.acquire();
         }
 
@@ -420,7 +419,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private void initLogReplicationFSM(ReaderImplementation readerImpl) {
 
         logEntryReader = new TestLogEntryReader();
-        dataSender = new TestDataSender();
 
         switch(readerImpl) {
             case EMPTY:
@@ -454,7 +452,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
 
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), new LogReplicationConfig(Collections.EMPTY_SET), new ClusterDescriptor("Cluster-Local",
+                new DefaultReadProcessor(runtime), new LogReplicationConfig(new HashSet<>(Arrays.asList(TEST_STREAM_NAME))), new ClusterDescriptor("Cluster-Local",
                 LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
         transitionObservable = fsm.getNumTransitions();
@@ -539,14 +537,15 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     public void update(Observable obs, Object arg) {
         if (obs == transitionObservable)
         {
+            while (!transitionAvailable.hasQueuedThreads()) {
+                // Wait until some thread is waiting to acquire...
+            }
             transitionAvailable.release();
             // System.out.println("Transition::#"  + transitionObservable.getValue() + "::" + fsm.getState().getType());
         } else if (obs == snapshotMessageCounterObservable) {
             if (limitSnapshotMessages == snapshotMessageCounterObservable.getValue() && observeSnapshotSync) {
                 // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
                 // System.out.println("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
-
-                System.out.println("REPLICATION STOPPING");
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
             }
         }

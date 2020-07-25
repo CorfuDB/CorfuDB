@@ -62,7 +62,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *          <li>LEASE_RENEWED:lease for the lock has been renewed</li>
  *          <li>LEASE_REVOKED:lease for the lock has been revoked, some other instance got the lock</li>
  *          <li>LEASE_EXPIRED:lease for the lock has expired as it could not be renewed</li>
- *          <li>UNRECOVERABLE_ERROR:unrecoverable error occured</li>
+ *          <li>UNRECOVERABLE_ERROR:unrecoverable error occurred</li>
  *      </ul>
  *
  * </pre>

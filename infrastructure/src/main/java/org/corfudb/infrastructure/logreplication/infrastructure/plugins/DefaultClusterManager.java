@@ -45,6 +45,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
     public static final String CONFIG_FILE_PATH = "src/test/resources/corfu_replication_config.properties";
     private static final String DEFAULT_ACTIVE_CLUSTER_NAME = "primary_site";
     private static final String DEFAULT_STANDBY_CLUSTER_NAME = "standby_site";
+
     private static final int NUM_NODES_PER_CLUSTER = 3;
 
     private static final String ACTIVE_CLUSTER_NAME = "primary_site";

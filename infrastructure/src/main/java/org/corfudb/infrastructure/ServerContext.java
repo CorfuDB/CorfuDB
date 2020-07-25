@@ -229,7 +229,13 @@ public class ServerContext implements AutoCloseable {
     }
 
     public int getLockLeaseDuration() {
-        Integer lockLeaseDuration = getServerConfig(Integer.class, "--lock-lease");
+        Integer lockLeaseDuration;
+        try {
+            lockLeaseDuration = getServerConfig(Integer.class, "--lock-lease");
+        } catch (ClassCastException e) {
+            // In the testing framework we only support Strings
+            lockLeaseDuration = Integer.valueOf(getServerConfig(String.class, "--lock-lease"));
+        }
         return lockLeaseDuration == null ? Lock.leaseDuration : lockLeaseDuration;
     }
 

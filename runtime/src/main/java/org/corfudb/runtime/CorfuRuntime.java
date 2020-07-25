@@ -118,7 +118,7 @@ public class CorfuRuntime {
         Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
 
        /*
-         * Time limit after which the logreader gives up and fills the hole.
+         * Time limit after which the reader gives up and fills the hole.
          */
         //@Default
         Duration holeFillTimeout = Duration.ofSeconds(10);

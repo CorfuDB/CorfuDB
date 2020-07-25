@@ -12,7 +12,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
@@ -20,7 +19,6 @@ import org.corfudb.util.serializer.Serializers;
 
 import static com.google.common.base.Preconditions.checkState;
 
-@Slf4j
 /**
  * Created by mwei on 1/8/16.
  */
@@ -98,7 +96,6 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         this.SMRMethod = smrMethod;
         this.SMRArguments = smrArguments;
         this.serializerType = serializer;
-        //this.serializerId = serializerType.getType();
     }
 
     /**
@@ -155,7 +152,6 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      */
     private int calculateOpaqueSMREntrySerializedSize() {
         if (!opaque) {
-            log.error("This operation only supported for an opaque SMR entry");
             return 0;
         }
 

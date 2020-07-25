@@ -47,7 +47,6 @@ public class AbstractIT extends AbstractCorfuTest {
     static final int DEFAULT_PORT = 9000;
 
     static final int DEFAULT_LOG_REPLICATION_PORT = 9020;
-    static final String DEFAULT_LOG_REPLICATION_FILE = "log_replication";
 
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
@@ -322,6 +321,16 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
+    public static Process runReplicationServer(int port, String pluginConfigFilePath, int lockLeaseDuration) throws IOException {
+        return new CorfuReplicationServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(port)
+                .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
+                .setPluginConfigFilePath(pluginConfigFilePath)
+                .setMsg_size(MSG_SIZE)
+                .runServer();
+    }
+
     public static Process runDefaultServer() throws IOException {
         return new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
@@ -514,6 +523,7 @@ public class AbstractIT extends AbstractCorfuTest {
         private String pluginConfigFilePath = null;
         private String logPath = null;
         private int msg_size = 0;
+        private Integer lockLeaseDuration;
 
         /**
          * Create a command line string according to the properties set for a Corfu Server
@@ -552,6 +562,10 @@ public class AbstractIT extends AbstractCorfuTest {
 
             if(pluginConfigFilePath != null) {
                 command.append(" --plugin=").append(pluginConfigFilePath);
+            }
+
+            if (lockLeaseDuration != null) {
+                command.append(" --lock-lease=").append(lockLeaseDuration);
             }
 
             command.append(" -d ").append(logLevel).append(" ")

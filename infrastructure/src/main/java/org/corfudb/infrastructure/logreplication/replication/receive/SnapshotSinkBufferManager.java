@@ -25,14 +25,13 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      */
     public SnapshotSinkBufferManager(int ackCycleTime, int ackCycleCnt, int size,
                                      long lastProcessedSeq, LogReplicationSinkManager sinkManager) {
-
         super(SNAPSHOT_MESSAGE, ackCycleTime, ackCycleCnt, size, lastProcessedSeq, sinkManager);
     }
 
     /**
      *
      * @param entry
-     * @return Previous inorder message's snapshotSeqNumber.
+     * @return Previous in order message's snapshotSeqNumber.
      */
     @Override
     long getPreSeq(LogReplicationEntry entry) {
@@ -84,14 +83,8 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      */
     @Override
     public boolean verifyMessageType(LogReplicationEntry entry) {
-        switch (entry.getMetadata().getMessageMetadataType()) {
-            case SNAPSHOT_MESSAGE:
-            case SNAPSHOT_END:
-                return true;
-            default:
-                log.error("wrong message type ", entry.getMetadata());
-                return false;
-        }
+        return entry.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE ||
+                entry.getMetadata().getMessageMetadataType() == SNAPSHOT_END;
     }
 
     /**

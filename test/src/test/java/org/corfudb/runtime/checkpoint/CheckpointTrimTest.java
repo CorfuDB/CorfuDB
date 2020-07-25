@@ -1,6 +1,7 @@
 package org.corfudb.runtime.checkpoint;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.in;
 
 import com.google.common.reflect.TypeToken;
 
@@ -10,6 +11,8 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.assertj.core.api.Assertions;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -270,6 +273,37 @@ public class CheckpointTrimTest extends AbstractViewTest {
         Assertions.assertThat(Stream.of(stream.remainingUpTo(Long.MAX_VALUE))
                 .map(List::size).mapToInt(Integer::intValue).sum())
                 .isEqualTo(BATCH_SIZE);
+    }
+
+
+    @Test
+    public void rawStreamSeekBeyondTrimNoCheckpoint() {
+        final int BATCH_SIZE = 10;
+        final String tableName = "test";
+        final CorfuTable<String, String> map = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamName(tableName)
+                .open();
+
+        IntStream.range(0, BATCH_SIZE).forEach(idx -> map.put(String.valueOf(idx), String.valueOf(idx)));
+        // Trim with no checkpoint
+        trim(new Token(0, BATCH_SIZE-1));
+
+        // Create a new stream and seek beyond the last trimmed address.
+        CorfuRuntime newRuntime = getNewRuntime(getDefaultNode()).connect();
+        IStreamView stream = newRuntime.getStreamsView().get(CorfuRuntime.getStreamID(tableName));
+
+        IntStream.range(BATCH_SIZE, BATCH_SIZE*2).forEach(idx -> stream.append(String.valueOf(idx).getBytes()));
+        stream.seek(BATCH_SIZE);
+        Stream<ILogData> data = stream.streamUpTo(BATCH_SIZE*2);
+        int index = BATCH_SIZE;
+        for(Object e : data.toArray()) {
+            ILogData logData = (ILogData)e;
+            assertThat(logData.getPayload(newRuntime)).isEqualTo(String.valueOf(index).getBytes());
+            index++;
+        }
+
+        assertThat(index).isEqualTo(BATCH_SIZE*2);
     }
 
     /**

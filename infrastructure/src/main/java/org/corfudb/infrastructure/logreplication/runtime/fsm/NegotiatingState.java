@@ -268,8 +268,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                         "logHead={}, lastLogProcessed={}", logHead, negotiationResponse.getLastLogProcessed());
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                         new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START,
-                                new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogProcessed())
-                        )));
+                                new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogProcessed(),
+                                        negotiationResponse.getSnapshotApplied()))));
             } else {
                 // TODO: it is OK for a first phase, but this might not be efficient/accurate, as the next (+1)
                 //  might not really be the next entry (as that is a globalAddress and the +1 might not even belong to
