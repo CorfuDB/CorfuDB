@@ -24,7 +24,8 @@ enum MessageType {
 
     GET_TOKEN = 9;
     COMMIT_TRANSACTION = 10;
-    BOOTSTRAP = 11;
+    BOOTSTRAP_SEQUENCER = 11;
+    BOOTSTRAP = 12;
     QUERY_STREAM = 16;
 
     READ_LOG = 17;
