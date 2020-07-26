@@ -19,7 +19,7 @@ public class CorfuServerStateGraph {
                 .put(START, ImmutableSet.of(RESET_LOG_UNIT, STOP, STOP_AND_CLEAN))
                 .put(STOP, ImmutableSet.of(START))
                 .put(STOP_AND_CLEAN, ImmutableSet.of(START))
-                .put(RESET_LOG_UNIT, ImmutableSet.of(RESET_LOG_UNIT, STOP))
+                .put(RESET_LOG_UNIT, ImmutableSet.of(RESET_LOG_UNIT, STOP, STOP_AND_CLEAN))
                 .build();
     }
 

@@ -466,9 +466,14 @@ public class LogUnitServer extends AbstractServer {
     public CompletableFuture<Void> shutdown() {
         log.info("Shutdown LogUnit server. Current epoch: {}, ", serverContext.getServerEpoch());
         markShutdown();
+
         return shutdownServerExecutor(executor)
+                .exceptionally(ex -> {
+                    log.error("LogUitServer shutdown error", ex);
+                    return null;
+                })
                 .thenCompose(empty -> logCleaner.shutdown())
-                .thenRun(batchWriter::close)
+                .thenCompose(empty -> batchWriter.asyncClose())
                 .thenRun(streamLog::close);
     }
 

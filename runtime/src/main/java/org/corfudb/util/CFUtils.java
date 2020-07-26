@@ -1,6 +1,7 @@
 package org.corfudb.util;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 import java.time.Duration;
@@ -24,6 +25,7 @@ import java.util.function.Supplier;
 /**
  * Created by mwei on 9/15/15.
  */
+@Slf4j
 public final class CFUtils {
     private static final ScheduledExecutorService SCHEDULER = Executors.newScheduledThreadPool(
             1,
@@ -246,6 +248,24 @@ public final class CFUtils {
         throw new RuntimeException(unwrapThrowable);
     }
 
+    public static CompletableFuture<Void> asyncShutdownExceptionally(
+            ExecutorService executor, Duration timeout, Executor shutdownExecutor) {
+        return asyncShutdown(executor, timeout, shutdownExecutor)
+                .exceptionally(ex -> {
+                    log.error("Error shutdown", ex);
+                    return null;
+                });
+    }
+
+    public static CompletableFuture<Void> asyncShutdownExceptionally(
+            ExecutorService executor, Duration timeout) {
+        return asyncShutdown(executor, timeout)
+                .exceptionally(ex -> {
+                    log.error("Error shutdown", ex);
+                    return null;
+                });
+    }
+
     public static CompletableFuture<Void> asyncShutdown(
             ExecutorService executor, Duration timeout) {
         return asyncShutdown(executor, timeout, SHUTDOWN_EXECUTOR);
@@ -259,7 +279,7 @@ public final class CFUtils {
             try {
                 executor.awaitTermination(timeout.toMillis(), TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
-                throw new CompletionException("Netty server - close operation is interrupted.", e);
+                throw new CompletionException("Shutdown operation - close operation is interrupted.", e);
             }
         };
         return CompletableFuture.runAsync(shutdownAction, shutdownExecutor);

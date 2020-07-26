@@ -99,14 +99,7 @@ public abstract class AbstractServer {
         log.info("close: Shutting down {}", serverName);
 
         return CFUtils
-                .asyncShutdown(executor, ServerContext.SHUTDOWN_TIMER, shutdownService)
-                .whenComplete((res, ex) -> {
-                    if (ex == null) {
-                        log.info("close: Cleanly shutdown {}", serverName);
-                    } else {
-                        log.error("close: Failed to cleanly shutdown {}", serverName, ex);
-                    }
-                });
+                .asyncShutdownExceptionally(executor, ServerContext.SHUTDOWN_TIMER, shutdownService);
     }
 
     protected void markShutdown(){

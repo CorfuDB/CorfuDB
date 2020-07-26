@@ -59,6 +59,6 @@ public class StreamLogCompaction {
 
     public CompletableFuture<Void> shutdown() {
         compactor.cancel(true);
-        return CFUtils.asyncShutdown(scheduler, shutdownTimer);
+        return CFUtils.asyncShutdownExceptionally(scheduler, shutdownTimer);
     }
 }

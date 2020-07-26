@@ -124,7 +124,7 @@ class LocalMonitoringService implements ManagementService {
     public CompletableFuture<Void> shutdown() {
         // Shutting the local metrics polling task.
         log.info("Local Metrics Polling Task shutting down.");
-        return CFUtils.asyncShutdown(pollingService, Duration.ofMillis(300));
+        return CFUtils.asyncShutdownExceptionally(pollingService, Duration.ofMillis(300));
     }
 
     public CompletableFuture<SequencerMetrics> getMetrics() {

@@ -208,6 +208,10 @@ public class BatchProcessor implements AutoCloseable {
     @Override
     public void close() {
         operationsQueue.add(BatchWriterOperation.SHUTDOWN);
-        CFUtils.asyncShutdown(processorService, ServerContext.SHUTDOWN_TIMER).join();
+        asyncClose().join();
+    }
+
+    public CompletableFuture<Void> asyncClose(){
+        return CFUtils.asyncShutdownExceptionally(processorService, ServerContext.SHUTDOWN_TIMER);
     }
 }

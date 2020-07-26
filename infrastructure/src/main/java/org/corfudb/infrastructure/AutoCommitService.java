@@ -215,6 +215,6 @@ public class AutoCommitService implements ManagementService {
     @Override
     public CompletableFuture<Void> shutdown() {
         log.info("Auto commit service shutting down.");
-        return CFUtils.asyncShutdown(autoCommitScheduler, Duration.ofMillis(300));
+        return CFUtils.asyncShutdownExceptionally(autoCommitScheduler, Duration.ofMillis(300));
     }
 }

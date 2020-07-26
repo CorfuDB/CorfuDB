@@ -202,7 +202,11 @@ public class CorfuServerManager {
                 corfuServerInstance.logUnitServer.getStreamLog().reset();
             });
 
-            return this;
+            return CorfuServerManager.builder()
+                    .instance(instance)
+                    .configurator(configurator)
+                    .currentState(nextState)
+                    .build();
         });
     }
 

@@ -836,8 +836,8 @@ public class RemoteMonitoringService implements ManagementService {
         Duration timeout = Duration.ofMillis(300);
 
         return CompletableFuture.allOf(
-                CFUtils.asyncShutdown(detectionTasksScheduler, timeout),
-                CFUtils.asyncShutdown(failureDetectorWorker, timeout)
+                CFUtils.asyncShutdownExceptionally(detectionTasksScheduler, timeout),
+                CFUtils.asyncShutdownExceptionally(failureDetectorWorker, timeout)
         );
     }
 
