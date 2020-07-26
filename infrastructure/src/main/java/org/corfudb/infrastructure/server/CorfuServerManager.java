@@ -128,6 +128,7 @@ public class CorfuServerManager {
         log.info("close: Shutting down Corfu server and cleaning resources");
         return ifLegalTransition(CorfuServerState.STOP, nextState -> {
             if (!instance.isPresent()) {
+                log.warn("Corfu server instance is not present");
                 return this;
             }
 
@@ -151,7 +152,7 @@ public class CorfuServerManager {
 
             return CorfuServerManager.builder()
                     .instance(Optional.empty())
-                    .currentState(CorfuServerState.STOP)
+                    .currentState(nextState)
                     .configurator(configurator)
                     .build();
         });

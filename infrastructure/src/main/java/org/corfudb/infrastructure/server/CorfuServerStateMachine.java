@@ -30,9 +30,9 @@ public class CorfuServerStateMachine {
                 case RESET_LOG_UNIT:
                     return currentServer.resetLogUnitServer();
                 case STOP:
-                    return currentServer.stopServer();
+                    return currentServer.stopServer().startServer(this);
                 case STOP_AND_CLEAN:
-                    return currentServer.stopAndCleanServer();
+                    return currentServer.stopAndCleanServer().startServer(this);
                 default:
                     throw new IllegalStateException("Invalid state: " + nextState);
             }
