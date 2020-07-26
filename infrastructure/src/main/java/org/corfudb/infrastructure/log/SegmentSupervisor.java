@@ -17,6 +17,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -121,19 +122,26 @@ public class SegmentSupervisor {
         segment.close();
     }
 
-    void sync(boolean force) {
+    void sync(boolean force) throws IOException {
+        Optional<IOException> err = Optional.empty();
+
         if (force) {
             for (FileChannel ch : channelsToSync) {
                 try {
                     ch.force(true);
-                } catch (Exception ex) {
+                } catch (IOException ex) {
                     log.warn("Error - can't sync a file channel");
+                    err = Optional.of(ex);
                 } finally {
                     channelsToSync.remove(ch);
                 }
             }
         }
         log.trace("Sync'd {} channels", channelsToSync.size());
+
+        if (err.isPresent()) {
+            throw err.get();
+        }
     }
 
     /**

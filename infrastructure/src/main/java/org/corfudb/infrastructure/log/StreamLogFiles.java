@@ -380,7 +380,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     }
 
     @Override
-    public void sync(boolean force) {
+    public void sync(boolean force) throws IOException {
         segmentSupervisor.sync(force);
     }
 
