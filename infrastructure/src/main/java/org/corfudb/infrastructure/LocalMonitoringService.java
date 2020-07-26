@@ -9,6 +9,7 @@ import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
@@ -120,10 +121,10 @@ class LocalMonitoringService implements ManagementService {
      * Shutsdown the local metrics polling executor service.
      */
     @Override
-    public void shutdown() {
+    public CompletableFuture<Void> shutdown() {
         // Shutting the local metrics polling task.
-        pollingService.shutdownNow();
         log.info("Local Metrics Polling Task shutting down.");
+        return CFUtils.asyncShutdown(pollingService, Duration.ofMillis(300));
     }
 
     public CompletableFuture<SequencerMetrics> getMetrics() {

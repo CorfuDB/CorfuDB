@@ -18,6 +18,7 @@ import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
 import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -212,8 +213,8 @@ public class AutoCommitService implements ManagementService {
      * Clean up.
      */
     @Override
-    public void shutdown() {
-        autoCommitScheduler.shutdownNow();
+    public CompletableFuture<Void> shutdown() {
         log.info("Auto commit service shutting down.");
+        return CFUtils.asyncShutdown(autoCommitScheduler, Duration.ofMillis(300));
     }
 }

@@ -22,6 +22,10 @@ public class ServerThreadFactory implements ThreadFactory {
         this.handler = handler;
     }
 
+    public static ServerThreadFactory create(String threadPrefix) {
+        return new ServerThreadFactory(threadPrefix, new ExceptionHandler());
+    }
+
     @Override
     public Thread newThread(Runnable run) {
         Thread thread = defaultFactory.newThread(run);

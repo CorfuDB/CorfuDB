@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.infrastructure.ServerThreadFactory.ExceptionHandler;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -151,7 +153,7 @@ public class SequencerServer extends AbstractServer {
 
         // Sequencer server is single threaded by current design
         this.executor = Executors.newSingleThreadExecutor(
-                new ServerThreadFactory("sequencer-", new ServerThreadFactory.ExceptionHandler()));
+                new ServerThreadFactory("sequencer-", new ExceptionHandler()));
 
         globalLogTail = Address.getMinAddress();
         this.cache = new SequencerServerCache(config.getCacheSize(), globalLogTail - 1);
@@ -164,9 +166,9 @@ public class SequencerServer extends AbstractServer {
     }
 
     @Override
-    public void shutdown() {
-        super.shutdown();
-        executor.shutdown();
+    public CompletableFuture<Void> shutdown() {
+        markShutdown();
+        return shutdownServerExecutor(executor);
     }
 
     @Override

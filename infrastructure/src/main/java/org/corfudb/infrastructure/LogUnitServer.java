@@ -9,6 +9,8 @@ import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.infrastructure.server.CorfuServerStateGraph.CorfuServerState;
+import org.corfudb.infrastructure.server.CorfuServerStateMachine;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -43,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -51,7 +54,6 @@ import java.util.concurrent.TimeUnit;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
 import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
@@ -101,16 +103,18 @@ public class LogUnitServer extends AbstractServer {
     private final StreamLog streamLog;
     private final StreamLogCompaction logCleaner;
     private final BatchProcessor batchWriter;
+    private final CorfuServerStateMachine serverStateMachine;
 
-    private ExecutorService executor;
+    private final ExecutorService executor;
 
     /**
      * Returns a new LogUnitServer.
      *
      * @param serverContext context object providing settings and objects
      */
-    public LogUnitServer(ServerContext serverContext) {
+    public LogUnitServer(ServerContext serverContext, CorfuServerStateMachine serverStateMachine) {
         this.serverContext = serverContext;
+        this.serverStateMachine = serverStateMachine;
         this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
         executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
                 new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
@@ -422,27 +426,36 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.RESET_LOGUNIT)
     private synchronized void resetLogUnit(CorfuPayloadMsg<Long> msg,
-                                           ChannelHandlerContext ctx, IServerRouter r) {
+                                           ChannelHandlerContext ctx, IServerRouter router) {
 
         // Check if the reset request is with an epoch greater than the last reset epoch seen to
         // prevent multiple reset in the same epoch. and should be equal to the current router
         // epoch to prevent stale reset requests from wiping out the data.
-        if (msg.getPayload() > serverContext.getLogUnitEpochWaterMark()
-                && msg.getPayload() == serverContext.getServerEpoch()) {
-            serverContext.setLogUnitEpochWaterMark(msg.getPayload());
-            batchWriter.addTask(RESET, msg)
-                    .thenRun(() -> {
-                        dataCache.invalidateAll();
-                        log.info("LogUnit Server Reset.");
-                        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-                    }).exceptionally(ex -> {
-                handleException(ex, ctx, msg, r);
-                return null;
-            });
-        } else {
+        if (msg.getPayload() <= serverContext.getLogUnitEpochWaterMark()
+                || msg.getPayload() != serverContext.getServerEpoch()) {
             log.info("LogUnit Server Reset request received but reset already done.");
-            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+            router.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+            return;
         }
+
+        serverContext.setLogUnitEpochWaterMark(msg.getPayload());
+        serverStateMachine
+                .next(CorfuServerState.RESET_LOG_UNIT)
+                .thenAccept(currentState -> {
+                    if (currentState == CorfuServerState.RESET_LOG_UNIT) {
+                        log.info("LogUnit Server Reset.");
+                        dataCache.invalidateAll();
+                        router.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+                    } else {
+                        String err = "Illegal operation (reset log unit), current corfu state: {}";
+                        log.warn(err, currentState);
+                        router.sendResponse(ctx, msg, CorfuMsgType.NACK.msg());
+                    }
+                })
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, router);
+                    return null;
+                });
     }
 
 
@@ -450,13 +463,13 @@ public class LogUnitServer extends AbstractServer {
      * Shutdown the server.
      */
     @Override
-    public void shutdown() {
+    public CompletableFuture<Void> shutdown() {
         log.info("Shutdown LogUnit server. Current epoch: {}, ", serverContext.getServerEpoch());
-        super.shutdown();
-        executor.shutdown();
-        logCleaner.shutdown();
-        batchWriter.close();
-        streamLog.close();
+        markShutdown();
+        return shutdownServerExecutor(executor)
+                .thenCompose(empty -> logCleaner.shutdown())
+                .thenRun(batchWriter::close)
+                .thenRun(streamLog::close);
     }
 
     @VisibleForTesting

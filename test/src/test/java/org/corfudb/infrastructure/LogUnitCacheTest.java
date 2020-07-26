@@ -2,6 +2,7 @@ package org.corfudb.infrastructure;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.corfudb.infrastructure.server.CorfuServerStateMachine;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -10,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,7 +45,7 @@ public class LogUnitCacheTest extends AbstractServerTest {
         sc.setServerRouter(router);
         sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
 
-        LogUnitServer s1 = new LogUnitServer(sc);
+        LogUnitServer s1 = new LogUnitServer(sc, serverSm);
 
         setServer(s1);
         setContext(sc);
@@ -112,7 +114,7 @@ public class LogUnitCacheTest extends AbstractServerTest {
                 .setLogPath(serviceDir)
                 .setMemory(false)
                 .setCacheSizeHeapRatio(String.valueOf(randomCacheRatio))
-                .build());
+                .build(), serverSm);
 
         assertThat(s1).hasMaxCorrectCacheSize(randomCacheRatio);
     }

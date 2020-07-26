@@ -1,4 +1,4 @@
-package org.corfudb.infrastructure;
+package org.corfudb.infrastructure.server;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +12,9 @@ import java.util.Map;
  */
 @Slf4j
 public class CorfuServerCmdLine {
+
+    // Error code required to detect an ungraceful shutdown.
+    public static final int EXIT_ERROR_CODE = 100;
 
     /**
      * This string defines the command line arguments,

@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import lombok.Getter;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.server.CorfuServerStateMachine;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -14,6 +15,7 @@ import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.junit.Before;
+import org.mockito.Mockito;
 
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +37,8 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     TestClientRouter clientRouter;
 
     AtomicInteger requestCounter;
+
+    protected final CorfuServerStateMachine serverSm = Mockito.mock(CorfuServerStateMachine.class);
 
     public AbstractServerTest() {
         router = new TestServerRouter();

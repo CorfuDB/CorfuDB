@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.util.LinkedList;
@@ -10,7 +9,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
 
@@ -28,7 +26,7 @@ import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.util.CFUtils;
 
 /**
  * This class manages access for operations that need ordering while executing against
@@ -164,9 +162,6 @@ public class BatchProcessor implements AutoCloseable {
                                 RangeWriteMsg writeRange = (RangeWriteMsg) currOp.getMsg().getPayload();
                                 streamLog.append(writeRange.getEntries());
                                 break;
-                            case RESET:
-                                streamLog.reset();
-                                break;
                             case TAILS_QUERY:
                                 TailsRequest tailsRequest = (TailsRequest)currOp.getMsg().getPayload();
                                 TailsResponse tails;
@@ -213,12 +208,6 @@ public class BatchProcessor implements AutoCloseable {
     @Override
     public void close() {
         operationsQueue.add(BatchWriterOperation.SHUTDOWN);
-        processorService.shutdown();
-        try {
-            processorService.awaitTermination(ServerContext.SHUTDOWN_TIMER.toMillis(),
-                    TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            throw new UnrecoverableCorfuInterruptedError("BatchProcessor close interrupted.", e);
-        }
+        CFUtils.asyncShutdown(processorService, ServerContext.SHUTDOWN_TIMER).join();
     }
 }

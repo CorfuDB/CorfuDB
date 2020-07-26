@@ -44,7 +44,7 @@ public class LayoutServerTest extends AbstractServerTest {
 
         LayoutServer s1 = new LayoutServer(sc);
         router.addServer(s1);
-        getRouter().addServer(new BaseServer(sc));
+        getRouter().addServer(new BaseServer(sc, serverSm));
         return s1;
     }
 

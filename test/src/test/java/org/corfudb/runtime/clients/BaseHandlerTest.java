@@ -4,8 +4,10 @@ import com.google.common.collect.ImmutableSet;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.server.CorfuServerStateMachine;
 import org.corfudb.util.CFUtils;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.util.Set;
 import java.util.UUID;
@@ -20,7 +22,7 @@ public class BaseHandlerTest extends AbstractClientTest {
     @Override
     Set<AbstractServer> getServersForTest() {
         return new ImmutableSet.Builder<AbstractServer>()
-                .add(new BaseServer(ServerContextBuilder.defaultTestContext(0)))
+                .add(new BaseServer(ServerContextBuilder.defaultTestContext(0), serverSm))
                 .build();
     }
 

@@ -12,6 +12,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.infrastructure.server.CorfuServerStateMachine;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -34,6 +35,7 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.io.File;
 import java.io.RandomAccessFile;
@@ -95,7 +97,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         serverContext.installSingleNodeLayoutIfAbsent();
         serverRouter.setServerContext(serverContext);
         serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(), serverRouter);
-        LogUnitServer server = new LogUnitServer(serverContext);
+        LogUnitServer server = new LogUnitServer(serverContext, serverSm);
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
                 .build();
@@ -175,7 +177,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .withCauseInstanceOf(OverwriteException.class);
 
         // "Restart the logging unit
-        LogUnitServer server2 = new LogUnitServer(serverContext);
+        LogUnitServer server2 = new LogUnitServer(serverContext, serverSm);
         serverRouter.reset();
         serverRouter.addServer(server2);
 
@@ -202,7 +204,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
                 .setServerRouter(serverRouter)
                 .setLogSizeLimitPercentage(Double.toString(maxLogSizeInPercentage))
                 .build();
-        LogUnitServer server = new LogUnitServer(sc);
+        LogUnitServer server = new LogUnitServer(sc, serverSm);
         serverRouter.addServer(server);
 
         final long address0 = 0L;
@@ -249,7 +251,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         client.compact().get();
 
         // For logunit cache flush
-        LogUnitServer server2 = new LogUnitServer(serverContext);
+        LogUnitServer server2 = new LogUnitServer(serverContext, serverSm);
         serverRouter.reset();
         serverRouter.addServer(server2);
 
@@ -261,7 +263,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
 
     @Test
     public void flushLogUnitCache() throws Exception {
-        LogUnitServer server2 = new LogUnitServer(serverContext);
+        LogUnitServer server2 = new LogUnitServer(serverContext, serverSm);
         serverRouter.reset();
         serverRouter.addServer(server2);
 
@@ -475,7 +477,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         String logFilePath = logDir + File.separator + "0.log";
 
         serverRouter.reset();
-        serverRouter.addServer(new LogUnitServer(serverContext));
+        serverRouter.addServer(new LogUnitServer(serverContext, serverSm));
 
         try(RandomAccessFile file = new RandomAccessFile(logFilePath, "rw")) {
             try (FileChannel channel = file.getChannel()) {

@@ -36,7 +36,7 @@ public class ManagementServerTest extends AbstractServerTest {
                 .build();
         // Required for management server to fetch layout.
         router.addServer(new LayoutServer(serverContext));
-        router.addServer(new BaseServer(serverContext));
+        router.addServer(new BaseServer(serverContext, serverSm));
         // Required to fetch global tails while handling failures.
         // Required for management server to bootstrap during initialization.
         router.addServer(new SequencerServer(serverContext));

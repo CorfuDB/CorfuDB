@@ -4,7 +4,11 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.util.CFUtils;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -12,11 +16,14 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @Slf4j
 public abstract class AbstractServer {
-
     /**
      * Current server state
      */
     private final AtomicReference<ServerState> state = new AtomicReference<>(ServerState.READY);
+
+    protected final ExecutorService shutdownService = Executors.newSingleThreadExecutor(
+            ServerThreadFactory.create("corfu-shutdown-service-")
+    );
 
     /**
      * Get the message handler for this instance.
@@ -39,9 +46,9 @@ public abstract class AbstractServer {
     /**
      * A stub that handlers can override to manage their threading, otherwise
      * the requests will be executed on the IO threads
-     * @param msg
-     * @param ctx
-     * @param r
+     * @param msg message
+     * @param ctx netty channel context
+     * @param r server router
      */
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         getHandler().handle(msg, ctx, r);
@@ -85,7 +92,24 @@ public abstract class AbstractServer {
     /**
      * Shutdown the server.
      */
-    public void shutdown() {
+    public abstract CompletableFuture<Void> shutdown();
+
+    protected CompletableFuture<Void> shutdownServerExecutor(ExecutorService executor) {
+        String serverName = getClass().getSimpleName();
+        log.info("close: Shutting down {}", serverName);
+
+        return CFUtils
+                .asyncShutdown(executor, ServerContext.SHUTDOWN_TIMER, shutdownService)
+                .whenComplete((res, ex) -> {
+                    if (ex == null) {
+                        log.info("close: Cleanly shutdown {}", serverName);
+                    } else {
+                        log.error("close: Failed to cleanly shutdown {}", serverName, ex);
+                    }
+                });
+    }
+
+    protected void markShutdown(){
         setState(ServerState.SHUTDOWN);
     }
 

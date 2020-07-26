@@ -30,12 +30,14 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import javax.annotation.Nonnull;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -262,14 +264,7 @@ public class Orchestrator {
     /**
      * Shuts down the orchestrator executor.
      */
-    public void shutdown() {
-        executor.shutdownNow();
-        try {
-            executor.awaitTermination(ServerContext.SHUTDOWN_TIMER.getSeconds(), TimeUnit.SECONDS);
-        } catch (InterruptedException ie) {
-            log.debug("Orchestrator executor awaitTermination interrupted : {}", ie);
-            throw new UnrecoverableCorfuInterruptedError(ie);
-        }
-        log.info("Orchestrator shutting down.");
+    public CompletableFuture<Void> shutdown() {
+        return CFUtils.asyncShutdown(executor, ServerContext.SHUTDOWN_TIMER);
     }
 }

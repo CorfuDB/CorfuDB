@@ -9,9 +9,11 @@ import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.concurrent.SingletonResource;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.corfudb.infrastructure.RecoveryHandler.runRecoveryReconfiguration;
@@ -222,8 +224,10 @@ public class ManagementAgent {
     /**
      * Shutdown the initializationTaskThread and monitoring services.
      */
-    public void shutdown() {
+    public CompletableFuture<Void> shutdown() {
         // Shutting the fault detector.
+        log.info("Management Agent shutting down.");
+
         shutdown = true;
 
         try {
@@ -231,14 +235,14 @@ public class ManagementAgent {
             initializationTaskThread.join(ServerContext.SHUTDOWN_TIMER.toMillis());
         } catch (InterruptedException ie) {
             log.error("initializationTask interrupted : {}", ie);
-            throw new UnrecoverableCorfuInterruptedError(ie);
+            throw new IllegalStateException(ie);
         }
 
-        remoteMonitoringService.shutdown();
-        localMonitoringService.shutdown();
-        autoCommitService.shutdown();
-
-        log.info("Management Agent shutting down.");
+        return CompletableFuture.allOf(
+                remoteMonitoringService.shutdown(),
+                localMonitoringService.shutdown(),
+                autoCommitService.shutdown()
+        );
     }
 
 }

@@ -1,24 +1,24 @@
 package org.corfudb.runtime.clients;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.ChannelFuture;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.BaseServer;
-import org.corfudb.infrastructure.CorfuServerNode;
 import org.corfudb.infrastructure.NettyServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
+import org.corfudb.infrastructure.server.CorfuServerStateMachine;
+import org.corfudb.infrastructure.server.NettyServerManager.NettyServerConfigurator;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.util.NodeLocator;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.mockito.Mockito;
 
 import javax.annotation.Nonnull;
 import java.io.File;
@@ -26,8 +26,9 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.util.Collections;
 import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 3/28/16.
@@ -546,19 +547,30 @@ public class NettyCommTest extends AbstractCorfuTest {
         }
 
         void bootstrapServer() {
-            BaseServer baseServer = new BaseServer(serverContext);
-            NettyServerRouter nsr = new NettyServerRouter(ImmutableList.of(baseServer),
-                    serverContext);
-            CorfuServerNode corfuServerNode = new CorfuServerNode(serverContext,
-                    ImmutableMap.of(BaseServer.class, baseServer));
-            f = corfuServerNode.bindServer(serverContext.getBossGroup(),
+            CorfuServerStateMachine stateMachine = Mockito.mock(CorfuServerStateMachine.class);
+            ImmutableList<AbstractServer> servers = ImmutableList.of(
+                    new BaseServer(serverContext, stateMachine)
+            );
+
+            NettyServerRouter nsr = new NettyServerRouter(servers, serverContext);
+            this.serverContext.setServerRouter(nsr);
+            if(serverContext.isSingleNodeSetup() && serverContext.getCurrentLayout() != null){
+                serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(), nsr);
+            }
+
+            NettyServerConfigurator nettyServer = NettyServerConfigurator.builder()
+                    .serverContext(serverContext)
+                    .router(nsr)
+                    .build();
+
+            f = nettyServer.bindServer(serverContext.getBossGroup(),
                     serverContext.getWorkerGroup(),
-                    corfuServerNode::configureBootstrapOptions,
+                    nettyServer::configureBootstrapOptions,
                     serverContext,
                     nsr,
                     address,
-                    Integer.parseInt((String)serverContext
-                        .getServerConfig().get("<port>")));
+                    Integer.parseInt((String) serverContext.getServerConfig().get("<port>"))
+            );
         }
 
         void shutdownServer() {

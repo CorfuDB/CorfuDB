@@ -38,7 +38,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
     @Override
     public AbstractServer getDefaultServer() {
-        return new LogUnitServer(new ServerContextBuilder().build());
+        return new LogUnitServer(new ServerContextBuilder().build(), serverSm);
     }
 
     @Test
@@ -55,7 +55,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         sc.setServerRouter(router);
         sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
 
-        LogUnitServer s1 = new LogUnitServer(sc);
+        LogUnitServer s1 = new LogUnitServer(sc, serverSm);
 
         setServer(s1);
         setContext(sc);
@@ -107,7 +107,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         sc.setServerRouter(router);
         sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
 
-        LogUnitServer s1 = new LogUnitServer(sc);
+        LogUnitServer s1 = new LogUnitServer(sc, serverSm);
 
         setServer(s1);
         setContext(sc);
@@ -134,7 +134,7 @@ public class LogUnitServerTest extends AbstractServerTest {
             LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
                     .setLogPath(serviceDir)
                     .setMemory(false)
-                    .build());
+                    .build(), serverSm);
             fail("Should have failed to startup in read-only mode");
         } catch (LogUnitException e) {
             // Correctly failed to open on read-only directory
@@ -159,7 +159,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         sc.setServerRouter(router);
         sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
 
-        LogUnitServer s1 = new LogUnitServer(sc);
+        LogUnitServer s1 = new LogUnitServer(sc, serverSm);
 
         setServer(s1);
         setContext(sc);
@@ -184,7 +184,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .build());
+                .build(), serverSm);
 
         setServer(s2);
 
@@ -225,7 +225,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         sc.setServerRouter(router);
         sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
 
-        LogUnitServer s1 = new LogUnitServer(sc);
+        LogUnitServer s1 = new LogUnitServer(sc, serverSm);
 
         setServer(s1);
         setContext(sc);
@@ -254,7 +254,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .build());
+                .build(), serverSm);
 
         setServer(s2);
 
@@ -286,7 +286,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogUnitServer s3 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .build());
+                .build(), serverSm);
 
         setServer(s3);
 
@@ -337,7 +337,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         sc.setServerRouter(router);
         sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
 
-        LogUnitServer s1 = new LogUnitServer(sc);
+        LogUnitServer s1 = new LogUnitServer(sc, serverSm);
 
         setServer(s1);
         setContext(sc);
@@ -371,7 +371,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogUnitServer newServer = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .build());
+                .build(), serverSm);
 
         // Retrieve address space from new initialized log unit server (bootstrap path)
         addressSpace = newServer.getStreamAddressSpace(streamID);
@@ -404,7 +404,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         sc.setServerRouter(router);
         sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
 
-        LogUnitServer s1 = new LogUnitServer(sc);
+        LogUnitServer s1 = new LogUnitServer(sc, serverSm);
 
         setServer(s1);
         setContext(sc);
@@ -426,7 +426,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         s1 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .build());
+                .build(), serverSm);
 
         setServer(s1);
 
@@ -478,7 +478,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         builder.setMemory(false);
         builder.setLogPath(tempDir);
         ServerContext context = builder.build();
-        LogUnitServer logunit = new LogUnitServer(context);
+        LogUnitServer logunit = new LogUnitServer(context, serverSm);
     }
 
     @Test (expected = RuntimeException.class)
@@ -495,7 +495,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         builder.setLogPath(tempDir);
         builder.setNoVerify(!noVerify);
         ServerContext context = builder.build();
-        LogUnitServer logunit = new LogUnitServer(context);
+        LogUnitServer logunit = new LogUnitServer(context, serverSm);
     }
 
 
@@ -513,7 +513,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         sc.setServerRouter(router);
         sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
 
-        LogUnitServer s1 = new LogUnitServer(sc);
+        LogUnitServer s1 = new LogUnitServer(sc, serverSm);
 
         setServer(s1);
         setContext(sc);
@@ -568,7 +568,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
                 .setMemory(false)
-                .build());
+                .build(), serverSm);
         setServer(s2);
 
         assertThat(s2)
@@ -592,7 +592,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         sc.setServerRouter(router);
         sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
 
-        LogUnitServer s1 = new LogUnitServer(sc);
+        LogUnitServer s1 = new LogUnitServer(sc, serverSm);
 
         setServer(s1);
         setContext(sc);

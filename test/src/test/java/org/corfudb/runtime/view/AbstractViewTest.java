@@ -24,6 +24,7 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.NetworkStretcher;
+import org.corfudb.infrastructure.server.CorfuServerStateMachine;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
 import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
@@ -54,6 +55,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.junit.BeforeClass;
+import org.mockito.Mockito;
 
 /**
  * This class serves as a base class for most higher-level Corfu unit tests
@@ -484,6 +486,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         private IServerRouter serverRouter;
         private int port;
 
+        private final CorfuServerStateMachine serverSm = Mockito.mock(CorfuServerStateMachine.class);
+
         TestServer(Map<String, Object> optsMap) {
             this(new ServerContext(optsMap));
             serverContext.setServerRouter(new TestServerRouter());
@@ -495,10 +499,10 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             if (serverRouter == null) {
                 serverRouter = new TestServerRouter();
             }
-            this.baseServer = new BaseServer(serverContext);
+            this.baseServer = new BaseServer(serverContext, serverSm);
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
-            this.logUnitServer = new LogUnitServer(serverContext);
+            this.logUnitServer = new LogUnitServer(serverContext, serverSm);
             this.managementServer = new ManagementServer(serverContext);
 
             this.serverRouter.addServer(baseServer);

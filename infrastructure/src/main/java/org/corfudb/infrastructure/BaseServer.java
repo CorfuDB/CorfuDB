@@ -4,6 +4,9 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerThreadFactory.ExceptionHandler;
+import org.corfudb.infrastructure.server.CorfuServerStateGraph.CorfuServerState;
+import org.corfudb.infrastructure.server.CorfuServerStateMachine;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -14,6 +17,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.net.InetSocketAddress;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -26,6 +30,7 @@ public class BaseServer extends AbstractServer {
     final ServerContext serverContext;
 
     private final ExecutorService executor;
+    private final CorfuServerStateMachine serverStateMachine;
 
     /** HandlerMethod for the base server. */
     @Getter
@@ -36,10 +41,11 @@ public class BaseServer extends AbstractServer {
         return getState() == ServerState.READY;
     }
 
-    public BaseServer(@Nonnull ServerContext context) {
+    public BaseServer(@Nonnull ServerContext context, CorfuServerStateMachine serverStateMachine) {
         this.serverContext = context;
+        this.serverStateMachine = serverStateMachine;
         executor = Executors.newFixedThreadPool(serverContext.getBaseServerThreadCount(),
-                new ServerThreadFactory("baseServer-", new ServerThreadFactory.ExceptionHandler()));
+                new ServerThreadFactory("baseServer-", new ExceptionHandler()));
     }
 
     @Override
@@ -48,9 +54,9 @@ public class BaseServer extends AbstractServer {
     }
 
     @Override
-    public void shutdown() {
-        super.shutdown();
-        executor.shutdown();
+    public CompletableFuture<Void> shutdown() {
+        markShutdown();
+        return shutdownServerExecutor(executor);
     }
 
     /**
@@ -129,15 +135,16 @@ public class BaseServer extends AbstractServer {
      * which monitors the exit code of Corfu. If the exit code is 100, then it resets
      * the server and DELETES ALL EXISTING DATA.
      *
-     * @param msg   The incoming message
-     * @param ctx   The channel context
-     * @param r     The server router.
+     * @param msg    The incoming message
+     * @param ctx    The channel context
+     * @param router The server router.
      */
     @ServerHandler(type = CorfuMsgType.RESET)
-    private void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter router) {
         log.warn("Remote reset requested from client {}", msg.getClientID());
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        CorfuServer.restartServer(true);
+        serverStateMachine
+                .next(CorfuServerState.STOP_AND_CLEAN)
+                .thenRun(() -> router.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()));
     }
 
     /**
@@ -145,14 +152,15 @@ public class BaseServer extends AbstractServer {
      * which monitors the exit code of Corfu. If the exit code is 200, then it restarts
      * the server.
      *
-     * @param msg   The incoming message
-     * @param ctx   The channel context
-     * @param r     The server router.
+     * @param msg    The incoming message
+     * @param ctx    The channel context
+     * @param router The server router.
      */
     @ServerHandler(type = CorfuMsgType.RESTART)
-    private void doRestart(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+    private void doRestart(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter router) {
         log.warn("Remote restart requested from client {}", msg.getClientID());
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        CorfuServer.restartServer(false);
+        serverStateMachine
+                .next(CorfuServerState.STOP)
+                .thenRun(() -> router.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()));
     }
 }

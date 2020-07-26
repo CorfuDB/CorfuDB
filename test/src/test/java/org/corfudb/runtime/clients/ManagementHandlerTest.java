@@ -12,11 +12,13 @@ import org.corfudb.infrastructure.SequencerServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.infrastructure.server.CorfuServerStateMachine;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.junit.After;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.util.Collections;
 import java.util.Set;
@@ -53,8 +55,8 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 .add(new LayoutServer(serverContext))
                 // Required for management server to be able to bootstrap the sequencer.
                 .add(new SequencerServer(serverContext))
-                .add(new LogUnitServer(serverContext))
-                .add(new BaseServer(serverContext))
+                .add(new LogUnitServer(serverContext, serverSm))
+                .add(new BaseServer(serverContext, serverSm))
                 .build();
     }
 

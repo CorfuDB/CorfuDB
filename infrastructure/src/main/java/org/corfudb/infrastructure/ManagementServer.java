@@ -28,6 +28,7 @@ import java.lang.invoke.MethodHandles;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
@@ -119,14 +120,14 @@ public class ManagementServer extends AbstractServer {
      * Shuts down the fault detector service.
      */
     @Override
-    public void shutdown() {
-        super.shutdown();
-        executor.shutdown();
-        orchestrator.shutdown();
-        managementAgent.shutdown();
-
-        // Shut down the Corfu Runtime.
-        corfuRuntime.cleanup(CorfuRuntime::shutdown);
+    public CompletableFuture<Void> shutdown() {
+        markShutdown();
+        return CompletableFuture.allOf(
+                shutdownServerExecutor(executor),
+                orchestrator.shutdown(),
+                managementAgent.shutdown(),
+                CompletableFuture.runAsync(() -> corfuRuntime.cleanup(CorfuRuntime::shutdown))
+        );
     }
 
     /**

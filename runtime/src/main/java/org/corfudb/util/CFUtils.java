@@ -10,9 +10,12 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
@@ -22,13 +25,22 @@ import java.util.function.Supplier;
  * Created by mwei on 9/15/15.
  */
 public final class CFUtils {
-    private static final ScheduledExecutorService SCHEDULER =
-            Executors.newScheduledThreadPool(
-                    1,
-                    new ThreadFactoryBuilder()
-                            .setDaemon(true)
-                            .setNameFormat("failAfter-%d")
-                            .build());
+    private static final ScheduledExecutorService SCHEDULER = Executors.newScheduledThreadPool(
+            1,
+            getThreadFactory("failAfter-%d")
+    );
+
+    private static final ExecutorService SHUTDOWN_EXECUTOR = Executors.newFixedThreadPool(
+            10,
+            getThreadFactory("shutdown-executor-%d")
+    );
+
+    private static ThreadFactory getThreadFactory(String name) {
+        return new ThreadFactoryBuilder()
+                .setDaemon(true)
+                .setNameFormat(name)
+                .build();
+    }
 
     /**
      * A static timeout exception that we complete futures exceptionally with.
@@ -232,5 +244,24 @@ public final class CFUtils {
             throw (Error) unwrapThrowable;
         }
         throw new RuntimeException(unwrapThrowable);
+    }
+
+    public static CompletableFuture<Void> asyncShutdown(
+            ExecutorService executor, Duration timeout) {
+        return asyncShutdown(executor, timeout, SHUTDOWN_EXECUTOR);
+    }
+
+    public static CompletableFuture<Void> asyncShutdown(
+            ExecutorService executor, Duration timeout, Executor shutdownExecutor) {
+
+        Runnable shutdownAction = () -> {
+            executor.shutdown();
+            try {
+                executor.awaitTermination(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                throw new CompletionException("Netty server - close operation is interrupted.", e);
+            }
+        };
+        return CompletableFuture.runAsync(shutdownAction, shutdownExecutor);
     }
 }

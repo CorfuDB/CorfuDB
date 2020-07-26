@@ -5,6 +5,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.junit.Test;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 
 import static org.mockito.Matchers.any;
@@ -31,6 +32,12 @@ public class CorfuAbstractServerTest {
             @Override
             public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
                 return getState() == ServerState.READY;
+            }
+
+            @Override
+            public CompletableFuture<Void> shutdown() {
+                markShutdown();
+                return CompletableFuture.completedFuture(null);
             }
         };
 

@@ -5,10 +5,12 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -55,14 +57,8 @@ public class StreamLogCompaction {
         compactor = scheduler.scheduleWithFixedDelay(task, initialDelay, period, timeUnit);
     }
 
-    public void shutdown() {
+    public CompletableFuture<Void> shutdown() {
         compactor.cancel(true);
-        scheduler.shutdownNow();
-        try {
-            scheduler.awaitTermination(shutdownTimer.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (InterruptedException ie) {
-            log.debug("Stream log compaction, awaitTermination interrupted : {}", ie);
-            throw new UnrecoverableCorfuInterruptedError(ie);
-        }
+        return CFUtils.asyncShutdown(scheduler, shutdownTimer);
     }
 }

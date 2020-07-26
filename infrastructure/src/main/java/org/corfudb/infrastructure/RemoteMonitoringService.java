@@ -28,6 +28,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.LambdaUtils;
 import org.corfudb.util.concurrent.SingletonResource;
 
@@ -829,11 +830,15 @@ public class RemoteMonitoringService implements ManagementService {
     }
 
     @Override
-    public void shutdown() {
+    public CompletableFuture<Void> shutdown() {
         // Shutting the fault detector.
-        detectionTasksScheduler.shutdownNow();
-        failureDetectorWorker.shutdownNow();
         log.info("Fault detection service shutting down.");
+        Duration timeout = Duration.ofMillis(300);
+
+        return CompletableFuture.allOf(
+                CFUtils.asyncShutdown(detectionTasksScheduler, timeout),
+                CFUtils.asyncShutdown(failureDetectorWorker, timeout)
+        );
     }
 
     public enum DetectorTask {
