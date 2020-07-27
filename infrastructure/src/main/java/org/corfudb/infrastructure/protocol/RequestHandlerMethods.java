@@ -52,7 +52,6 @@ public class RequestHandlerMethods {
 
     /** Construct a new instance of RequestHandlerMethods. */
     public RequestHandlerMethods() {
-        //TODO(Zach): Make sure this works as expected
         handlerMap = new EnumMap<>(MessageType.class);
     }
 
