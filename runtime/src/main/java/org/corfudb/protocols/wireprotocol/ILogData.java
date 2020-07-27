@@ -18,6 +18,8 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
 
     Object getPayload(CorfuRuntime t);
 
+    byte[] getData();
+
     DataType getType();
 
     @Override

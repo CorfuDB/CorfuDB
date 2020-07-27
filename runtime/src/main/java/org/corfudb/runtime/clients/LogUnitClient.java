@@ -24,6 +24,8 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
+import org.corfudb.protocols.wireprotocol.ReadLocationRequest;
+import org.corfudb.protocols.wireprotocol.ReadLocationResponse;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -33,6 +35,8 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.LocationBucket;
+import org.corfudb.runtime.collections.LocationBucket.LocationImpl;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
 
@@ -153,6 +157,17 @@ public class LogUnitClient extends AbstractClient {
         Timer.Context context = getTimerContext("read");
         CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(addresses, cacheable)));
+
+        return cf.thenApply(x -> {
+            context.stop();
+            return x;
+        });
+    }
+
+    public CompletableFuture<ReadLocationResponse> readLocation(List<LocationImpl> locations) {
+        Timer.Context context = getTimerContext("read");
+        CompletableFuture<ReadLocationResponse> cf = sendMessageWithFuture(
+                CorfuMsgType.READ_LOCATION_REQUEST.payloadMsg(new ReadLocationRequest(locations, false)));
 
         return cf.thenApply(x -> {
             context.stop();

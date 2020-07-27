@@ -10,6 +10,9 @@ import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 
 
 import com.google.common.annotations.VisibleForTesting;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.EmptyByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
 import java.util.List;
@@ -27,10 +30,15 @@ import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.protocols.logprotocol.LogEntry;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ExceptionMsg;
+import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesRequest;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
@@ -38,6 +46,8 @@ import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
+import org.corfudb.protocols.wireprotocol.ReadLocationRequest;
+import org.corfudb.protocols.wireprotocol.ReadLocationResponse;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -45,6 +55,9 @@ import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.LocationBucket;
+import org.corfudb.runtime.collections.LocationBucket.LocationImpl;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.LogUnitException;
@@ -52,8 +65,12 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.object.ISMRData;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
+import org.corfudb.util.serializer.CorfuSerializer;
+import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.Serializers;
 
 
 /**
@@ -285,6 +302,108 @@ public class LogUnitServer extends AbstractServer {
                     handleException(ex, ctx, msg, r);
                     return null;
                 });
+    }
+
+    ByteBuf extract(ByteBuf buffer) {
+        int startReadIndex = buffer.readerIndex();
+        short methodLength = buffer.readShort();
+
+        byte[] methodBytes = new byte[methodLength];
+        buffer.readBytes(methodBytes, 0, methodLength);
+        String SMRMethod = new String(methodBytes);
+
+        ISerializer serializerType = Serializers.getSerializer(buffer.readByte());
+        byte numArguments = buffer.readByte();
+        Object[] arguments = new Object[numArguments];
+        for (byte arg = 0; arg < numArguments; arg++) {
+            int len = buffer.readInt();
+            buffer.skipBytes(len);
+        }
+
+        final int readIndex = buffer.readerIndex();
+        buffer.readerIndex(startReadIndex);
+        ByteBuf result = Unpooled.buffer();
+        result.writeBytes(buffer.readSlice(readIndex - startReadIndex));
+        return result;
+    }
+
+
+
+    void consume(ByteBuf buffer) {
+        short methodLength = buffer.readShort();
+        byte[] methodBytes = new byte[methodLength];
+        buffer.readBytes(methodBytes, 0, methodLength);
+        String SMRMethod = new String(methodBytes);
+
+        ISerializer serializerType = Serializers.getSerializer(buffer.readByte());
+        byte numArguments = buffer.readByte();
+        Object[] arguments = new Object[numArguments];
+        for (byte arg = 0; arg < numArguments; arg++) {
+            int len = buffer.readInt();
+            buffer.skipBytes(len);
+        }
+    }
+
+    public LogData getSMRUpdates(long offset, MultiObjectSMREntry mSrm) {
+
+        // The stream exists and it needs to be deserialized
+        byte[] streamUpdatesBuf = mSrm.getStreamBuffers().values().stream().findFirst().get();
+        ByteBuf buf = Unpooled.wrappedBuffer(streamUpdatesBuf);
+
+        //MultiSMREntry multiSMREntry = (MultiSMREntry) Serializers.CORFU.deserialize(buf, null);
+
+        if (buf.readByte() != CorfuSerializer.corfuPayloadMagic) {
+            throw new IllegalArgumentException();
+        }
+
+
+        byte type = buf.readByte();
+        int numUpdates = buf.readInt();
+        for (int i = 0; i < numUpdates; i++) {
+            if (buf.readByte() != CorfuSerializer.corfuPayloadMagic) {
+                throw new IllegalArgumentException();
+            }
+            byte type_ = buf.readByte();
+            if (i == offset) {
+                SMREntry entry = new SMREntry();
+                entry.setType(LogEntry.LogEntryType.SMR);
+                ByteBuf buffer = extract(buf);
+                entry.deserializeBuffer(buffer, null);
+                LogData data = new LogData(DataType.DATA, entry);
+                return data;
+            }
+            consume(buf);
+        }
+
+
+        throw new IllegalArgumentException();
+    }
+
+    @ServerHandler(type = CorfuMsgType.READ_LOCATION_REQUEST)
+    public void readLocation(CorfuPayloadMsg<ReadLocationRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
+        boolean cacheable = msg.getPayload().isCacheReadResult();
+
+        ReadLocationResponse rr = new ReadLocationResponse();
+
+        for (LocationImpl location : msg.getPayload().getLocations()) {
+            try {
+                ILogData logData = dataCache.get(location.getAddress(), cacheable);
+                if (logData == null) {
+                    rr.put(location, LogData.getEmpty(location.getAddress()));
+                } else {
+                    MultiObjectSMREntry msmr = (MultiObjectSMREntry) logData.getPayload(null);
+                    //msmr.deserializeBuffer(Unpooled.wrappedBuffer(logData.getData()), null);
+                    rr.put(location, getSMRUpdates(location.getOffset(), msmr));
+                }
+            } catch (DataCorruptionException e) {
+                log.error(
+                        "Data corruption exception while reading locations {}",
+                        msg.getPayload().getLocations(), e);
+                r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION.payloadMsg(location.getAddress()));
+                return;
+            }
+        }
+        r.sendResponse(ctx, msg, CorfuMsgType.READ_LOCATION_RESPONSE.payloadMsg(rr));
     }
 
   @ServerHandler(type = CorfuMsgType.READ_REQUEST)

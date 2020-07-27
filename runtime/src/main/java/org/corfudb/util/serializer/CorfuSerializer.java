@@ -36,7 +36,8 @@ public class CorfuSerializer implements ISerializer {
             b.readBytes(bytes);
             return bytes;
         }
-        return LogEntry.deserialize(b, rt);
+        ICorfuSerializable deserialize = LogEntry.deserialize(b, rt);
+        return deserialize;
     }
 
     /**

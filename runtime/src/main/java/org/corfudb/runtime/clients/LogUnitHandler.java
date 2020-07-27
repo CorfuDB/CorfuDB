@@ -13,6 +13,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
+import org.corfudb.protocols.wireprotocol.ReadLocationResponse;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
@@ -169,6 +170,12 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ClientHandler(type = CorfuMsgType.READ_RESPONSE)
     private static Object handleReadResponse(CorfuPayloadMsg<ReadResponse> msg,
+                                             ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    @ClientHandler(type = CorfuMsgType.READ_LOCATION_RESPONSE)
+    private static Object readLocationResponse(CorfuPayloadMsg<ReadLocationResponse> msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view.stream;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.FluentIterable;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
@@ -25,6 +26,7 @@ import org.corfudb.util.Utils;
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -34,6 +36,7 @@ import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 /** The abstract queued stream view implements a stream backed by a read queue.
@@ -59,6 +62,34 @@ public abstract class AbstractQueuedStreamView extends
     @Getter
     private final ReadOptions readOptions;
 
+    HashMap<Long, ILogData> cache = new HashMap<>();
+
+    private Map<Long, ILogData> readAddr(List<Long> addresses, ReadOptions readOptions) {
+        if (!this.getContext().id.equals(UUID.fromString("5ac9fad0-0418-3c68-815b-9ac780abdfc8"))) {
+            return runtime.getAddressSpaceView().read(addresses, readOptions);
+        }
+
+        Map<Boolean, List<Long>> split = addresses.stream().collect(Collectors.groupingBy(cache::containsKey));
+        Map<Long, ILogData> newData = runtime.getAddressSpaceView().read(split.get(false), readOptions);
+        cache.putAll(newData);
+        Map<Long, ILogData> cacheData = split.getOrDefault(true, new ArrayList<>()).stream().collect(Collectors.toMap(Long::longValue, cache::get));
+        cacheData.putAll(newData);
+        return cacheData;
+    }
+
+    private ILogData readAddr(long address, ReadOptions readOptions) {
+        if (!this.getContext().id.equals(UUID.fromString("5ac9fad0-0418-3c68-815b-9ac780abdfc8"))) {
+            return runtime.getAddressSpaceView().read(address, readOptions);
+        }
+
+        if (cache.containsKey(address)) {
+            return cache.get(address);
+        }
+
+        ILogData value = runtime.getAddressSpaceView().read(address, readOptions);;
+        cache.put(address, value);
+        return value;
+    }
     /** Create a new queued stream view.
      *
      * @param streamId  The ID of the stream
@@ -258,13 +289,13 @@ public abstract class AbstractQueuedStreamView extends
         try {
             if (System.currentTimeMillis() - readStartTime <
                     runtime.getParameters().getHoleFillTimeout().toMillis()) {
-                return runtime.getAddressSpaceView().read(address, readOptions);
+                return readAddr(address, readOptions);
             }
 
             ReadOptions options = readOptions.toBuilder()
                     .waitForHole(false)
                     .build();
-            return runtime.getAddressSpaceView().read(address, options);
+            return readAddr(address, options);
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
@@ -275,7 +306,7 @@ public abstract class AbstractQueuedStreamView extends
     protected List<ILogData> readAll(@Nonnull List<Long> addresses) {
         try {
             Map<Long, ILogData> dataMap =
-                    runtime.getAddressSpaceView().read(addresses, readOptions);
+                    readAddr(addresses, readOptions);
             // If trimmed exceptions are ignored, the data retrieved by the read API might not correspond
             // to all requested addresses, for this reason we must filter out data entries not included (null).
             // Also, we need to preserve ordering for checkpoint logic.
@@ -571,7 +602,7 @@ public abstract class AbstractQueuedStreamView extends
      **/
     protected ILogData read(final long address) {
         try {
-            return runtime.getAddressSpaceView().read(address, readOptions);
+            return readAddr(address, readOptions);
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;
@@ -591,7 +622,14 @@ public abstract class AbstractQueuedStreamView extends
      */
     protected @Nonnull ILogData read(long nextRead, @Nonnull final NavigableSet<Long> addresses) {
         try {
-            return runtime.getAddressSpaceView().read(nextRead, addresses, readOptions);
+            if (!id.equals(UUID.fromString("5ac9fad0-0418-3c68-815b-9ac780abdfc8"))) {
+                return runtime.getAddressSpaceView().read(nextRead, addresses, readOptions);
+            }
+            if (cache.containsKey(nextRead)) {
+                return cache.get(nextRead);
+            }
+            readAddr(FluentIterable.from(addresses).append(nextRead).toList(), readOptions);
+            return cache.get(nextRead);
         } catch (TrimmedException te) {
             processTrimmedException(te);
             throw te;

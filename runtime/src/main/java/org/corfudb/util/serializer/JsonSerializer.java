@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -25,6 +26,8 @@ public class JsonSerializer implements ISerializer {
 
     private static final Gson gson = new GsonBuilder()
             .create();
+    private static final ConcurrentHashMap<String, Class<? extends ICorfuSMR>> classCache =
+            new ConcurrentHashMap<>();
 
     public JsonSerializer(byte type) {
         this.type = type;
@@ -55,9 +58,12 @@ public class JsonSerializer implements ISerializer {
             b.readBytes(smrClassNameBytes, 0, smrClassNameLength);
             String smrClassName = new String(smrClassNameBytes);
             try {
+                if (!classCache.containsKey(smrClassName)) {
+                    classCache.put(smrClassName, (Class<? extends ICorfuSMR>) Class.forName(smrClassName));
+                }
                 return rt.getObjectsView().build()
                         .setStreamID(new UUID(b.readLong(), b.readLong()))
-                        .setType((Class<? extends ICorfuSMR>) Class.forName(smrClassName))
+                        .setType(classCache.get(className))
                         .open();
             } catch (ClassNotFoundException cnfe) {
                 log.error("Exception during deserialization!", cnfe);
@@ -66,7 +72,10 @@ public class JsonSerializer implements ISerializer {
         } else {
             try (ByteBufInputStream bbis = new ByteBufInputStream(b)) {
                 try (InputStreamReader r = new InputStreamReader(bbis)) {
-                    return gson.fromJson(r, Class.forName(className));
+                    if (!classCache.containsKey(className)) {
+                        classCache.put(className, (Class<? extends ICorfuSMR>) Class.forName(className));
+                    }
+                    return gson.fromJson(r, classCache.get(className));
                 }
             } catch (IOException | ClassNotFoundException ie) {
                 log.error("Exception during deserialization!", ie);

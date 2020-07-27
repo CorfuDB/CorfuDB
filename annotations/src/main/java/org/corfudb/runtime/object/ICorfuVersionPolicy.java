@@ -22,6 +22,12 @@ public interface ICorfuVersionPolicy {
     VersionPolicy MONOTONIC = new VersionPolicy();
 
     /**
+     * A more restrictive update policy that allows the object
+     * to only move forward in time.
+     */
+    VersionPolicy BLIND = new VersionPolicy();
+
+    /**
      * Any sort of state associated with the version policy.
      */
     class VersionPolicy {

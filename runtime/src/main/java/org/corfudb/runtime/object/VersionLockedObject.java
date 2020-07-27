@@ -80,7 +80,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * A lock, which controls access to modifications to the object. Any access to unsafe
      * methods should obtain the lock.
      */
-    private final StampedLock lock;
+    private final WriteLock lock;
 
     /**
      * The stream view this object is backed by.
@@ -145,7 +145,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         this.pendingUpcalls = ConcurrentHashMap.newKeySet();
         this.upcallResults = new ConcurrentHashMap<>();
 
-        lock = new StampedLock();
+        lock = new WriteLock(object.getVersionPolicy());
     }
 
     /**
@@ -290,6 +290,10 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      *                             the supplied version.
      */
     public void rollbackObjectUnsafe(long timestamp) {
+        if (object.getVersionPolicy() == ICorfuVersionPolicy.BLIND) {
+            return; // We are not allowed to go back in time.
+        }
+
         if (object.getVersionPolicy() == ICorfuVersionPolicy.MONOTONIC) {
             return; // We are not allowed to go back in time.
         }
@@ -669,6 +673,10 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @param timestamp The timestamp to sync up to.
      */
     protected void syncStreamUnsafe(ISMRStream stream, long timestamp) {
+        if (object.getVersionPolicy() == ICorfuVersionPolicy.BLIND) {
+            return; // We are not allowed to go back in time.
+        }
+
         log.trace("Sync[{}] {}", this, (timestamp == Address.OPTIMISTIC)
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;

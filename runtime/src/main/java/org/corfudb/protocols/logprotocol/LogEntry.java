@@ -25,7 +25,7 @@ import org.corfudb.util.serializer.ICorfuSerializable;
 @NoArgsConstructor
 public class LogEntry implements ICorfuSerializable {
 
-    static final Map<Byte, LogEntryType> typeMap =
+    public static final Map<Byte, LogEntryType> typeMap =
             Arrays.stream(LogEntryType.values())
                     .collect(Collectors.toMap(LogEntryType::asByte, Function.identity()));
 
@@ -39,6 +39,7 @@ public class LogEntry implements ICorfuSerializable {
      * The type of log entry.
      */
     @Getter
+    @Setter
     LogEntryType type;
 
     /**
@@ -86,6 +87,10 @@ public class LogEntry implements ICorfuSerializable {
      */
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         // In the base case, we don't do anything.
+    }
+
+    void consume(ByteBuf buffer, CorfuRuntime corfuRuntime) {
+
     }
 
     /**

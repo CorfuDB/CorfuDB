@@ -435,7 +435,7 @@ public class CorfuRuntime {
          * The compression codec to use to encode a write's payload
          */
         @Default
-        private Codec.Type codecType = Codec.Type.ZSTD;
+        private Codec.Type codecType = Codec.Type.NONE;
 
         // Register handlers region
 

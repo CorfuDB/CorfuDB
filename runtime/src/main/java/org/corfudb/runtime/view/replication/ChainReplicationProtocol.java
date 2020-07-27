@@ -2,6 +2,12 @@ package org.corfudb.runtime.view.replication;
 
 import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.collections.LocationBucket;
+import org.corfudb.runtime.collections.LocationBucket.LocationImpl;
+import org.corfudb.runtime.object.ISMRData;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -17,12 +23,16 @@ import org.corfudb.util.CFUtils;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
+
+import static java.util.stream.IntStream.range;
 
 /**
  * Created by mwei on 4/6/17.
@@ -41,6 +51,26 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
     public void write(RuntimeLayout runtimeLayout, ILogData data) throws OverwriteException {
         final long globalAddress = data.getGlobalAddress();
         int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
+
+
+        Object payload = data.getPayload(runtimeLayout.getRuntime());
+        if (payload instanceof ISMRData) {
+            ISMRData smr = (ISMRData) payload;
+            Arrays.stream(smr.getSMRArguments())
+                    .filter(LocationBucket.class::isInstance)
+                    .map(LocationBucket.class::cast)
+                    .forEach(entry -> entry.setLocation(globalAddress, 0));
+        } else if (payload instanceof MultiObjectSMREntry) {
+            MultiObjectSMREntry smr = (MultiObjectSMREntry) payload;
+            for (MultiSMREntry msmr : smr.getEntryMap().values()) {
+                List<SMREntry> updates = msmr.getUpdates();
+                range(0, updates.size())
+                        .forEach(idx -> Arrays.stream(updates.get(idx).getSMRArguments())
+                                .filter(LocationBucket.class::isInstance)
+                                .map(LocationBucket.class::cast)
+                                .forEach(entry -> entry.setLocation(globalAddress, idx)));
+            }
+        }
 
         // To reduce the overhead of serialization, we serialize only the
         // first time we write, saving when we go down the chain.
@@ -63,6 +93,20 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
             }
         }
     }
+
+    @Override
+    public ILogData peek(RuntimeLayout runtimeLayout, LocationImpl location) {
+        int numUnits = runtimeLayout.getLayout().getSegmentLength(location.getAddress());
+        log.trace("Read[{}]: chain {}/{}", location, numUnits, numUnits);
+        // In chain replication, we read from the last unit, though we can optimize if we
+        // know where the committed tail is.
+        ILogData peekResult = CFUtils.getUninterruptibly(runtimeLayout
+                .getLogUnitClient(location.getAddress(), numUnits - 1)
+                .readLocation(Collections.singletonList(location))).getLocations().get(location);
+
+        return peekResult.isEmpty() ? null : peekResult;
+    }
+
 
     /**
      * {@inheritDoc}

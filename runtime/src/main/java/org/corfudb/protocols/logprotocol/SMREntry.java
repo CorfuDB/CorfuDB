@@ -7,12 +7,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.NonNull;
-import lombok.ToString;
+import lombok.*;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.object.ISMRData;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -26,14 +23,24 @@ import static com.google.common.base.Preconditions.checkState;
 @ToString(callSuper = true)
 @NoArgsConstructor
 @EqualsAndHashCode
-public class SMREntry extends LogEntry implements ISMRConsumable {
+public class SMREntry extends LogEntry implements ISMRConsumable, ISMRData {
 
     /**
      * The name of the SMR method. Note that this is limited to the size of a short.
      */
     @SuppressWarnings("checkstyle:MemberName")
-    @Getter
     private String SMRMethod;
+
+    /**
+     * As dfas dfsda fsd.
+     * @return asdf asdf
+     */
+    public int getSmrIndex() {
+        return smrIndex;
+    }
+
+    @Setter
+    private int smrIndex;
 
     /**
      * The arguments to the SMR method, which could be 0.
@@ -95,6 +102,20 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         this.serializerType = serializer;
     }
 
+    @Override
+    void consume(ByteBuf buffer, CorfuRuntime corfuRuntime) {
+        short methodLength = buffer.readShort();
+        buffer.skipBytes(methodLength);
+        byte[] methodBytes = new byte[methodLength];
+        ISerializer serializerType = Serializers.getSerializer(buffer.readByte());
+        byte numArguments = buffer.readByte();
+        Object[] arguments = new Object[numArguments];
+        for (byte arg = 0; arg < numArguments; arg++) {
+            int len = buffer.readInt();
+            buffer.skipBytes(len);
+        }
+    }
+
     /**
      * This function provides the remaining buffer. Child entries
      * should initialize their contents based on the buffer.
@@ -102,7 +123,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      * @param b The remaining buffer.
      */
     @Override
-    void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
+    public void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
         super.deserializeBuffer(b, rt);
         short methodLength = b.readShort();
         byte[] methodBytes = new byte[methodLength];
@@ -168,5 +189,10 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         // TODO: we should check that the id matches the id of this entry,
         // but replex erases this information.
         return Collections.singletonList(this);
+    }
+
+    @Override
+    public String getSMRMethod() {
+        return SMRMethod;
     }
 }

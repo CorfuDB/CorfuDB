@@ -24,6 +24,7 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.collections.LocationBucket;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
@@ -64,7 +65,7 @@ import java.util.stream.Collectors;
 public class AddressSpaceView extends AbstractView {
 
     private final static long CACHE_KEY_SIZE = MetricsUtils.sizeOf.deepSizeOf(0L);
-    private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
+    private final static long DEFAULT_MAX_CACHE_ENTRIES = 20;
 
     /**
      * A cache for read results.
@@ -699,7 +700,7 @@ public class AddressSpaceView extends AbstractView {
 
     /**
      * Given the input data, deduce which addresses have been trimmed.
-     *
+
      * @param allData data on which the operation will be performed
      * @return the list of addresses that have been trimmed.
      */
@@ -748,6 +749,16 @@ public class AddressSpaceView extends AbstractView {
         );
 
         checkLogDataThrowException(address, result);
+
+        return result;
+    }
+
+    @Nonnull
+    public ILogData fetch(final LocationBucket.LocationImpl location) {
+        ILogData result = layoutHelper(e -> e.getLayout().getReplicationMode(location.getAddress())
+                .getReplicationProtocol(runtime)
+                .readLocation(e, location)
+        );
 
         return result;
     }

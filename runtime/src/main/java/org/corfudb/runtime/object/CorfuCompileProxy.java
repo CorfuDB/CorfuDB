@@ -249,6 +249,10 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     @Override
     public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
+        if (getUnderlyingObject().getObject().getVersionPolicy() == ICorfuVersionPolicy.BLIND) {
+            return null;
+        }
+
         try (Timer.Context context = MetricsUtils.getConditionalContext(timerUpcall);) {
             return getUpcallResultInner(timestamp, conflictObject);
         }

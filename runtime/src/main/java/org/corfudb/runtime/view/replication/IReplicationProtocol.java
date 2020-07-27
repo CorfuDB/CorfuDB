@@ -1,6 +1,8 @@
 package org.corfudb.runtime.view.replication;
 
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.collections.LocationBucket;
+import org.corfudb.runtime.collections.LocationBucket.LocationImpl;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.RuntimeLayout;
 
@@ -53,6 +55,10 @@ public interface IReplicationProtocol {
     @Nonnull
     ILogData read(RuntimeLayout runtimeLayout, long globalAddress);
 
+    @Nonnull
+    default ILogData readLocation(RuntimeLayout runtimeLayout, LocationImpl location) {
+        throw new IllegalStateException();
+    }
     /**
      * Read data from all the given addresses.
      *
@@ -97,4 +103,9 @@ public interface IReplicationProtocol {
      * there was no entry committed.
      */
     ILogData peek(RuntimeLayout runtimeLayout, long globalAddress);
+
+    default ILogData peek(RuntimeLayout runtimeLayout, LocationImpl location) {
+        throw new IllegalStateException();
+    }
+
 }

@@ -14,6 +14,8 @@ import io.netty.buffer.Unpooled;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
 import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
+import org.corfudb.runtime.collections.LocationBucket;
+import org.corfudb.runtime.collections.LocationBucket.LocationImpl;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -68,6 +70,7 @@ public interface ICorfuPayload<T> {
                         String str = new String(byteArray, StandardCharsets.UTF_8);
                         return JsonUtils.parser.fromJson(str, Layout.class);
                     })
+                    .put(LocationImpl.class, x -> new LocationImpl(x.readLong(), x.readInt()))
                     .put(DataRank.class, x -> new DataRank(x.readLong(), new UUID(x.readLong(), x.readLong())))
                     .put(CheckpointEntryType.class, x -> CheckpointEntryType.typeMap.get(x.readByte()))
                     .put(Codec.Type.class, x -> Codec.getCodecTypeById(x.readInt()))
@@ -361,6 +364,10 @@ public interface ICorfuPayload<T> {
             int bytes = b.readableBytes();
             buffer.writeInt(bytes);
             buffer.writeBytes(b, bytes);
+        } else if (payload instanceof LocationImpl) {
+            LocationImpl LocationImpl = (LocationImpl) payload;
+            buffer.writeLong(LocationImpl.getAddress());
+            buffer.writeInt(LocationImpl.getOffset());
         } else if (payload instanceof DataRank) {
             DataRank rank = (DataRank) payload;
             buffer.writeLong(rank.getRank());

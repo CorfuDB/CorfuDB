@@ -3,6 +3,7 @@ package org.corfudb.protocols.logprotocol;
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -36,7 +37,8 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      * A container to store streams and their payloads (i.e. serialized SMR updates).
      * This is required to support lazy stream deserialization.
      */
-    private final Map<UUID, byte[]> streamBuffers = new ConcurrentHashMap<>();
+    @Getter
+    final Map<UUID, byte[]> streamBuffers = new ConcurrentHashMap<>();
 
     public MultiObjectSMREntry() {
         this.type = LogEntryType.MULTIOBJSMR;
@@ -170,12 +172,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
     }
 
     @VisibleForTesting
-    Map<UUID, byte[]> getStreamBuffers() {
-        return streamBuffers;
-    }
-
-    @VisibleForTesting
-    Map<UUID, MultiSMREntry> getStreamUpdates() {
+    public Map<UUID, MultiSMREntry> getStreamUpdates() {
         return streamUpdates;
     }
 }

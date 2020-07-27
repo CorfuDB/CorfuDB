@@ -251,7 +251,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      *                          stream context.
      * @return                  A list of the next entries for this context
      */
-    protected List<ILogData> getNextEntries(T context, long maxGlobal,
+    protected List<ILogData>getNextEntries(T context, long maxGlobal,
                                                      Function<ILogData, Boolean> contextCheckFn) {
         final List<ILogData> dataList = new ArrayList<>();
         ILogData thisData;

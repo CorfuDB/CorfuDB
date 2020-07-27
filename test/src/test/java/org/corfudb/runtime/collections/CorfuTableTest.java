@@ -9,12 +9,16 @@ import java.util.ConcurrentModificationException;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.time.StopWatch;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.data.MapEntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -31,6 +35,70 @@ public class CorfuTableTest extends AbstractViewTest {
 
     Collection<String> project(Collection<Map.Entry<String, String>> entries) {
         return entries.stream().map(entry -> entry.getValue()).collect(Collectors.toCollection(ArrayList::new));
+    }
+    final int range = 10_000;
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void largeTx() {
+        PersistedCorfuTable<String, String> table = new PersistedCorfuTable<>(getDefaultRuntime(), "table");
+        getDefaultRuntime().getObjectsView().executeTx(() -> {
+            IntStream.range(0, range).forEach(num -> table.put(Integer.toString(num),
+                    RandomStringUtils.random(range, true, true)));
+        });
+
+        StopWatch watch = new StopWatch();
+        watch.start();
+        System.out.println(table.get(Integer.toString(range)));
+        watch.stop();
+        System.out.println("Total time: " + watch.getTime(TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void largeTx2() {
+        Map<String, String> table = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamName("tableNamexx")
+                .open();
+        getDefaultRuntime().getObjectsView().executeTx(() -> {
+            IntStream.range(0, range).forEach(num -> table.put(Integer.toString(num),
+                    RandomStringUtils.random(range, true, true)));
+        });
+
+        StopWatch watch = new StopWatch();
+        watch.start();
+        System.out.println(table.get(Integer.toString(range)));
+        watch.stop();
+        System.out.println("Total time: " + watch.getTime(TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void persistedCorfuTable() {
+        PersistedCorfuTable<String, String> table = new PersistedCorfuTable<>(getDefaultRuntime(), "table");
+        System.out.println(table.get("a"));
+
+        getDefaultRuntime().getObjectsView().executeTx(() -> {
+                    table.put("a", "a");
+                    table.put("c", "c");
+                    table.put("b", "b");
+                }
+        );
+
+        System.out.println(table.get("a"));
+        System.out.println(table.get("b"));
+        System.out.println(table.get("c"));
+
+        getDefaultRuntime().getObjectsView().executeTx(() -> {
+                    table.remove("a");
+                }
+        );
+
+        System.out.println(table.get("a"));
+        System.out.println(table.get("b"));
+        System.out.println(table.get("c"));
+        table.entryStream().forEach(e -> System.out.println(e));
     }
 
     @Test
@@ -241,19 +309,39 @@ public class CorfuTableTest extends AbstractViewTest {
                 .containsExactly("a");
     }
 
-    /**
-     * Ensure that {@link StreamingMap#entryStream()} always operates on a snapshot.
-     * If it does not, this test will throw {@link ConcurrentModificationException}.
-     */
     @Test
-    public void snapshotInvariant() {
-        final int NUM_WRITES = 10;
-        final ContextAwareMap<Integer, Integer> map = new StreamingMapDecorator<>();
-        IntStream.range(0, NUM_WRITES).forEach(num -> map.put(num, num));
+    @SuppressWarnings({"unchecked", "checkstyle:magicnumber"})
+    public void readTest() {
+        UUID streamID = UUID.randomUUID();
 
-        final Stream<Map.Entry<Integer, Integer>> result = map.entryStream();
-        result.forEach(e -> map.put(new Random().nextInt(), 0));
+        CorfuTable<String, String> corfuTable = getDefaultRuntime()
+                .getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamID(streamID)
+                .open();
+        corfuTable.put("k1", "dog fox cat");
+        getDefaultRuntime().getObjectsView().executeTx(() -> {
+                    corfuTable.put("k1", "dog fox cat");
+                    corfuTable.put("k2", "dog bat");
+                    corfuTable.put("k3", "fox");
+                });
+
+        // create a hole
+        TokenResponse tokenResponse =  getDefaultRuntime()
+                .getSequencerView()
+                .next(streamID);
+
+        Token token = tokenResponse.getToken();
+
+        getDefaultRuntime().getAddressSpaceView()
+                .write(tokenResponse, LogData.getHole(token));
+
+        ILogData data = getDefaultRuntime().getAddressSpaceView()
+                .fetch(new LocationBucket.LocationImpl(token.getSequence() -1, 0));
+        data.getPayload(getDefaultRuntime());
     }
+
 
     @Test
     @SuppressWarnings({"unchecked", "checkstyle:magicnumber"})

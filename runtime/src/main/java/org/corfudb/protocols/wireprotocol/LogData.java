@@ -9,6 +9,7 @@ import java.util.EnumMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.compression.Codec;
@@ -29,7 +30,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     @Getter
     final DataType type;
 
-    @Getter
+    @Getter @Setter
     byte[] data;
 
     private ByteBuf serializedCache = null;
@@ -250,7 +251,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
      *
      * @param buf The buffer to read from
      */
-    public byte[] byteArrayFromBuf(final ByteBuf buf) {
+    public static byte[] byteArrayFromBuf(final ByteBuf buf) {
         ByteBuf readOnlyCopy = buf.asReadOnly();
         readOnlyCopy.resetReaderIndex();
         byte[] outArray = new byte[readOnlyCopy.readableBytes()];
