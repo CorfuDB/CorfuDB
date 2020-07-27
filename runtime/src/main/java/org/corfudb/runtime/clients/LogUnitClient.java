@@ -6,6 +6,7 @@ import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -22,7 +23,6 @@ import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
-import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -139,20 +139,20 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> read(long address) {
-        return read(address, true);
+        return read(Collections.singletonList(address), true);
     }
 
     /**
      * Asynchronously read from the logging unit.
      *
-     * @param address the address to read from.
+     * @param addresses the addresses to read from.
      * @param cacheable whether the read result should be cached on log unit server.
      * @return a completableFuture which returns a ReadResponse on completion.
      */
-    public CompletableFuture<ReadResponse> read(long address, boolean cacheable) {
+    public CompletableFuture<ReadResponse> read(List<Long> addresses, boolean cacheable) {
         Timer.Context context = getTimerContext("read");
         CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
-                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(address, cacheable)));
+                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(addresses, cacheable)));
 
         return cf.thenApply(x -> {
             context.stop();
@@ -160,34 +160,6 @@ public class LogUnitClient extends AbstractClient {
         });
     }
 
-
-    /**
-     * Read data from the log unit server for a list of addresses.
-     * Read results are <b>NOT</b> cached at log unit server.
-     *
-     * @param addresses list of global addresses.
-     * @return a completableFuture which returns a ReadResponse on completion.
-     */
-    public CompletableFuture<ReadResponse> readAll(List<Long> addresses) {
-       return readAll(addresses, false);
-    }
-
-    /**
-     * Read data from the log unit server for a list of addresses.
-     *
-     * @param addresses list of global addresses.
-     * @param cacheable Whether the read results should be cached on log unit server.
-     * @return a completableFuture which returns a ReadResponse on completion.
-     */
-    public CompletableFuture<ReadResponse> readAll(List<Long> addresses, boolean cacheable) {
-        Timer.Context context = getTimerContext("readAll");
-        CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
-                CorfuMsgType.MULTIPLE_READ_REQUEST.payloadMsg(new MultipleReadRequest(addresses, cacheable)));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
-    }
 
     /**
      * Check if addresses are committed on log unit server, which returns a future

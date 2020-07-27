@@ -319,7 +319,7 @@ public class StateTransferIT extends AbstractIT {
                                                   String endpoint, long end) throws Exception {
         ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(endpoint)
-                .readAll(getRangeAddressAsList(0L, end))
+                .read(getRangeAddressAsList(0L, end), false)
                 .get();
         return readResponse.getAddresses().entrySet()
                 .stream()

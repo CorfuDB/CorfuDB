@@ -91,7 +91,7 @@ class CommittedBatchProcessorTest extends DataTest {
         doAnswer(invoke -> {
             retries.incrementAndGet();
             throw new WrongEpochException(0L);
-        }).when(logUnitClient).readAll(addresses);
+        }).when(logUnitClient).read(addresses, false);
         CommittedBatchProcessor testProcessor = CommittedBatchProcessor.builder()
                 .currentNode("test").runtimeLayout(runtimeLayout).build();
         assertThatThrownBy(() -> testProcessor.readRecords(batch.getAddresses(), Optional.empty(), logUnitClient))
@@ -110,7 +110,7 @@ class CommittedBatchProcessorTest extends DataTest {
         doAnswer(invocation -> {
             retries.incrementAndGet();
             throw new RuntimeException(new TimeoutException());
-        }).when(logUnitClient).readAll(addresses);
+        }).when(logUnitClient).read(addresses, false);
         CommittedBatchProcessor testProcessor = CommittedBatchProcessor.builder()
                 .currentNode("test").runtimeLayout(runtimeLayout).build();
         assertThatThrownBy(() -> testProcessor.readRecords(batch.getAddresses(), Optional.empty(), logUnitClient))
@@ -131,7 +131,7 @@ class CommittedBatchProcessorTest extends DataTest {
         doAnswer(invocation -> {
             retries.incrementAndGet();
             throw new NetworkException("test", node);
-        }).when(logUnitClient).readAll(addresses);
+        }).when(logUnitClient).read(addresses, false);
         CommittedBatchProcessor testProcessor = CommittedBatchProcessor.builder()
                 .currentNode("test").runtimeLayout(runtimeLayout).build();
         assertThatThrownBy(() -> testProcessor.readRecords(batch.getAddresses(), Optional.empty(), logUnitClient))
@@ -151,7 +151,7 @@ class CommittedBatchProcessorTest extends DataTest {
         doAnswer(invocation -> {
             retries.incrementAndGet();
             throw new IllegalStateException();
-        }).when(logUnitClient).readAll(addresses);
+        }).when(logUnitClient).read(addresses, false);
         CommittedBatchProcessor testProcessor = CommittedBatchProcessor.builder()
                 .currentNode("test").runtimeLayout(runtimeLayout).build();
         assertThatThrownBy(() -> testProcessor.readRecords(batch.getAddresses(), Optional.empty(), logUnitClient))
@@ -174,7 +174,7 @@ class CommittedBatchProcessorTest extends DataTest {
             retries.incrementAndGet();
             resp.complete(readResponse);
             return resp;
-        }).when(logUnitClient).readAll(addresses);
+        }).when(logUnitClient).read(addresses, false);
         CommittedBatchProcessor testProcessor = CommittedBatchProcessor.builder()
                 .currentNode("test").runtimeLayout(runtimeLayout).build();
         CommittedBatchProcessor spytestProcessor = spy(testProcessor);
@@ -197,7 +197,7 @@ class CommittedBatchProcessorTest extends DataTest {
         doAnswer(invocation -> {
             future.complete(readResponse);
             return future;
-        }).when(logUnitClient).readAll(addresses);
+        }).when(logUnitClient).read(addresses, false);
         CommittedBatchProcessor testProcessor = CommittedBatchProcessor.builder()
                 .currentNode("test").runtimeLayout(runtimeLayout).build();
         CommittedBatchProcessor spytestProcessor = spy(testProcessor);

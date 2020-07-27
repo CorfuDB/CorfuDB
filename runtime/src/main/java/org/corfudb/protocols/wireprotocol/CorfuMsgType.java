@@ -59,7 +59,6 @@ public enum CorfuMsgType {
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),
     READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}),
     READ_RESPONSE(32, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
-    MULTIPLE_READ_REQUEST(35, new TypeToken<CorfuPayloadMsg<MultipleReadRequest>>() {}),
     INSPECT_ADDRESSES_REQUEST(36, new TypeToken<CorfuPayloadMsg<InspectAddressesRequest>>() {}),
     INSPECT_ADDRESSES_RESPONSE(37, new TypeToken<CorfuPayloadMsg<InspectAddressesResponse>>() {}),
     PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
