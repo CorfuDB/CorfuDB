@@ -1,8 +1,6 @@
 package org.corfudb.common.metrics;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import lombok.extern.slf4j.Slf4j;
-
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
@@ -17,13 +15,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
 
 /**
  *
  * Created by Maithem on 7/7/20.
  */
-@Slf4j
 public class StatsCollector {
+
+    private static final String LOGGER_NAME = "org.corfudb.metrics";
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(LOGGER_NAME);
 
     /**     * system level metrics,
      *

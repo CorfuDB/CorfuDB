@@ -47,4 +47,4 @@ else
       byteman=""
 fi
 
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.infrastructure.CorfuServer $*
+"$JAVA" -Dlogback.configurationFile=/home/maithem/CorfuDB/infrastructure/src/main/resources/logback.prod.xml -cp "$CLASSPATH" $JVMFLAGS $byteman org.corfudb.infrastructure.CorfuServer $*
