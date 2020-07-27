@@ -6,6 +6,7 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
+import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CorfuComponent;
@@ -35,7 +36,7 @@ public class RequestHandlerMethods {
      * on another thread.
      */
     @FunctionalInterface
-    interface HandlerMethod {
+    public interface HandlerMethod {
         void handle(@Nonnull Request req,
                     @Nonnull ChannelHandlerContext ctx,
                     @Nonnull IServerRouter r);

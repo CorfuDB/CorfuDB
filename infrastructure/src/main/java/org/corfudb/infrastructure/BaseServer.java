@@ -4,6 +4,12 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.API;
+import org.corfudb.common.protocol.proto.CorfuProtocol;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.infrastructure.protocol.AnnotatedServerHandler;
+import org.corfudb.infrastructure.protocol.RequestHandlerMethods;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -31,8 +37,19 @@ public class BaseServer extends AbstractServer {
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
+    /** RequestHandlerMethods for the base server. */
+    private final RequestHandlerMethods handlerMethods = RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    @Override
+    public RequestHandlerMethods getHandlerMethods() { return handlerMethods; }
+
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        return getState() == ServerState.READY;
+    }
+
+    @Override
+    public boolean isServerReadyToHandleReq(Header requestHeader) {
         return getState() == ServerState.READY;
     }
 
@@ -45,6 +62,11 @@ public class BaseServer extends AbstractServer {
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         executor.submit(() -> getHandler().handle(msg, ctx, r));
+    }
+
+    @Override
+    protected void processRequest(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
+        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
     @Override
@@ -63,6 +85,24 @@ public class BaseServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.PING)
     private void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
+    }
+
+    /**
+     * Respond to a ping message.
+     *
+     * @param req   The incoming request message.
+     * @param ctx   The channel context.
+     * @param r     The server router.
+     */
+    @AnnotatedServerHandler(type = CorfuProtocol.MessageType.PING)
+    private void handlePing(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
+        log.info("Ping message received from {} {}", req.getHeader().getClientId().getMsb(),
+                req.getHeader().getClientId().getLsb());
+
+        //TODO(Zach): checkArgument(req.hasPingRequest());
+        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+        CorfuProtocol.Response response = API.newPingResponse(responseHeader);
+        r.sendResponse(response, ctx);
     }
 
     /**
@@ -153,6 +193,22 @@ public class BaseServer extends AbstractServer {
     private void doRestart(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("Remote restart requested from client {}", msg.getClientID());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        CorfuServer.restartServer(false);
+    }
+
+    /**
+     * Restart the JVM. This mechanism leverages that corfu_server runs in a bash script
+     * which monitors the exit code of Corfu. If the exit code is 200, then it restarts
+     * the server.
+     *
+     * @param req   The incoming request message.
+     * @param ctx   The channel context.
+     * @param r     The server router.
+     */
+    @AnnotatedServerHandler(type = CorfuProtocol.MessageType.RESTART)
+    private void handleRestart(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
+        log.warn("Remote restart requested from client {}", req.getHeader().getClientId());
+        //TODO(Zach): checkArgument(req.hasRestartRequest()); and send RestartResponse
         CorfuServer.restartServer(false);
     }
 }

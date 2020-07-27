@@ -17,6 +17,7 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.view.Layout;
 
@@ -59,7 +60,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         handlerMap = new EnumMap<>(MessageType.class);
 
         servers.forEach(server -> {
-            Set<MessageType> handledTypes = server.getHandler().getHandledTypes();
+            Set<MessageType> handledTypes = server.getHandlerMethods().getHandledTypes();
             handledTypes.forEach(handledType -> handlerMap.put(handledType, server));
         });
     }
