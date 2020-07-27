@@ -1,17 +1,41 @@
 package org.corfudb.runtime.clients;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import java.io.File;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.file.FileStore;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.Condition;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -34,30 +58,6 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
-import java.io.File;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.nio.file.FileStore;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
-import java.util.stream.LongStream;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
 
 /**
  * Created by mwei on 12/14/15.
@@ -427,7 +427,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             halfBatch.add(x);
         }
 
-        ReadResponse resp = client.readAll(halfBatch).get();
+        ReadResponse resp = client.read(halfBatch, false).get();
         assertThat(resp.getAddresses().size()).isEqualTo(half);
 
         // Read two batches
@@ -437,7 +437,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             twoBatchAddresses.add(x);
         }
 
-        resp = client.readAll(twoBatchAddresses).get();
+        resp = client.read(twoBatchAddresses, false).get();
         assertThat(resp.getAddresses().size()).isEqualTo(twoBatches);
     }
 
@@ -488,10 +488,20 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         file.writeInt(CORRUPT_BYTES);
         file.close();
 
+        // Verify that the correct inspect addresses fails properly when log entry
+        // is corrupted
+        final int start = 0;
+        final int end = 10;
+
+        assertThatThrownBy(() -> client.inspectAddresses(LongStream.range(start, end)
+                .boxed().collect(Collectors.toList())).get())
+                .isInstanceOf(ExecutionException.class)
+                .hasCauseExactlyInstanceOf(DataCorruptionException.class);
+
         // Try to read a corrupted log entry
         assertThatThrownBy(() -> client.read(0).get())
                 .isInstanceOf(ExecutionException.class)
-                .hasCauseInstanceOf(DataCorruptionException.class);
+                .hasCauseExactlyInstanceOf(DataCorruptionException.class);
     }
 
     /**
