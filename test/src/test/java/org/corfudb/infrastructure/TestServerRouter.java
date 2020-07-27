@@ -134,7 +134,6 @@ public class TestServerRouter implements IServerRouter, AutoCloseable {
     @Override
     public void close() {
         List<AbstractServer> handlers = new ArrayList<>(handlerMap.values());
-        handlers.forEach(this::shutdownServer);
 
         servers.forEach(server -> {
             if (!handlers.contains(server)) {
@@ -146,7 +145,7 @@ public class TestServerRouter implements IServerRouter, AutoCloseable {
     private void shutdownServer(AbstractServer server) {
         String serverName = server.getClass().getSimpleName();
         try {
-            server.shutdown();
+            server.shutdown().join();
         } catch (Exception ex) {
             log.error("close: Failed to shutdown: {}", serverName);
         }

@@ -96,7 +96,7 @@ public abstract class AbstractServer {
 
     protected CompletableFuture<Void> shutdownServerExecutor(ExecutorService executor) {
         String serverName = getClass().getSimpleName();
-        log.info("close: Shutting down {}", serverName);
+        log.info("Shutting down {}", serverName);
 
         return CFUtils
                 .asyncShutdownExceptionally(executor, ServerContext.SHUTDOWN_TIMER, shutdownService);
