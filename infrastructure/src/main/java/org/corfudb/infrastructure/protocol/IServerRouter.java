@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.protocol;
 
 import io.netty.channel.ChannelHandlerContext;
 import org.corfudb.common.protocol.API;
+import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.common.protocol.proto.CorfuProtocol.UUID;
