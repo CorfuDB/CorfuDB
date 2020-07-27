@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.protocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import com.google.common.collect.ImmutableList;
+import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -10,8 +11,8 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 import org.corfudb.common.protocol.API;
-import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
@@ -19,6 +20,7 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.view.Layout;
 
+import java.io.IOException;
 import java.util.*;
 
 @Slf4j
@@ -45,6 +47,11 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     /** The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for. */
     private final ImmutableList<AbstractServer> servers;
 
+    /**
+     * Construct a new NettyServerRouter.
+     * @param servers A list of {@link AbstractServer}s this router will route requests for.
+     * @param serverContext The server context.
+     */
     public NettyServerRouter(ImmutableList<AbstractServer> servers, ServerContext serverContext) {
         this.serverContext = serverContext;
         this.serverEpoch = serverContext.getServerEpoch();
@@ -62,15 +69,26 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         return Optional.ofNullable(serverContext.getCurrentLayout());
     }
 
-
-
+    /**
+     * Send a response message through this router.
+     * @param response The response message to send.
+     * @param ctx The context of the channel handler.
+     */
     @Override
     public void sendResponse(Response response, ChannelHandlerContext ctx) {
         ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        outBuf.writeByte(API.PROTO_CORFU_MSG_MARK);
-        outBuf.writeBytes(response.toByteArray());
-        //TODO(Zach): Where to remove allocation?
-        ctx.writeAndFlush(outBuf);
+        ByteBufOutputStream responseOutputStream = new ByteBufOutputStream(outBuf);
+
+        try {
+            responseOutputStream.writeByte(API.PROTO_CORFU_MSG_MARK);
+            response.writeTo(responseOutputStream);
+            ctx.writeAndFlush(outBuf);
+        } catch(IOException e) {
+            log.warn("Exception occurred when sending response {}, caused by {}", response.getHeader(), e.getCause(), e);
+        } finally {
+            IOUtils.closeQuietly(responseOutputStream);
+            outBuf.release();
+        }
     }
 
     /**
@@ -82,7 +100,6 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     @Override
     @Deprecated
     public void addServer(AbstractServer server) {
-        //TODO(Zach): Method still needed?
         throw new UnsupportedOperationException("No longer supported");
     }
 
@@ -94,14 +111,16 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         return servers;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public void setServerContext(ServerContext serverContext) {
-        //TODO(Zach): Method still needed?
         throw new UnsupportedOperationException("The operation is not supported.");
     }
 
     @Override
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    public void channelActive(ChannelHandlerContext ctx) {
         log.info("channelActive: Incoming connection established from: {}.",
                 ctx.channel().remoteAddress());
     }
@@ -127,7 +146,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
             Header header = request.getHeader();
 
             if (log.isDebugEnabled()) {
-                log.debug("Request {} pi {} from {}", header.getType(), ctx.channel().remoteAddress());
+                log.debug("Request {} from {}", header.getType(), ctx.channel().remoteAddress());
             }
 
             AbstractServer handler = handlerMap.get(header.getType());
