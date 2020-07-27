@@ -11,7 +11,6 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ProtocolVersion;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ERROR;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
-import org.corfudb.common.protocol.proto.CorfuProtocol.ErrorNoPayload;
 import org.corfudb.common.protocol.proto.CorfuProtocol.WrongClusterPayload;
 
 import java.util.UUID;
@@ -74,7 +73,6 @@ public class API {
         return ServerError.newBuilder()
                 .setCode(ERROR.OK)
                 .setMessage("")
-                .setNone(ErrorNoPayload.getDefaultInstance())
                 .build();
     }
 
@@ -90,18 +88,25 @@ public class API {
         return ServerError.newBuilder()
                 .setCode(ERROR.NOT_READY)
                 .setMessage(errorMsg)
-                .setNone(ErrorNoPayload.getDefaultInstance())
                 .build();
     }
 
-    public static ServerError newWrongClusterServerError(String errorMsg, UUID serverClusterId, UUID clientClusterId) {
+    public static ServerError newWrongClusterServerError(String errorMsg, CorfuProtocol.UUID serverClusterId,
+                                                         CorfuProtocol.UUID clientClusterId) {
         return ServerError.newBuilder()
                 .setCode(ERROR.WRONG_CLUSTER)
                 .setMessage(errorMsg)
                 .setWrongClusterPayload(WrongClusterPayload.newBuilder()
-                                        .setServerClusterId(getUUID(serverClusterId))
-                                        .setClientClusterId(getUUID(clientClusterId))
-                                        .build())
+                        .setServerClusterId(serverClusterId)
+                        .setClientClusterId(clientClusterId)
+                        .build())
+                .build();
+    }
+
+    public static ServerError newNotBootstrappedServerError(String errorMsg) {
+        return ServerError.newBuilder()
+                .setCode(ERROR.NOT_BOOTSTRAPPED)
+                .setMessage(errorMsg)
                 .build();
     }
 
@@ -123,6 +128,13 @@ public class API {
                 .setHeader(header)
                 .setError(error)
                 .setPingResponse(pingResponse)
+                .build();
+    }
+
+    public static Response newErrorResponseNoPayload(Header header, ServerError error) {
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(error)
                 .build();
     }
 }
