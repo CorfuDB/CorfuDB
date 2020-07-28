@@ -124,7 +124,7 @@ public class SnapshotSender {
                     LogReplicationEntry ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp) {
                         // Snapshot Sync Completed
-                        log.info("Snapshot sync completed for {} on timestamp {}, ack{}", snapshotSyncEventId,
+                        log.info("Snapshot sync completed for {} on timestamp={}, ack={}", snapshotSyncEventId,
                                 baseSnapshotTimestamp, ack.getMetadata());
                         snapshotSyncComplete(snapshotSyncEventId);
                     } else {
@@ -232,6 +232,8 @@ public class SnapshotSender {
     private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error) {
         // Report error to the application through the dataSender
         dataSenderBufferManager.onError(error);
+
+        log.error("SNAPSHOT SYNC is being CANCELED, due to {}", error.getDescription());
 
         // Enqueue cancel event, this will cause a transition to the require snapshot sync request, which
         // will notify application through the data control about this request.

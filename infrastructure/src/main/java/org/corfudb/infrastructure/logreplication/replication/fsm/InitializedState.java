@@ -34,12 +34,14 @@ public class InitializedState implements LogReplicationState {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
             case SNAPSHOT_WAIT_COMPLETE:
+                log.info("Start Snapshot Sync, requestId={}", event.getEventID());
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
                 snapshotSyncState.setTransitionEventId(event.getEventID());
                 return snapshotSyncState;
             case REPLICATION_START:
+                log.info("Start Log Entry Sync, requestId={}", event.getEventID());
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState logEntrySyncState = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
