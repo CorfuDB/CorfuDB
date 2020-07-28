@@ -87,7 +87,7 @@ public class LogReplicationMetadataManager {
         CorfuRecord<LogReplicationMetadataVal, LogReplicationMetadataKey> record = metadataTable.get(currentMetadataKey);
 
         if (record == null) {
-            log.warn(" The log replication metadata doesn't exist at corefuTable, the operation could not succeed.");
+            log.warn(" The log replication metadata doesn't exist at corefuTable, the query operation could not succeed.");
             return Address.NON_ADDRESS;
         }
 
@@ -130,7 +130,7 @@ public class LogReplicationMetadataManager {
         CorfuRecord<LogReplicationMetadataVal, LogReplicationMetadataKey> record = metadataTable.get(currentMetadataKey);
 
         if (record == null) {
-            log.warn(" The log replication metadata doesn't exist at corefuTable, the operation could not succeed.");
+            log.warn(" The log replication metadata doesn't exist at corefuTable, the queryPersistedMetadata operation could not succeed.");
             return LogReplicationMetadataVal.newBuilder().build();
         }
 
@@ -213,7 +213,7 @@ public class LogReplicationMetadataManager {
         CorfuRecord<LogReplicationMetadataVal, LogReplicationMetadataKey> record = metadataTable.get(currentMetadataKey);
 
         if (record == null) {
-            log.warn(" The log replication metadata doesn't exist at corefuTable, the operation could not succeed.");
+            log.warn(" The log replication metadata doesn't exist at corefuTable, the setSrcBaseSnapshotStart operation could not succeed.");
             return false;
         }
 
@@ -258,7 +258,7 @@ public class LogReplicationMetadataManager {
         CorfuRecord<LogReplicationMetadataVal, LogReplicationMetadataKey> record = metadataTable.get(currentMetadataKey);
 
         if (record == null) {
-            log.warn(" The log replication metadata doesn't exist at corefuTable, the operation could not succeed.");
+            log.warn(" The log replication metadata doesn't exist at corefuTable, the setLastSnapTransferTS operation could not succeed.");
             return;
         }
 
@@ -291,7 +291,7 @@ public class LogReplicationMetadataManager {
         CorfuRecord<LogReplicationMetadataVal, LogReplicationMetadataKey> record = metadataTable.get(currentMetadataKey);
 
         if (record == null) {
-            log.warn(" The log replication metadata doesn't exist at corefuTable, the operation could not succeed.");
+            log.warn(" The log replication metadata doesn't exist at corefuTable, the setSnapshotApplied operation could not succeed.");
             return;
         }
 

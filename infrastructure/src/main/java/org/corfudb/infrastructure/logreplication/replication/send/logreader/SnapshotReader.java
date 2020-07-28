@@ -30,4 +30,6 @@ public interface SnapshotReader {
     void reset(long snapshotTimestamp);
 
     void setTopologyConfigId(long topologyConfigId);
+
+    long getMsgSeqNum();
 }

@@ -19,6 +19,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
+
 /**
  * Sender Buffer Manager to store outstanding message that hasn't got an ACK yet.
  */

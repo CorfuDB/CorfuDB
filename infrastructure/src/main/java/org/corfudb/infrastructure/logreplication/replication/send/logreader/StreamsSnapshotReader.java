@@ -272,6 +272,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.topologyConfigId = topologyConfigId;
     }
 
+    @Override
+    public long getMsgSeqNum() {
+        return sequence;
+    }
+
     /**
      * Record a list of SMR entries
      */

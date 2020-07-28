@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
@@ -17,6 +18,7 @@ import java.util.UUID;
  * This log reader attempts to access n entries in the log in a continuous address space and
  * wraps the payload in the LogReplicationEntry.
  */
+@Slf4j
 public class TestSnapshotReader implements SnapshotReader {
 
     private long topologyConfigId = 0;
@@ -62,6 +64,12 @@ public class TestSnapshotReader implements SnapshotReader {
     @Override
     public void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
+    }
+
+    @Override
+    public long getMsgSeqNum() {
+        log.error("Not implemented");
+        return 0;
     }
 
     public void setBatchSize(int batchSize) {

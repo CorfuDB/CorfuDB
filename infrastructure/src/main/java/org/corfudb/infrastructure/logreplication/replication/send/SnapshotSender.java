@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
@@ -187,10 +188,7 @@ public class SnapshotSender {
         // If Snapshot is complete, add end marker
         if (completed) {
             long seqNum = 0;
-            if (logReplicationEntries.size() > 0) {
-                seqNum = logReplicationEntries.get(logReplicationEntries.size() -1).getMetadata().getSnapshotSyncSeqNum() + 1;
-            }
-            LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId, seqNum);
+            LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId, snapshotReader.getMsgSeqNum());
             log.info("SnapshotSender sent out SNAPSHOT_END message {} ", endDataMessage.getMetadata());
             snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;

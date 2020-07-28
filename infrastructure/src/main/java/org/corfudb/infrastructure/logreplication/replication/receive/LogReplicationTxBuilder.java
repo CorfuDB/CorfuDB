@@ -36,7 +36,6 @@ public class LogReplicationTxBuilder {
         this.metadataManager = metadataManager;
         this.timestamp = metadataManager.getTimestamp();
         this.txBuilder = metadataManager.getCorfuStore().tx(LogReplicationMetadataManager.getNAMESPACE());
-        this.metadataBuilder = LogReplicationMetadataVal.newBuilder(metadataManager.queryPersistedMetadata());
     }
 
     /**
@@ -46,6 +45,10 @@ public class LogReplicationTxBuilder {
      * @param val
      */
     public void appendUpdate(LogReplicationMetadataManager.LogReplicationMetadataName metadataName, long val) {
+
+        if (metadataBuilder == null) {
+            this.metadataBuilder = LogReplicationMetadataVal.newBuilder(metadataManager.queryPersistedMetadata());
+        }
 
         switch (metadataName) {
             case TOPOLOGY_CONFIG_ID:
@@ -101,7 +104,7 @@ public class LogReplicationTxBuilder {
             LogReplicationMetadataVal metadataVal = metadataBuilder.build();
             txBuilder.update(metadataManager.getMetadataTableName(), metadataManager.getCurrentMetadataKey(), metadataVal, null);
         } else {
-            log.error("There is no metadata update along the data update. This could lead to corrupted data if two leaders update the data at the same time");
+            log.warn("There is no metadata update along the data update. This could lead to corrupted data if two leaders update the data at the same time");
         }
         txBuilder.commit(timestamp);
     }
@@ -113,7 +116,9 @@ public class LogReplicationTxBuilder {
      */
     public void commit(LogReplicationMetadataVal metadataVal) {
         if (metadataBuilder != null) {
-            log.error("There are some mix use of appendUpdate with this commit(LogReplicationMetadataVal) API");
+
+            Thread.interrupted();
+            log.warn("There are some mix use of appendUpdate with this commit(LogReplicationMetadataVal) API");
         }
         txBuilder.update(metadataManager.getMetadataTableName(), metadataManager.getCurrentMetadataKey(), metadataVal, null);
         txBuilder.commit();

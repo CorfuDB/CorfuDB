@@ -279,7 +279,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         } else {
             LogReplicationEntry ack = snapshotSinkBufferManager.processMsgAndBuffer(message);
             // Check to the one persisted...
-            if (ack.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_REPLICATED) {
+            if (ack.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END) {
                 LogReplicationMetadata.LogReplicationMetadataVal metadataVal = logReplicationMetadataManager.queryPersistedMetadata();
 
                 long lastAppliedBaseSnapshotTimestamp = metadataVal.getSnapshotAppliedTimestamp();
@@ -292,8 +292,8 @@ public class LogReplicationSinkManager implements DataReceiver {
                     // Notify end of snapshot sync. This is a blocking call.
                     snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
                 } else {
-                    log.warn("SNAPSHOT_SYNC has completed for {}, but new ongoing SNAPSHOT_SYNC is {}",
-                            ack.getMetadata().getSnapshotTimestamp(), lastAppliedBaseSnapshotTimestamp);
+                    log.warn("SNAPSHOT_SYNC has completed for {}, but new ongoing SNAPSHOT_SYNC is {} persistedMetadata {}",
+                            ack.getMetadata(), lastAppliedBaseSnapshotTimestamp, LogReplicationMetadataManager.getPersistedMetadataStr(metadataVal));
                 }
             }
             return ack;
