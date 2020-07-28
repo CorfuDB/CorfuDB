@@ -132,7 +132,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 /*
                   Cancel snapshot sync if still in progress.
                  */
-                 cancelSnapshotSync("request to stop replication.");
+                 cancelSnapshotSync("of a request to stop replication.");
                  return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 /*

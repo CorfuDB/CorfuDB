@@ -191,7 +191,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         List<LogReplicationEntry> messages = new ArrayList<>();
 
         boolean endSnapshotSync = false;
-        LogReplicationEntry msg = null;
+        LogReplicationEntry msg;
 
         // If the currentStreamInfo still has entry to process, it will reuse the currentStreamInfo
         // and process the remaining entries.

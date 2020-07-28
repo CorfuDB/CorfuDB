@@ -54,7 +54,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public final String streamA = "Table001";
 
-    public final int numWrites = 800;
+    public final int numWrites = 5000;
     public final int lockLeaseDuration = 8;
 
     public final int activeSiteCorfuPort = 9000;

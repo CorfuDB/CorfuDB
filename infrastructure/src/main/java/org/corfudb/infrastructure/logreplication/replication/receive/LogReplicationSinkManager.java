@@ -272,23 +272,30 @@ public class LogReplicationSinkManager implements DataReceiver {
             return logEntrySinkBufferManager.processMsgAndBuffer(message);
         } else {
             LogReplicationEntry ack = snapshotSinkBufferManager.processMsgAndBuffer(message);
-            // Check to the one persisted...
-            if (ack.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_REPLICATED) {
-                long lastAppliedBaseSnapshotTimestamp = logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp();
-                long latestSnapshotSyncCycleId = logReplicationMetadataManager.getCurrentSnapshotSyncCycleId();
-                long ackSnapshotSyncCycleId = ack.getMetadata().getSyncRequestId().getMostSignificantBits() & Long.MAX_VALUE;
-                // Verify this snapshot ACK corresponds to the last initialized/valid snapshot sync
-                // as a previous one could have been canceled but still processed due to messages being out of order
-                if ((ackSnapshotSyncCycleId == latestSnapshotSyncCycleId) &&
-                        (ack.getMetadata().getSnapshotTimestamp() == lastAppliedBaseSnapshotTimestamp)) {
-                    // Notify end of snapshot sync. This is a blocking call.
-                    snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
-                } else {
-                    log.warn("SNAPSHOT_SYNC has completed for {}, but new ongoing SNAPSHOT_SYNC is {}",
-                            ack.getMetadata().getSnapshotTimestamp(), lastAppliedBaseSnapshotTimestamp);
-                }
+            // If the snapshot sync apply has completed (determined by the end marker) notify
+            // plugin the completion, so checkpoint/trim process is resumed.
+            if (ack.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
+                processSnapshotSyncApplied(ack);
             }
             return ack;
+        }
+    }
+
+    private void processSnapshotSyncApplied(LogReplicationEntry ack) {
+        long lastAppliedBaseSnapshotTimestamp = logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp();
+        long latestSnapshotSyncCycleId = logReplicationMetadataManager.getCurrentSnapshotSyncCycleId();
+        long ackSnapshotSyncCycleId = ack.getMetadata().getSyncRequestId().getMostSignificantBits() & Long.MAX_VALUE;
+        // Verify this snapshot ACK corresponds to the last initialized/valid snapshot sync
+        // as a previous one could have been canceled but still processed due to messages being out of order
+        if ((ackSnapshotSyncCycleId == latestSnapshotSyncCycleId) &&
+                (ack.getMetadata().getSnapshotTimestamp() == lastAppliedBaseSnapshotTimestamp)) {
+            // Notify end of snapshot sync. This is a blocking call.
+            log.info("Notify Snapshot Sync Plugin completion of snapshot sync id={}, baseSnapshot={}", ackSnapshotSyncCycleId,
+                    lastAppliedBaseSnapshotTimestamp);
+            snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
+        } else {
+            log.warn("SNAPSHOT_SYNC has completed for {}, but new ongoing SNAPSHOT_SYNC is {}",
+                    ack.getMetadata().getSnapshotTimestamp(), lastAppliedBaseSnapshotTimestamp);
         }
     }
 
@@ -374,7 +381,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         logReplicationMetadataManager.setSnapshotApplied(inputEntry);
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
-
 
         log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
                 inputEntry, rxState);
