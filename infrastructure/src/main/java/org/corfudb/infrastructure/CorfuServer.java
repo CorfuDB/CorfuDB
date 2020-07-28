@@ -9,6 +9,7 @@ import ch.qos.logback.core.joran.spi.JoranException;
 import io.netty.buffer.PooledByteBufAllocator;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
+import org.corfudb.common.metrics.LongGauge;
 import org.corfudb.common.metrics.StatsCollector;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
@@ -243,10 +244,10 @@ public class CorfuServer {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             StatsCollector collector = new StatsCollector();
-            serverContext.getStats().createGauge("allocator_direct_mem_usage",
-                    PooledByteBufAllocator.DEFAULT.metric()::usedDirectMemory);
-            serverContext.getStats().createGauge("allocator_heap_mem_usage",
-                    PooledByteBufAllocator.DEFAULT.metric()::usedHeapMemory);
+            serverContext.getStats().createGauge(new LongGauge("allocator_direct_mem_usage",
+                    PooledByteBufAllocator.DEFAULT.metric()::usedDirectMemory));
+            serverContext.getStats().createGauge(new LongGauge("allocator_heap_mem_usage",
+                    PooledByteBufAllocator.DEFAULT.metric()::usedHeapMemory));
 
             collector.register(serverContext.getStats());
             try {

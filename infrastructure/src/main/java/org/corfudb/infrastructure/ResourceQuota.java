@@ -59,4 +59,8 @@ public class ResourceQuota {
         return used.get();
     }
 
+    public void reset() {
+        used.set(0);
+    }
+
 }

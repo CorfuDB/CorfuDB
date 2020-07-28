@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -11,11 +9,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-
 import javax.annotation.Nonnull;
-
 import lombok.extern.slf4j.Slf4j;
-
+import org.corfudb.common.metrics.IntGauge;
 import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
@@ -77,7 +73,7 @@ public class BatchProcessor implements AutoCloseable {
         processorService.submit(this::processor);
 
         StatsGroup batchProcessorStats = statsGroup.scope(getClass().getSimpleName());
-        batchProcessorStats.createGauge("batch_processor_queue_len", operationsQueue::size);
+        batchProcessorStats.createGauge(new IntGauge("batch_processor_queue_len", operationsQueue::size));
     }
 
     /**

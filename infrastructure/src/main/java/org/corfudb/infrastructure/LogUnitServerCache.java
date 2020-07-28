@@ -5,6 +5,8 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.DoubleGauge;
+import org.corfudb.common.metrics.LongGauge;
 import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
@@ -41,9 +43,9 @@ public class LogUnitServerCache {
 
         StatsGroup cacheStats = stats.scope(getClass().getSimpleName());
 
-        cacheStats.createGauge("hit_rate", this.dataCache.stats()::hitRate);
-        cacheStats.createGauge("average_load_time", this.dataCache.stats()::averageLoadPenalty);
-        cacheStats.createGauge("size_estimate", this.dataCache::estimatedSize);
+        cacheStats.createGauge(new DoubleGauge("hit_rate", this.dataCache.stats()::hitRate));
+        cacheStats.createGauge(new DoubleGauge("average_load_time", this.dataCache.stats()::averageLoadPenalty));
+        cacheStats.createGauge(new LongGauge("size_estimate", this.dataCache::estimatedSize));
         // TODO(Maithem) add total weight
     }
 

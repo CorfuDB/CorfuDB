@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.LongAdder;
  *
  * Created by Maithem on 7/7/20.
  */
-public class Counter {
+public class Counter implements Metric {
 
     private final LongAdder count = new LongAdder();
 

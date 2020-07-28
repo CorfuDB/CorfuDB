@@ -5,30 +5,26 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.TimeZone;
-
 import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
-import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
-import org.corfudb.infrastructure.log.LogFormat.Metadata;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
+import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -94,7 +90,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         log.append(writeEntries);
         log.sync(true);
 
-        StreamLog log2 = new StreamLogFiles(sc, false);
+        ServerContext newSc = getContext();
+        StreamLog log2 = new StreamLogFiles(newSc, false);
         List<LogData> readEntries = readRange(0, numIter, log2);
         assertThat(writeEntries).isEqualTo(readEntries);
     }
@@ -140,7 +137,8 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         log.append(entries);
 
-        StreamLog log2 = new StreamLogFiles(sc, false);
+        ServerContext newSc = getContext();
+        StreamLog log2 = new StreamLogFiles(newSc, false);
         List<LogData> readEntries = readRange(0L, trimMark - trimOverlap + numEntries, log2);
 
         List<LogData> notTrimmed = new ArrayList<>();

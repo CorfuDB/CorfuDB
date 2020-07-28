@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
  */
 
 @Slf4j
-public class Histogram {
+public class Histogram implements Metric {
 
     private static final long MAX_TRACKED_VALUE = TimeUnit.HOURS.toMillis(1);
 

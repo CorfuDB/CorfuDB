@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.common.metrics.Counter;
 import org.corfudb.common.metrics.Histogram;
+import org.corfudb.common.metrics.IntGauge;
 import org.corfudb.common.metrics.Meter;
 import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
@@ -170,7 +171,7 @@ public class SequencerServer extends AbstractServer {
         this.keysResolutionMeter = sequencerStats.createMeter("num_keys_commit");
         this.txnAborts = sequencerStats.createCounter("txn_aborts");
         this.rawTokenAllocations = sequencerStats.createCounter("raw_allocation");
-        sequencerStats.createGauge("opened_streams", streamsAddressMap::size);
+        sequencerStats.createGauge(new IntGauge("opened_streams", streamsAddressMap::size));
     }
 
     @Override

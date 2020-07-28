@@ -1,5 +1,8 @@
 package org.corfudb.infrastructure.log;
 
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
+
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;
@@ -8,36 +11,6 @@ import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.Unpooled;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
-import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
-import org.corfudb.infrastructure.log.LogFormat.DataRank;
-import org.corfudb.infrastructure.log.LogFormat.DataType;
-import org.corfudb.infrastructure.log.LogFormat.LogEntry;
-import org.corfudb.infrastructure.log.LogFormat.LogHeader;
-import org.corfudb.infrastructure.log.LogFormat.Metadata;
-import org.corfudb.common.metrics.Counter;
-import org.corfudb.common.metrics.Gauge;
-import org.corfudb.common.metrics.Histogram;
-import org.corfudb.common.metrics.StatsGroup;
-import org.corfudb.infrastructure.ResourceQuota;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.common.compression.Codec;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.LogUnitException;
-import org.corfudb.runtime.exceptions.OverwriteCause;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-
-import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileNotFoundException;
@@ -68,8 +41,36 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-
-import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
+import javax.annotation.Nullable;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+import org.corfudb.common.compression.Codec;
+import org.corfudb.common.metrics.Counter;
+import org.corfudb.common.metrics.Histogram;
+import org.corfudb.common.metrics.IntGauge;
+import org.corfudb.common.metrics.LongGauge;
+import org.corfudb.common.metrics.StatsGroup;
+import org.corfudb.infrastructure.ResourceQuota;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
+import org.corfudb.infrastructure.log.LogFormat.DataRank;
+import org.corfudb.infrastructure.log.LogFormat.DataType;
+import org.corfudb.infrastructure.log.LogFormat.LogEntry;
+import org.corfudb.infrastructure.log.LogFormat.LogHeader;
+import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.LogUnitException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 /**
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
@@ -119,8 +120,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     private final Histogram compactLatency;
 
-    private final Gauge openSegments;
-
     private final Counter bytesTrimmed;
 
     /**
@@ -153,7 +152,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         logSizeQuota.consume(initialLogSize);
-        streamLogFilesStats.createGauge("log_size", () -> logSizeQuota.getUsed());
+        streamLogFilesStats.createGauge(new LongGauge("log_size", logSizeQuota::getUsed));
 
         verifyLogs();
         // Starting address initialization should happen before
@@ -169,8 +168,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         syncLatency = streamLogFilesStats.createHistogram("segment_sync");
         compactLatency = streamLogFilesStats.createHistogram("prefix_compact");
-        openSegments = () -> writeChannels.size();
-        streamLogFilesStats.createGauge("open_segments", openSegments);
+        // TODO(Maithem) NPE when writeChannel is changed?
+        streamLogFilesStats.createGauge(new IntGauge("open_segments", writeChannels::size));
         bytesTrimmed = streamLogFilesStats.createCounter("bytes_trimmed");
     }
 
@@ -1336,9 +1335,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.resetCommittedTail();
         logMetadata = new LogMetadata();
         writeChannels.clear();
-        streamLogFilesStats.unregisterScopes();
-        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
-        streamLogFilesStats.createGauge("log_size", () -> logSizeQuota.getUsed());
+        //TODO(Maithem) re-add other stats? after reset?
+        logSizeQuota.reset();
         log.info("reset: Completed, end segment {}", endSegment);
     }
 

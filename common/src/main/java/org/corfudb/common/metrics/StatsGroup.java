@@ -36,28 +36,26 @@ public class StatsGroup {
         return prefix + "_" + name;
     }
 
-    public Histogram createHistogram(String name) {
-        return histograms.merge(name, new Histogram(name), (k, v) -> {
-            throw new IllegalStateException(name(prefix, name) + " already exists!");
+    private  <T extends Metric> T create(Map<String, T> map, T metric) throws IllegalArgumentException {
+        return map.merge(metric.getName(), metric, (k, v) -> {
+            throw new IllegalArgumentException(name(prefix, metric.getName()) + " already exists!");
         });
+    }
+
+    public Histogram createHistogram(String name) {
+        return create(histograms, new Histogram(name));
     }
 
     public Meter createMeter(String name) {
-        return meters.merge(name, new Meter(name), (k, v) -> {
-            throw new IllegalStateException(name(prefix, name) + " already exists!");
-        });
+        return create(meters, new Meter(name));
     }
 
     public Counter createCounter(String name) {
-        return counters.merge(name, new Counter(name), (k, v) -> {
-            throw new IllegalStateException(name(prefix, name) + " already exists!");
-        });
+        return create(counters, new Counter(name));
     }
 
-    public void createGauge(String name, Gauge gauge) {
-        gauges.merge(name, gauge, (k, v) -> {
-            throw new IllegalStateException(name(prefix, name) + " already exists!");
-        });
+    public void createGauge(Gauge gauge) {
+        create(gauges, gauge);
     }
 
     public StatsGroup scope(String scope) {

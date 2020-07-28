@@ -4,6 +4,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.Counter;
+import org.corfudb.common.metrics.IntGauge;
 import org.corfudb.common.metrics.StatsGroup;
 import org.corfudb.runtime.view.Address;
 import org.ehcache.sizeof.SizeOf;
@@ -95,7 +96,7 @@ public class SequencerServerCache {
         this.maxConflictNewSequencer = maxConflictNewSequencer;
 
         // TODO(Maithem): Track window size in bytes?
-        statsGroup.scope("cache").createGauge("txn_window_size", this.conflictKeys::size);
+        statsGroup.scope("cache").createGauge(new IntGauge("txn_window_size", this.conflictKeys::size));
         numKeysInvalidated = statsGroup.scope("cache").createCounter("num_keys_invalidated");
     }
 
