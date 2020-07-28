@@ -175,9 +175,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     private LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
         SMREntryList entryList = next(stream);
-
         LogReplicationEntry txMsg = generateMessage(stream, entryList, syncRequestId);
-        log.trace("Successfully generate a txMsg {} for stream {} with snapshotTimestamp {}", stream.name, snapshotTimestamp);
+        log.info("Successfully generate a snapshot message for stream {} with snapshotTimestamp={}, numEntries={}, " +
+                        "entriesBytes={}, streamId={}", stream.name, snapshotTimestamp,
+                entryList.getSmrEntries().size(), entryList.getSizeInBytes(), stream.uuid);
         return txMsg;
     }
 

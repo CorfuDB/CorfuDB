@@ -92,17 +92,17 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
         // Check if Tx Stream Opaque Entry is empty
         if(tmpUUIDs.isEmpty()) {
-            log.info("Log Entry Reader, TX stream Opaque entry is EMPTY, size={}", streamUUIDs.size());
+            log.trace("Log Entry Reader, TX stream Opaque entry is EMPTY, size={}", streamUUIDs.size());
             return false;
         }
 
-        //If the entry's stream set is a subset of interested streams, it is the entry we should process
+        // If the entry's stream set is a subset of interested streams, it is the entry we should process
         if (streamUUIDs.containsAll(tmpUUIDs)) {
             log.info("Log Entry Reader, replicating streams={}, replicateBase={}", tmpUUIDs, streamUUIDs.size());
             return true;
         }
 
-        //If the entry's stream set has no overlap with the interested streams, it should be skipped.
+        // If the entry's stream set has no overlap with the interested streams, it should be skipped.
         tmpUUIDs.retainAll(streamUUIDs);
         if (tmpUUIDs.isEmpty()) {
             log.info("Log Entry Reader, TX stream contains none of the streams of interest");
