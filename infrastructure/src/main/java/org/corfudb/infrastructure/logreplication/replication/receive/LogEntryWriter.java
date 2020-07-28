@@ -110,9 +110,9 @@ public class LogEntryWriter {
             }
         }
 
-        TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
+        LogReplicationTxBuilder txBuilder = LogReplicationTxBuilder.getLogReplicationTxBuilder(logReplicationMetadataManager);
 
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataName.LAST_LOG_PROCESSED, entryTs);
+        txBuilder.appendUpdate(LogReplicationMetadataManager.LogReplicationMetadataName.LAST_LOG_PROCESSED, entryTs);
 
         for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
             for (UUID uuid : opaqueEntry.getEntries().keySet()) {
@@ -122,8 +122,7 @@ public class LogEntryWriter {
             }
         }
 
-        txBuilder.commit(timestamp);
-
+        txBuilder.commit();
         lastMsgTs = Math.max(entryTs, lastMsgTs);
     }
 

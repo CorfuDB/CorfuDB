@@ -236,6 +236,9 @@ public class LogReplicationSinkManager implements DataReceiver {
                 // (temporal non-checkpointed streams). This is a blocking call.
                 log.info("onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
                 snapshotSyncPlugin.onSnapshotSyncStart(runtime);
+
+                // Always ACK a SNAPSHOT_START message.
+                return message;
             }
             return null;
         }
@@ -280,11 +283,11 @@ public class LogReplicationSinkManager implements DataReceiver {
                 LogReplicationMetadata.LogReplicationMetadataVal metadataVal = logReplicationMetadataManager.queryPersistedMetadata();
 
                 long lastAppliedBaseSnapshotTimestamp = metadataVal.getSnapshotAppliedTimestamp();
-                //long latestSnapshotSyncCycleId = logReplicationMetadataManager.getCurrentSnapshotSyncCycleId();
+                long latestSnapshotSyncCycleId = metadataVal.getCurrentSnapshotCycleId();
                 long ackSnapshotSyncCycleId = ack.getMetadata().getSyncRequestId().getMostSignificantBits() & Long.MAX_VALUE;
                 // Verify this snapshot ACK corresponds to the last initialized/valid snapshot sync
                 // as a previous one could have been canceled but still processed due to messages being out of order
-                if (//(ackSnapshotSyncCycleId == latestSnapshotSyncCycleId) &&
+                if ((ackSnapshotSyncCycleId == latestSnapshotSyncCycleId) &&
                         (ack.getMetadata().getSnapshotTimestamp() == lastAppliedBaseSnapshotTimestamp)) {
                     // Notify end of snapshot sync. This is a blocking call.
                     snapshotSyncPlugin.onSnapshotSyncEnd(runtime);

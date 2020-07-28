@@ -30,8 +30,9 @@ message LogReplicationMetadataVal {
   int64 snapshotTransferredTimestamp = 4;
   int64 snapshotAppliedTimestamp = 5;
   int64 lastLogEntryProcessedTimestamp = 6;
-
   int64 snapshotMessageReceivedSeqNum = 7;
   int64 snapshotMessageAppliedSeqNum = 8;
+  int64 currentSnapshotCycleId=9;
+  int64 minShadowStreamTimestamp=10;
 }
 

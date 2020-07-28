@@ -159,7 +159,7 @@ public class SnapshotSender {
             // to complete snapshot sync and send the right ACK)
             try {
                 dataSenderBufferManager.sendWithBuffering(getSnapshotSyncStartMarker(snapshotSyncEventId));
-                snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId));
+                snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(getSnapshotSyncEndMarker(snapshotSyncEventId, 0));
                 snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                 snapshotSyncComplete(snapshotSyncEventId);
             } catch (Exception e) {
@@ -186,7 +186,11 @@ public class SnapshotSender {
 
         // If Snapshot is complete, add end marker
         if (completed) {
-            LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
+            long seqNum = 0;
+            if (logReplicationEntries.size() > 0) {
+                seqNum = logReplicationEntries.get(logReplicationEntries.size() -1).getMetadata().getSnapshotSyncSeqNum() + 1;
+            }
+            LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId, seqNum);
             log.info("SnapshotSender sent out SNAPSHOT_END message {} ", endDataMessage.getMetadata());
             snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;
@@ -209,10 +213,11 @@ public class SnapshotSender {
         return emptyEntry;
     }
 
-    private LogReplicationEntry getSnapshotSyncEndMarker(UUID snapshotSyncEventId) {
+    private LogReplicationEntry getSnapshotSyncEndMarker(UUID snapshotSyncEventId, long seqNum) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END, fsm.getTopologyConfigId(), snapshotSyncEventId,
-                Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
+                Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, seqNum);
         LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata);
+        log.info("Make snapshot_end message {}", emptyEntry);
         return emptyEntry;
     }
 

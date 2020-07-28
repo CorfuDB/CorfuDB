@@ -113,8 +113,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             return;
         }
 
-        TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataName.TOPOLOGY_CONFIG_ID, topologyConfigId);
+        LogReplicationTxBuilder txBuilder = LogReplicationTxBuilder.getLogReplicationTxBuilder(getLogReplicationMetadataManager());
+        txBuilder.appendUpdate(LogReplicationMetadataManager.LogReplicationMetadataName.TOPOLOGY_CONFIG_ID, topologyConfigId);
 
 
         for (UUID streamID : streamViewMap.keySet()) {
@@ -127,7 +127,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             txBuilder.logUpdate(usedStreamID, entry);
         }
 
-        txBuilder.commit(timestamp);
+        txBuilder.commit();
     }
 
     /**
@@ -167,11 +167,11 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param shadowStreamUuid
      */
     private void processOpaqueEntry(List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid) {
-        TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
-        Timestamp timestamp = processOpaqueEntry(txBuilder, smrEntries, currentSeqNum, shadowStreamUuid);
+        LogReplicationTxBuilder txBuilder = LogReplicationTxBuilder.getLogReplicationTxBuilder(getLogReplicationMetadataManager());
+        processOpaqueEntry(txBuilder, smrEntries, currentSeqNum, shadowStreamUuid);
 
         try {
-            txBuilder.commit(timestamp);
+            txBuilder.commit();
         } catch (Exception e) {
             log.warn("Caught an exception ", e);
             throw e;
@@ -185,8 +185,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param currentSeqNum
      * @param shadowStreamUuid
      */
-    private Timestamp processOpaqueEntry(TxBuilder txBuilder, List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid) {
-        Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
+    private void processOpaqueEntry(LogReplicationTxBuilder txBuilder, List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid) {
+        //Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
         LogReplicationMetadataVal metadataVal = logReplicationMetadataManager.queryPersistedMetadata();
 
         if (topologyConfigId != metadataVal.getTopologyConfigId() || srcGlobalSnapshot != metadataVal.getSnapshotStartTimestamp() ||
@@ -194,16 +194,14 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             log.warn("Skip processing opaque entry. Current topologyConfigId={} srcGlobalSnapshot={}, currentSeqNum={}, " +
                             "peristed metadata {}", topologyConfigId,
                     srcGlobalSnapshot, recvSeq, LogReplicationMetadataManager.getPersistedMetadataStr(metadataVal));
-            return Timestamp.getDefaultInstance();
+            return;
         }
 
-        logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataManager.LogReplicationMetadataName.LAST_SNAPSHOT_MSG_RECEIVED_SEQ_NUM, currentSeqNum);
+        txBuilder.appendUpdate(LogReplicationMetadataManager.LogReplicationMetadataName.LAST_SNAPSHOT_MSG_RECEIVED_SEQ_NUM, currentSeqNum);
         for (SMREntry smrEntry : smrEntries) {
             txBuilder.logUpdate(shadowStreamUuid, smrEntry);
         }
-
-        return timestamp;
-    }
+   }
 
     /**
      * Write a list of SMR entries to the specified stream log.
@@ -212,15 +210,15 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param shadowStreamUuid
      */
     private void processOpaqueEntry(List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid, UUID snapshotSyncId) {
-        TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
-        Timestamp timestamp = processOpaqueEntry(txBuilder, smrEntries, currentSeqNum, shadowStreamUuid);
+        LogReplicationTxBuilder txBuilder = LogReplicationTxBuilder.getLogReplicationTxBuilder(getLogReplicationMetadataManager());
+        processOpaqueEntry(txBuilder, smrEntries, currentSeqNum, shadowStreamUuid);
 
         try {
             if (!snapshotSyncStartMarker.isPresent()) {
-                logReplicationMetadataManager.setSnapshotSyncStartMarker(snapshotSyncId, timestamp, txBuilder);
-                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, timestamp.getSequence()));
+                logReplicationMetadataManager.setSnapshotSyncStartMarker(snapshotSyncId, txBuilder.getTimestamp(), txBuilder);
+                snapshotSyncStartMarker = Optional.of(new SnapshotSyncStartMarker(snapshotSyncId, txBuilder.getTimestamp().getSequence()));
             }
-            txBuilder.commit(timestamp);
+            txBuilder.commit();
         } catch (Exception e) {
             log.warn("Caught an exception ", e);
             throw e;
@@ -297,9 +295,9 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
 
         // This variable reflects the minimum timestamp for all shadow streams in the current snapshot cycle.
         // We seek up to this address, assuming that no trim should occur beyond this snapshot start
-        // long currentMinShadowStreamTimestamp = logReplicationMetadataManager.getMinSnapshotSyncShadowStreamTs();
+        long currentMinShadowStreamTimestamp = logReplicationMetadataManager.getMinSnapshotSyncShadowStreamTs();
         OpaqueStream shadowOpaqueStream = new OpaqueStream(rt, rt.getStreamsView().get(shadowStreamId, options));
-        // shadowOpaqueStream.seek(currentMinShadowStreamTimestamp);
+        shadowOpaqueStream.seek(currentMinShadowStreamTimestamp);
         Stream shadowStream = shadowOpaqueStream.streamUpTo(snapshot);
 
         Iterator<OpaqueEntry> iterator = shadowStream.iterator();
@@ -337,16 +335,17 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         long seqNum = 0;
         topologyConfigId = entry.getMetadata().getTopologyConfigId();
 
-        //update the metadata
+        // Update the metadata
         logReplicationMetadataManager.setLastSnapTransferDoneTimestamp(topologyConfigId, ts);
 
         //get the number of entries to apply
         seqNum = logReplicationMetadataManager.query(LogReplicationMetadataManager.LogReplicationMetadataName.LAST_SNAPSHOT_MSG_RECEIVED_SEQ_NUM);
 
         // There is no snapshot data to apply
-        if (seqNum == Address.NON_ADDRESS)
+        if (seqNum == Address.NON_ADDRESS) {
+            log.info("There is no date to apply for snapshot sync");
             return;
-
+        }
         // Only if there is data to be applied
         if (seqNum != Address.NON_ADDRESS) {
             applyShadowStreams(seqNum + 1);

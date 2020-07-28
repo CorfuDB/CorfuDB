@@ -2,18 +2,15 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
 
@@ -36,13 +33,18 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LogReplicationMetadataManager {
 
+    @Getter
     private static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
     private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
     private static final String CURRENT_METADATA_KEY = "CORFU-REPLICATION-CURRENT-STATUS";
+
+    @Getter
     private CorfuStore corfuStore;
 
+    @Getter
     private LogReplicationMetadataKey currentMetadataKey = LogReplicationMetadataKey.newBuilder().setKey(CURRENT_METADATA_KEY).build();
 
+    @Getter
     private String metadataTableName;
 
     private Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataKey> metadataTable;
@@ -73,14 +75,6 @@ public class LogReplicationMetadataManager {
      */
     public Timestamp getTimestamp() {
         return corfuStore.getTimestamp();
-    }
-
-    /**
-     * Get a txBuilder.
-     * @return
-     */
-    public TxBuilder getTxBuilder() {
-        return corfuStore.tx(NAMESPACE);
     }
 
     /**
@@ -119,8 +113,14 @@ public class LogReplicationMetadataManager {
             case LAST_LOG_PROCESSED:
                 return record.getPayload().getLastLogEntryProcessedTimestamp();
 
+            case CURRENT_SNAPSHOT_CYCLE_ID:
+                return record.getPayload().getCurrentSnapshotCycleId();
+
+            case CURRENT_CYCLE_MIN_SHADOW_STREAM_TS:
+                return record.getPayload().getMinShadowStreamTimestamp();
+
             default:
-                log.warn("there is no metadata name for {}", metadataName);
+                log.error("There is no metadata name for {}", metadataName);
                 return Address.NON_ADDRESS;
         }
     }
@@ -138,70 +138,13 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * This API is used to append the metadata update to the transaction that updates the shadow stream or real stream.
-     *
-     * @param txBuilder
-     * @param metadataName
-     * @param val
-     */
-    public void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataName metadataName, long val) {
-        CorfuRecord<LogReplicationMetadataVal, LogReplicationMetadataKey> record = metadataTable.get(currentMetadataKey);
-        LogReplicationMetadataVal metadataVal;
-
-        if (record == null) {
-            log.warn(" The log replication metadata doesn't exist at corefuTable, the operation could not succeed.");
-            return;
-        }
-
-        switch (metadataName) {
-            case TOPOLOGY_CONFIG_ID:
-                metadataVal = LogReplicationMetadataVal.newBuilder(record.getPayload()).setTopologyConfigId(val).build();
-                break;
-
-            case LAST_SNAPSHOT_STARTED:
-                metadataVal = LogReplicationMetadataVal.newBuilder(record.getPayload()).
-                        setSnapshotStartTimestamp(val).
-                        setSnapshotMessageReceivedSeqNum(Address.NON_ADDRESS).
-                        setSnapshotMessageAppliedSeqNum(Address.NON_ADDRESS).
-                        build();
-                break;
-
-            case LAST_SNAPSHOT_TRANSFERRED:
-                metadataVal = LogReplicationMetadataVal.newBuilder(record.getPayload()).setSnapshotTransferredTimestamp(val).build();
-                break;
-
-            case LAST_SNAPSHOT_APPLIED:
-                metadataVal = LogReplicationMetadataVal.newBuilder(record.getPayload()).setSnapshotAppliedTimestamp(val).build();
-                break;
-
-            case LAST_SNAPSHOT_MSG_RECEIVED_SEQ_NUM:
-                metadataVal = LogReplicationMetadataVal.newBuilder(record.getPayload()).setSnapshotMessageReceivedSeqNum(val).build();
-                break;
-
-            case LAST_SNAPSHOT_MSG_APPLIED_SEQ_NUM:
-                metadataVal = LogReplicationMetadataVal.newBuilder(record.getPayload()).setSnapshotMessageAppliedSeqNum(val).build();
-                break;
-
-            case LAST_LOG_PROCESSED:
-                metadataVal = LogReplicationMetadataVal.newBuilder(record.getPayload()).setLastLogEntryProcessedTimestamp(val).build();
-                break;
-
-            default:
-                log.warn("there is no metadata name for {}", metadataName);
-                return;
-        }
-
-        txBuilder.update(metadataTableName, currentMetadataKey, metadataVal, null);
-    }
-
-    /**
      * Set the snapshot sync start marker, i.e., a unique identification of the current snapshot sync cycle.
      * Identified by the snapshot sync Id and the min shadow stream update timestamp for this cycle.
      *
      * @param currentSnapshotSyncId
      * @param shadowStreamTs
      */
-    public void setSnapshotSyncStartMarker(UUID currentSnapshotSyncId, Timestamp shadowStreamTs, TxBuilder txBuilder) {
+    public void setSnapshotSyncStartMarker(UUID currentSnapshotSyncId, Timestamp shadowStreamTs, LogReplicationTxBuilder txBuilder) {
 
         long currentSnapshotSyncIdLong = currentSnapshotSyncId.getMostSignificantBits() & Long.MAX_VALUE;
         long persistedSnapshotId = query(LogReplicationMetadataName.CURRENT_SNAPSHOT_CYCLE_ID);
@@ -209,8 +152,10 @@ public class LogReplicationMetadataManager {
         if (persistedSnapshotId != currentSnapshotSyncIdLong) {
             // Update if current Snapshot Sync differs from the persisted one, otherwise ignore.
             // It could have already been updated in the case that leader changed in between a snapshot sync cycle
-            appendUpdate(txBuilder, LogReplicationMetadataName.CURRENT_SNAPSHOT_CYCLE_ID, currentSnapshotSyncIdLong);
-            appendUpdate(txBuilder, LogReplicationMetadataName.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS, shadowStreamTs.getSequence());
+            txBuilder.appendUpdate(LogReplicationMetadataName.CURRENT_SNAPSHOT_CYCLE_ID, currentSnapshotSyncIdLong);
+            txBuilder.appendUpdate(LogReplicationMetadataName.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS, shadowStreamTs.getSequence());
+            log.debug("Set Metadata {} as {}, {} as {} ", LogReplicationMetadataName.CURRENT_SNAPSHOT_CYCLE_ID, currentSnapshotSyncIdLong,
+                    LogReplicationMetadataName.CURRENT_CYCLE_MIN_SHADOW_STREAM_TS, shadowStreamTs);
         }
     }
 
@@ -222,47 +167,12 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Given topologyConfigId and version number, build a metadataVal with log replication status with init values.
-     *
-     * @param topologyConfigId
-     * @param version
-     * @return
-     */
-    private LogReplicationMetadataVal buildMetadataValInstance(long topologyConfigId, String version) {
-            LogReplicationMetadataVal metadataVal = LogReplicationMetadataVal.newBuilder().
-                setTopologyConfigId(topologyConfigId).
-                setVersion(version).
-                setSnapshotStartTimestamp(Address.NON_ADDRESS).
-                setSnapshotTransferredTimestamp(Address.NON_ADDRESS).
-                setSnapshotAppliedTimestamp(Address.NON_ADDRESS).
-                setSnapshotMessageReceivedSeqNum(Address.NON_ADDRESS).
-                setSnapshotMessageAppliedSeqNum(Address.NON_ADDRESS).
-                setLastLogEntryProcessedTimestamp(Address.NON_ADDRESS).build();
-            return metadataVal;
-    }
-
-    /**
-     * Persist the new metadata to the corfu table.
-     * @param timestamp
-     * @param metadata
-     */
-    private void persistMetadata (Timestamp timestamp, LogReplicationMetadataVal metadata) {
-        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
-
-        txBuilder.update(metadataTableName, currentMetadataKey, metadata, null);
-
-        txBuilder.commit(timestamp);
-
-        log.debug("Updated metadata with new metadata {}", metadata);
-    }
-
-    /**
      * Update the topologyConfigId with a transaction.
      * It will set the log replications status with init values.
      * @param topologyConfigId
      */
     public void setupTopologyConfigId(long topologyConfigId) {
-        Timestamp timestamp = corfuStore.getTimestamp();
+        LogReplicationTxBuilder txBuilder = LogReplicationTxBuilder.getLogReplicationTxBuilder(this);
 
         CorfuRecord<LogReplicationMetadataVal, LogReplicationMetadataKey> record = metadataTable.get(currentMetadataKey);
         long persistedTopologyConfigId = Address.NON_ADDRESS;
@@ -279,11 +189,10 @@ public class LogReplicationMetadataManager {
             return;
         }
 
-
-        LogReplicationMetadataVal metadataVal = buildMetadataValInstance(topologyConfigId, persistedVersion);
+        LogReplicationMetadataVal metadataVal = LogReplicationTxBuilder.buildMetadataValInstance(topologyConfigId, persistedVersion);
 
         try {
-            persistMetadata(timestamp, metadataVal);
+            txBuilder.commit(metadataVal);
         } catch (TransactionAbortedException e) {
             log.warn("Transaction about when updating with the new topologyConfigId {} ", topologyConfigId, e);
         }
@@ -299,7 +208,8 @@ public class LogReplicationMetadataManager {
      * @return if the operation succeeds or not.
      */
     public boolean setSrcBaseSnapshotStart(long topologyConfigId, long ts) {
-        Timestamp timestamp = corfuStore.getTimestamp();
+        LogReplicationTxBuilder txBuilder = LogReplicationTxBuilder.getLogReplicationTxBuilder(this);
+
         CorfuRecord<LogReplicationMetadataVal, LogReplicationMetadataKey> record = metadataTable.get(currentMetadataKey);
 
         if (record == null) {
@@ -328,7 +238,7 @@ public class LogReplicationMetadataManager {
                 build();
 
         try {
-            persistMetadata(timestamp, metadataVal);
+            txBuilder.commit(metadataVal);
             return true;
         } catch (TransactionAbortedException e) {
             log.warn("Transaction Aborted while updating the SnapshotStartTimestamp {} with the topologyConfigID {}", ts, topologyConfigId);
@@ -342,6 +252,8 @@ public class LogReplicationMetadataManager {
      * @param ts
      */
     public void setLastSnapTransferDoneTimestamp(long topologyConfigId, long ts) {
+        LogReplicationTxBuilder txBuilder = LogReplicationTxBuilder.getLogReplicationTxBuilder(this);
+
         Timestamp timestamp = corfuStore.getTimestamp();
         CorfuRecord<LogReplicationMetadataVal, LogReplicationMetadataKey> record = metadataTable.get(currentMetadataKey);
 
@@ -367,14 +279,15 @@ public class LogReplicationMetadataManager {
                 setSnapshotTransferredTimestamp(ts).build();
 
         try {
-            persistMetadata(timestamp, metadataVal);
+            txBuilder.commit(metadataVal);
         } catch (TransactionAbortedException e) {
             log.warn("Caught a transaction exception while updating the snapshotTransferredTimestamp {} ", metadataVal, e);
         }
     }
 
     public void setSnapshotApplied(LogReplicationEntry entry) {
-        Timestamp timestamp = corfuStore.getTimestamp();
+        LogReplicationTxBuilder txBuilder = LogReplicationTxBuilder.getLogReplicationTxBuilder(this);
+
         CorfuRecord<LogReplicationMetadataVal, LogReplicationMetadataKey> record = metadataTable.get(currentMetadataKey);
 
         if (record == null) {
@@ -399,7 +312,7 @@ public class LogReplicationMetadataManager {
                 build();
 
         try {
-            persistMetadata(timestamp, metadataVal);
+            txBuilder.commit(metadataVal);
         } catch (TransactionAbortedException e) {
             log.warn("Transaction aborted while updating the log replication metadata with the new value {}", metadataVal);
         }
@@ -420,6 +333,7 @@ public class LogReplicationMetadataManager {
 
         return getPersistedMetadataStr(record.getPayload());
     }
+
 
     /**
      * Given a metadata, get the metadata in string format used by logging.

@@ -348,9 +348,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             System.out.println("Table[" + name + "]: " + table.keySet().size() + " keys; Expected "
                     + mapKeys.size() + " keys");
 
-            assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
-            assertThat(table.keySet().containsAll(mapKeys.keySet())).isTrue();
-            assertThat(table.keySet().size() == mapKeys.keySet().size()).isTrue();
+            assertThat(table.keySet().size()).isEqualTo(mapKeys.keySet().size());
 
             for (Long key : mapKeys.keySet()) {
                 assertThat(table.get(key)).isEqualTo(mapKeys.get(key));
