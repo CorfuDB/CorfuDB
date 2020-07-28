@@ -122,6 +122,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                     // We need to set a new transition event Id, so anything happening on this new state
                     // is marked with this unique Id and correlated to cancel or trimmed events.
                     logEntrySyncState.setTransitionEventId(event.getEventID());
+                    log.info("Snapshot Sync Completed, syncRequestId={}. Transition to LOG_ENTRY_SYNC", event.getEventID());
                     return logEntrySyncState;
                 }
 

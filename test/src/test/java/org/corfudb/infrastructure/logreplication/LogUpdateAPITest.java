@@ -55,7 +55,6 @@ public class LogUpdateAPITest extends AbstractViewTest {
         Table<Uuid, Uuid, Uuid> tableA = corfuStore1.openTable(namespace, tableAName,
                 Uuid.class, Uuid.class, Uuid.class, TableOptions.builder().build());
 
-
         UUID uuidA = CorfuRuntime.getStreamID(tableA.getFullyQualifiedTableName());
 
         //update tableA

@@ -128,7 +128,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
                         int currentEntrySize = ReaderUtility.calculateSize(smrEntries);
 
                         if (currentEntrySize > MAX_DATA_MSG_SIZE_SUPPORTED) {
-                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported", currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
+                            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
+                                    currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
                             throw new IllegalSnapshotEntrySizeException(" The snapshot entry is bigger than the system supported");
                         } else if (currentEntrySize > maxDataSizePerMsg) {
                             observeBiggerMsg.setValue(observeBiggerMsg.getValue()+1);
@@ -174,9 +175,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
      */
     private LogReplicationEntry read(OpaqueStreamIterator stream, UUID syncRequestId) {
         SMREntryList entryList = next(stream);
-
         LogReplicationEntry txMsg = generateMessage(stream, entryList, syncRequestId);
-        log.trace("Successfully generate a txMsg {} for stream {} with snapshotTimestamp {}", stream.name, snapshotTimestamp);
+        log.info("Successfully generate a snapshot message for stream {} with snapshotTimestamp={}, numEntries={}, " +
+                        "entriesBytes={}, streamId={}", stream.name, snapshotTimestamp,
+                entryList.getSmrEntries().size(), entryList.getSizeInBytes(), stream.uuid);
         return txMsg;
     }
 
@@ -198,7 +200,10 @@ public class StreamsSnapshotReader implements SnapshotReader {
         if (currentStreamInfo == null) {
             while (!streamsToSend.isEmpty()) {
                 // Setup a new stream
-                currentStreamInfo = new OpaqueStreamIterator(streamsToSend.poll(), rt, snapshotTimestamp);
+                String streamToReplicate = streamsToSend.poll();
+                currentStreamInfo = new OpaqueStreamIterator(streamToReplicate, rt, snapshotTimestamp);
+                log.info("Start Snapshot Sync replication for stream name={}, id={}", streamToReplicate,
+                        CorfuRuntime.getStreamID(streamToReplicate));
 
                 // If the new stream has entries to be processed, go to the next step
                 if (currentStreamInfo.iterator.hasNext()) {
@@ -219,11 +224,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
         }
 
         if (!currentStreamHasNext()) {
-            log.debug("Snapshot log reader finished reading stream {}", currentStreamInfo.uuid);
+            log.debug("Snapshot log reader finished reading stream id={}, name={}", currentStreamInfo.uuid, currentStreamInfo.name);
             currentStreamInfo = null;
 
             if (streamsToSend.isEmpty()) {
-                log.info("Snapshot log reader finished reading all streams {}", streams);
+                log.info("Snapshot log reader finished reading ALL streams, total={}", streams.size());
                 endSnapshotSync = true;
             }
         }

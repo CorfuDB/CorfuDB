@@ -231,8 +231,9 @@ public class LogReplicationSinkManager implements DataReceiver {
                 // so the system can prepare for the full sync. Typically, to stop checkpoint/trim
                 // during the period of the snapshot sync to prevent data loss from shadow tables
                 // (temporal non-checkpointed streams). This is a blocking call.
-                log.info("onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
+                log.info("Enter onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
                 snapshotSyncPlugin.onSnapshotSyncStart(runtime);
+                log.info("OnExit onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
             }
             return null;
         }
@@ -292,7 +293,9 @@ public class LogReplicationSinkManager implements DataReceiver {
             // Notify end of snapshot sync. This is a blocking call.
             log.info("Notify Snapshot Sync Plugin completion of snapshot sync id={}, baseSnapshot={}", ackSnapshotSyncCycleId,
                     lastAppliedBaseSnapshotTimestamp);
+            log.info("Enter onSnapshotSyncEnd :: {}", snapshotSyncPlugin.getClass().getSimpleName());
             snapshotSyncPlugin.onSnapshotSyncEnd(runtime);
+            log.info("Exit onSnapshotSyncEnd :: {}", snapshotSyncPlugin.getClass().getSimpleName());
         } else {
             log.warn("SNAPSHOT_SYNC has completed for {}, but new ongoing SNAPSHOT_SYNC is {}",
                     ack.getMetadata().getSnapshotTimestamp(), lastAppliedBaseSnapshotTimestamp);
