@@ -7,6 +7,12 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.PingRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.PingResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.RestartRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.RestartResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ResetRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ResetResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.SealRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.SealResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ProtocolVersion;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ERROR;
@@ -128,6 +134,71 @@ public class API {
                 .setHeader(header)
                 .setError(error)
                 .setPingResponse(pingResponse)
+                .build();
+    }
+
+    public static Request newRestartRequest(Header header) {
+        RestartRequest restartRequest = RestartRequest.getDefaultInstance();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setRestartRequest(restartRequest)
+                .build();
+    }
+
+    public static Response newRestartResponse(Header header) {
+        return newRestartResponse(header, newNoServerError());
+    }
+
+    public static Response newRestartResponse(Header header, ServerError error) {
+        RestartResponse restartResponse = RestartResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(error)
+                .setRestartResponse(restartResponse)
+                .build();
+    }
+
+    public static Request newResetRequest(Header header) {
+        ResetRequest resetRequest = ResetRequest.getDefaultInstance();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setResetRequest(resetRequest)
+                .build();
+    }
+
+    public static Response newResetResponse(Header header) {
+        return newRestartResponse(header, newNoServerError());
+    }
+
+    public static Response newResetResponse(Header header, ServerError error) {
+        ResetResponse resetResponse = ResetResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(error)
+                .setResetResponse(resetResponse)
+                .build();
+    }
+
+    public static Request newSealRequest(Header header, long newEpoch) {
+        SealRequest sealRequest = SealRequest.newBuilder()
+                                        .setEpoch(newEpoch)
+                                        .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setSealRequest(sealRequest)
+                .build();
+    }
+
+    public static Response newSealResponse(Header header) {
+        return newSealResponse(header, newNoServerError());
+    }
+
+    public static Response newSealResponse(Header header, ServerError error) {
+        SealResponse sealResponse = SealResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(error)
+                .setSealResponse(sealResponse)
                 .build();
     }
 
