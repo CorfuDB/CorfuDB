@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -50,6 +51,9 @@ public class CorfuServerNode implements AutoCloseable {
     @Getter
     private final NettyServerRouter router;
 
+    @Getter
+    private final org.corfudb.infrastructure.protocol.NettyServerRouter requestRouter;
+
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;
 
@@ -83,6 +87,10 @@ public class CorfuServerNode implements AutoCloseable {
         this.serverContext = serverContext;
         this.serverMap = serverMap;
         router = new NettyServerRouter(serverMap.values().asList(), serverContext);
+
+        requestRouter = new org.corfudb.infrastructure.protocol.NettyServerRouter(ImmutableList.<AbstractServer>builder()
+                .add(serverMap.getOrDefault(BaseServer.class, new BaseServer(serverContext))).build(), serverContext);
+
         this.serverContext.setServerRouter(router);
         // If the node is started in the single node setup and was bootstrapped,
         // set the server epoch as well.
@@ -205,7 +213,7 @@ public class CorfuServerNode implements AutoCloseable {
                     .channel(context.getChannelImplementation().getServerChannelClass());
             bootstrapConfigurer.configure(bootstrap);
 
-            bootstrap.childHandler(getServerChannelInitializerPeer(context, router)); // Temporary
+            bootstrap.childHandler(getServerChannelInitializer(context, router, requestRouter));
             boolean bindToAllInterfaces =
                     Optional.ofNullable(context.getServerConfig(Boolean.class, "--bind-to-all-interfaces"))
                             .orElse(false);
@@ -234,7 +242,6 @@ public class CorfuServerNode implements AutoCloseable {
                 .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
     }
 
-
     /**
      * Obtain a {@link ChannelInitializer} which initializes the channel pipeline
      * for a new {@link ServerChannel}.
@@ -245,7 +252,6 @@ public class CorfuServerNode implements AutoCloseable {
      */
     private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
                                                                   @Nonnull NettyServerRouter router) {
-
         // Generate the initializer.
         return new ChannelInitializer() {
             @Override
@@ -323,6 +329,7 @@ public class CorfuServerNode implements AutoCloseable {
                     ch.pipeline().addLast("sasl/plain-text", new
                             PlainTextSaslNettyServer());
                 }
+
                 // Transform the framed message into a Corfu message.
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
@@ -336,27 +343,104 @@ public class CorfuServerNode implements AutoCloseable {
         };
     }
 
-    private static ChannelInitializer getServerChannelInitializerPeer(@Nonnull ServerContext context,
-                                                                  @Nonnull NettyServerRouter router) {
+    /**
+     * Obtain a {@link ChannelInitializer} which initializes the channel pipeline
+     * for a new {@link ServerChannel}.
+     *
+     * @param context The {@link ServerContext} to use.
+     * @param router  The {@link NettyServerRouter} to initialize the channel with.
+     * @return A {@link ChannelInitializer} to initialize the channel.
+     */
+    private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context, @Nonnull NettyServerRouter router,
+                                                                  @Nonnull org.corfudb.infrastructure.protocol.NettyServerRouter requestRouter) {
         // Generate the initializer.
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
+
+                // Security variables
+                final SslContext sslContext;
+                final String[] enabledTlsProtocols;
+                final String[] enabledTlsCipherSuites;
+
+                // Security Initialization
+                Boolean tlsEnabled = context.getServerConfig(Boolean.class, "--enable-tls");
+                Boolean tlsMutualAuthEnabled = context.getServerConfig(Boolean.class,
+                        "--enable-tls-mutual-auth");
+                if (tlsEnabled) {
+                    // Get the TLS cipher suites to enable
+                    String ciphs = context.getServerConfig(String.class, "--tls-ciphers");
+                    if (ciphs != null) {
+                        enabledTlsCipherSuites = Pattern.compile(",")
+                                .splitAsStream(ciphs)
+                                .map(String::trim)
+                                .toArray(String[]::new);
+                    } else {
+                        enabledTlsCipherSuites = new String[]{};
+                    }
+
+                    // Get the TLS protocols to enable
+                    String protos = context.getServerConfig(String.class, "--tls-protocols");
+                    if (protos != null) {
+                        enabledTlsProtocols = Pattern.compile(",")
+                                .splitAsStream(protos)
+                                .map(String::trim)
+                                .toArray(String[]::new);
+                    } else {
+                        enabledTlsProtocols = new String[]{};
+                    }
+
+                    try {
+                        sslContext = SslContextConstructor.constructSslContext(true,
+                                context.getServerConfig(String.class, "--keystore"),
+                                context.getServerConfig(String.class, "--keystore-password-file"),
+                                context.getServerConfig(String.class, "--truststore"),
+                                context.getServerConfig(String.class,
+                                        "--truststore-password-file"));
+                    } catch (SSLException e) {
+                        log.error("Could not build the SSL context", e);
+                        throw new RuntimeException("Couldn't build the SSL context", e);
+                    }
+                } else {
+                    enabledTlsCipherSuites = new String[]{};
+                    enabledTlsProtocols = new String[]{};
+                    sslContext = null;
+                }
+
+                Boolean saslPlainTextAuth = context.getServerConfig(Boolean.class,
+                        "--enable-sasl-plain-text-auth");
+
+                // If TLS is enabled, setup the encryption pipeline.
+                if (tlsEnabled) {
+                    SSLEngine engine = sslContext.newEngine(ch.alloc());
+                    engine.setEnabledCipherSuites(enabledTlsCipherSuites);
+                    engine.setEnabledProtocols(enabledTlsProtocols);
+                    if (tlsMutualAuthEnabled) {
+                        engine.setNeedClientAuth(true);
+                    }
+                    ch.pipeline().addLast("ssl", new SslHandler(engine));
+                }
                 // Add/parse a length field
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer
                         .MAX_VALUE, 0, 4,
                         0, 4));
+                // If SASL authentication is requested, perform a SASL plain-text auth.
+                if (saslPlainTextAuth) {
+                    ch.pipeline().addLast("sasl/plain-text", new
+                            PlainTextSaslNettyServer());
+                }
 
-                ch.pipeline().addLast((new ServerRequestHandler())); // Handle new message types
+                // New message router -- Route to appropriate server handler class -- Forward legacy messages
+                ch.pipeline().addLast(requestRouter);
 
                 // Transform the framed message into a Corfu message.
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
-                // ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
-                //        Version.getVersionString() + "("
-                //                + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
-                //        context.getServerConfig(String.class, "--HandshakeTimeout")));
+                ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
+                        Version.getVersionString() + "("
+                                + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
+                        context.getServerConfig(String.class, "--HandshakeTimeout")));
                 // Route the message to the server class.
                 ch.pipeline().addLast(router);
             }
