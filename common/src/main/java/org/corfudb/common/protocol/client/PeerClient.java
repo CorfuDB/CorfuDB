@@ -53,7 +53,7 @@ public class PeerClient extends ChannelHandler {
      */
     protected CompletableFuture<Void> ping() {
         Header header = getHeader(MessageType.PING, true, true);
-        log.info("sealRemoteServer: send PING from me(clientId={}) to the server",
+        log.info("ping: send PING from me(clientId={}) to the server",
                 header.getClientId());
         return sendRequest(API.newPingRequest(header));
     }
@@ -70,7 +70,7 @@ public class PeerClient extends ChannelHandler {
      */
     protected CompletableFuture<Boolean> restart() {
         Header header = getHeader(MessageType.RESTART, true, true);
-        log.warn("sealRemoteServer: send RESTART from me(clientId={}) to the server",
+        log.warn("restart: send RESTART from me(clientId={}) to the server",
                 header.getClientId());
         return sendRequest(API.newRestartRequest(header));
     }
@@ -91,7 +91,7 @@ public class PeerClient extends ChannelHandler {
      */
     protected CompletableFuture<Boolean> reset() {
         Header header = getHeader(MessageType.RESET, true, true);
-        log.warn("sealRemoteServer: send RESET from me(clientId={}) to the server",
+        log.warn("reset: send RESET from me(clientId={}) to the server",
                 header.getClientId());
         return sendRequest(API.newResetRequest(header));
     }

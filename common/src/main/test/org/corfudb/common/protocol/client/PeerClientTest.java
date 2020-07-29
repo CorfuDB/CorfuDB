@@ -46,7 +46,7 @@ class PeerClientTest {
     }
 
     @Test
-    void pingTest() {
+    void ping() {
         // Call the ping method and check its return value.
         try {
             Assertions.assertThat(spyPeerClient.ping().get()).isEqualTo(true);
@@ -59,7 +59,7 @@ class PeerClientTest {
 
 
     @Test
-    void restartTest() {
+    void restart() {
         // Call the restart method and check its return value.
         try {
             Assertions.assertThat(spyPeerClient.restart().get()).isEqualTo(true);
@@ -71,7 +71,7 @@ class PeerClientTest {
     }
 
     @Test
-    void resetTest() {
+    void reset() {
         // Call the reset method and check its return value.
         try {
             Assertions.assertThat(spyPeerClient.reset().get()).isEqualTo(true);
@@ -83,7 +83,7 @@ class PeerClientTest {
     }
 
     @Test
-    void sealRemoteServerTest() {
+    void sealRemoteServer() {
         // Call the sealRemoteServer method and check its return value.
         try {
             long epoch = new Random().nextLong();
