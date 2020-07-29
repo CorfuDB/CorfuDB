@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
+import com.google.common.annotations.VisibleForTesting;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalTransactionStreamsException;
@@ -52,6 +54,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private final int maxDataSizePerMsg;
 
+    @Getter
+    @VisibleForTesting
     private OpaqueEntry lastOpaqueEntry = null;
 
     private boolean hasNoiseData = false;
@@ -88,11 +92,12 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     // Check if it has the correct streams.
     private boolean shouldProcess(OpaqueEntry entry) {
-        Set<UUID> tmpUUIDs = entry.getEntries().keySet();
+        Set<UUID> tmpUUIDs = new HashSet<>(entry.getEntries().keySet());
 
         // Check if Tx Stream Opaque Entry is empty
         if(tmpUUIDs.isEmpty()) {
-            log.trace("Log Entry Reader, TX stream Opaque entry is EMPTY, size={}", streamUUIDs.size());
+            log.info("Log Entry Reader, TX stream Opaque entry is EMPTY, size={}, version={}", streamUUIDs.size(),
+                    entry.getVersion());
             return false;
         }
 
@@ -105,7 +110,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         // If the entry's stream set has no overlap with the interested streams, it should be skipped.
         tmpUUIDs.retainAll(streamUUIDs);
         if (tmpUUIDs.isEmpty()) {
-            log.info("Log Entry Reader, TX stream contains none of the streams of interest");
+            log.info("Log Entry Reader, TX stream contains none of the streams of interest, version={}", entry.getVersion());
             return false;
         }
 
@@ -118,7 +123,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         return false;
     }
 
-    private boolean checkValidSize(OpaqueEntry entry, int currentMsgSize, int currentEntrySize) {
+    private boolean checkValidSize(int currentMsgSize, int currentEntrySize) {
         // For interested entry, if its size is too big we should skip and report error
         if (currentEntrySize > maxDataSizePerMsg) {
             log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
@@ -158,19 +163,21 @@ public class StreamsLogEntryReader implements LogEntryReader {
         try {
             while (currentMsgSize < maxDataSizePerMsg && !hasNoiseData) {
 
-                if (lastOpaqueEntry != null && shouldProcess(lastOpaqueEntry)) {
+                if (lastOpaqueEntry != null) {
+                    if (shouldProcess(lastOpaqueEntry)) {
+                        // If the currentEntry is too big to append the current message, will skip it and
+                        // append it to the next message as the first entry.
+                        currentEntrySize = ReaderUtility.calculateOpaqueEntrySize(lastOpaqueEntry);
 
-                    // If the currentEntry is too big to append the current message, will skip it and
-                    // append it to the next message as the first entry.
-                    currentEntrySize = ReaderUtility.calculateOpaqueEntrySize(lastOpaqueEntry);
+                        if (!checkValidSize(currentMsgSize, currentEntrySize)) {
+                            break;
+                        }
 
-                    if (!checkValidSize(lastOpaqueEntry, currentMsgSize, currentEntrySize)) {
-                        break;
+                        // Add the lastOpaqueEntry to the current message.
+                        opaqueEntryList.add(lastOpaqueEntry);
+                        currentMsgSize += currentEntrySize;
                     }
 
-                    // Add the lastOpaqueEntry to the current message.
-                    opaqueEntryList.add(lastOpaqueEntry);
-                    currentMsgSize += currentEntrySize;
                     lastOpaqueEntry = null;
                 }
 
