@@ -35,6 +35,11 @@ class PeerClientTest {
 
     @BeforeEach
     void setUp() throws Exception {
+
+    }
+
+    @Test
+    void ping() {
         // Set clientID required for the header of each request object.
         spyPeerClient.setConfig(ClientConfig.builder().clientId(clientId).build());
 
@@ -43,10 +48,7 @@ class PeerClientTest {
         // We inspect the Request object passed as an argument to sendRequest() later in each test.
         doReturn(CompletableFuture.completedFuture(true)).
                 when(spyPeerClient).sendRequest(any(CorfuProtocol.Request.class));
-    }
 
-    @Test
-    void ping() {
         // Call the ping method and check its return value.
         try {
             Assertions.assertThat(spyPeerClient.ping().get()).isEqualTo(true);
@@ -60,6 +62,15 @@ class PeerClientTest {
 
     @Test
     void restart() {
+        // Set clientID required for the header of each request object.
+        spyPeerClient.setConfig(ClientConfig.builder().clientId(clientId).build());
+
+        // Since there is no server,
+        // return true when sendRequest() is called with any Request class.
+        // We inspect the Request object passed as an argument to sendRequest() later in each test.
+        doReturn(CompletableFuture.completedFuture(true)).
+                when(spyPeerClient).sendRequest(any(CorfuProtocol.Request.class));
+
         // Call the restart method and check its return value.
         try {
             Assertions.assertThat(spyPeerClient.restart().get()).isEqualTo(true);
@@ -72,6 +83,15 @@ class PeerClientTest {
 
     @Test
     void reset() {
+        // Set clientID required for the header of each request object.
+        spyPeerClient.setConfig(ClientConfig.builder().clientId(clientId).build());
+
+        // Since there is no server,
+        // return true when sendRequest() is called with any Request class.
+        // We inspect the Request object passed as an argument to sendRequest() later in each test.
+        doReturn(CompletableFuture.completedFuture(true)).
+                when(spyPeerClient).sendRequest(any(CorfuProtocol.Request.class));
+
         // Call the reset method and check its return value.
         try {
             Assertions.assertThat(spyPeerClient.reset().get()).isEqualTo(true);
@@ -84,6 +104,15 @@ class PeerClientTest {
 
     @Test
     void sealRemoteServer() {
+        // Set clientID required for the header of each request object.
+        spyPeerClient.setConfig(ClientConfig.builder().clientId(clientId).build());
+
+        // Since there is no server,
+        // return true when sendRequest() is called with any Request class.
+        // We inspect the Request object passed as an argument to sendRequest() later in each test.
+        doReturn(CompletableFuture.completedFuture(true)).
+                when(spyPeerClient).sendRequest(any(CorfuProtocol.Request.class));
+
         // Call the sealRemoteServer method and check its return value.
         try {
             long epoch = new Random().nextLong();

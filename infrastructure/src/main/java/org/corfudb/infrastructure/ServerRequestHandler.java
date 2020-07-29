@@ -7,16 +7,22 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.client.RequestHandler;
-import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
-import org.corfudb.runtime.CorfuSchema;
 
 @Slf4j
 public class ServerRequestHandler extends RequestHandler {
     @Override
     protected void handlePing(Request request, ChannelHandlerContext ctx) {
-        log.info("handlePing: ping message received");
+        log.warn("handlePing: Remote reset requested from client with " +
+                        "LSB: {} MSB:{}", request.getHeader().getClientId().getLsb(),
+                request.getHeader().getClientId().getMsb());
+
+        // send ResetResponse message back to the client
+        ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
+        // Temporary marker to indicate new Protobuf Message
+        byteBuf.writeByte(0x2);
+        byteBuf.writeBytes(API.newPingResponse(request.getHeader()).toByteArray());
+        ctx.writeAndFlush(byteBuf);
     }
 
     @Override

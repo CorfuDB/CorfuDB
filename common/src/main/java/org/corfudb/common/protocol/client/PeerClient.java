@@ -1,18 +1,11 @@
 package org.corfudb.common.protocol.client;
 
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import lombok.Builder;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.API;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
-import org.corfudb.common.protocol.proto.CorfuProtocol.StreamAddressRange;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
+import org.corfudb.common.protocol.proto.CorfuProtocol.*;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.UUID;
@@ -51,7 +44,7 @@ public class PeerClient extends ChannelHandler {
      * @return A completable future which will be completed with True if
      * the endpoint is reachable, otherwise False or exceptional completion.
      */
-    protected CompletableFuture<Void> ping() {
+    protected CompletableFuture<Boolean> ping() {
         Header header = getHeader(MessageType.PING, true, true);
         log.info("ping: send PING from me(clientId={}) to the server",
                 header.getClientId());

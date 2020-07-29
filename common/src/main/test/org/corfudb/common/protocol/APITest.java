@@ -28,8 +28,8 @@ class APITest {
         long msb = uuid.getMostSignificantBits();
 
         CorfuProtocol.UUID protoUuid = API.getUUID(uuid);
-        assertThat(protoUuid.getLsb()==lsb).isTrue();
-        assertThat(protoUuid.getMsb()==msb).isTrue();
+        assertThat(protoUuid.getLsb()).isEqualTo(lsb);
+        assertThat(protoUuid.getMsb()).isEqualTo(msb);
     }
 
     @Test
@@ -46,8 +46,8 @@ class APITest {
         assertThat(header.getPriority()).isEqualTo(CorfuProtocol.Priority.HIGH);
         assertThat(header.getType()).isEqualTo(PING);
         assertThat(header.getEpoch()).isEqualTo(epoch);
-        assertThat(header.getClusterId()).isEqualTo(clusterId);
-        assertThat(header.getClientId()).isEqualTo(clientId);
+        assertThat(header.getClusterId()).isEqualTo(API.getUUID(clusterId));
+        assertThat(header.getClientId()).isEqualTo(API.getUUID(clientId));
         assertThat(header.getIgnoreClusterId()).isTrue();
         assertThat(header.getIgnoreEpoch()).isFalse();
     }
@@ -105,7 +105,7 @@ class APITest {
         CorfuProtocol.Header header = getRandomHeader(RESET);
         CorfuProtocol.Request request = API.newResetRequest(header);
         assertThat(request.getHeader()).isEqualTo(header);
-        assertThat(request.hasPingRequest()).isTrue();
+        assertThat(request.hasResetRequest()).isTrue();
     }
 
     @Test
