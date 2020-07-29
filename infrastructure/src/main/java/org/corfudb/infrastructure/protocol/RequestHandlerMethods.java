@@ -92,8 +92,6 @@ public class RequestHandlerMethods {
                                 @Nonnull final Method method) {
         final AnnotatedServerHandler annotation = method.getAnnotation(AnnotatedServerHandler.class);
 
-        //TODO(Zach): Check request type
-
         if(handlerMap.containsKey(annotation.type())) {
             throw new UnrecoverableCorfuError("HandlerMethod for " + annotation.type()
                     + " already registered!");
@@ -104,22 +102,19 @@ public class RequestHandlerMethods {
             HandlerMethod h;
             if (Modifier.isStatic(method.getModifiers())) {
                 MethodHandle mh = caller.unreflect(method);
-                MethodType mt = mh.type().changeParameterType(0, Request.class);
                 h = (HandlerMethod) LambdaMetafactory.metafactory(caller,
                         "handle", MethodType.methodType(HandlerMethod.class),
-                        mt, mh, mh.type()).getTarget().invokeExact();
+                        mh.type(), mh, mh.type()).getTarget().invokeExact();
             } else {
                 // instance method, so we need to capture the type.
                 MethodType mt = MethodType.methodType(method.getReturnType(),
                         method.getParameterTypes());
                 MethodHandle mh = caller.findVirtual(server.getClass(), method.getName(), mt);
-                MethodType mtGeneric = mh.type().changeParameterType(1, Request.class);
+                MethodType mtt = mh.type().dropParameterTypes(0, 1);
                 h = (HandlerMethod) LambdaMetafactory.metafactory(caller,
                         "handle",
                         MethodType.methodType(HandlerMethod.class, server.getClass()),
-                        mtGeneric.dropParameterTypes(0, 1), mh,
-                        mh.type().dropParameterTypes(0, 1)).getTarget()
-                        .bindTo(server).invoke();
+                        mtt, mh, mtt).getTarget().bindTo(server).invoke();
             }
 
             // Install pre-conditions on handler and place the handler in the map
