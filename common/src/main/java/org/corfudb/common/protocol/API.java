@@ -167,7 +167,7 @@ public class API {
     }
 
     public static Response newResetResponse(Header header) {
-        return newRestartResponse(header, newNoServerError());
+        return newResetResponse(header, newNoServerError());
     }
 
     public static Response newResetResponse(Header header, ServerError error) {
