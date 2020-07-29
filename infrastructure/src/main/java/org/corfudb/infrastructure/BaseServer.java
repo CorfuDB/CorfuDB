@@ -100,7 +100,6 @@ public class BaseServer extends AbstractServer {
         log.info("Ping message received from {} {}", req.getHeader().getClientId().getMsb(),
                 req.getHeader().getClientId().getLsb());
 
-        //TODO(Zach): checkArgument(req.hasPingRequest());
         Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
         Response response = API.newPingResponse(responseHeader);
         r.sendResponse(response, ctx);
@@ -174,7 +173,6 @@ public class BaseServer extends AbstractServer {
      */
     @AnnotatedServerHandler(type = CorfuProtocol.MessageType.SEAL)
     private synchronized void handleSeal(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
-        //TODO(Zach): checkArgument(req.hasSealRequest());
         try {
             long epoch = req.getSealRequest().getEpoch();
             String remoteHostAddress;
@@ -224,7 +222,6 @@ public class BaseServer extends AbstractServer {
     @AnnotatedServerHandler(type = CorfuProtocol.MessageType.RESET)
     private void handleReset(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
         log.warn("Remote reset requested from client {}", req.getHeader().getClientId());
-        //TODO(Zach): checkArgument(req.hasResetRequest());
         Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
         Response response = API.newResetResponse(responseHeader);
         r.sendResponse(response, ctx);
@@ -259,7 +256,6 @@ public class BaseServer extends AbstractServer {
     @AnnotatedServerHandler(type = CorfuProtocol.MessageType.RESTART)
     private void handleRestart(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
         log.warn("Remote restart requested from client {}", req.getHeader().getClientId());
-        //TODO(Zach): checkArgument(req.hasRestartRequest());
         Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
         Response response = API.newRestartResponse(responseHeader);
         r.sendResponse(response, ctx);

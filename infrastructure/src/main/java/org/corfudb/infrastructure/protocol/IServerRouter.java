@@ -145,8 +145,9 @@ public interface IServerRouter {
 
     /**
      * Validate the incoming request. The request is valid if:
-     *    1) The flag ignoreEpoch is set to true, or it's set to false and the epoch is valid.
-     *    2) Also, if the flag ignoreClusterId is set to false,
+     *    1) Also, if the request message has the appropriate payload given the request type.
+     *    2) The flag ignoreEpoch is set to true, or it's set to false and the epoch is valid.
+     *    3) Also, if the flag ignoreClusterId is set to false,
      *           a. The current layout server should be bootstrapped and
      *           b. the request's cluster ID should be equal to the bootstrapped layout's cluster ID.
      *
@@ -156,6 +157,11 @@ public interface IServerRouter {
      */
     default boolean requestIsValid(Request req, ChannelHandlerContext ctx) {
         Header requestHeader = req.getHeader();
+
+        if(!API.validateRequest(req)) {
+            //TODO(Zach): What error response to send here, if any? UNKNOWN?
+            return false;
+        }
 
         if(!requestHeader.getIgnoreEpoch() && epochIsValid(requestHeader, ctx)) { return false; }
         if(!requestHeader.getIgnoreClusterId()) {

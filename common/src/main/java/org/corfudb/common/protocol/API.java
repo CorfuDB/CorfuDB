@@ -208,4 +208,79 @@ public class API {
                 .setError(error)
                 .build();
     }
+
+    public static boolean validateRequest(Request request) {
+        switch(request.getHeader().getType()) {
+            case PING:
+                if (request.hasPingRequest()) return true;
+                break;
+            case AUTHENTICATE:
+                if (request.hasAuthenticateRequest()) return true;
+                break;
+            case RESTART:
+                if (request.hasRestartRequest()) return true;
+                break;
+            case RESET:
+                if (request.hasResetRequest()) return true;
+                break;
+            case SEAL:
+                if (request.hasSealRequest()) return true;
+                break;
+            case GET_LAYOUT:
+                if (request.hasGetLayoutRequest()) return true;
+                break;
+            case PREPARE_LAYOUT:
+                if (request.hasPrepareLayoutRequest()) return true;
+                break;
+            case PROPOSE_LAYOUT:
+                if (request.hasProposeLayoutRequest()) return true;
+                break;
+            case COMMIT_LAYOUT:
+                if (request.hasCommitLayoutRequest()) return true;
+                break;
+            case GET_TOKEN:
+                if (request.hasGetTokenRequest()) return true;
+                break;
+            case COMMIT_TRANSACTION:
+                if (request.hasCommitTransactionRequest()) return true;
+                break;
+            case BOOTSTRAP:
+                if (request.hasBootstrapRequest()) return true;
+                break;
+            case QUERY_STREAM:
+                if (request.hasQueryStreamRequest()) return true;
+                break;
+            case READ_LOG:
+                if (request.hasReadLogRequest()) return true;
+                break;
+            case QUERY_LOG_METADATA:
+                if (request.hasQueryLogMetadataRequest()) return true;
+                break;
+            case TRIM_LOG:
+                if (request.hasTrimLogRequest()) return true;
+                break;
+            case COMPACT_LOG:
+                if (request.hasCompactRequest()) return true;
+                break;
+            case FLASH:
+                if (request.hasFlashRequest()) return true;
+                break;
+            case QUERY_NODE:
+                if (request.hasQueryNodeRequest()) return true;
+                break;
+            case REPORT_FAILURE:
+                if (request.hasReportFailureRequest()) return true;
+                break;
+            case HEAL_FAILURE:
+                if (request.hasHealFailureRequest()) return true;
+                break;
+            case EXECUTE_WORKFLOW:
+                if (request.hasExecuteWorkflowRequest()) return true;
+                break;
+            default:
+                break;
+        }
+
+        return false;
+    }
 }
