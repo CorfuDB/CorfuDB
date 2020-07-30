@@ -113,7 +113,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         // Send read requests to log unit servers in parallel
         List<CompletableFuture<ReadResponse>> futures = serverAddressMap.entrySet().stream()
                 .map(entry -> runtimeLayout.getLogUnitClient(entry.getKey())
-                        .readAll(entry.getValue(), cacheOnServer))
+                        .read(entry.getValue(), cacheOnServer))
                 .collect(Collectors.toList());
 
         // Merge the read responses from different log unit servers

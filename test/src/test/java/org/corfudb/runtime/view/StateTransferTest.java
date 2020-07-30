@@ -1,8 +1,26 @@
 package org.corfudb.runtime.view;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus.STABLE;
+import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
+import static org.corfudb.test.TestUtils.waitForLayoutChange;
+
+
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import lombok.Getter;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.infrastructure.ServerContext;
@@ -29,24 +47,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
-import java.util.stream.LongStream;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus.STABLE;
-import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
-import static org.corfudb.test.TestUtils.waitForLayoutChange;
-
 /**
  * Created by zlokhandwala on 2019-06-06.
  */
@@ -71,7 +71,8 @@ public class StateTransferTest extends AbstractViewTest {
                                                   String endpoint, long end) throws Exception {
         ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(endpoint)
-                .readAll(ContiguousSet.create(Range.closed(0L, end), DiscreteDomain.longs()).asList())
+                .read(ContiguousSet.create(Range.closed(0L, end),
+                        DiscreteDomain.longs()).asList(), false)
                 .get();
         return readResponse.getAddresses().entrySet()
                 .stream()
