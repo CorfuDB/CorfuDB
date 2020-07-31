@@ -48,7 +48,7 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
 
         final long initialCompactionCounter = getCompactionCounter();
         StreamLogCompaction compaction = new StreamLogCompaction(
-                streamLog, new ReentrantReadWriteLock(),
+                streamLog,
                 initialDelay, period, TimeUnit.MILLISECONDS, PARAMETERS.TIMEOUT_VERY_SHORT
         );
 

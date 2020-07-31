@@ -14,9 +14,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Scheduled log compaction manager.
@@ -44,21 +41,14 @@ public class StreamLogCompaction {
     private final ScheduledFuture<?> compactor;
     private final Duration shutdownTimer;
 
-    public StreamLogCompaction(StreamLog streamLog, ReadWriteLock resetLock,
-                               long initialDelay, long period, TimeUnit timeUnit,
+    public StreamLogCompaction(StreamLog streamLog, long initialDelay, long period, TimeUnit timeUnit,
                                Duration shutdownTimer) {
         this.shutdownTimer = shutdownTimer;
 
         Runnable task = () -> {
             log.debug("Start log compaction.");
-            try (Timer.Context context = MetricsUtils.getConditionalContext(compactionTimer)){
-                Lock lock = resetLock.writeLock();
-                lock.lock();
-                try {
-                    streamLog.compact();
-                } finally {
-                    lock.unlock();
-                }
+            try (Timer.Context context = MetricsUtils.getConditionalContext(compactionTimer)) {
+                streamLog.compact();
             } catch (Exception ex) {
                 log.error("Can't compact stream log.", ex);
             }
