@@ -290,19 +290,6 @@ public class Layout {
     }
 
     /**
-     * Get the last node in the last segment.
-     *
-     * @return Returns the last node in the last segment.
-     */
-    public String getLastAddedNodeInLastSegment() {
-
-        // Fetching the latest segment. Note: This is the unbounded segment with ongoing writes.
-        // Returning the last node in the first stripe for determinism.
-        List<String> firstStripeLogServers = getLatestSegment().getFirstStripe().getLogServers();
-        return firstStripeLogServers.get(firstStripeLogServers.size() - 1);
-    }
-
-    /**
      * Get the length of a segment at a particular address.
      *
      * @param address The address to check.

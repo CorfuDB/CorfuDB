@@ -1,6 +1,18 @@
 package org.corfudb.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
+
+import java.text.DecimalFormat;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
@@ -12,26 +24,12 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-
-import java.text.DecimalFormat;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 /**
  * Created by crossbach on 5/22/15.
  */
 @Slf4j
 public class Utils {
-
-    private static final int DEFAULT_LOGUNIT = 0;
 
     private Utils() {
         // prevent instantiation of this class
@@ -119,6 +117,80 @@ public class Utils {
         return Long.toHexString((id.getLeastSignificantBits()) & 0xFFFF);
     }
 
+
+    /**
+     * Verify that the stripes are not empty and that each segment has one stripe.
+     * @param segments segments to validate
+     */
+    private static void validateSegments(List<Layout.LayoutSegment> segments) {
+        checkNotNull(segments);
+        checkArgument(!segments.isEmpty());
+        long previousSegmentEndAddress = 0;
+        for (Layout.LayoutSegment segment : segments) {
+            checkState(segment.getStart() == previousSegmentEndAddress);
+            previousSegmentEndAddress = segment.getEnd();
+            // only supported for chain replication
+            checkArgument(segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION);
+            // Since stripping is not supported, we can assume only one stripe exists
+            checkArgument(segment.getStripes().size() == 1);
+            // A stripe cannot be empty
+            checkArgument(!segment.getStripes().get(0).getLogServers().isEmpty());
+        }
+        // The last segment (i.e open segment) end address is -1 (denoting infinity)
+        checkState(previousSegmentEndAddress == -1);
+    }
+
+    /**
+     * This method selects a head node: the first node (in the open segment) that also exists in all previous
+     * segments.
+     * @param layout layout to use to find the head node
+     * @return head node
+     * @throws IllegalStateException if no such node exists
+     */
+    private static String selectHeadNode(Layout layout) {
+        checkNotNull(layout);
+        validateSegments(layout.getSegments());
+        List<Layout.LayoutSegment> segments = layout.getSegments();
+
+        // select open segment (i.e. last segment)
+        Layout.LayoutSegment openSegment = segments.get(segments.size() - 1);
+        // only support chain replication
+        Layout.LayoutStripe openSegmentStripe = openSegment.getStripes().get(0);
+
+        if (segments.size() == 1) {
+            // Since there is only one segment we can return the first node in the stripe (i.e. head node)
+            return segments.get(0).getStripes().get(0).getLogServers().get(0);
+        }
+
+        // walk the chain of the last segment and find the first node that exists in all previous segments
+        List<Layout.LayoutSegment> reversedSegmentPrefix = segments.subList(0, segments.size() - 1);
+        checkState(!reversedSegmentPrefix.isEmpty());
+        // Reverse the prefix to simplify the indexing when walking the segments backwards (i.e. high to low)
+        Collections.reverse(reversedSegmentPrefix);
+
+        for (String node : openSegmentStripe.getLogServers()) {
+            boolean isNodeMissing = false;
+            for (Layout.LayoutSegment currentSegment : reversedSegmentPrefix) {
+                checkState(currentSegment.getStripes().size() == 1);
+                if (!currentSegment.getAllLogServers().contains(node)) {
+                    // this node can't be a candidate because it doesn't exist in all the
+                    // prefix segments
+                    isNodeMissing = true;
+                    break;
+                }
+            }
+
+            if (!isNodeMissing) {
+                // this node is the first node in the last chain that exists in all previous segments (i.e. head node
+                // of the whole chain across all segments)
+                return node;
+            }
+        }
+
+        // need to log layout
+        throw new IllegalStateException("Failed to find the head node of the chain!");
+    }
+
     /**
      * Get maximum trim mark from all log units.
      *
@@ -163,6 +235,7 @@ public class Utils {
 
     /**
      * Get the maximum committed log tail from all log units.
+     * Get global log tail. TODO(Maithem): to be executed on same layout as seal
      *
      * @param runtimeLayout current RuntimeLayout
      * @return the maximum committed tail among all log units
@@ -212,23 +285,11 @@ public class Utils {
      */
     public static long getLogTail(RuntimeLayout runtimeLayout) {
         long globalLogTail = Address.NON_EXIST;
-
-        Layout.LayoutSegment segment = runtimeLayout.getLayout().getLatestSegment();
-
-        // Query the head log unit in every stripe.
-        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
-            for (Layout.LayoutStripe stripe : segment.getStripes()) {
-
-                TailsResponse response = CFUtils.getUninterruptibly(runtimeLayout
-                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))
-                                .getLogTail());
-                globalLogTail = Long.max(globalLogTail, response.getLogTail());
-            }
-        } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {
-            throw new UnsupportedOperationException();
-        }
-
-        return globalLogTail;
+        String headNode = selectHeadNode(runtimeLayout.getLayout());
+        TailsResponse response = CFUtils.getUninterruptibly(runtimeLayout
+                .getLogUnitClient(headNode)
+                .getLogTail());
+        return Long.max(globalLogTail, response.getLogTail());
     }
 
     /**
@@ -241,63 +302,13 @@ public class Utils {
      * @return The max global log tail obtained from the log unit servers.
      */
     public static TailsResponse getAllTails(RuntimeLayout runtimeLayout) {
-        Set<TailsResponse> luResponses = new HashSet<>();
-
-        Layout.LayoutSegment segment = runtimeLayout.getLayout().getLatestSegment();
-
-        // Query the tail of the head log unit in every stripe.
-        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
-            for (Layout.LayoutStripe stripe : segment.getStripes()) {
-
-                TailsResponse res = CFUtils.getUninterruptibly(runtimeLayout
-                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))
-                                .getAllTails());
-                luResponses.add(res);
-            }
-        } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {
-            throw new UnsupportedOperationException();
-        }
-
-        return aggregateLogUnitTails(luResponses);
+        String headNode = selectHeadNode(runtimeLayout.getLayout());
+        TailsResponse result = CFUtils.getUninterruptibly(runtimeLayout
+                        .getLogUnitClient(headNode)
+                        .getAllTails());
+        return result;
     }
 
-    /**
-     * Given a set of request tails, we aggregate them and maintain
-     * the greatest address per stream and the greatest tail over
-     * all responses.
-     * @param responses a set of tail responses
-     * @return An max-aggregation of all tails
-     */
-    static TailsResponse aggregateLogUnitTails(Set<TailsResponse> responses) {
-        long globalTail = Address.NON_ADDRESS;
-        Map<UUID, Long> globalStreamTails = new HashMap<>();
-
-        for (TailsResponse res : responses) {
-            globalTail = Math.max(globalTail, res.getLogTail());
-
-            for (Map.Entry<UUID, Long> stream : res.getStreamTails().entrySet()) {
-                long streamTail = globalStreamTails.getOrDefault(stream.getKey(), Address.NON_ADDRESS);
-                globalStreamTails.put(stream.getKey(), Math.max(streamTail, stream.getValue()));
-            }
-        }
-        // All epochs should be equal as all the tails are queried using a single runtime layout.
-        return new TailsResponse(globalTail, globalStreamTails);
-    }
-
-    static Map<UUID, StreamAddressSpace> aggregateStreamAddressMap(Map<UUID, StreamAddressSpace> streamAddressSpaceMap,
-                                                                   Map<UUID, StreamAddressSpace> aggregated) {
-        for (Map.Entry<UUID, StreamAddressSpace> stream : streamAddressSpaceMap.entrySet()) {
-            if (aggregated.containsKey(stream.getKey())) {
-                long currentTrimMark = aggregated.get(stream.getKey()).getTrimMark();
-                aggregated.get(stream.getKey()).getAddressMap().or(stream.getValue().getAddressMap());
-                aggregated.get(stream.getKey()).setTrimMark(Math.max(currentTrimMark, stream.getValue().getTrimMark()));
-            } else {
-                aggregated.put(stream.getKey(), stream.getValue());
-            }
-        }
-
-        return aggregated;
-    }
 
     /**
      * Retrieve the space of addresses of the log, i.e., for all streams in the log.
@@ -307,34 +318,10 @@ public class Utils {
      * @return response with all streams addresses and global log tail.
      */
     public static StreamsAddressResponse getLogAddressSpace(RuntimeLayout runtimeLayout) {
-        Set<StreamsAddressResponse> luResponses = new HashSet<>();
-
-        Layout.LayoutSegment segment = runtimeLayout.getLayout().getLatestSegment();
-
-        // Query the head log unit in every stripe.
-        if (segment.getReplicationMode() == Layout.ReplicationMode.CHAIN_REPLICATION) {
-            for (Layout.LayoutStripe stripe : segment.getStripes()) {
-
-                StreamsAddressResponse res = CFUtils.getUninterruptibly(runtimeLayout
-                                .getLogUnitClient(stripe.getLogServers().get(DEFAULT_LOGUNIT))
-                                .getLogAddressSpace());
-                luResponses.add(res);
-            }
-        } else if (segment.getReplicationMode() == Layout.ReplicationMode.QUORUM_REPLICATION) {
-            throw new UnsupportedOperationException();
-        }
-
-        return aggregateLogAddressSpace(luResponses);
-    }
-
-    static StreamsAddressResponse aggregateLogAddressSpace(Set<StreamsAddressResponse> responses) {
-        Map<UUID, StreamAddressSpace> streamAddressSpace = new HashMap<>();
-        long logTail = Address.NON_ADDRESS;
-
-        for (StreamsAddressResponse res : responses) {
-            logTail = Math.max(logTail, res.getLogTail());
-            streamAddressSpace = aggregateStreamAddressMap(res.getAddressMap(), streamAddressSpace);
-        }
-        return new StreamsAddressResponse(logTail, streamAddressSpace);
+        String headNode = selectHeadNode(runtimeLayout.getLayout());
+        StreamsAddressResponse result = CFUtils.getUninterruptibly(runtimeLayout
+                .getLogUnitClient(headNode)
+                .getLogAddressSpace());
+        return result;
     }
 }

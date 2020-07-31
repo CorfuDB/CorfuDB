@@ -68,7 +68,7 @@ public class StreamAddressSpace {
      */
     public Long getTail() {
         // If no address is present for this stream, the tail is given by the trim mark (last trimmed address)
-        if (addressMap.getLongCardinality() == NO_ADDRESSES) {
+        if (addressMap.isEmpty()) {
             return trimMark;
         }
 

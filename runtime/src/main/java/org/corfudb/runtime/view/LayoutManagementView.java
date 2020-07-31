@@ -1,17 +1,9 @@
 package org.corfudb.runtime.view;
 
-import com.google.common.collect.Sets;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.LayoutModificationException;
-import org.corfudb.runtime.exceptions.OutrankedException;
-import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.util.CFUtils;
+import static org.corfudb.util.Utils.getLogTail;
 
-import javax.annotation.Nonnull;
+
+import com.google.common.collect.Sets;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -21,8 +13,17 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
-
-import static org.corfudb.util.Utils.getLogTail;
+import javax.annotation.Nonnull;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.LayoutModificationException;
+import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.exceptions.QuorumUnreachableException;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.Utils;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -415,8 +416,13 @@ public class LayoutManagementView extends AbstractView {
                         || !originalLayout.getPrimarySequencer()
                         .equals(newLayout.getPrimarySequencer())) {
 
-                    StreamsAddressResponse streamsAddressesResponse = runtime.getAddressSpaceView()
-                            .getLogAddressSpace();
+                    // The sequencer state needs to be retrieved from the head logunit from the
+                    // new layout. Note that AddressSpaceView::getLogAddressSpace shouldn't be
+                    // used because there is no guarantee that the same head node from newLayout
+                    // will be the same head not selected by the AbstractView
+                    StreamsAddressResponse streamsAddressesResponse = Utils
+                            .getLogAddressSpace(new RuntimeLayout(newLayout, runtime));
+
 
                     maxTokenRequested = streamsAddressesResponse.getLogTail();
                     streamsAddressSpace = streamsAddressesResponse.getAddressMap();
