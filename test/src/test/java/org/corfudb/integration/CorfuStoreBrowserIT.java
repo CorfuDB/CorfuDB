@@ -133,6 +133,26 @@ public class CorfuStoreBrowserIT extends AbstractIT {
     }
 
     /**
+     * Create a table and add data to it using the loadTable command.
+     * @throws IOException
+     */
+    @Test
+    public void loaderTest() throws IOException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+        final int numItems = 100;
+        final int batchSize = 10;
+
+        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        Assert.assertEquals(browser.loadTable(namespace, tableName, numItems, batchSize), batchSize);
+    }
+
+    /**
      * Create a table and add nested protobufs as data to it.  Verify that the
      * browser tool is able to read the contents accurately.
      * @throws IOException
