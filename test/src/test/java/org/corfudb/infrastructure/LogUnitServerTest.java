@@ -1,19 +1,13 @@
 package org.corfudb.infrastructure;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
+import static org.junit.Assert.fail;
+
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.infrastructure.log.LogFormat.LogHeader;
-import org.corfudb.protocols.wireprotocol.*;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.LogUnitException;
-
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.util.serializer.Serializers;
-import org.junit.Test;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -25,11 +19,26 @@ import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.Assert.fail;
+import org.corfudb.infrastructure.log.LogFormat.LogHeader;
+import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.DataType;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.IMetadata;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.ReadRequest;
+import org.corfudb.protocols.wireprotocol.TailsRequest;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TrimRequest;
+import org.corfudb.protocols.wireprotocol.WriteRequest;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.LogUnitException;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.serializer.Serializers;
+import org.junit.Test;
 
 /**
  * Created by mwei on 2/4/16.
@@ -39,6 +48,41 @@ public class LogUnitServerTest extends AbstractServerTest {
     @Override
     public AbstractServer getDefaultServer() {
         return new LogUnitServer(new ServerContextBuilder().build());
+    }
+
+    @Test
+    public void verifyLogTailQueriesEpoch() {
+        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
+
+        ServerContext sc = new ServerContextBuilder()
+                .setLogPath(serviceDir)
+                .setSingle(true)
+                .setMemory(false)
+                .build();
+
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
+        TailsResponse req1 = (TailsResponse) sendRequest(CorfuMsgType.TAIL_REQUEST
+                .payloadMsg(new TailsRequest(TailsRequest.LOG_TAIL)))
+                .join();
+
+        TailsResponse req2 = (TailsResponse) sendRequest(CorfuMsgType.TAIL_REQUEST
+                .payloadMsg(new TailsRequest(TailsRequest.STREAMS_TAILS)))
+                .join();
+
+        TailsResponse req3 = (TailsResponse) sendRequest(CorfuMsgType.TAIL_REQUEST
+                .payloadMsg(new TailsRequest(TailsRequest.ALL_STREAMS_TAIL)))
+                .join();
+
+        assertThat(req1.getEpoch()).isEqualTo(sc.getCurrentLayout().getEpoch());
+        assertThat(req2.getEpoch()).isEqualTo(sc.getCurrentLayout().getEpoch());
+        assertThat(req3.getEpoch()).isEqualTo(sc.getCurrentLayout().getEpoch());
     }
 
     @Test

@@ -1,5 +1,14 @@
 package org.corfudb.infrastructure.logreplication;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+
+
+import java.lang.reflect.InvocationTargetException;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Stream;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -18,14 +27,7 @@ import org.corfudb.runtime.view.stream.OpaqueStream;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Test;
 
-import java.lang.reflect.InvocationTargetException;
-import java.util.Iterator;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Stream;
-
-import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
-
+@Slf4j
 public class LogUpdateAPITest extends AbstractViewTest {
     static final private int NUM_KEYS = 10;
 
@@ -116,14 +118,16 @@ public class LogUpdateAPITest extends AbstractViewTest {
             ILogData data = iterator1.next();
             data.getStreams().contains(uuidB);
         }
-        System.out.print("\nstreamBTail " + runtime2.getAddressSpaceView().getAllTails().getStreamTails().get(uuidB));
+        log.debug("streamBTail {}", runtime2.getAddressSpaceView()
+                .getAllTails()
+                .getStreamTails().get(uuidB));
 
 
         Query q = corfuStore1.query(namespace);
         Set<Uuid> aSet = q.keySet(tableAName, null);
         Set<Uuid> bSet = q.keySet(tableBName, null);
 
-        System.out.print("\naSet " + aSet + "\n\nbSet " + bSet);
+        log.debug("aSet {} bSet {}", aSet, bSet);
         assertThat(bSet.containsAll(aSet)).isTrue();
         assertThat(aSet.containsAll(bSet)).isTrue();
     }
