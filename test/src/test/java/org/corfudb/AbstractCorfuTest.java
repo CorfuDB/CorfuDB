@@ -215,7 +215,7 @@ public class AbstractCorfuTest {
                     .a(" - ").a(e.getClass().getSimpleName())
                     .a(lineOut)
                     .a("]").newline());
-            printThreads();
+            //printThreads();
             System.out.flush();
         }
 
@@ -226,7 +226,7 @@ public class AbstractCorfuTest {
                 .fg(Ansi.Color.RED)
                 .a("TIMED OUT").reset()
                 .a("]").newline());
-            printThreads();
+            //printThreads();
             System.out.flush();
         }
 

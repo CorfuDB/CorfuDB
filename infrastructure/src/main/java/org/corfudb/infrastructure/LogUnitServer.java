@@ -1,30 +1,7 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
-
-
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
-import java.lang.invoke.MethodHandles;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +36,25 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
+
+import java.lang.invoke.MethodHandles;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 
 
 /**
@@ -108,8 +104,6 @@ public class LogUnitServer extends AbstractServer {
 
     private ExecutorService executor;
 
-    private final ReadWriteLock resetLock = new ReentrantReadWriteLock();
-
     /**
      * Returns a new LogUnitServer.
      *
@@ -139,39 +133,14 @@ public class LogUnitServer extends AbstractServer {
         batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
 
         logCleaner = new StreamLogCompaction(
-                streamLog, resetLock, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER
+                streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER
         );
     }
 
 
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        executor.submit(
-                () -> {
-                    switch (msg.getMsgType()) {
-                        case READ_REQUEST:
-                        case KNOWN_ADDRESS_REQUEST:
-                        case COMPACT_REQUEST:
-                            Lock lock = resetLock.readLock();
-                            lock.lock();
-
-                            if (msg.getEpoch() != serverContext.getLogUnitEpochWaterMark()) {
-                                r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH,
-                                        serverContext.getServerEpoch()));
-                                return;
-                            }
-
-                            try {
-                                getHandler().handle(msg, ctx, r);
-                            } finally {
-                                lock.unlock();
-                            }
-
-                            break;
-                        default:
-                            getHandler().handle(msg, ctx, r);
-                    }
-                });
+        executor.submit(() -> getHandler().handle(msg, ctx, r));
     }
 
     /**
@@ -356,7 +325,6 @@ public class LogUnitServer extends AbstractServer {
         } catch (DataCorruptionException dc) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION
                     .payloadMsg(Address.NON_ADDRESS));
-            return;
         } catch (Exception e) {
             handleException(e, ctx, msg, r);
         }
@@ -366,15 +334,9 @@ public class LogUnitServer extends AbstractServer {
     private void handleCompactRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleCompactRequest: received a compact request {}", msg);
 
-        Lock lock = resetLock.writeLock();
-        lock.lock();
+        streamLog.compact();
+        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
 
-        try {
-            streamLog.compact();
-            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-        } finally {
-            lock.unlock();
-        }
     }
 
     @ServerHandler(type = CorfuMsgType.FLUSH_CACHE)
@@ -426,6 +388,9 @@ public class LogUnitServer extends AbstractServer {
     private synchronized void resetLogUnit(CorfuPayloadMsg<Long> msg,
                                            ChannelHandlerContext ctx, IServerRouter r) {
 
+        // Check if the reset request is with an epoch greater than the last reset epoch seen to
+        // prevent multiple reset in the same epoch and should be equal to the current router
+        // epoch to prevent stale reset requests from wiping out the data.
         if (msg.getPayload() <= serverContext.getLogUnitEpochWaterMark()
                 || msg.getPayload() != serverContext.getServerEpoch()) {
             log.info("LogUnit Server Reset request received but reset already done.");
@@ -433,31 +398,19 @@ public class LogUnitServer extends AbstractServer {
             return;
         }
 
-        // Check if the reset request is with an epoch greater than the last reset epoch seen to
-        // prevent multiple reset in the same epoch and should be equal to the current router
-        // epoch to prevent stale reset requests from wiping out the data.
         serverContext.setLogUnitEpochWaterMark(msg.getPayload());
 
-        Lock lock = resetLock.writeLock();
-        lock.lock();
-
-        try {
-            CompletableFuture<Void> cf = batchWriter
-                    .addTask(RESET, msg)
-                    .thenRun(() -> {
-                        dataCache.invalidateAll();
-                        log.info("LogUnit Server Reset.");
-                        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-                    })
-                    .exceptionally(ex -> {
-                        handleException(ex, ctx, msg, r);
-                        return null;
-                    });
-            //this has to be a synchronous call for the read write lock to take effect
-            cf.join();
-        } finally {
-            lock.unlock();
-        }
+        CompletableFuture<Void> cf = batchWriter
+                .addTask(RESET, msg)
+                .thenRun(() -> {
+                    dataCache.invalidateAll();
+                    log.info("LogUnit Server Reset.");
+                    r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+                })
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
     }
 
     /**

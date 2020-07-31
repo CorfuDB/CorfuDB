@@ -1,23 +1,7 @@
 package org.corfudb.infrastructure.log;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
-import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
 import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
@@ -32,8 +16,26 @@ import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.test.LsofSpec;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
+import static org.corfudb.infrastructure.log.StreamLogFiles.RECORDS_PER_LOG_FILE;
 
 
 /**
@@ -48,11 +50,62 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     private ServerContext getContext() {
         String path = getDirPath();
         return new ServerContextBuilder()
-            .setLogPath(path)
-            .setMemory(false)
-            .build();
+                .setLogPath(path)
+                .setMemory(false)
+                .build();
     }
-    
+
+    /**
+     * Reproduces the issue, with an exception happens during segment handle creation.
+     * The test checks that there are no any open file channels due to exception.
+     *
+     * @throws Exception spec exception
+     */
+    @Test
+    public void testProtectionFromDataLossInCaseOfExceptionDuringDataLoad() throws Exception {
+        String logDir = com.google.common.io.Files.createTempDir().getAbsolutePath();
+        Path logPath = Paths.get(logDir, "log", "0.log");
+
+        ServerContext context = new ServerContextBuilder()
+                .setLogPath(logDir)
+                .setMemory(false)
+                .build();
+
+        StreamLogFiles log = new StreamLogFiles(context, false);
+        ByteBuf b = Unpooled.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        long address0 = 0;
+        log.append(address0, new LogData(DataType.DATA, b));
+
+        final int OVERWRITE_BYTES = 4;
+
+        try (RandomAccessFile logFile = new RandomAccessFile(logPath.toFile(), "rw")) {
+            logFile.seek(1);
+            logFile.writeInt(OVERWRITE_BYTES);
+        }
+
+        log.closeSegmentHandlers(0);
+        try {
+            log.read(address0);
+            throw new IllegalStateException("Must not get here");
+        } catch (DataCorruptionException ex) {
+            //ignore
+        }
+
+        LsofSpec lsOfSpec = new LsofSpec();
+        lsOfSpec.check(logPath);
+
+        log.close();
+    }
+
+    private LogData getLogData() {
+        ByteBuf b = Unpooled.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        return new LogData(DataType.DATA, b);
+    }
+
     @Test
     public void testWriteReadWithChecksum() {
         // Enable checksum, then append and read the same entry
@@ -68,10 +121,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // An overwrite exception should occur, since we are writing the
         // same entry.
         final StreamLog newLog = new StreamLogFiles(getContext(), true);
-        assertThatThrownBy(() -> {
-            newLog.append(address0, new LogData(DataType.DATA, b));
-        })
+        assertThatThrownBy(() -> newLog.append(address0, new LogData(DataType.DATA, b)))
                 .isInstanceOf(OverwriteException.class);
+
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
     }
 
@@ -242,12 +294,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         return entries;
     }
 
-    LogData getEntry(long x) {
-        ByteBuf b = Unpooled.buffer();
-        byte[] streamEntry = "Payload".getBytes();
-        Serializers.CORFU.serialize(streamEntry, b);
-        LogData ld = new LogData(DataType.DATA, b);
-        ld.setGlobalAddress((long) x);
+    LogData getEntry(long globalAddress) {
+        LogData ld = getLogData();
+        ld.setGlobalAddress(globalAddress);
         return ld;
     }
 
@@ -359,8 +408,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         scheduleConcurrently(num_threads, threadNumber -> {
             int base = threadNumber * num_entries;
-            for (int i = base; i < base + num_entries; i++) {
-                long address = (long) i;
+            for (int address = base; address < base + num_entries; address++) {
                 log.append(address, new LogData(DataType.DATA, b));
             }
         });
@@ -368,8 +416,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         executeScheduled(num_threads, PARAMETERS.TIMEOUT_LONG);
 
         // verify that addresses 0 to 2000 have been used up
-        for (int x = 0; x < num_entries * num_threads; x++) {
-            long address = (long) x;
+        for (int address = 0; address < num_entries * num_threads; address++) {
             LogData data = log.read(address);
             byte[] bytes = (byte[]) data.getPayload(null);
             assertThat(bytes).isEqualTo(streamEntry);
@@ -395,7 +442,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         log.sync(true);
 
-        assertThat(log.getChannelsToSync().size()).isEqualTo(0);
+        assertThat(log.getChannelsToSync().size()).isZero();
     }
 
     private void writeToLog(StreamLog log, long address) {
@@ -426,7 +473,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Write to multiple segments
         final int segments = 3;
         long lastAddress = segments * StreamLogFiles.RECORDS_PER_LOG_FILE;
-        for (long x = 0; x <= lastAddress; x++){
+        for (long x = 0; x <= lastAddress; x++) {
             writeToLog(log, x);
             assertThat(log.getLogTail()).isEqualTo(x);
         }
@@ -437,7 +484,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Advance the tail some more
         final long tailDelta = 5;
-        for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++){
+        for (long x = lastAddress + 1; x <= lastAddress + tailDelta; x++) {
             writeToLog(log, x);
             assertThat(log.getLogTail()).isEqualTo(x);
         }
@@ -454,7 +501,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
 
         // Write 50 segments and trim the first 25
         final long numSegments = 50;
-        for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
+        for (long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
             writeToLog(log, x);
         }
 
@@ -496,9 +543,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         long trimmedExceptions = 0;
 
         // Try to read trimmed addresses
-        for(long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
+        for (long x = 0; x < numSegments * StreamLogFiles.RECORDS_PER_LOG_FILE; x++) {
             ILogData logData = log.read(x);
-            if(logData.isTrimmed()) {
+            if (logData.isTrimmed()) {
                 trimmedExceptions++;
             }
         }
