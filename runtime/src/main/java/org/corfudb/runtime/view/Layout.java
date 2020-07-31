@@ -5,6 +5,17 @@ import static java.util.Objects.requireNonNull;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -23,18 +34,6 @@ import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.ThreadSafeStreamView;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 /**
  * This class represents the layout of a Corfu instance.
@@ -196,6 +195,17 @@ public class Layout {
     }
 
     /**
+     * Get all the unique log unit server endpoints in the layout.
+     *
+     * @return a set of all log unit server endpoints
+     */
+    public Set<String> getAllLogServers() {
+        return segments.stream()
+                .flatMap(seg -> seg.getAllLogServers().stream())
+                .collect(Collectors.toSet());
+    }
+
+    /**
      * Returns the primary sequencer.
      *
      * @return The primary sequencer.
@@ -257,21 +267,8 @@ public class Layout {
      * Return latest segment.
      * @return the latest segment.
      */
-    public LayoutSegment getLatestSegment() {
+    public LayoutSegment getLastSegment() {
         return this.getSegments().get(this.getSegments().size() - 1);
-    }
-
-    /**
-     * Get the last node in the last segment.
-     *
-     * @return Returns the last node in the last segment.
-     */
-    public String getLastAddedNodeInLastSegment() {
-
-        // Fetching the latest segment. Note: This is the unbounded segment with ongoing writes.
-        // Returning the last node in the first stripe for determinism.
-        List<String> firstStripeLogServers = getLatestSegment().getFirstStripe().getLogServers();
-        return firstStripeLogServers.get(firstStripeLogServers.size() - 1);
     }
 
     /**

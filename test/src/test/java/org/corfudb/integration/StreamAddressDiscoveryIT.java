@@ -17,6 +17,7 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.Utils;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -771,7 +772,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             runtimes.add(runtimeRestart);
 
             // Fetch Address Space for the given stream S1
-            StreamAddressSpace addressSpaceA = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+            StreamAddressSpace addressSpaceA = Utils.getLogAddressSpace(runtimeRestart
+                    .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(stream1));
 
@@ -781,7 +783,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             assertThat(addressSpaceA.getAddressMap().getLongCardinality()).isEqualTo(insertions);
 
             // Fetch Address Space for the given stream S2
-            StreamAddressSpace addressSpaceB = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+            StreamAddressSpace addressSpaceB =  Utils.getLogAddressSpace(runtimeRestart
+                    .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(stream2));
 
@@ -894,7 +897,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("8");
 
             // Fetch Address Space for the given stream
-            StreamAddressSpace addressSpaceA = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+            StreamAddressSpace addressSpaceA = Utils.getLogAddressSpace(runtimeRestart
+                    .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(streamNameA));
 
@@ -984,7 +988,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             runtimes.add(rt2);
 
             // Fetch Address Space for the given stream
-            StreamAddressSpace addressSpaceB = rt2.getAddressSpaceView().getLogAddressSpace()
+            StreamAddressSpace addressSpaceB = Utils.getLogAddressSpace(rt2
+                    .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(streamNameB));
 
@@ -1009,7 +1014,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             runtimes.add(runtimeRestart);
 
             // Fetch Address Space for the given stream
-            addressSpaceB = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+            addressSpaceB = Utils.getLogAddressSpace(runtimeRestart
+                    .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(streamNameB));
 
@@ -1278,7 +1284,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             Token cpTokenA = cpwA.appendCheckpoint();
 
             // Verify Address Maps from Log Unit and Sequencer Tails (first node)
-            StreamsAddressResponse logUnitResponse = runtime.getAddressSpaceView().getLogAddressSpace();
+            StreamsAddressResponse logUnitResponse = Utils.getLogAddressSpace(runtime
+                    .getLayoutView().getRuntimeLayout());
+
             TokenResponse sequencerTails = runtime.getSequencerView().query(streamID, checkpointId);
 
             // +1 because checkpointer contributes to a NO_OP entry
@@ -1299,7 +1307,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             waitForLayoutChange(layout -> layout.getEpoch() > currentEpoch, runtime);
 
             // Verify Address Maps from Log Unit and Sequencer Tails (second node)
-            logUnitResponse = runtime.getAddressSpaceView().getLogAddressSpace();
+            logUnitResponse = Utils.getLogAddressSpace(runtime.getLayoutView().getRuntimeLayout());
             sequencerTails = runtime.getSequencerView().query(streamID, checkpointId);
 
             assertThat(logUnitResponse.getAddressMap().get(checkpointId).getTail()).isEqualTo(totalEntries + extraEntry);

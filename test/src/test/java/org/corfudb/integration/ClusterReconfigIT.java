@@ -53,6 +53,7 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.Utils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -1170,8 +1171,8 @@ public class ClusterReconfigIT extends AbstractIT {
                 .open();
 
         // Verify sequencer has correct address map for this stream (addresses and trim mark)
-        StreamAddressSpace addressSpace = runtime2.getAddressSpaceView()
-                .getLogAddressSpace()
+        StreamAddressSpace addressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
+                .getRuntimeLayout())
                 .getAddressMap().get(streamId);
 
         assertThat(addressSpace.getTrimMark()).isEqualTo(numEntries);
@@ -1184,8 +1185,8 @@ public class ClusterReconfigIT extends AbstractIT {
         }
 
         // Verify START_ADDRESS of checkpoint for stream
-        StreamAddressSpace checkpointAddressSpace = runtime2.getAddressSpaceView()
-                .getLogAddressSpace()
+        StreamAddressSpace checkpointAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
+                .getRuntimeLayout())
                 .getAddressMap().get(checkpointStreamId);
 
         // Addresses should correspond to: start, continuation and end records. (total 3 records)
