@@ -8,7 +8,6 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationF
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -119,22 +118,14 @@ public class LogEntrySender {
                     // Back-off for couple of seconds and retry n times if not require full sync
                 }
 
-                if (logEntryReader.hasNoiseData()) {
-                    cancelLogEntrySync(LogReplicationError.ILLEGAL_TRANSACTION, LogReplicationEventType.REPLICATION_SHUTDOWN, logEntrySyncEventId);
+                if (logEntryReader.hasMessageExceededSize()) {
+                    cancelLogEntrySync(LogReplicationError.LOG_ENTRY_MESSAGE_SIZE_EXCEEDED, LogReplicationEventType.REPLICATION_SHUTDOWN, logEntrySyncEventId);
                     return;
                 }
 
             } catch (TrimmedException te) {
                 log.error("Caught Trimmed Exception while reading for {}", logEntrySyncEventId);
                 cancelLogEntrySync(LogReplicationError.TRIM_LOG_ENTRY_SYNC, LogReplicationEvent.LogReplicationEventType.SYNC_CANCEL, logEntrySyncEventId);
-                return;
-            } catch (IllegalTransactionStreamsException se) {
-                /*
-                 * Unrecoverable error, noisy streams found in transaction stream (streams of interest and others not
-                 * intended for replication). Shutdown.
-                 */
-                log.error("IllegalTransactionStreamsException, log replication will be TERMINATED.", se);
-                cancelLogEntrySync(LogReplicationError.ILLEGAL_TRANSACTION, LogReplicationEventType.REPLICATION_SHUTDOWN, logEntrySyncEventId);
                 return;
             } catch (Exception e) {
                 log.error("Caught exception at LogEntrySender", e);

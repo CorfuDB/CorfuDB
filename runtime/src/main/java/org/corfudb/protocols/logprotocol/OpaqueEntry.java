@@ -36,6 +36,7 @@ public class OpaqueEntry {
     // TODO(Maithem): Inconsistent behavior when full-sync vs delta (for full sync the versions will change)
     final long version;
 
+
     public OpaqueEntry(long version, Map<UUID, List<SMREntry>> updates) {
         this.entries = updates;
         this.version = version;
