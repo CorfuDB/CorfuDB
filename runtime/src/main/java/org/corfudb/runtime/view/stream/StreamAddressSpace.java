@@ -90,7 +90,7 @@ public class StreamAddressSpace {
      * and set the new trim mark (to the greatest of all addresses to remove).
      */
     public void removeAddresses(List<Long> addresses) {
-        addresses.stream().forEach(addressMap::removeLong);
+        addresses.forEach(addressMap::removeLong);
 
         // Recover allocated but unused memory
         addressMap.trim();

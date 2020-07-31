@@ -16,13 +16,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerThreadFactory.ExceptionHandler;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
@@ -102,6 +108,8 @@ public class LogUnitServer extends AbstractServer {
 
     private ExecutorService executor;
 
+    private final ReadWriteLock resetLock = new ReentrantReadWriteLock();
+
     /**
      * Returns a new LogUnitServer.
      *
@@ -110,8 +118,10 @@ public class LogUnitServer extends AbstractServer {
     public LogUnitServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
-        executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
-                new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
+        executor = Executors.newFixedThreadPool(
+                serverContext.getLogunitThreadCount(),
+                new ServerThreadFactory("LogUnit-", new ExceptionHandler())
+        );
 
         if (config.isMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
@@ -128,13 +138,40 @@ public class LogUnitServer extends AbstractServer {
         dataCache = new LogUnitServerCache(config, streamLog);
         batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
 
-        logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
+        logCleaner = new StreamLogCompaction(
+                streamLog, resetLock, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER
+        );
     }
 
 
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        executor.submit(() -> getHandler().handle(msg, ctx, r));
+        executor.submit(
+                () -> {
+                    switch (msg.getMsgType()) {
+                        case READ_REQUEST:
+                        case KNOWN_ADDRESS_REQUEST:
+                        case COMPACT_REQUEST:
+                            Lock lock = resetLock.readLock();
+                            lock.lock();
+
+                            if (msg.getEpoch() != serverContext.getLogUnitEpochWaterMark()) {
+                                r.sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH,
+                                        serverContext.getServerEpoch()));
+                                return;
+                            }
+
+                            try {
+                                getHandler().handle(msg, ctx, r);
+                            } finally {
+                                lock.unlock();
+                            }
+
+                            break;
+                        default:
+                            getHandler().handle(msg, ctx, r);
+                    }
+                });
     }
 
     /**
@@ -144,7 +181,9 @@ public class LogUnitServer extends AbstractServer {
     public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleTailRequest: received a tail request {}", msg);
         batchWriter.<TailsResponse>addTask(TAILS_QUERY, msg)
-                .thenAccept(tailsResp -> r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp)))
+                .thenAccept(tailsResp -> {
+                    r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp));
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
@@ -162,7 +201,8 @@ public class LogUnitServer extends AbstractServer {
         log.trace("handleLogAddressSpaceRequest: received a log address space request {}", msg);
         batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
                 .thenAccept(tailsResp -> r.sendResponse(ctx, msg,
-                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
+                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp))
+                )
                 .exceptionally(ex -> {
                     handleException(ex, ctx, payloadMsg, r);
                     return null;
@@ -219,14 +259,16 @@ public class LogUnitServer extends AbstractServer {
             msg.setPriorityLevel(PriorityLevel.HIGH);
         }
 
-        batchWriter.addTask(WRITE, msg)
+        batchWriter
+                .addTask(WRITE, msg)
                 .thenRunAsync(() -> {
                     dataCache.put(msg.getPayload().getGlobalAddress(), logData);
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                }, executor).exceptionally(ex -> {
-            handleException(ex, ctx, msg, r);
-            return null;
-        });
+                }, executor)
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
     }
 
     /**
@@ -239,7 +281,8 @@ public class LogUnitServer extends AbstractServer {
         log.debug("rangeWrite: Writing {} entries [{}-{}]", range.size(),
                 range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
 
-        batchWriter.addTask(RANGE_WRITE, msg)
+        batchWriter
+                .addTask(RANGE_WRITE, msg)
                 .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
@@ -258,7 +301,8 @@ public class LogUnitServer extends AbstractServer {
     private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
                             IServerRouter r) {
         log.debug("prefixTrim: trimming prefix to {}", msg.getPayload().getAddress());
-        batchWriter.addTask(PREFIX_TRIM, msg)
+        batchWriter
+                .addTask(PREFIX_TRIM, msg)
                 .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
@@ -321,8 +365,16 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST)
     private void handleCompactRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleCompactRequest: received a compact request {}", msg);
-        streamLog.compact();
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+
+        Lock lock = resetLock.writeLock();
+        lock.lock();
+
+        try {
+            streamLog.compact();
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        } finally {
+            lock.unlock();
+        }
     }
 
     @ServerHandler(type = CorfuMsgType.FLUSH_CACHE)
@@ -374,27 +426,39 @@ public class LogUnitServer extends AbstractServer {
     private synchronized void resetLogUnit(CorfuPayloadMsg<Long> msg,
                                            ChannelHandlerContext ctx, IServerRouter r) {
 
+        if (msg.getPayload() <= serverContext.getLogUnitEpochWaterMark()
+                || msg.getPayload() != serverContext.getServerEpoch()) {
+            log.info("LogUnit Server Reset request received but reset already done.");
+            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+            return;
+        }
+
         // Check if the reset request is with an epoch greater than the last reset epoch seen to
-        // prevent multiple reset in the same epoch. and should be equal to the current router
+        // prevent multiple reset in the same epoch and should be equal to the current router
         // epoch to prevent stale reset requests from wiping out the data.
-        if (msg.getPayload() > serverContext.getLogUnitEpochWaterMark()
-                && msg.getPayload() == serverContext.getServerEpoch()) {
-            serverContext.setLogUnitEpochWaterMark(msg.getPayload());
-            batchWriter.addTask(RESET, msg)
+        serverContext.setLogUnitEpochWaterMark(msg.getPayload());
+
+        Lock lock = resetLock.writeLock();
+        lock.lock();
+
+        try {
+            CompletableFuture<Void> cf = batchWriter
+                    .addTask(RESET, msg)
                     .thenRun(() -> {
                         dataCache.invalidateAll();
                         log.info("LogUnit Server Reset.");
                         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-                    }).exceptionally(ex -> {
-                handleException(ex, ctx, msg, r);
-                return null;
-            });
-        } else {
-            log.info("LogUnit Server Reset request received but reset already done.");
-            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+                    })
+                    .exceptionally(ex -> {
+                        handleException(ex, ctx, msg, r);
+                        return null;
+                    });
+            //this has to be a synchronous call for the read write lock to take effect
+            cf.join();
+        } finally {
+            lock.unlock();
         }
     }
-
 
     /**
      * Shutdown the server.
@@ -406,6 +470,7 @@ public class LogUnitServer extends AbstractServer {
         executor.shutdown();
         logCleaner.shutdown();
         batchWriter.close();
+        streamLog.close();
     }
 
     @VisibleForTesting

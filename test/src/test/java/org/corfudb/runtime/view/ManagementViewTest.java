@@ -269,11 +269,10 @@ public class ManagementViewTest extends AbstractViewTest {
      * heartbeat. This is responded with the nodeMetrics which is
      * asserted with expected values.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
-    public void checkNodeState()
-            throws Exception {
+    public void checkNodeState() throws Exception {
         addServer(SERVERS.PORT_0);
 
         Layout l = new TestLayoutBuilder()
@@ -288,16 +287,15 @@ public class ManagementViewTest extends AbstractViewTest {
                 .build();
         bootstrapAllServers(l);
 
-
         CorfuRuntime corfuRuntime = getRuntime(l).connect();
 
-        // Set aggressive timeouts.
+        log.info("Set aggressive timeouts.");
         setAggressiveTimeouts(l, corfuRuntime,
                 getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime());
 
         NodeState nodeState= null;
 
-        // Send heartbeat requests and wait until we get a valid response.
+        log.info("Send heartbeat requests and wait until we get a valid response.");
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
 
             nodeState = corfuRuntime.getLayoutView().getRuntimeLayout()
