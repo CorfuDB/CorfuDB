@@ -5,12 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.StreamLogFiles.METADATA_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
 import java.io.File;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -26,7 +26,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-
 import org.assertj.core.api.Assertions;
 import org.assertj.core.api.Condition;
 import org.corfudb.format.Types;
@@ -41,8 +40,6 @@ import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.runtime.exceptions.QuotaExceededException;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -52,8 +49,10 @@ import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OverwriteCause;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -425,7 +424,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             halfBatch.add(x);
         }
 
-        ReadResponse resp = client.readAll(halfBatch).get();
+        ReadResponse resp = client.read(halfBatch, false).get();
         assertThat(resp.getAddresses().size()).isEqualTo(half);
 
         // Read two batches
@@ -435,7 +434,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
             twoBatchAddresses.add(x);
         }
 
-        resp = client.readAll(twoBatchAddresses).get();
+        resp = client.read(twoBatchAddresses, false).get();
         assertThat(resp.getAddresses().size()).isEqualTo(twoBatches);
     }
 
@@ -486,10 +485,19 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         file.writeInt(CORRUPT_BYTES);
         file.close();
 
+        // Verify that the correct inspect addresses fails properly when log entry is corrupted
+        final int start = 0;
+        final int end = 10;
+
+        assertThatThrownBy(() -> client.requestKnownAddresses(start, end)
+                .get())
+                .isInstanceOf(ExecutionException.class)
+                .hasCauseExactlyInstanceOf(DataCorruptionException.class);
+
         // Try to read a corrupted log entry
         assertThatThrownBy(() -> client.read(0).get())
                 .isInstanceOf(ExecutionException.class)
-                .hasCauseInstanceOf(DataCorruptionException.class);
+                .hasCauseExactlyInstanceOf(DataCorruptionException.class);
     }
 
     /**
