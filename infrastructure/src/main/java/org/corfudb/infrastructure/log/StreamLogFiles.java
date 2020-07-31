@@ -11,13 +11,13 @@ import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -691,6 +691,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @return The log unit entry at that address, or NULL if there was no entry.
      */
     private LogData readRecord(SegmentHandle segment, long address) throws IOException {
+
         FileChannel fileChannel = segment.getReadChannel();
 
         AddressMetaData metaData = segment.getKnownAddresses().get(address);
@@ -776,6 +777,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 IOUtils.closeQuietly(writeCh);
                 IOUtils.closeQuietly(readCh);
                 throw new IllegalStateException(e);
+            } catch (RuntimeException ex) {
+                //Prevents file resources leaks in case of any RuntimeException.
+                IOUtils.closeQuietly(writeCh);
+                IOUtils.closeQuietly(readCh);
+                throw ex;
             }
         });
 
@@ -961,6 +967,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     private AddressMetaData writeRecord(SegmentHandle segment, long address,
                                         LogData entry) throws IOException {
+
         LogEntry logEntry = getLogEntry(address, entry);
         Metadata metadata = getMetadata(logEntry);
 
@@ -975,7 +982,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             syncTailSegment(address);
             logMetadata.update(entry, false);
         }
-
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
     }
 
@@ -1276,6 +1282,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.resetTailSegment();
         logMetadata = new LogMetadata();
         writeChannels.clear();
+
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
         log.info("reset: Completed, end segment {}", endSegment);
     }
