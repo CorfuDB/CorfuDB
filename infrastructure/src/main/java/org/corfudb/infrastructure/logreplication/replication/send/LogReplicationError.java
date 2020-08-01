@@ -7,7 +7,7 @@ public enum LogReplicationError {
     TRIM_SNAPSHOT_SYNC(0, "A trim exception has occurred during snapshot sync."),
     TRIM_LOG_ENTRY_SYNC(1, "A trim exception has occurred during log entry sync."),
     LOG_ENTRY_ACK_TIMEOUT(2, "Log Entry Sync ack has timed out."),
-    ILLEGAL_TRANSACTION (3, "Illegal Transaction across replicated and non-replicated streams. " +
+    LOG_ENTRY_MESSAGE_SIZE_EXCEEDED(3, "Log Replication Entry Message exceeds max allowed size." +
             "Log Replication is TERMINATED."),
     UNKNOWN (4, "Unknown exception caused sync cancel.");
 

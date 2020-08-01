@@ -28,7 +28,7 @@ public class TestLogEntryReader implements LogEntryReader {
     }
 
     @Override
-    public boolean hasNoiseData() {
+    public boolean hasMessageExceededSize() {
         return false;
     }
 }

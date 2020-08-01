@@ -463,8 +463,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     /**
      * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T0 and T1 are replicated,
-     * however, transactions are written across the 3 tables. This scenario should fail as invalid tables are
-     * crossing transactional boundaries.
+     * however, transactions are written across the 3 tables.
+     *
+     * This scenario succeeds, as snapshot sync does not rely on the transaction stream and thus is able to
+     * replicate T0 and T1 independently.
      *
      * @throws Exception
      */
@@ -726,60 +728,37 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     /**
-     * Test Log Entry Sync, when transactions are performed across invalid tables
-     * (i.e., NOT all tables in the transaction are set to be replicated).
+     * Test Log Entry Sync, when the first transaction encountered
+     * writes data across replicated and non-replicated streams.
      *
-     * This test should fail log replication completely as we do not support
-     * transactions across federated and non-federated tables.
+     * This test should succeed as we filter the streams of interest, and limit replication to this subset.
      *
      * @throws Exception
      */
     @Test
     public void testLogEntrySyncInvalidCrossTables() throws Exception {
-        // Write data in transaction to t0, t1 (tables to be replicated) and also include a non-replicated table
-        Set<String> crossTables = new HashSet<>();
-        crossTables.add(t0);
-        crossTables.add(t1);
-        crossTables.add(t2);
-
-        // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
-        writeCrossTableTransactions(crossTables, true);
-
-        Set<String> replicateTables = new HashSet<>();
-        replicateTables.add(t0);
-        replicateTables.add(t1);
-
-        // Start Log Entry Sync
-        // We need to block until the error is received and verify the state machine is shutdown
-        testConfig.clear();
-        LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ERROR);
-
-        checkStateChange(fsm, LogReplicationStateType.STOPPED, true);
-
-        // Verify Data on Destination site
-        System.out.println("****** Verify Data on Destination");
-        // Because t2 is not specified as a replicated table, we should not see it on the destination
-        srcDataForVerification.get(t2).clear();
-
-        // Verify Destination
-        verifyNoData(dstCorfuTables);
+        testLogEntrySyncCrossTableTransactions(true);
     }
 
     /**
-     * Test Log Entry Sync, when transactions are performed across invalid tables
+     * Test Log Entry Sync, when transactions are performed across replicated and non-replicated tables
      * (i.e., NOT all tables in the transaction are set to be replicated).
      *
-     * This test should fail log replication completely as we do not support
+     * This test should succeed log replication completely as we do support
      * transactions across federated and non-federated tables.
      *
      * In this test, we first initiate transactions on valid replicated streams, and then introduce
      * transactions across replicated and non-replicated tables, we verify log entry sync is
-     * achieved partially and then stopped due to error.
+     * achieved fully.
      *
      * @throws Exception
      */
     @Test
     public void testLogEntrySyncInvalidCrossTablesPartial() throws Exception {
+        testLogEntrySyncCrossTableTransactions(false);
+    }
+
+    private void testLogEntrySyncCrossTableTransactions(boolean startWithCrossTableTxs) throws Exception {
         // Write data in transaction to t0, t1 (tables to be replicated) and also include a non-replicated table
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0);
@@ -787,7 +766,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         crossTables.add(t2);
 
         // Writes transactions to t0, t1 and t2 + transactions across 'crossTables'
-        writeCrossTableTransactions(crossTables, false);
+        writeCrossTableTransactions(crossTables, startWithCrossTableTxs);
 
         Set<String> replicateTables = new HashSet<>();
         replicateTables.add(t0);
@@ -796,26 +775,22 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Start Log Entry Sync
         // We need to block until the error is received and verify the state machine is shutdown
         testConfig.clear();
-        LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ERROR);
+        expectedAckMessages = srcDataRuntime.getAddressSpaceView().getLogAddressSpace().getAddressMap()
+                .get(ObjectsView.TRANSACTION_STREAM_ID)
+                .getTail().intValue();
 
-        checkStateChange(fsm, LogReplicationStateType.STOPPED, true);
+        LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ACK);
+
+        checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
 
         // Verify Data on Destination site
         System.out.println("****** Verify Data on Destination");
 
         // Because t2 is not specified as a replicated table, we should not see it on the destination
         srcDataForVerification.get(t2).clear();
-        // Add partial transaction entries which were transmitted before transactions across non-replicated streams
-        HashMap<String, HashMap<Long, Long>> partialSrcHashMap = new HashMap<>();
-        partialSrcHashMap.put(t0, new HashMap<>());
-        partialSrcHashMap.put(t1, new HashMap<>());
-        for (int i=NUM_KEYS; i<NUM_KEYS*2; i++) {
-            partialSrcHashMap.get(t0).put((long)i, (long)i);
-            partialSrcHashMap.get(t1).put((long)i, (long)i);
-        }
 
         // Verify Destination
-        verifyData(dstCorfuTables, partialSrcHashMap);
+        verifyData(dstCorfuTables, srcDataForVerification);
     }
 
     /**
@@ -999,7 +974,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     @Test
     public void testLogEntrySyncWithTrim() throws Exception {
         final int RX_MESSAGES_LIMIT = 2;
-        final int TRIM_RATIO = NUM_KEYS_LARGE - 20;
 
         // Setup Environment: two corfu servers (source & destination)
         setupEnv();
@@ -1018,7 +992,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // then enforce a trim on the log.
         expectedSinkReceivedMessages = RX_MESSAGES_LIMIT;
 
-
         LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), WAIT.ON_SINK_RECEIVE, false);
 
         System.out.println("****** Trim log, will trigger a full snapshot sync");
@@ -1030,10 +1003,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             // no-op
         }
 
-        System.out.println("****** Wait till IN_SNAPSHOT_SYNC");
+        System.out.println("****** Wait until IN_SNAPSHOT_SYNC");
         checkStateChange(fsm, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
-        System.out.println("Block untill full snapshot transfer complete");
+        System.out.println("Block until full snapshot transfer complete");
         checkStateChange(fsm, LogReplicationStateType.IN_LOG_ENTRY_SYNC, true);
 
         verifyData(dstCorfuTables, dstDataForVerification);
@@ -1114,8 +1087,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyNoData(dstCorfuTables);
     }
 
-
-    void startTxAtSrc() {
+    private void startTxAtSrc() {
         Set<String> crossTables = new HashSet<>();
         crossTables.add(t0);
         crossTables.add(t1);
@@ -1123,11 +1095,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         generateTransactionsCrossTables(srcCorfuTables, crossTables, srcDataForVerification,
                 NUM_KEYS_LARGE, srcDataRuntime, NUM_KEYS*WRITE_CYCLES);
     }
-
-    void startTxDst() {
-
-    }
-
 
     private void trim(CorfuRuntime rt, int trimAddress) {
         System.out.println("Trim at: " + trimAddress);
@@ -1143,9 +1110,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         if (testConfig.writingSrc) {
             expectedAckMessages += NUM_KEYS_LARGE;
             scheduledExecutorService.submit(this::startTxAtSrc);
-        }
-        if (testConfig.writingDst) {
-            scheduledExecutorService.submit(this::startTxDst);
         }
     }
 
