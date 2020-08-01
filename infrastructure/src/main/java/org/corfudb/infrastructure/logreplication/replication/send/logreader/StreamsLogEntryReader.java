@@ -2,10 +2,11 @@ package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
-import org.corfudb.infrastructure.logreplication.replication.send.IllegalTransactionStreamsException;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
@@ -15,11 +16,14 @@ import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
 
@@ -31,17 +35,19 @@ import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX
 public class StreamsLogEntryReader implements LogEntryReader {
 
     private CorfuRuntime rt;
+
     private final MessageType MSG_TYPE = MessageType.LOG_ENTRY_MESSAGE;
-    // the set of uuids for the corresponding streams.
+
+    // Set of UUIDs for the corresponding streams
     private Set<UUID> streamUUIDs;
 
-    // the opaquestream wrapper for the transaction stream.
+    // Opaque Stream wrapper for the transaction stream
     private TxOpaqueStream txOpaqueStream;
 
-    // the base snapshot the log entry logreader starts to poll transaction logs
+    // Snapshot Timestamp on which the log entry reader is based on
     private long globalBaseSnapshot;
 
-    // timestamp of the transaction log that is the previous message
+    // Timestamp of the transaction log that is the previous message
     private long preMsgTs;
 
     // the timestamp of the transaction log that is the current message
@@ -58,7 +64,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     @VisibleForTesting
     private OpaqueEntry lastOpaqueEntry = null;
 
-    private boolean hasNoiseData = false;
+    private boolean messageExceededSize = false;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
@@ -89,55 +95,55 @@ public class StreamsLogEntryReader implements LogEntryReader {
         return txMessage;
     }
 
+    /**
+     * Verify the transaction entry is valid, i.e., if the entry contains any
+     * of the streams to be replicated.
+     *
+     * Notice that a transaction stream entry can be fully or partially replicated,
+     * i.e., if only a subset of streams in the transaction entry are part of the streams
+     * to replicate, the transaction entry will be partially replicated,
+     * avoiding replication of the other streams present in the transaction.
+     *
+     * @param entry transaction stream opaque entry
+     *
+     * @return true, if the transaction entry has any valid stream to replicate.
+     *         false, otherwise.
+     */
+    private boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
+        Set<UUID> txEntryStreamIds = new HashSet<>(entry.getEntries().keySet());
 
-    // Check if it has the correct streams.
-    private boolean shouldProcess(OpaqueEntry entry) {
-        Set<UUID> tmpUUIDs = new HashSet<>(entry.getEntries().keySet());
-
-        // Check if Tx Stream Opaque Entry is empty
-        if(tmpUUIDs.isEmpty()) {
-            log.info("Log Entry Reader, TX stream Opaque entry is EMPTY, size={}, version={}", streamUUIDs.size(),
-                    entry.getVersion());
+        // Sanity Check: discard if transaction stream opaque entry is empty (no streams are present)
+        if (txEntryStreamIds.isEmpty()) {
+            log.debug("TX Stream entry[{}] :: EMPTY [ignored]", entry.getVersion());
             return false;
         }
 
-        // If the entry's stream set is a subset of interested streams, it is the entry we should process
-        if (streamUUIDs.containsAll(tmpUUIDs)) {
-            log.info("Log Entry Reader, replicating streams={}, replicateBase={}", tmpUUIDs, streamUUIDs.size());
+        // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
+        if (Collections.disjoint(streamUUIDs, txEntryStreamIds)) {
+            log.trace("TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]", entry.getVersion(), txEntryStreamIds);
+            return false;
+        } else {
+            Set<UUID> ignoredTxStreams = txEntryStreamIds.stream().filter(id -> !streamUUIDs.contains(id))
+                    .collect(Collectors.toSet());
+            txEntryStreamIds.removeAll(ignoredTxStreams);
+            log.debug("TX Stream entry[{}] :: replicate[{}]={}, ignore[{}]={} [valid]", entry.getVersion(),
+                    txEntryStreamIds.size(), txEntryStreamIds, ignoredTxStreams.size(), ignoredTxStreams);
             return true;
         }
-
-        // If the entry's stream set has no overlap with the interested streams, it should be skipped.
-        tmpUUIDs.retainAll(streamUUIDs);
-        if (tmpUUIDs.isEmpty()) {
-            log.info("Log Entry Reader, TX stream contains none of the streams of interest, version={}", entry.getVersion());
-            return false;
-        }
-
-        // If the entry's stream set contains both interested streams and other streams, it is not
-        // the expected behavior
-        log.error("There are noisy streams {} in the entry, expected streams set {}",
-                entry.getEntries().keySet(), streamUUIDs);
-
-        hasNoiseData = true;
-        return false;
     }
 
     private boolean checkValidSize(int currentMsgSize, int currentEntrySize) {
         // For interested entry, if its size is too big we should skip and report error
         if (currentEntrySize > maxDataSizePerMsg) {
-            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported",
+            log.error("The current entry size {} is bigger than the maxDataSizePerMsg {} supported.",
                     currentEntrySize, MAX_DATA_MSG_SIZE_SUPPORTED);
-            hasNoiseData = true;
+            // If a message cannot be sent due to its size exceeding the maximum boundary, the replication will be stopped.
+            messageExceededSize = true;
             return false;
         }
 
-        if (currentEntrySize > maxDataSizePerMsg) {
-            log.warn("The current entry size {} is bigger than the configured maxDataSizePerMsg {}",
-                    currentEntrySize, maxDataSizePerMsg);
-        }
-
-        // Skip append this entry, will process it for the next message;
+        // If it exceeds the maximum size of this message, skip appending this entry,
+        // it will be processed with the next message;
         if (currentEntrySize + currentMsgSize > maxDataSizePerMsg) {
             return false;
         }
@@ -153,18 +159,19 @@ public class StreamsLogEntryReader implements LogEntryReader {
         sequence = 0;
     }
 
-
     @Override
-    public LogReplicationEntry read(UUID logEntryRequestId) throws TrimmedException, IllegalTransactionStreamsException {
+    public LogReplicationEntry read(UUID logEntryRequestId) throws TrimmedException {
         List<OpaqueEntry> opaqueEntryList = new ArrayList<>();
         int currentEntrySize = 0;
         int currentMsgSize = 0;
 
         try {
-            while (currentMsgSize < maxDataSizePerMsg && !hasNoiseData) {
-
+            while (currentMsgSize < maxDataSizePerMsg) {
                 if (lastOpaqueEntry != null) {
-                    if (shouldProcess(lastOpaqueEntry)) {
+                    if (isValidTransactionEntry(lastOpaqueEntry)) {
+
+                        lastOpaqueEntry = filterTransactionEntry(lastOpaqueEntry);
+
                         // If the currentEntry is too big to append the current message, will skip it and
                         // append it to the next message as the first entry.
                         currentEntrySize = ReaderUtility.calculateOpaqueEntrySize(lastOpaqueEntry);
@@ -181,10 +188,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     lastOpaqueEntry = null;
                 }
 
-                if (hasNoiseData) {
-                    break;
-                }
-
                 if (!txOpaqueStream.hasNext()) {
                     break;
                 }
@@ -193,13 +196,9 @@ public class StreamsLogEntryReader implements LogEntryReader {
             }
 
             log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEnry size {}",
-                    currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null? 0 : currentEntrySize);
+                    currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null ? 0 : currentEntrySize);
 
-            if (opaqueEntryList.size() == 0 && hasNoiseData) {
-                throw new IllegalTransactionStreamsException("There are noisy streams in the transaction log entry");
-            }
-
-            if (opaqueEntryList.size() == 0) {
+            if (opaqueEntryList.isEmpty()) {
                 return null;
             }
 
@@ -207,13 +206,28 @@ public class StreamsLogEntryReader implements LogEntryReader {
             return txMessage;
 
         } catch (Exception e) {
-            log.warn("Caught an exception {}", e);
+            log.warn("Caught an exception while reading transaction stream {}", e);
             throw e;
         }
     }
 
+    /**
+     * Filter out streams that are not intended for replication
+     *
+     * @param opaqueEntry opaque entry to parse.
+     * @return filtered opaque entry
+     */
+    private OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
+        Map<UUID, List<SMREntry>> filteredTxEntryMap = opaqueEntry.getEntries().entrySet().stream()
+                .filter(entry -> streamUUIDs.contains(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        return new OpaqueEntry(opaqueEntry.getVersion(), filteredTxEntryMap);
+    }
+
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
+        messageExceededSize = false;
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
     }
 
@@ -288,7 +302,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     }
 
     @Override
-    public boolean hasNoiseData() {
-        return hasNoiseData;
+    public boolean hasMessageExceededSize() {
+        return messageExceededSize;
     }
 }

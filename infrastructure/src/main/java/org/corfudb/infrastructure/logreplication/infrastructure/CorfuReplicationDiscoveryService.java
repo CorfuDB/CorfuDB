@@ -219,6 +219,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * log replication.
      */
     private void startDiscovery() {
+        log.info("Start Log Replication Discovery Service");
         connectToClusterManager();
         fetchTopologyFromClusterManager();
         processDiscoveredTopology(topologyDescriptor, true);
@@ -377,6 +378,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     log.error("Error while attempting to register interest on log replication lock {}:{}", LOCK_GROUP, LOCK_NAME, e);
                     throw new RetryNeededException();
                 }
+
+                log.debug("Registered to lock, client msb={}, lsb={}", logReplicationNodeId.getMostSignificantBits(),
+                        logReplicationNodeId.getLeastSignificantBits());
                 return null;
             }).run();
         } catch (InterruptedException e) {
@@ -455,7 +459,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Process lock acquisition event
      */
     public void processLockAcquire() {
-        log.debug("Process lock acquire event");
+        log.debug("Lock acquired");
         isLeader.set(true);
         onLeadershipAcquire();
     }
@@ -477,7 +481,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Set leadership metadata and stop log replication in the event of leadership loss
      */
     public void processLockRelease() {
-        log.debug("Process lock release event");
+        log.debug("Lock released");
         isLeader.set(false);
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
         interClusterReplicationService.getLogReplicationServer().setLeadership(false);
@@ -617,7 +621,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         // If a cluster descriptor is not found, this node does not belong to any cluster in the topology
         // wait for updates to the topology config to start, if this cluster ever becomes part of the topology
-        log.warn("Node[{}] does not belong to any Cluster provided by the discovery service, topology={}", localEndpoint,
+        log.warn("Node[{}] does not belong to any cluster provided by the discovery service, topology={}", localEndpoint,
                 topologyDescriptor);
         return false;
     }
@@ -669,7 +673,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null) {
             replicationManager.prepareClusterRoleChange();
         } else {
-            log.warn("Illegal prepareToBecomeStandby when cluster{} with role {}",
+            log.warn("Illegal prepareToBecomeStandby when cluster {} with role {}",
                     localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
         }
     }
@@ -684,19 +688,19 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             if (!isLeader.get()) {
                 log.warn("Illegal queryReplicationStatus when node is not a leader " +
-                        "in an ACTIVE Cluster{} ", localClusterDescriptor.getClusterId());
+                        "in an ACTIVE cluster={} ", localClusterDescriptor.getClusterId());
                 return 0;
             }
 
             if (replicationManager == null) {
                 log.warn("Illegal queryReplicationStatus when replication manager is null " +
-                        "in an ACTIVE Cluster{} ", localClusterDescriptor.getClusterId());
+                        "in an ACTIVE cluster={} ", localClusterDescriptor.getClusterId());
                 return 0;
             }
 
             return replicationManager.queryReplicationStatus();
         } else {
-            log.warn("Illegal queryReplicationStatus when cluster{} with role {}",
+            log.warn("Illegal queryReplicationStatus when cluster={} with role {}",
                     localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
             return INVALID_REPLICATION_STATUS;
         }
