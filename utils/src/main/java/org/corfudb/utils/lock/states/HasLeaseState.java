@@ -4,7 +4,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.utils.lock.Lock;
 
-import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
@@ -27,6 +26,8 @@ public class HasLeaseState extends LockState {
     @Setter
     private static int durationBetweenLeaseChecks = 30;
 
+    private static final int SECONDS_TO_NANOSECONDS = 1000_000_000;
+
     // task to renew lease
     private Optional<ScheduledFuture<?>> leaseRenewalFuture = Optional.empty();
 
@@ -35,7 +36,7 @@ public class HasLeaseState extends LockState {
 
     // records the last time lease was acquired or renewed.
     // this variable is used to check whether the lease has expired.
-    private volatile Optional<Instant> leaseTime = Optional.empty();
+    private volatile Optional<Long> leaseTime = Optional.empty();
 
     /**
      * Constructor
@@ -61,13 +62,13 @@ public class HasLeaseState extends LockState {
                 // This should not happen !
                 // TODO maybe this is illegalStateTransition
                 log.warn("Lock: {} unexpected lock event:{} in state:{}", lock.getLockId(), event, getType());
-                leaseTime = Optional.of(Instant.now());
+                leaseTime = Optional.of(System.nanoTime());
                 return Optional.empty();
             }
             case LEASE_RENEWED: {
                 // Lock is expected to keep renewing it's lease
                 // Record the new lease time
-                leaseTime = Optional.of(Instant.now());
+                leaseTime = Optional.of(System.nanoTime());
                 return Optional.empty();
             }
             case LEASE_REVOKED:
@@ -105,7 +106,7 @@ public class HasLeaseState extends LockState {
     public void onEntry(LockState from) {
         notify(() -> lock.getLockListener().lockAcquired(lock.getLockId()), "Lock Acquired");
         //Record the lease time
-        leaseTime = Optional.of(Instant.now());
+        leaseTime = Optional.of(System.nanoTime());
         startLeaseRenewal();
         startLeaseMonitor();
     }
@@ -169,13 +170,13 @@ public class HasLeaseState extends LockState {
                             try {
                                 if (lockStore.renew(lock.getLockId())) {
                                     lock.input(LockEvent.LEASE_RENEWED);
-                                    leaseTime = Optional.of(Instant.now());
+                                    leaseTime = Optional.of(System.nanoTime());
                                 } else {
-                                    log.info("Lock: {} lease revoked for lock {}", lock.getLockId());
+                                    log.info("Lock: lease revoked for lock {}", lock.getLockId());
                                     lock.input(LockEvent.LEASE_REVOKED);
                                 }
                             } catch (Exception e) {
-                                log.error("Lock: {} could not renew lease for lock {}", lock.getLockId(), e);
+                                log.error("Lock: could not renew lease for lock {}", lock.getLockId(), e);
                             }
                         },
                         0,
@@ -195,8 +196,8 @@ public class HasLeaseState extends LockState {
             if (!leaseMonitorFuture.isPresent() || leaseMonitorFuture.get().isDone())
                 leaseMonitorFuture = Optional.of(taskScheduler.scheduleWithFixedDelay(
                         () -> {
-                            if (leaseTime.isPresent() && leaseTime.get().isBefore(Instant.now().minusSeconds(Lock.leaseDuration))) {
-                                log.info("Lock: {} lease expired for lock {}", lock.getLockId());
+                            if (leaseTime.isPresent() && (leaseTime.get() < (System.nanoTime() - Lock.leaseDuration * SECONDS_TO_NANOSECONDS))) {
+                                log.info("Lock: lease expired for lock {}", lock.getLockId());
                                 lock.input(LockEvent.LEASE_EXPIRED);
                             }
 
