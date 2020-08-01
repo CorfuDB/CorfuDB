@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
-
 import lombok.NonNull;
 
 import java.util.UUID;

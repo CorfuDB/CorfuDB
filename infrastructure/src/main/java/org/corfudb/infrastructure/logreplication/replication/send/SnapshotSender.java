@@ -190,7 +190,6 @@ public class SnapshotSender {
         return numMessages + logReplicationEntries.size();
     }
 
-
     /**
      * Prepare a Snapshot Sync Replication start marker.
      *

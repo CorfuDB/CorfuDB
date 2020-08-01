@@ -140,7 +140,7 @@ public class LockClient {
                     try {
                         Collection<LockId> locksWithExpiredLeases = lockStore.filterLocksWithExpiredLeases(locks.keySet());
                         for(LockId lockId : locksWithExpiredLeases) {
-                            log.trace("LockClient: lease revoked for lock {}", lockId.getLockName());
+                            log.debug("LockClient: lease revoked for lock {}", lockId.getLockName());
                             locks.get(lockId).input(LockEvent.LEASE_REVOKED);
                         }
                     } catch (Exception ex) {

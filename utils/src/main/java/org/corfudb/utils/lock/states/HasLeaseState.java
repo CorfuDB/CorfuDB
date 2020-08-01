@@ -25,7 +25,6 @@ public class HasLeaseState extends LockState {
     // duration after which a local task checks if a lease has expired.
     private static int DURATION_BETWEEN_LEASE_CHECKS = 60;
 
-
     // task to renew lease
     private Optional<ScheduledFuture<?>> leaseRenewalFuture = Optional.empty();
 
