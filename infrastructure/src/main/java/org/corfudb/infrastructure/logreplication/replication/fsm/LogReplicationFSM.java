@@ -8,6 +8,7 @@ import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
@@ -175,6 +176,12 @@ public class LogReplicationFSM {
     private final ClusterDescriptor remoteCluster;
 
     /**
+     * Ack Reader for Snapshot and Log Entry Syncs
+     */
+    @Getter
+    private final LogReplicationAckReader ackReader;
+
+    /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
      * @param runtime Corfu Runtime
@@ -186,11 +193,10 @@ public class LogReplicationFSM {
      * @param workers FSM executor service for state tasks
      */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, ClusterDescriptor remoteCluster, DataSender dataSender,
-                             ReadProcessor readProcessor, ExecutorService workers) {
+                             ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader) {
         // Use stream-based readers for snapshot and log entry sync reads
         this(runtime, new StreamsSnapshotReader(runtime, config), dataSender,
-                new StreamsLogEntryReader(runtime, config), readProcessor, config, remoteCluster, workers);
-
+                new StreamsLogEntryReader(runtime, config), readProcessor, config, remoteCluster, workers, ackReader);
     }
 
     /**
@@ -208,16 +214,17 @@ public class LogReplicationFSM {
     @VisibleForTesting
     public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                              LogEntryReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
-                             ClusterDescriptor remoteCluster, ExecutorService workers) {
+                             ClusterDescriptor remoteCluster, ExecutorService workers, LogReplicationAckReader ackReader) {
 
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
         this.remoteCluster = remoteCluster;
+        this.ackReader = ackReader;
 
         // Create transmitters to be used by the the sync states (Snapshot and LogEntry) to read and send data
         // through the callbacks provided by the application
         snapshotSender = new SnapshotSender(runtime, snapshotReader, dataSender, readProcessor, config.getMaxNumMsgPerBatch(), this);
-        logEntrySender = new LogEntrySender(runtime, logEntryReader, dataSender, readProcessor, this);
+        logEntrySender = new LogEntrySender(logEntryReader, dataSender, readProcessor, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender);

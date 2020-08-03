@@ -21,12 +21,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * This class manages Log Replication for multiple remote (standby) cluster's.
+ * This class manages Log Replication for multiple remote (standby) clusters.
  */
 @Slf4j
 public class CorfuReplicationManager {
-
-    public final static int PERCENTAGE_BASE = 100;
 
     // Keep map of remote cluster ID and the associated log replication runtime (an abstract
     // client to that cluster)
@@ -42,11 +40,6 @@ public class CorfuReplicationManager {
 
     private final CorfuRuntime corfuRuntime;
 
-    // TODO (Xiaoqin Ma): can you please add a description on this variable's meaning
-    private long prepareClusterRoleChangeLogTail;
-
-    private long totalNumEntriesToSend;
-
     private final LogReplicationMetadataManager metadataManager;
 
     private final String pluginFilePath;
@@ -61,10 +54,7 @@ public class CorfuReplicationManager {
         this.metadataManager = metadataManager;
         this.pluginFilePath = pluginFilePath;
         this.corfuRuntime = corfuRuntime;
-
         this.localNodeDescriptor = localNodeDescriptor;
-        this.prepareClusterRoleChangeLogTail = Address.NON_ADDRESS;
-        this.totalNumEntriesToSend = 0;
     }
 
     /**
@@ -85,7 +75,6 @@ public class CorfuReplicationManager {
      * Stop log replication for all the standby sites
      */
     public void stop() {
-
         runtimeToRemoteCluster.values().forEach(runtime -> {
             try {
                 log.info("Stop log replication runtime to remote cluster id={}", runtime.getRemoteClusterId());
@@ -94,7 +83,6 @@ public class CorfuReplicationManager {
                 log.warn("Failed to stop log replication runtime to remote cluster id={}", runtime.getRemoteClusterId());
             }
         });
-
         runtimeToRemoteCluster.clear();
     }
 
@@ -110,9 +98,7 @@ public class CorfuReplicationManager {
      * Start Log Replication Runtime to a specific standby Cluster
      */
     private void startLogReplicationRuntime(ClusterDescriptor remoteClusterDescriptor) {
-
         String remoteClusterId = remoteClusterDescriptor.getClusterId();
-
         try {
             if (!runtimeToRemoteCluster.containsKey(remoteClusterId)) {
                 log.info("Starting Log Replication Runtime to Standby Cluster id={}", remoteClusterId);
@@ -219,91 +205,5 @@ public class CorfuReplicationManager {
                 startLogReplicationRuntime(clusterInfo);
             }
         }
-    }
-
-    /**
-     * Query max stream tail for all streams to be replicated.
-     *
-     * @return max tail of all relevant streams.
-     */
-    private long queryStreamTail() {
-        Set<String> streamsToReplicate = context.getConfig().getStreamsToReplicate();
-        long maxTail = Address.NON_ADDRESS;
-        Map<UUID, Long> tailMap = corfuRuntime.getAddressSpaceView().getAllTails().getStreamTails();
-        for (String s : streamsToReplicate) {
-            UUID currentUUID = CorfuRuntime.getStreamID(s);
-            Long currentTail = tailMap.get(currentUUID);
-            if (currentTail != null) {
-                maxTail = Math.max(maxTail, currentTail);
-            }
-        }
-        return maxTail;
-    }
-
-    /**
-     * Given a timestamp, calculate how many entries to be sent for all replicated streams.
-     *
-     * @param timestamp
-     */
-    private long queryEntriesToSend(long timestamp) {
-        // TODO(Xiaoqin Ma / Nan) : is not exactly how many entries we need to send?
-        //  Because we only transfer some streams, and getNumEntriesToSend returns (maxStreamTail - ackedTimeStamp),
-        //  which will count other log entries. Besides, for loop will amplify totalNumEntries multiple times.
-
-        int totalNumEntries = 0;
-
-        for (CorfuLogReplicationRuntime runtime: runtimeToRemoteCluster.values()) {
-            totalNumEntries += runtime.getNumEntriesToSend(timestamp);
-        }
-
-        return totalNumEntries;
-    }
-
-    /**
-     * Query the current all replication stream log tail and remember the max stream tail.
-     * Query each standby site information according to the ack information to calculate the number of
-     * msgs to be sent out.
-     */
-    public void prepareClusterRoleChange() {
-        prepareClusterRoleChangeLogTail = queryStreamTail();
-        totalNumEntriesToSend = queryEntriesToSend(prepareClusterRoleChangeLogTail);
-    }
-
-    /**
-     * Query the all replication stream log tail and calculate the number of messages to be sent.
-     * If the max tail has changed, give 0 percent has done.
-     *
-     * @return Percentage of work has been done, when it return 100, the replication is done.
-     */
-    public int queryReplicationStatus() {
-        long maxTail = queryStreamTail();
-
-        /*
-         * If the tail has been moved, reset the base calculation
-         */
-        if (maxTail > prepareClusterRoleChangeLogTail) {
-            prepareClusterRoleChange();
-        }
-
-        // TODO(Xiaoqin Ma/Nan): if the max stream tail moves, it calls prepareSiteRoleChange(), which
-        //  call queryStreamTail() one more time, and will update totalNumEntriesToSend.
-        //  Then it call queryEntriesToSend() again, will get a pretty close result as currentNumEntriesToSend.
-        //  So percent calculation will always return a 0.
-        long currentNumEntriesToSend = queryEntriesToSend(prepareClusterRoleChangeLogTail);
-        log.debug("maxTail {} totalNumEntriesToSend  {}  currentNumEntriesToSend {}", maxTail, totalNumEntriesToSend, currentNumEntriesToSend);
-
-        if (totalNumEntriesToSend == 0 || currentNumEntriesToSend == 0)
-            return PERCENTAGE_BASE;
-
-        /*
-         * percentage of has been sent
-         * as the currentNumEntriesToSend is not zero, the percent should not be 100%
-         */
-        int percent = (int)((totalNumEntriesToSend - currentNumEntriesToSend)*PERCENTAGE_BASE/totalNumEntriesToSend);
-        if (percent == PERCENTAGE_BASE) {
-            percent = PERCENTAGE_BASE - 1;
-        }
-
-        return percent;
     }
 }

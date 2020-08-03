@@ -24,6 +24,8 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
@@ -88,6 +90,11 @@ public class LogReplicationSinkManager implements DataReceiver {
 
     private String pluginConfigFilePath;
 
+    // true indicates data is consistent on the local(standby) cluster, false indicates it is not.
+    // In Snapshot Sync, if the StreamsSnapshotWriter is in the apply phase, the data is not yet
+    // consistent and cannot be read by applications.  Data is always consistent during Log Entry Sync
+    private AtomicBoolean dataConsistent = new AtomicBoolean(false);
+
     /**
      * Constructor Sink Manager
      *
@@ -99,7 +106,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
                                      LogReplicationMetadataManager metadataManager,
                                      ServerContext context, long topologyConfigId) {
-        this.logReplicationMetadataManager = metadataManager;
+
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder()
                 .trustStore((String) context.getServerConfig().get("--truststore"))
                 .tsPasswordFile((String) context.getServerConfig().get("--truststore-password-file"))
@@ -108,17 +115,9 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .tlsEnabled((Boolean) context.getServerConfig().get("--enable-tls"))
                 .build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
-
-        /*
-         * When the server is up, it will be at LOG_ENTRY_SYNC state by default.
-         * The sender will query receiver's status and decide what type of replication to start with.
-         * It will transit to SNAPSHOT_SYNC state if it received a SNAPSHOT_START message from the sender.
-         */
-        this.rxState = RxState.LOG_ENTRY_SYNC;
-        this.config = config;
-        this.topologyConfigId = topologyConfigId;
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
-        init();
+        this.topologyConfigId = topologyConfigId;
+        initCommonParams(metadataManager, config);
     }
 
     /**
@@ -130,31 +129,37 @@ public class LogReplicationSinkManager implements DataReceiver {
     @VisibleForTesting
     public LogReplicationSinkManager(String localCorfuEndpoint, LogReplicationConfig config,
                                      LogReplicationMetadataManager metadataManager, String pluginConfigFilePath) {
-        this.logReplicationMetadataManager = metadataManager;
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = pluginConfigFilePath;
+        initCommonParams(metadataManager, config);
+    }
 
-        /*
-         * When the server is up, it will be at LOG_ENTRY_SYNC state by default.
-         * The sender will query receiver's status and decide what type of replication to start with.
-         * It will transit to SNAPSHOT_SYNC state if it received a SNAPSHOT_START message from the sender.
-         */
-        this.rxState = RxState.LOG_ENTRY_SYNC;
+    private void initCommonParams(LogReplicationMetadataManager metadataManager, LogReplicationConfig config) {
+        this.logReplicationMetadataManager = metadataManager;
         this.config = config;
-        init();
+
+        // When the server is up, it will be at LOG_ENTRY_SYNC state by default.
+        // The sender will query receiver's status and decide what type of replication to start with.
+        // It will transit to SNAPSHOT_SYNC state if it received a SNAPSHOT_START message from the sender.
+        this.rxState = RxState.LOG_ENTRY_SYNC;
+
+        // Set the data consistent status.
+        setDataConsistent(dataConsistent.get());
+        initWriterAndBufferMgr();
     }
 
     /**
-     * Init variables.
+     * Init the writers, Buffer Manager and Snapshot Plugin.
      */
-    private void init() {
+    private void initWriterAndBufferMgr() {
         // Read config first before init other components.
         readConfig();
 
         // Instantiate Snapshot Sync Plugin, this is an external service which will be triggered on start and end
         // of a snapshot sync.
         snapshotSyncPlugin = getSnapshotPlugin();
+
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp(),
@@ -196,7 +201,6 @@ public class LogReplicationSinkManager implements DataReceiver {
         } catch (IOException e) {
             log.error("IO Exception when reading config file", e);
         }
-
         log.info("Sink Manager Buffer config queue size {} ackCycleCnt {} ackCycleTime {}",
                 bufferSize, ackCycleCnt, ackCycleTime);
     }
@@ -315,7 +319,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         long topologyConfigId = entry.getMetadata().getTopologyConfigId();
         long messageBaseSnapshot = entry.getMetadata().getSnapshotTimestamp();
 
-        log.debug("Received snapshot sync start marker for {} on base snapshot timestamp {}",
+        log.debug("Received snapshot sync start marker with request id {} on base snapshot timestamp {}",
                 entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
 
         /*
@@ -335,7 +339,7 @@ public class LogReplicationSinkManager implements DataReceiver {
          */
         if (!logReplicationMetadataManager.setSrcBaseSnapshotStart(topologyConfigId, messageBaseSnapshot)) {
             log.warn("Sink Manager in state {} and received message {}. " +
-                            "Dropping Message due to failure update of the metadata store {}",
+                            "Dropping Message due to failure to update the metadata store {}",
                     rxState, entry.getMetadata(), logReplicationMetadataManager);
             return false;
         }
@@ -398,14 +402,15 @@ public class LogReplicationSinkManager implements DataReceiver {
         switch (message.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
                 snapshotWriter.apply(message);
-                return;
+                break;
             case SNAPSHOT_END:
+                setDataConsistent(false);
                 snapshotWriter.snapshotTransferDone(message);
                 completeSnapshotApply(message);
-                return;
+                setDataConsistent(true);
+                break;
             default:
                 log.warn("Message type {} should not be applied as snapshot sync.", message.getMetadata().getMessageMetadataType());
-                break;
         }
     }
 
@@ -439,6 +444,11 @@ public class LogReplicationSinkManager implements DataReceiver {
         return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE
                 || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END)
                 || rxState == RxState.LOG_ENTRY_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
+    }
+
+    private void setDataConsistent(boolean isDataConsistent) {
+        dataConsistent.set(isDataConsistent);
+        logReplicationMetadataManager.setDataConsistentOnStandby(isDataConsistent);
     }
 
     /**

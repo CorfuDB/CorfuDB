@@ -2,39 +2,42 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.collections.CorfuRecord;
-import org.corfudb.runtime.collections.CorfuStore;
-import org.corfudb.runtime.collections.Table;
-import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.view.Address;
 
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Stream;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 /**
  * The table persisted at the replication writer side.
- * It records the log reader cluster's snapshot timestamp  and last log entry's timestamp, it has received and processed.
+ * It records the log reader cluster's snapshot timestamp and last log entry's timestamp, it has received and processed.
  */
 @Slf4j
 public class LogReplicationMetadataManager {
 
     private static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
-    private static final String TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
+    private static final String METADATA_TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
+    private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
 
     private CorfuStore corfuStore;
 
     private String metadataTableName;
 
     private Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable;
+    private Table<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal> replicationStatusTable;
 
     private CorfuRuntime runtime;
+    private String localClusterId;
 
     public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
         this.runtime = rt;
@@ -47,8 +50,15 @@ public class LogReplicationMetadataManager {
                             LogReplicationMetadataVal.class,
                             null,
                             TableOptions.builder().build());
+            replicationStatusTable = this.corfuStore.openTable(NAMESPACE,
+                            REPLICATION_STATUS_TABLE,
+                            ReplicationStatusKey.class,
+                            ReplicationStatusVal.class,
+                            null,
+                            TableOptions.builder().build());
+            this.localClusterId = localClusterId;
         } catch (Exception e) {
-            log.error("Caught an exception while opening the table NAMESPACE={}, name={}", NAMESPACE, metadataTableName, e);
+            log.error("Caught an exception while opening MetadataManagerTables {}", e);
             throw new ReplicationWriterException(e);
         }
         setupTopologyConfigId(topologyConfigId);
@@ -98,7 +108,9 @@ public class LogReplicationMetadataManager {
         return query(null, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
     }
 
-    public String getVersion() { return queryString(null, LogReplicationMetadataType.VERSION); }
+    public String getVersion() {
+        return queryString(null, LogReplicationMetadataType.VERSION);
+    }
 
     public long getLastSnapStartTimestamp() {
         return query(null, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
@@ -117,11 +129,11 @@ public class LogReplicationMetadataManager {
     }
 
     public long getLastProcessedLogTimestamp() {
-        return query(null, LogReplicationMetadataType.LAST_LOG_PROCESSED);
+        return query(null, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
     }
 
-    public void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType key, long val) {
-        LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(key.getVal()).build();
+    public void appendUpdate(TxBuilder txBuilder, LogReplicationMetadataType type, long val) {
+        LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(type.getVal()).build();
         LogReplicationMetadataVal txVal = LogReplicationMetadataVal.newBuilder().setVal(Long.toString(val)).build();
         txBuilder.update(metadataTableName, txKey, txVal, null);
     }
@@ -137,20 +149,20 @@ public class LogReplicationMetadataManager {
         long persistedTopologyConfigId = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
 
         if (topologyConfigId <= persistedTopologyConfigId) {
-            log.warn("Skip setupTopologyConfigId. the current topologyConfigId " + topologyConfigId + " is not larger than the persistedTopologyConfigID " + persistedTopologyConfigId);
+            log.warn("Skip setupTopologyConfigId. the current topologyConfigId {} is not larger than the persistedTopologyConfigID {}",
+                topologyConfigId, persistedTopologyConfigId);
             return;
         }
 
         TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
 
-        for (LogReplicationMetadataType key : LogReplicationMetadataType.values()) {
+        for (LogReplicationMetadataType type : LogReplicationMetadataType.values()) {
             long val = Address.NON_ADDRESS;
-            if (key == LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) {
+            if (type == LogReplicationMetadataType.TOPOLOGY_CONFIG_ID) {
                 val = topologyConfigId;
             }
-            appendUpdate(txBuilder, key, val);
+            appendUpdate(txBuilder, type, val);
          }
-
         txBuilder.commit(timestamp);
         log.info("Update topologyConfigId, new metadata {}", this);
     }
@@ -160,7 +172,8 @@ public class LogReplicationMetadataManager {
         String  persistedVersion = queryString(timestamp, LogReplicationMetadataType.VERSION);
 
         if (persistedVersion.equals(version)) {
-            log.warn("Skip update the current version {} with new version {} as they are the same", persistedVersion, version);
+            log.warn("Skip update of the current version {} to {} as they are the same",
+                persistedVersion, version);
             return;
         }
 
@@ -217,14 +230,14 @@ public class LogReplicationMetadataManager {
         // Update the topologyConfigId to fence all other transactions that update the metadata at the same time
         appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
 
-        // Setup the LAST_SNAPSHOT_STARTED
+        // Setup the LAST_LAST_SNAPSHOT_STARTED
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, ts);
 
         // Reset other metadata
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, Address.NON_ADDRESS);
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, Address.NON_ADDRESS);
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM, Address.NON_ADDRESS);
-        appendUpdate(txBuilder, LogReplicationMetadataType.LAST_LOG_PROCESSED, Address.NON_ADDRESS);
+        appendUpdate(txBuilder, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, Address.NON_ADDRESS);
 
         txBuilder.commit(timestamp);
 
@@ -261,7 +274,7 @@ public class LogReplicationMetadataManager {
         //Update the topologyConfigId to fence all other transactions that update the metadata at the same time
         appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, topologyConfigId);
 
-        //Setup the LAST_SNAPSHOT_STARTED
+        //Setup the LAST_LAST_SNAPSHOT_STARTED
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED, ts);
 
         txBuilder.commit(timestamp);
@@ -290,7 +303,7 @@ public class LogReplicationMetadataManager {
         appendUpdate(txBuilder, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID, siteConfigID);
 
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED, ts);
-        appendUpdate(txBuilder, LogReplicationMetadataType.LAST_LOG_PROCESSED, ts);
+        appendUpdate(txBuilder, LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED, ts);
 
         //may not need
         appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM, Address.NON_ADDRESS);
@@ -301,21 +314,106 @@ public class LogReplicationMetadataManager {
                 " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
     }
 
+    public void setReplicationRemainingPercent(String clusterId, long percentComplete,
+                                               ReplicationStatusVal.SyncType type) {
+        ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
+        ReplicationStatusVal val = ReplicationStatusVal.newBuilder().setReplicationCompletion(percentComplete)
+                .setType(type).build();
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
+        txBuilder.update(REPLICATION_STATUS_TABLE, key, val, null);
+        txBuilder.commit();
+    }
+
+    public Map<String, ReplicationStatusVal> getReplicationRemainingPercent() {
+
+        Map<String, ReplicationStatusVal> replicationStatusMap = new HashMap<>();
+        QueryResult<CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal>> entries =
+                corfuStore.query(NAMESPACE).executeQuery(REPLICATION_STATUS_TABLE, (x) -> {return true;});
+
+        for(CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal>entry : entries.getResult()) {
+            replicationStatusMap.put(entry.getKey().getClusterId(), entry.getPayload());
+        }
+        return replicationStatusMap;
+    }
+
+    public ReplicationStatusVal getReplicationRemainingPercent(String clusterId) {
+        ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
+        CorfuRecord record = corfuStore.query(NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
+        if (record == null) {
+            return null;
+        }
+        return (ReplicationStatusVal)record.getPayload();
+    }
+
+    public void setDataConsistentOnStandby(boolean isConsistent) {
+        ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build();
+        ReplicationStatusVal val = ReplicationStatusVal.newBuilder().setDataConsistent(isConsistent).build();
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
+        txBuilder.update(REPLICATION_STATUS_TABLE, key, val, null);
+        txBuilder.commit();
+    }
+
+    public Map<String, ReplicationStatusVal> getDataConsistentOnStandby() {
+        ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build();
+        CorfuRecord record = corfuStore.query(NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
+
+        ReplicationStatusVal statusVal;
+        // Initially, snapshot sync is pending so the data is not consistent.
+        if (record == null) {
+            log.warn("No Key for Data Consistent found.  DataConsistent Status is not set.");
+            statusVal = ReplicationStatusVal.newBuilder().setDataConsistent(false).build();
+        } else {
+            statusVal = (ReplicationStatusVal)record.getPayload();
+        }
+        Map<String, ReplicationStatusVal> dataConsistentMap = new HashMap<>();
+        dataConsistentMap.put(localClusterId, statusVal);
+        return dataConsistentMap;
+    }
+
+    public void resetReplicationStatus() {
+        replicationStatusTable.clear();
+    }
+
     @Override
     public String toString() {
-        String s = new String();
-        s.concat(LogReplicationMetadataType.TOPOLOGY_CONFIG_ID.getVal() + " " + getTopologyConfigId() +" ");
-        s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_STARTED.getVal() + " " + getLastSnapStartTimestamp() +" ");
-        s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED.getVal() + " " + getLastSnapTransferDoneTimestamp() + " ");
-        s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED.getVal() + " " + getLastAppliedBaseSnapshotTimestamp() + " ");
-        s.concat(LogReplicationMetadataType.LAST_SNAPSHOT_SEQ_NUM.getVal() + " " + getLastSnapSeqNum() + " ");
-        s.concat(LogReplicationMetadataType.LAST_LOG_PROCESSED.getVal() + " " + getLastProcessedLogTimestamp() + " ");
+        StringBuilder builder = new StringBuilder();
+        for (LogReplicationMetadataType type : LogReplicationMetadataType.values()) {
+            builder.append(type).append(": ");
+            switch (type) {
+                case TOPOLOGY_CONFIG_ID:
+                    builder.append(getTopologyConfigId());
+                    break;
+                case LAST_SNAPSHOT_STARTED:
+                   builder.append(getLastSnapStartTimestamp());
+                   break;
+                case LAST_SNAPSHOT_TRANSFERRED:
+                   builder.append(getLastSnapTransferDoneTimestamp());
+                   break;
+                case LAST_SNAPSHOT_APPLIED:
+                   builder.append(getLastAppliedBaseSnapshotTimestamp());
+                   break;
+                case LAST_SNAPSHOT_SEQ_NUM:
+                   builder.append(getLastSnapSeqNum());
+                   break;
+                case LAST_LOG_ENTRY_PROCESSED:
+                   builder.append(getLastProcessedLogTimestamp());
+                   break;
+                default:
+                    // error
+            }
+            builder.append(" ");
+        }
+        builder.append("Replication Completion: ");
+        Map<String, ReplicationStatusVal> replicationStatusMap = getReplicationRemainingPercent();
+        replicationStatusMap.entrySet().forEach( entry -> builder.append(entry.getKey())
+                .append(entry.getValue().getReplicationCompletion()));
 
-        return s;
+        builder.append("Data Consistent: ").append(getDataConsistentOnStandby());
+        return builder.toString();
     }
 
     public static String getPersistedWriterMetadataTableName(String localClusterId) {
-        return TABLE_PREFIX_NAME + localClusterId;
+        return METADATA_TABLE_PREFIX_NAME + localClusterId;
     }
 
     public long getLogHead() {
@@ -365,7 +463,9 @@ public class LogReplicationMetadataManager {
         LAST_SNAPSHOT_SEQ_NUM("lastSnapSeqNum"),
         CURRENT_SNAPSHOT_CYCLE_ID("currentSnapshotCycleId"),
         CURRENT_CYCLE_MIN_SHADOW_STREAM_TS("minShadowStreamTimestamp"),
-        LAST_LOG_PROCESSED("lastLogProcessed");
+        LAST_LOG_ENTRY_PROCESSED("lastLogProcessed"),
+        REMAINING_REPLICATION_PERCENT("replicationStatus"),
+        DATA_CONSISTENT_ON_STANDBY("dataConsistentOnStandby");
 
         @Getter
         String val;

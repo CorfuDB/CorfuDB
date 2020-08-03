@@ -44,7 +44,10 @@ public class LogReplicationEntryMetadata {
      */
     private long snapshotTimestamp;
 
-    private long snapshotSyncSeqNum; //used by snapshot full sync stream only, zero means the start of the stream.
+    /*
+     * Used by snapshot full sync stream only, zero means the start of the stream.
+     */
+    private long snapshotSyncSeqNum;
 
     public LogReplicationEntryMetadata(LogReplicationEntryMetadata inputMetadata) {
         this.messageMetadataType = inputMetadata.messageMetadataType;

@@ -25,3 +25,24 @@ message LogReplicationMetadataKey {
 message LogReplicationMetadataVal {
   string val = 1;
 }
+
+/*
+ * Replication Status Key
+ */
+ message ReplicationStatusKey {
+   string clusterId = 1;
+ }
+
+/*
+ * Replication Status Value
+ * Active Site sets the completionPercent, Standby sets the dataConsistent boolean
+ */
+message ReplicationStatusVal {
+  uint64 replicationCompletion = 1;
+  bool dataConsistent = 2;
+  enum SyncType {
+    SNAPSHOT = 0;
+    LOG_ENTRY = 1;
+  }
+  SyncType type = 3;
+}

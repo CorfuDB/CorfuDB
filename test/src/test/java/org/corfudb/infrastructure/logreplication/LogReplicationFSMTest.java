@@ -7,6 +7,7 @@ import org.corfudb.common.compression.Codec;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.InSnapshotSyncState;
@@ -18,6 +19,7 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.TestDataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.TestLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.TestReaderConfiguration;
 import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
@@ -29,6 +31,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.Address;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -61,6 +65,8 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private static final int BATCH_SIZE = 2;
     private static final int WAIT_TIME = 100;
     private static final int CORFU_PORT = 9000;
+    private static final int TEST_TOPOLOGY_CONFIG_ID = 1;
+    private static final String TEST_LOCAL_CLUSTER_ID = "local_cluster";
 
     // This semaphore is used to block until the triggering event causes the transition to a new state
     private final Semaphore transitionAvailable = new Semaphore(1, true);
@@ -77,11 +83,17 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private DataSender dataSender;
     private SnapshotReader snapshotReader;
     private LogEntryReader logEntryReader;
+    private LogReplicationAckReader ackReader;
 
     @Before
     public void setRuntime() {
         runtime = getDefaultRuntime();
         runtime.getParameters().setCodecType(Codec.Type.NONE);
+    }
+
+    @After
+    public void stopAckReader() {
+        ackReader.shutdown();
     }
 
     /**
@@ -214,7 +226,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         ((TestSnapshotReader)snapshotReader).setBatchSize(batchSize);
 
         // Write NUM_ENTRIES to streamA
-        writeToStream();
+        List<TokenResponse> writeTokens = writeToStream();
+
+        List<Long> seqNums = new ArrayList<>();
+        writeTokens.forEach(token -> seqNums.add(token.getSequence()));
+
+        // Write to Stream will write to some addresses.  SnapshotReader should only read from those addresses
+        ((TestSnapshotReader) snapshotReader).setSeqNumsToRead(seqNums);
 
         // Initial acquire of semaphore, the transition method will block until a transition occurs
         transitionAvailable.acquire();
@@ -266,7 +284,13 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         limitSnapshotMessages = 2;
 
         // Write NUM_ENTRIES to streamA
-        writeToStream();
+        List<TokenResponse> writeTokens = writeToStream();
+
+        List<Long> seqNums = new ArrayList<>();
+        writeTokens.forEach(token -> seqNums.add(token.getSequence()));
+
+        // Write to Stream will write to some addresses.  SnapshotReader should only read from those addresses
+        ((TestSnapshotReader) snapshotReader).setSeqNumsToRead(seqNums);
 
         // Initial acquire of semaphore, the transition method will block until a transition occurs
         transitionAvailable.acquire();
@@ -377,10 +401,9 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         }
     }
 
-    private void writeToStream() {
+    private List<TokenResponse> writeToStream() {
         UUID streamA = UUID.nameUUIDFromBytes(TEST_STREAM_NAME.getBytes());
         List<TokenResponse> writeTokens = new ArrayList<>();
-
         // Write
         for (int i=0; i < NUM_ENTRIES; i++) {
             TokenResponse response = runtime.getSequencerView().next(streamA);
@@ -395,6 +418,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                     .isEqualTo( String.format(PAYLOAD_FORMAT, index).getBytes());
             index++;
         }
+        return writeTokens;
     }
 
     private void writeToMap() {
@@ -451,10 +475,15 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 break;
         }
 
+        LogReplicationMetadataManager metadataManager = new LogReplicationMetadataManager(runtime, TEST_TOPOLOGY_CONFIG_ID,
+                TEST_LOCAL_CLUSTER_ID);
+        LogReplicationConfig config = new LogReplicationConfig(new HashSet<>(Arrays.asList(TEST_STREAM_NAME)));
+        ackReader = new LogReplicationAckReader(metadataManager, config, runtime, TEST_LOCAL_CLUSTER_ID);
         fsm = new LogReplicationFSM(runtime, snapshotReader, dataSender, logEntryReader,
-                new DefaultReadProcessor(runtime), new LogReplicationConfig(new HashSet<>(Arrays.asList(TEST_STREAM_NAME))), new ClusterDescriptor("Cluster-Local",
+                new DefaultReadProcessor(runtime), config, new ClusterDescriptor("Cluster-Local",
                 LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),
-                Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()));
+                Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
+                ackReader);
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
 

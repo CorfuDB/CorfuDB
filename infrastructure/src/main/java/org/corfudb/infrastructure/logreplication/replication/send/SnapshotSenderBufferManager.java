@@ -2,6 +2,8 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.concurrent.CompletableFuture;
@@ -12,8 +14,11 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 public class SnapshotSenderBufferManager extends SenderBufferManager {
-    public SnapshotSenderBufferManager(DataSender dataSender) {
+    private LogReplicationAckReader ackReader;
+
+    public SnapshotSenderBufferManager(DataSender dataSender, LogReplicationAckReader ackReader) {
         super(dataSender);
+        this.ackReader = ackReader;
     }
 
     /**
@@ -23,13 +28,15 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
      */
     @Override
     public void updateAck(Long newAck) {
-        if (maxAckForLogEntrySync > newAck)
-            return;
-        maxAckForLogEntrySync = newAck;
-        pendingMessages.evictAccordingToSeqNum(maxAckForLogEntrySync);
-        pendingCompletableFutureForAcks = pendingCompletableFutureForAcks.entrySet().stream()
-                .filter(entry -> entry.getKey() > maxAckForLogEntrySync)
-                .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
+        if (maxAckTimestamp < newAck) {
+            log.debug("Ack Received for Snapshot Sync {}", newAck);
+            maxAckTimestamp = newAck;
+            pendingMessages.evictAccordingToSeqNum(maxAckTimestamp);
+            pendingCompletableFutureForAcks = pendingCompletableFutureForAcks.entrySet().stream()
+                    .filter(entry -> entry.getKey() > maxAckTimestamp)
+                    .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
+            ackReader.setAckedTsAndSyncType(newAck, ReplicationStatusVal.SyncType.SNAPSHOT);
+        }
     }
 
     /**

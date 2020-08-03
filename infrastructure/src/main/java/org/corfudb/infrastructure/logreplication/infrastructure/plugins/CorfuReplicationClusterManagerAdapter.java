@@ -2,6 +2,9 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+
+import java.util.Map;
 
 /**
  * This is the interface for CorfuReplicationClusterManager.
@@ -54,5 +57,5 @@ public interface CorfuReplicationClusterManagerAdapter {
      *
      * @return
      */
-    int queryReplicationStatus();
+    Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
 }
