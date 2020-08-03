@@ -41,7 +41,7 @@ public class API {
                 .build();
     }
 
-    public static Header newHeader(long requestId, Priority priority, MessageType type, long epoch,
+    public static Header getHeader(long requestId, Priority priority, MessageType type, long epoch,
                                    CorfuProtocol.UUID clusterId, CorfuProtocol.UUID clientId,
                                    boolean ignoreClusterId, boolean ignoreEpoch) {
         return Header.newBuilder()
@@ -57,15 +57,15 @@ public class API {
                 .build();
     }
 
-    public static Header newHeader(long requestId, Priority priority, MessageType type,
+    public static Header getHeader(long requestId, Priority priority, MessageType type,
                                    long epoch, UUID clusterId, UUID clientId,
                                    boolean ignoreClusterId, boolean ignoreEpoch) {
-        return newHeader(requestId, priority, type, epoch,
+        return getHeader(requestId, priority, type, epoch,
                 getUUID(clusterId), getUUID(clientId), ignoreClusterId, ignoreEpoch);
     }
 
     public static Header generateResponseHeader(Header requestHeader, boolean ignoreClusterId, boolean ignoreEpoch) {
-        return newHeader(requestHeader.getRequestId(),
+        return getHeader(requestHeader.getRequestId(),
                 requestHeader.getPriority(),
                 requestHeader.getType(),
                 requestHeader.getEpoch(),
@@ -75,14 +75,14 @@ public class API {
                 ignoreEpoch);
     }
 
-    public static ServerError newNoServerError() {
+    public static ServerError getNoServerError() {
         return ServerError.newBuilder()
                 .setCode(ERROR.OK)
                 .setMessage("")
                 .build();
     }
 
-    public static ServerError newWrongEpochServerError(String errorMsg, long serverEpoch) {
+    public static ServerError getWrongEpochServerError(String errorMsg, long serverEpoch) {
         return ServerError.newBuilder()
                 .setCode(ERROR.WRONG_EPOCH)
                 .setMessage(errorMsg)
@@ -90,14 +90,14 @@ public class API {
                 .build();
     }
 
-    public static ServerError newNotReadyServerError(String errorMsg) {
+    public static ServerError getNotReadyServerError(String errorMsg) {
         return ServerError.newBuilder()
                 .setCode(ERROR.NOT_READY)
                 .setMessage(errorMsg)
                 .build();
     }
 
-    public static ServerError newWrongClusterServerError(String errorMsg, CorfuProtocol.UUID serverClusterId,
+    public static ServerError getWrongClusterServerError(String errorMsg, CorfuProtocol.UUID serverClusterId,
                                                          CorfuProtocol.UUID clientClusterId) {
         return ServerError.newBuilder()
                 .setCode(ERROR.WRONG_CLUSTER)
@@ -109,14 +109,14 @@ public class API {
                 .build();
     }
 
-    public static ServerError newNotBootstrappedServerError(String errorMsg) {
+    public static ServerError getNotBootstrappedServerError(String errorMsg) {
         return ServerError.newBuilder()
                 .setCode(ERROR.NOT_BOOTSTRAPPED)
                 .setMessage(errorMsg)
                 .build();
     }
 
-    public static Request newPingRequest(Header header) {
+    public static Request getPingRequest(Header header) {
         PingRequest pingRequest = PingRequest.getDefaultInstance();
         return Request.newBuilder()
                 .setHeader(header)
@@ -124,11 +124,11 @@ public class API {
                 .build();
     }
 
-    public static Response newPingResponse(Header header) {
-        return newPingResponse(header, newNoServerError());
+    public static Response getPingResponse(Header header) {
+        return getPingResponse(header, getNoServerError());
     }
 
-    public static Response newPingResponse(Header header, ServerError error) {
+    public static Response getPingResponse(Header header, ServerError error) {
         PingResponse pingResponse = PingResponse.getDefaultInstance();
         return Response.newBuilder()
                 .setHeader(header)
@@ -137,7 +137,7 @@ public class API {
                 .build();
     }
 
-    public static Request newRestartRequest(Header header) {
+    public static Request getRestartRequest(Header header) {
         RestartRequest restartRequest = RestartRequest.getDefaultInstance();
         return Request.newBuilder()
                 .setHeader(header)
@@ -145,11 +145,11 @@ public class API {
                 .build();
     }
 
-    public static Response newRestartResponse(Header header) {
-        return newRestartResponse(header, newNoServerError());
+    public static Response getRestartResponse(Header header) {
+        return getRestartResponse(header, getNoServerError());
     }
 
-    public static Response newRestartResponse(Header header, ServerError error) {
+    public static Response getRestartResponse(Header header, ServerError error) {
         RestartResponse restartResponse = RestartResponse.getDefaultInstance();
         return Response.newBuilder()
                 .setHeader(header)
@@ -158,7 +158,7 @@ public class API {
                 .build();
     }
 
-    public static Request newResetRequest(Header header) {
+    public static Request getResetRequest(Header header) {
         ResetRequest resetRequest = ResetRequest.getDefaultInstance();
         return Request.newBuilder()
                 .setHeader(header)
@@ -166,11 +166,11 @@ public class API {
                 .build();
     }
 
-    public static Response newResetResponse(Header header) {
-        return newResetResponse(header, newNoServerError());
+    public static Response getResetResponse(Header header) {
+        return getResetResponse(header, getNoServerError());
     }
 
-    public static Response newResetResponse(Header header, ServerError error) {
+    public static Response getResetResponse(Header header, ServerError error) {
         ResetResponse resetResponse = ResetResponse.getDefaultInstance();
         return Response.newBuilder()
                 .setHeader(header)
@@ -179,7 +179,7 @@ public class API {
                 .build();
     }
 
-    public static Request newSealRequest(Header header, long newEpoch) {
+    public static Request getSealRequest(Header header, long newEpoch) {
         SealRequest sealRequest = SealRequest.newBuilder()
                                         .setEpoch(newEpoch)
                                         .build();
@@ -189,11 +189,11 @@ public class API {
                 .build();
     }
 
-    public static Response newSealResponse(Header header) {
-        return newSealResponse(header, newNoServerError());
+    public static Response getSealResponse(Header header) {
+        return getSealResponse(header, getNoServerError());
     }
 
-    public static Response newSealResponse(Header header, ServerError error) {
+    public static Response getSealResponse(Header header, ServerError error) {
         SealResponse sealResponse = SealResponse.getDefaultInstance();
         return Response.newBuilder()
                 .setHeader(header)
@@ -202,7 +202,7 @@ public class API {
                 .build();
     }
 
-    public static Response newErrorResponseNoPayload(Header header, ServerError error) {
+    public static Response getErrorResponseNoPayload(Header header, ServerError error) {
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(error)

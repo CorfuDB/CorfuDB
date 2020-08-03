@@ -101,7 +101,7 @@ public class BaseServer extends AbstractServer {
                 req.getHeader().getClientId().getLsb());
 
         Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        Response response = API.newPingResponse(responseHeader);
+        Response response = API.getPingResponse(responseHeader);
         r.sendResponse(response, ctx);
     }
 
@@ -152,8 +152,10 @@ public class BaseServer extends AbstractServer {
             } catch (NullPointerException e) {
                 remoteHostAddress = "unavailable";
             }
+
             log.info("handleMessageSetEpoch: Received SEAL from (clientId={}:{}), moving to new epoch {}",
                     msg.getClientID(), remoteHostAddress, epoch);
+
             serverContext.setServerEpoch(epoch, r);
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
         } catch (WrongEpochException e) {
@@ -184,9 +186,10 @@ public class BaseServer extends AbstractServer {
 
             log.info("handleSeal: Received SEAL from (clientId={}:{}), moving to new epoch {},",
                     req.getHeader().getClientId(), remoteHostAddress, epoch);
-            //TODO(Zach): serverContext.setServerEpoch(epoch, r);
+            //TODO(Zach): New router type should be incorporated into serverContext
+            //serverContext.setServerEpoch(epoch, r);
             //Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-            //Response response = API.newSealResponse(responseHeader);
+            //Response response = API.getSealResponse(responseHeader);
             //r.sendResponse(response, ctx);
         } catch (WrongEpochException e) {
             log.debug("handleSeal: Rejected SEAL current={}, requested={}",
@@ -223,7 +226,7 @@ public class BaseServer extends AbstractServer {
     private void handleReset(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
         log.warn("Remote reset requested from client {}", req.getHeader().getClientId());
         Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        Response response = API.newResetResponse(responseHeader);
+        Response response = API.getResetResponse(responseHeader);
         r.sendResponse(response, ctx);
         CorfuServer.restartServer(true);
     }
@@ -257,7 +260,7 @@ public class BaseServer extends AbstractServer {
     private void handleRestart(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
         log.warn("Remote restart requested from client {}", req.getHeader().getClientId());
         Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        Response response = API.newRestartResponse(responseHeader);
+        Response response = API.getRestartResponse(responseHeader);
         r.sendResponse(response, ctx);
         CorfuServer.restartServer(false);
     }

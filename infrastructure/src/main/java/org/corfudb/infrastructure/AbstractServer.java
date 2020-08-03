@@ -126,8 +126,8 @@ public abstract class AbstractServer {
     }
 
     private Response getNotReadyError(Header requestHeader) {
-        return API.newErrorResponseNoPayload(API.generateResponseHeader(requestHeader, false, true),
-                API.newNotReadyServerError("Server is not ready to handle request messages"));
+        return API.getErrorResponseNoPayload(API.generateResponseHeader(requestHeader, false, true),
+                API.getNotReadyServerError("Server is not ready to handle request messages"));
     }
 
     protected void setState(ServerState newState) {

@@ -32,13 +32,13 @@ public class PeerClient extends ChannelHandler {
     }
 
     private Header getHeader(MessageType type, boolean ignoreClusterId, boolean ignoreEpoch) {
-        return API.newHeader(generateRequestId(), priority, type, epoch, API.DEFAULT_UUID,
+        return API.getHeader(generateRequestId(), priority, type, epoch, API.DEFAULT_UUID,
                 config.getClientId(), ignoreClusterId, ignoreEpoch);
     }
 
     public CompletableFuture<Void> ping() {
         Header header = getHeader(MessageType.PING, true, true);
-        return sendRequest(API.newPingRequest(header));
+        return sendRequest(API.getPingRequest(header));
     }
 
     protected void handlePing(Response response) {

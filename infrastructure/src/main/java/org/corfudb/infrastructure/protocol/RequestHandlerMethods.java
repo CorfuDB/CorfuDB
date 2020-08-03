@@ -67,7 +67,7 @@ public class RequestHandlerMethods {
         try {
             handler.handle(req, ctx, r);
         } catch(Exception e) {
-            log.error("handle: Unhandled exception processing {} message", req.getHeader().getType(), e);
+            log.error("handle: Unhandled exception processing {} request", req.getHeader().getType(), e);
             //TODO(Zach): Send exception/error response
         }
     }
@@ -97,7 +97,6 @@ public class RequestHandlerMethods {
                     + " already registered!");
         }
 
-        //TODO(Zach): Does this still work as intended?
         try {
             HandlerMethod h;
             if (Modifier.isStatic(method.getModifiers())) {
@@ -106,9 +105,8 @@ public class RequestHandlerMethods {
                         "handle", MethodType.methodType(HandlerMethod.class),
                         mh.type(), mh, mh.type()).getTarget().invokeExact();
             } else {
-                // instance method, so we need to capture the type.
-                MethodType mt = MethodType.methodType(method.getReturnType(),
-                        method.getParameterTypes());
+                // Instance method, so we need to capture the type.
+                MethodType mt = MethodType.methodType(method.getReturnType(), method.getParameterTypes());
                 MethodHandle mh = caller.findVirtual(server.getClass(), method.getName(), mt);
                 MethodType mtt = mh.type().dropParameterTypes(0, 1);
                 h = (HandlerMethod) LambdaMetafactory.metafactory(caller,

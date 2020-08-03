@@ -122,9 +122,8 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) {
-        log.info("channelActive: Incoming connection established from: {}.",
-                ctx.channel().remoteAddress());
-        ctx.fireChannelActive(); // So that handshake is initiated.
+        log.info("channelActive: Incoming connection established from: {}.", ctx.channel().remoteAddress());
+        ctx.fireChannelActive(); // So that legacy handshake is initiated.
     }
 
     @Override

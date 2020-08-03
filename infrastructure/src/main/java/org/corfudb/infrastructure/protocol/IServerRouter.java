@@ -63,10 +63,10 @@ public interface IServerRouter {
         Header responseHeader = API.generateResponseHeader(requestHeader, false, true);
         long serverEpoch = getServerEpoch();
 
-        ServerError wrongEpochError = API.newWrongEpochServerError("WRONG_EPOCH error "
+        ServerError wrongEpochError = API.getWrongEpochServerError("WRONG_EPOCH error "
                 + "triggered by " + requestHeader.toString(), serverEpoch);
 
-        Response response = API.newErrorResponseNoPayload(responseHeader, wrongEpochError);
+        Response response = API.getErrorResponseNoPayload(responseHeader, wrongEpochError);
         sendResponse(response, ctx);
 
         log.trace("Incoming request received with wrong epoch, got {}, expected {}, request was: {}",
@@ -80,10 +80,10 @@ public interface IServerRouter {
      */
     default void sendNoBootstrapError(Header requestHeader, ChannelHandlerContext ctx) {
         Header responseHeader = API.generateResponseHeader(requestHeader, false, true);
-        ServerError notBootstrappedError = API.newNotBootstrappedServerError("NOT_BOOTSTRAPPED "
+        ServerError notBootstrappedError = API.getNotBootstrappedServerError("NOT_BOOTSTRAPPED "
                 + " error triggered by " + requestHeader.toString());
 
-        Response response = API.newErrorResponseNoPayload(responseHeader, notBootstrappedError);
+        Response response = API.getErrorResponseNoPayload(responseHeader, notBootstrappedError);
         sendResponse(response, ctx);
 
         log.trace("Received request but not bootstrapped! Request was: {}", requestHeader);
@@ -97,10 +97,10 @@ public interface IServerRouter {
      */
     default void sendWrongClusterError(Header requestHeader, ChannelHandlerContext ctx, UUID clusterId) {
         Header responseHeader = API.generateResponseHeader(requestHeader, false, true);
-        ServerError wrongClusterError = API.newWrongClusterServerError("WRONG_CLUSTER error triggered by "
+        ServerError wrongClusterError = API.getWrongClusterServerError("WRONG_CLUSTER error triggered by "
                 + requestHeader.toString(), clusterId, requestHeader.getClusterId());
 
-        Response response = API.newErrorResponseNoPayload(responseHeader, wrongClusterError);
+        Response response = API.getErrorResponseNoPayload(responseHeader, wrongClusterError);
         sendResponse(response, ctx);
 
         log.trace("Incoming request with a wrong cluster id, got {}, expected {}, request was: {}",
@@ -145,7 +145,7 @@ public interface IServerRouter {
 
     /**
      * Validate the incoming request. The request is valid if:
-     *    1) Also, if the request message has the appropriate payload given the request type.
+     *    1) If the request message has the appropriate payload given the request type.
      *    2) The flag ignoreEpoch is set to true, or it's set to false and the epoch is valid.
      *    3) Also, if the flag ignoreClusterId is set to false,
      *           a. The current layout server should be bootstrapped and
