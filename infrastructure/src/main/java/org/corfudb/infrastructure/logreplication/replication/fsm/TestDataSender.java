@@ -36,18 +36,21 @@ public class TestDataSender implements DataSender {
         }
 
         CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(message.getMetadata());
+        LogReplicationEntryMetadata ackMetadata = new LogReplicationEntryMetadata(message.getMetadata());
 
         // Emulate behavior from Sink, send ACK per received message
         if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END)) {
-            metadata.setMessageMetadataType(MessageType.SNAPSHOT_END);
+            ackMetadata.setMessageMetadataType(MessageType.SNAPSHOT_END);
         } else if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_MESSAGE)) {
-            metadata.setMessageMetadataType(MessageType.SNAPSHOT_REPLICATED);
+            ackMetadata.setMessageMetadataType(MessageType.SNAPSHOT_REPLICATED);
         } else if (message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
-            metadata.setMessageMetadataType(MessageType.LOG_ENTRY_REPLICATED);
+            ackMetadata.setMessageMetadataType(MessageType.LOG_ENTRY_REPLICATED);
+        } else {
+            // Do not send an ACK for start markers
+            return cf;
         }
 
-        LogReplicationEntry ack = LogReplicationEntry.generateAck(metadata);
+        LogReplicationEntry ack = LogReplicationEntry.generateAck(ackMetadata);
         cf.complete(ack);
 
         return cf;

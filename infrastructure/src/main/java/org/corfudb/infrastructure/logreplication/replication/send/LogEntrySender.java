@@ -25,11 +25,6 @@ import java.util.UUID;
 public class LogEntrySender {
 
     /*
-     * Corfu Runtime
-     */
-    private CorfuRuntime runtime;
-
-    /*
      * Implementation of Log Entry Reader. Default implementation reads at the stream layer.
      */
     private LogEntryReader logEntryReader;
@@ -58,18 +53,18 @@ public class LogEntrySender {
     /**
      * Constructor
      *
-     * @param runtime corfu runtime
      * @param logEntryReader log entry logreader implementation
      * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
      *                   the application callback for data transmission
+     * @param readProcessor post read processing logic
+     * @param logReplicationFSM log replication FSM to insert events upon message acknowledgement
      */
-    public LogEntrySender(CorfuRuntime runtime, LogEntryReader logEntryReader, DataSender dataSender,
+    public LogEntrySender(LogEntryReader logEntryReader, DataSender dataSender,
                           ReadProcessor readProcessor, LogReplicationFSM logReplicationFSM) {
 
-        this.runtime = runtime;
         this.logEntryReader = logEntryReader;
-        this.dataSenderBufferManager = new LogEntrySenderBufferManager(dataSender);
         this.logReplicationFSM = logReplicationFSM;
+        this.dataSenderBufferManager = new LogEntrySenderBufferManager(dataSender, logReplicationFSM.getAckReader());
     }
 
     /**
@@ -153,19 +148,11 @@ public class LogEntrySender {
     }
 
     /**
-     * update FSM log entry sync ACK
-     * @param ts
-     */
-    /*public void updateAck(long ts) {
-        dataSenderBufferManager.updateAck(ts);
-    }*/
-
-    /**
      * Reset the log entry sender to initial state
      */
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         taskActive = true;
-        log.info("Reset baseSnapshot {} maxAckForLogEntrySync {}", lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
+        log.info("Reset baseSnapshot {} maxAckTimestamp {}", lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         logEntryReader.reset(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         dataSenderBufferManager.reset(lastAckedTimestamp);
     }

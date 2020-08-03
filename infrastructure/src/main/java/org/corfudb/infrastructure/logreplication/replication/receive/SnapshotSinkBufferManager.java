@@ -107,7 +107,6 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
         if (lastProcessedSeq == snapshotEndSeq) {
             return true;
         }
-
         return super.shouldAck();
     }
 }

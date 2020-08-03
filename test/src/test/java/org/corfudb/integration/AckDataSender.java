@@ -6,7 +6,6 @@ import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourc
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 import java.util.List;
@@ -31,12 +30,7 @@ public class AckDataSender implements DataSender {
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
         // Emulate it was sent over the wire and arrived on the source side
         // channel.execute(() -> sourceManager.receive(message));
-        final CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
-        LogReplicationEntry entry = sourceManager.receive(message);
-        if (entry != null) {
-            cf.complete(entry);
-        }
-        return cf;
+        return new CompletableFuture<>();
     }
 
     @Override

@@ -55,19 +55,22 @@ public abstract class SenderBufferManager {
     private boolean errorOnMsgTimeout;
 
     /*
-     * the max ACK timestamp received. Used by log entry sync.
+     * The max ACK timestamp received.
+     *
+     * When used by log entry sync, it represents the max log entry timestamp replicated.
+     * When used by snapshot sync, it represents the max snapshot sequence number replicated.
      */
-    long maxAckForLogEntrySync = Address.NON_ADDRESS;
+    public long maxAckTimestamp = Address.NON_ADDRESS;
 
     /*
-     * the max snapShotSeqNum has ACKed. Used by snapshot sync.
+     * The snapshot sync sequence number
      */
-    private long maxAckForSnapshotSync = Address.NON_ADDRESS;
+    private long snapshotSyncSequenceNumber = Address.NON_ADDRESS;
 
     private DataSender dataSender;
 
     /*
-     * The messages sent to the receiver but hasn't been ACKed yet.
+     * The messages sent to the receiver that have not been ACKed yet.
      */
     @Getter
     SenderPendingMessageQueue pendingMessages;
@@ -152,37 +155,8 @@ public abstract class SenderBufferManager {
         return ack;
     }
 
-    /**
-     * This is used by SnapshotStart, SnapshotEnd marker messages as those messages don't have a sequence number.
-     */
-    public CompletableFuture<LogReplicationEntry> sendWithoutBuffering(LogReplicationEntry entry) {
-        entry.getMetadata().setSnapshotSyncSeqNum(maxAckForSnapshotSync++);
-        CompletableFuture<LogReplicationEntry> cf = dataSender.send(entry);
-        int retry = 0;
-        boolean result = false;
-
-        while (retry++ < maxRetry && result == false) {
-            try {
-                cf.get(timeoutTimer, TimeUnit.MILLISECONDS);
-                result = true;
-            } catch (Exception e) {
-                log.warn("Caught an exception", e);
-            }
-        }
-
-        if (result == false) {
-            //TODO: notify the discoveryservice there is something wrong with the network.
-        }
-
-        return cf;
-    }
-
-    /**
-     *
-     * @param message
-     */
     public CompletableFuture<LogReplicationEntry> sendWithBuffering(LogReplicationEntry message) {
-        message.getMetadata().setSnapshotSyncSeqNum(maxAckForSnapshotSync++);
+        message.getMetadata().setSnapshotSyncSeqNum(snapshotSyncSequenceNumber++);
         pendingMessages.append(message);
         CompletableFuture<LogReplicationEntry> cf = dataSender.send(message);
         addCFToAcked(message, cf);
@@ -200,9 +174,9 @@ public abstract class SenderBufferManager {
     }
 
     /**
-     * resend the messages in the queue if they are timeout.
-     * @return it returns false if there is an entry has been resent MAX_RETRY and timeout again.
-     * Otherwise it returns true.
+     * Resend the messages in the queue if they have timed out.
+     * @return false, if an entry has been resent MAX_RETRY.
+     *         true, otherwise
      */
     public LogReplicationEntry resend() {
         //Enforce a resend or not
@@ -239,12 +213,13 @@ public abstract class SenderBufferManager {
 
 
     /**
-     * init the buffer state
+     * Reset the buffer state
+     *
      * @param lastAckedTimestamp
      */
     public void reset(long lastAckedTimestamp) {
-        maxAckForSnapshotSync = Address.NON_ADDRESS;
-        maxAckForLogEntrySync = lastAckedTimestamp;
+        snapshotSyncSequenceNumber = Address.NON_ADDRESS;
+        maxAckTimestamp = lastAckedTimestamp;
         pendingMessages.clear();
         pendingCompletableFutureForAcks.clear();
     }

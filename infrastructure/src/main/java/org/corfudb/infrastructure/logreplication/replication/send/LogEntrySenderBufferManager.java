@@ -1,6 +1,9 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DataSender;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
 import java.util.concurrent.CompletableFuture;
@@ -9,14 +12,17 @@ import java.util.stream.Collectors;
 /**
  * This manages log entry sync messages for buffering and processing ACKs.
  */
+@Slf4j
 public class LogEntrySenderBufferManager extends SenderBufferManager {
+    private LogReplicationAckReader ackReader;
 
     /**
      * Constructor
      * @param dataSender
      */
-    public LogEntrySenderBufferManager(DataSender dataSender) {
+    public LogEntrySenderBufferManager(DataSender dataSender, LogReplicationAckReader ackReader) {
         super(dataSender);
+        this.ackReader = ackReader;
     }
 
     /**
@@ -37,22 +43,22 @@ public class LogEntrySenderBufferManager extends SenderBufferManager {
     @Override
     public void updateAck(Long newAck) {
         /*
-         * If the newAck is not larger than the current maxAckForLogEntrySync, ignore it.
+         * If the newAck is not larger than the current maxAckTimestamp, ignore it.
          */
-        if (newAck <= maxAckForLogEntrySync) {
+        if (newAck <= maxAckTimestamp) {
             return;
         }
+        log.trace("Ack received for Log Entry Sync {}", newAck);
+        maxAckTimestamp = newAck;
 
+        // Remove pending messages that have been ACKed.
+        pendingMessages.evictAccordingToTimestamp(maxAckTimestamp);
 
-        maxAckForLogEntrySync = newAck;
-
-        //Remove pending messages has been ACKed.
-        pendingMessages.evictAccordingToTimestamp(maxAckForLogEntrySync);
-
-        //Remove CompletableFutures for Acks that has received.
+        // Remove CompletableFutures for Acks that has received.
         pendingCompletableFutureForAcks = pendingCompletableFutureForAcks.entrySet().stream()
-                .filter(entry -> entry.getKey() > maxAckForLogEntrySync)
+                .filter(entry -> entry.getKey() > maxAckTimestamp)
                 .collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
+        ackReader.setAckedTsAndSyncType(newAck, ReplicationStatusVal.SyncType.LOG_ENTRY);
     }
 
     /**

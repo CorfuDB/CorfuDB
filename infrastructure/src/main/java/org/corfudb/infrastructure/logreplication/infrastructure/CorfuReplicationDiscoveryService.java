@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
@@ -27,6 +28,7 @@ import org.corfudb.utils.lock.LockListener;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -62,11 +64,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private static final String LOCK_GROUP = "Log_Replication_Group";
     private static final String LOCK_NAME = "Log_Replication_Lock";
-
-    /**
-     * Invalid replication status, when querying a standby cluster
-     */
-    private static final int INVALID_REPLICATION_STATUS = -1;
 
     /**
      * Used by the active cluster to initiate Log Replication
@@ -423,7 +420,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Fetch current topology from Cluster Manager
      */
     private void fetchTopologyFromClusterManager() {
-
         try {
             IRetry.build(ExponentialBackoffRetry.class, () -> {
                 try {
@@ -511,6 +507,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         // Update topology config id in metadata manager
         logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
+
+        // Reset the Replication Status on Active and Standby
+        logReplicationMetadataManager.resetReplicationStatus();
+
         log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
 
@@ -664,14 +664,14 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     /**
-     * Query all replicated stream log tails and remember the max
-     * and query each standbySite information according to the ackInformation decide all manay total
-     * msg needs to send out.
+     * No work needs to be done here.  If in the Active state, writes to all replicated streams have stopped at this time.
+     * Following this, the ClusterManagerAdapter can query the status of ongoing snapshot sync on the
+     * local(active) cluster.
      */
     @Override
     public void prepareToBecomeStandby() {
-        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null) {
-            replicationManager.prepareClusterRoleChange();
+        if (ClusterRole.ACTIVE == localClusterDescriptor.getRole()) {
+            log.info("Received a Request to Become Standby");
         } else {
             log.warn("Illegal prepareToBecomeStandby when cluster {} with role {}",
                     localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
@@ -679,31 +679,21 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     /**
-     * Query all replicated stream log tails and calculate the number of messages to be sent.
-     * If the max tail has changed, return 0%.
+     * Active Cluster - Read the shared metadata table to find the status of any ongoing snapshot or log entry sync
+     * and return a completion percentage.
+     * Standby Cluster - Read the shared metadata table and find if data is consistent(returns false if
+     * snapshot sync is in the apply phase)
      */
     @Override
-    public int queryReplicationStatus() {
-        //TODO make sure caller should query all nodes in the cluster and pick the max of these 3 values
-        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-            if (!isLeader.get()) {
-                log.warn("Illegal queryReplicationStatus when node is not a leader " +
-                        "in an ACTIVE cluster={} ", localClusterDescriptor.getClusterId());
-                return 0;
-            }
-
-            if (replicationManager == null) {
-                log.warn("Illegal queryReplicationStatus when replication manager is null " +
-                        "in an ACTIVE cluster={} ", localClusterDescriptor.getClusterId());
-                return 0;
-            }
-
-            return replicationManager.queryReplicationStatus();
-        } else {
-            log.warn("Illegal queryReplicationStatus when cluster={} with role {}",
-                    localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
-            return INVALID_REPLICATION_STATUS;
+    public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
+        LogReplicationMetadata.ReplicationStatusVal status;
+        if (ClusterRole.ACTIVE == localClusterDescriptor.getRole()) {
+            return logReplicationMetadataManager.getReplicationRemainingPercent();
+        } else if (ClusterRole.STANDBY == localClusterDescriptor.getRole()) {
+            return logReplicationMetadataManager.getDataConsistentOnStandby();
         }
+        log.error("Received Replication Status Query in Incorrect Role {}.", localClusterDescriptor.getRole());
+        return null;
     }
 
     public void shutdown() {
