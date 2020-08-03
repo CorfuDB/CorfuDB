@@ -1,16 +1,22 @@
 package org.corfudb.infrastructure.protocol;
 
+import com.google.common.collect.ImmutableList;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
-import com.google.common.collect.ImmutableList;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import java.io.IOException;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import lombok.extern.slf4j.Slf4j;
 import lombok.Getter;
 import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
@@ -20,9 +26,6 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.view.Layout;
-
-import java.io.IOException;
-import java.util.*;
 
 @Slf4j
 @ChannelHandler.Sharable
@@ -85,7 +88,8 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
             response.writeTo(responseOutputStream);
             ctx.writeAndFlush(outBuf);
         } catch(IOException e) {
-            log.warn("Exception occurred when sending response {}, caused by {}", response.getHeader(), e.getCause(), e);
+            log.warn("sendResponse[{}]: Exception occurred when sending response {}, caused by {}",
+                    response.getHeader().getRequestId(), response.getHeader(), e.getCause(), e);
         } finally {
             IOUtils.closeQuietly(responseOutputStream);
             outBuf.release();
@@ -147,28 +151,28 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
             Header header = request.getHeader();
 
             if (log.isDebugEnabled()) {
-                log.debug("Request {} from {}", header.getType(), ctx.channel().remoteAddress());
+                log.debug("channelRead: Request {} from {}", header.getType(), ctx.channel().remoteAddress());
             }
 
             AbstractServer handler = handlerMap.get(header.getType());
             if (handler == null) {
-                log.warn("Received unregistered request message {}, dropping", header.getType());
+                log.warn("channelRead: Received unregistered request {}, dropping", header.getType());
             } else {
                 if(requestIsValid(request, ctx)) {
                     if(log.isTraceEnabled()) {
-                        log.trace("Request message routed to {}: {}", handler.getClass().getSimpleName(), request);
+                        log.trace("channelRead: Request routed to {}: {}", handler.getClass().getSimpleName(), request);
                     }
 
                     try {
                         handler.handleRequest(request, ctx, this);
                     } catch(Throwable t) {
                         log.error("channelRead: Handling {} failed due to {}:{}",
-                                header.getType(),t.getClass().getSimpleName(), t.getMessage(), t);
+                                header.getType(), t.getClass().getSimpleName(), t.getMessage(), t);
                     }
                 }
             }
         } catch (Exception e) {
-            log.error("Exception during read!", e);
+            log.error("channelRead: Exception during read!", e);
         } finally {
             msgInputStream.close();
             msgBuf.release();
@@ -177,7 +181,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("Error in handling inbound message, {}", cause);
+        log.error("exceptionCaught: Error in handling inbound message, {}", cause);
         ctx.close();
     }
 }

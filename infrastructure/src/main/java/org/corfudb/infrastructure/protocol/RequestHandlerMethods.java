@@ -2,6 +2,18 @@ package org.corfudb.infrastructure.protocol;
 
 import com.codahale.metrics.Timer;
 import io.netty.channel.ChannelHandlerContext;
+import java.lang.invoke.LambdaMetafactory;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
@@ -11,15 +23,6 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
-
-import javax.annotation.Nonnull;
-import java.lang.invoke.LambdaMetafactory;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.util.*;
 
 @Slf4j
 public class RequestHandlerMethods {
@@ -67,7 +70,8 @@ public class RequestHandlerMethods {
         try {
             handler.handle(req, ctx, r);
         } catch(Exception e) {
-            log.error("handle: Unhandled exception processing {} request", req.getHeader().getType(), e);
+            log.error("handle[{}]: Unhandled exception processing {} request",
+                    req.getHeader().getRequestId(), req.getHeader().getType(), e);
             //TODO(Zach): Send exception/error response
         }
     }
@@ -93,8 +97,7 @@ public class RequestHandlerMethods {
         final AnnotatedServerHandler annotation = method.getAnnotation(AnnotatedServerHandler.class);
 
         if(handlerMap.containsKey(annotation.type())) {
-            throw new UnrecoverableCorfuError("HandlerMethod for " + annotation.type()
-                    + " already registered!");
+            throw new UnrecoverableCorfuError("HandlerMethod for " + annotation.type() + " already registered!");
         }
 
         try {
@@ -109,8 +112,7 @@ public class RequestHandlerMethods {
                 MethodType mt = MethodType.methodType(method.getReturnType(), method.getParameterTypes());
                 MethodHandle mh = caller.findVirtual(server.getClass(), method.getName(), mt);
                 MethodType mtt = mh.type().dropParameterTypes(0, 1);
-                h = (HandlerMethod) LambdaMetafactory.metafactory(caller,
-                        "handle",
+                h = (HandlerMethod) LambdaMetafactory.metafactory(caller, "handle",
                         MethodType.methodType(HandlerMethod.class, server.getClass()),
                         mtt, mh, mtt).getTarget().bindTo(server).invoke();
             }
@@ -119,7 +121,7 @@ public class RequestHandlerMethods {
             final HandlerMethod handler = generateConditionalHandler(annotation.type(), h);
             handlerMap.put(annotation.type(), handler);
         } catch(Throwable e) {
-            log.error("Exception during message handler registration", e);
+            log.error("registerMethod: Exception during request handler registration", e);
             throw new UnrecoverableCorfuError(e);
         }
     }

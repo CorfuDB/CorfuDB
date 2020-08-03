@@ -33,7 +33,7 @@ public abstract class AbstractServer {
     /**
      * Get the request handlers for this instance.
      *
-     * @return The request handlers
+     * @return The request handlers.
      */
     public RequestHandlerMethods getHandlerMethods() {
         //TODO: Make abstract once other servers are implemented.
@@ -113,7 +113,7 @@ public abstract class AbstractServer {
      */
     public final void handleRequest(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
         if (getState() == ServerState.SHUTDOWN) {
-            log.warn("Server received {} but is already shutdown.", req.getHeader().getType().toString());
+            log.warn("handleRequest: Server received {} but is already shutdown.", req.getHeader().getType().toString());
             return;
         }
 

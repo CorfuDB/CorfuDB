@@ -1,6 +1,8 @@
 package org.corfudb.infrastructure.protocol;
 
 import io.netty.channel.ChannelHandlerContext;
+import java.util.List;
+import java.util.Optional;
 import org.corfudb.common.protocol.API;
 import org.corfudb.infrastructure.AbstractServer;
 import org.corfudb.infrastructure.ServerContext;
@@ -13,8 +15,6 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
-import java.util.Optional;
 
 public interface IServerRouter {
 
@@ -69,8 +69,8 @@ public interface IServerRouter {
         Response response = API.getErrorResponseNoPayload(responseHeader, wrongEpochError);
         sendResponse(response, ctx);
 
-        log.trace("Incoming request received with wrong epoch, got {}, expected {}, request was: {}",
-                requestHeader.getEpoch(), serverEpoch, requestHeader);
+        log.trace("sendWrongEpochError[{}]: Incoming request received with wrong epoch, got {}, expected {}, " +
+                "request was {}", requestHeader.getRequestId(), requestHeader.getEpoch(), serverEpoch, requestHeader);
     }
 
     /**
@@ -86,7 +86,8 @@ public interface IServerRouter {
         Response response = API.getErrorResponseNoPayload(responseHeader, notBootstrappedError);
         sendResponse(response, ctx);
 
-        log.trace("Received request but not bootstrapped! Request was: {}", requestHeader);
+        log.trace("sendNoBootstrapError[{}]: Received request but not bootstrapped! Request was {}",
+                requestHeader.getRequestId(), requestHeader);
     }
 
     /**
@@ -103,8 +104,8 @@ public interface IServerRouter {
         Response response = API.getErrorResponseNoPayload(responseHeader, wrongClusterError);
         sendResponse(response, ctx);
 
-        log.trace("Incoming request with a wrong cluster id, got {}, expected {}, request was: {}",
-                requestHeader.getClusterId(), clusterId, requestHeader);
+        log.trace("sendWrongClusterError[{}]: Incoming request with a wrong cluster id, got {}, expected {}, " +
+                "request was: {}", requestHeader.getRequestId(), requestHeader.getClusterId(), clusterId, requestHeader);
     }
 
     /**
