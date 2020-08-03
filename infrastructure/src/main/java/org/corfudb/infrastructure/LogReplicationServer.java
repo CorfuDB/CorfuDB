@@ -103,17 +103,17 @@ public class LogReplicationServer extends AbstractServer {
         log.info("Log Replication Negotiation Request received by Server.");
 
         if (isLeader(msg, r)) {
-            LogReplicationMetadataManager metadata = sinkManager.getLogReplicationMetadataManager();
+            LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
 
             // TODO (Xiaoqin Ma): That's 6 independent DB calls per one LOG_REPLICATION_NEGOTIATION_REQUEST.
             //  Can we do just one? Also, It does not look like we handle failures if one of them fails, for example.
             LogReplicationNegotiationResponse response = new LogReplicationNegotiationResponse(
-                    metadata.getTopologyConfigId(),
-                    metadata.getVersion(),
-                    metadata.getLastSnapStartTimestamp(),
-                    metadata.getLastSnapTransferDoneTimestamp(),
-                    metadata.getLastAppliedBaseSnapshotTimestamp(),
-                    metadata.getLastProcessedLogTimestamp());
+                    metadataMgr.getTopologyConfigId(),
+                    metadataMgr.getVersion(),
+                    metadataMgr.getLastSnapStartTimestamp(),
+                    metadataMgr.getLastSnapTransferDoneTimestamp(),
+                    metadataMgr.getLastAppliedBaseSnapshotTimestamp(),
+                    metadataMgr.getLastProcessedLogTimestamp());
             log.info("Send Negotiation response");
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE.payloadMsg(response));
         } else {
