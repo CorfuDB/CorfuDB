@@ -92,11 +92,12 @@ public class CorfuServerNode implements AutoCloseable {
                 .add(serverMap.getOrDefault(BaseServer.class, new BaseServer(serverContext))).build(), serverContext);
 
         this.serverContext.setServerRouter(router);
+        this.serverContext.setRequestRouter(requestRouter);
         // If the node is started in the single node setup and was bootstrapped,
         // set the server epoch as well.
         if(serverContext.isSingleNodeSetup() && serverContext.getCurrentLayout() != null){
-            serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(),
-                    router);
+            serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(), router);
+            serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(), requestRouter);
         }
         this.close = new AtomicBoolean(false);
     }

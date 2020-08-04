@@ -187,11 +187,10 @@ public class BaseServer extends AbstractServer {
             log.info("handleSeal[{}]: Received SEAL from (clientId={}:{}), moving to new epoch {},",
                     req.getHeader().getRequestId(), req.getHeader().getClientId(), remoteHostAddress, epoch);
 
-            //TODO(Zach): New router type should be incorporated into serverContext
-            //serverContext.setServerEpoch(epoch, r);
-            //Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-            //Response response = API.getSealResponse(responseHeader);
-            //r.sendResponse(response, ctx);
+            serverContext.setServerEpoch(epoch, r);
+            Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+            Response response = API.getSealResponse(responseHeader);
+            r.sendResponse(response, ctx);
         } catch (WrongEpochException e) {
             log.debug("handleSeal[{}]: Rejected SEAL current={}, requested={}",
                     req.getHeader().getRequestId(), e.getCorrectEpoch(), req.getSealRequest().getEpoch());
