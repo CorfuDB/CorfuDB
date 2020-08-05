@@ -71,6 +71,11 @@ public class TestSnapshotReader implements SnapshotReader {
         this.topologyConfigId = topologyConfigId;
     }
 
+    @Override
+    public long getMsgSeqNum() {
+        return 0;
+    }
+
     public void setBatchSize(int batchSize) {
         config.setBatchSize(batchSize);
     }

@@ -24,4 +24,9 @@ public class EmptySnapshotReader implements SnapshotReader {
     public void setTopologyConfigId(long topologyConfigId) {
 
     }
+
+    @Override
+    public long getMsgSeqNum() {
+        return 0;
+    }
 }

@@ -110,26 +110,16 @@ public class StreamsLogEntryReader implements LogEntryReader {
      *         false, otherwise.
      */
     private boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
-        Set<UUID> txEntryStreamIds = new HashSet<>(entry.getEntries().keySet());
+        Set<UUID> txEntryStreamIds = entry.getEntries().keySet();
 
-        // Sanity Check: discard if transaction stream opaque entry is empty (no streams are present)
-        if (txEntryStreamIds.isEmpty()) {
-            log.debug("TX Stream entry[{}] :: EMPTY [ignored]", entry.getVersion());
-            return false;
-        }
+        txEntryStreamIds.retainAll(streamUUIDs);
 
         // If none of the streams in the transaction entry are specified to be replicated, this is an invalid entry, skip
-        if (Collections.disjoint(streamUUIDs, txEntryStreamIds)) {
-            log.trace("TX Stream entry[{}] :: contains none of the streams of interest, streams={} [ignored]", entry.getVersion(), txEntryStreamIds);
+        if (txEntryStreamIds.isEmpty()) {
             return false;
-        } else {
-            Set<UUID> ignoredTxStreams = txEntryStreamIds.stream().filter(id -> !streamUUIDs.contains(id))
-                    .collect(Collectors.toSet());
-            txEntryStreamIds.removeAll(ignoredTxStreams);
-            log.debug("TX Stream entry[{}] :: replicate[{}]={}, ignore[{}]={} [valid]", entry.getVersion(),
-                    txEntryStreamIds.size(), txEntryStreamIds, ignoredTxStreams.size(), ignoredTxStreams);
-            return true;
         }
+
+        return true;
     }
 
     private boolean checkValidSize(int currentMsgSize, int currentEntrySize) {
@@ -165,31 +155,25 @@ public class StreamsLogEntryReader implements LogEntryReader {
         int currentEntrySize = 0;
         int currentMsgSize = 0;
 
+        if (lastOpaqueEntry == null) {
+            lastOpaqueEntry = txOpaqueStream.next();
+        }
+
         try {
-            while (currentMsgSize < maxDataSizePerMsg) {
-                if (lastOpaqueEntry != null) {
-                    if (isValidTransactionEntry(lastOpaqueEntry)) {
+            while (currentMsgSize < maxDataSizePerMsg && lastOpaqueEntry != null) {
+                if (isValidTransactionEntry(lastOpaqueEntry)) {
 
-                        lastOpaqueEntry = filterTransactionEntry(lastOpaqueEntry);
+                    // If the currentEntry is too big to append the current message, will skip it and
+                    // append it to the next message as the first entry.
+                    currentEntrySize = ReaderUtility.calculateOpaqueEntrySize(lastOpaqueEntry);
 
-                        // If the currentEntry is too big to append the current message, will skip it and
-                        // append it to the next message as the first entry.
-                        currentEntrySize = ReaderUtility.calculateOpaqueEntrySize(lastOpaqueEntry);
-
-                        if (!checkValidSize(currentMsgSize, currentEntrySize)) {
-                            break;
-                        }
-
-                        // Add the lastOpaqueEntry to the current message.
-                        opaqueEntryList.add(lastOpaqueEntry);
-                        currentMsgSize += currentEntrySize;
+                    if (!checkValidSize(currentMsgSize, currentEntrySize)) {
+                        break;
                     }
 
-                    lastOpaqueEntry = null;
-                }
-
-                if (!txOpaqueStream.hasNext()) {
-                    break;
+                    // Add the lastOpaqueEntry to the current message.
+                    opaqueEntryList.add(lastOpaqueEntry);
+                    currentMsgSize += currentEntrySize;
                 }
 
                 lastOpaqueEntry = txOpaqueStream.next();
@@ -211,19 +195,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
         }
     }
 
-    /**
-     * Filter out streams that are not intended for replication
-     *
-     * @param opaqueEntry opaque entry to parse.
-     * @return filtered opaque entry
-     */
-    private OpaqueEntry filterTransactionEntry(OpaqueEntry opaqueEntry) {
-        Map<UUID, List<SMREntry>> filteredTxEntryMap = opaqueEntry.getEntries().entrySet().stream()
-                .filter(entry -> streamUUIDs.contains(entry.getKey()))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-        return new OpaqueEntry(opaqueEntry.getVersion(), filteredTxEntryMap);
-    }
 
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {

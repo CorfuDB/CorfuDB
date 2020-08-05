@@ -52,6 +52,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private long preMsgTs;
     private long currentMsgTs;
     private OpaqueStreamIterator currentStreamInfo;
+
+    @Getter
     private long sequence;
     private OpaqueEntry lastEntry = null;
 
@@ -276,6 +278,11 @@ public class StreamsSnapshotReader implements SnapshotReader {
     @Override
     public void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
+    }
+
+    @Override
+    public long getMsgSeqNum() {
+        return sequence;
     }
 
     /**
