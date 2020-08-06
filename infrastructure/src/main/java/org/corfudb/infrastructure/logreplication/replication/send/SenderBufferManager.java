@@ -188,8 +188,8 @@ public abstract class SenderBufferManager {
             log.warn("Caught a timeout exception ", e);
             force = true;
         } catch (Exception e) {
-            log.warn("Caught an Exception and will notify discovery service ", e);
-            //TODO: notify discoveryService
+            log.warn("Caught an Exception while processing ACKs.", e);
+            return null;
         }
 
         for (int i = 0; i < pendingMessages.getSize(); i++) {

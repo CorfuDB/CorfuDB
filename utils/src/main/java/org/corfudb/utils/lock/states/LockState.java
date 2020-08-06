@@ -16,11 +16,11 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public abstract class LockState {
 
-    // renew lease every 60 seconds
+    // Renew lease every 20 seconds
     @Setter
-    public static int DurationBetweenLeaseRenewals = 60;
+    public static int DurationBetweenLeaseRenewals = 20;
 
-    // max time allowed for listener to process a notification
+    // Max time allowed for listener to process a notification
     @Setter
     public static int MaxTimeForNotificationListenerProcessing = 60;
 

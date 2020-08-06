@@ -39,6 +39,8 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
 
     private final int port;
 
+    private CompletableFuture<Boolean> connectionEnded;
+
     public NettyLogReplicationServerChannelAdapter(ServerContext serverContext, LogReplicationServerRouter router) {
         super(serverContext, router);
         this.port = Integer.parseInt((String) serverContext.getServerConfig().get("<port>"));
@@ -55,12 +57,16 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
     @Override
     public CompletableFuture<Boolean> start() {
         startServer().channel().closeFuture().syncUninterruptibly();
-        return null;
+        connectionEnded = new CompletableFuture<>();
+        return connectionEnded;
     }
 
     @Override
     public void stop() {
         bindFuture.channel().close().syncUninterruptibly();
+        if (connectionEnded != null) {
+            connectionEnded.complete(true);
+        }
     }
 
     // ==========================================================

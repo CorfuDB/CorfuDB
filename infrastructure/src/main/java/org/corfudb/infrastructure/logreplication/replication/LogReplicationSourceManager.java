@@ -159,6 +159,14 @@ public class LogReplicationSourceManager {
     }
 
     /**
+     * Stop Log Replication
+     */
+    public void stopLogReplication() {
+        log.info("Stop Log Replication");
+        logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
+    }
+
+    /**
      * Signal to cancel snapshot send.
      *
      * @param snapshotSyncId identifier of the snapshot sync task to cancel.

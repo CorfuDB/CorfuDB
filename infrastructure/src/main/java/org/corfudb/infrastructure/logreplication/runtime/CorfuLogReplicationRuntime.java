@@ -20,6 +20,7 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteLead
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -142,7 +143,7 @@ public class CorfuLogReplicationRuntime {
     private final LogReplicationClientRouter router;
     private final LogReplicationMetadataManager metadataManager;
     private final LogReplicationSourceManager sourceManager;
-    private volatile Set<String> connectedEndpoints = ConcurrentHashMap.newKeySet();
+    private volatile Set<String> connectedEndpoints;
     private volatile Optional<String> leaderEndpoint = Optional.empty();
 
     @Getter
@@ -158,6 +159,7 @@ public class CorfuLogReplicationRuntime {
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, remoteClusterId),
             metadataManager);
+        this.connectedEndpoints = new HashSet<>();
         this.communicationFSMWorkers = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build());
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
@@ -274,6 +276,8 @@ public class CorfuLogReplicationRuntime {
     public synchronized void setRemoteLeaderEndpoint(String leader) {
         leaderEndpoint = Optional.ofNullable(leader);
     }
+
+    public synchronized void resetRemoteLeaderEndpoint() { leaderEndpoint = Optional.empty(); }
 
     public synchronized Optional<String> getRemoteLeader() {
         return leaderEndpoint;

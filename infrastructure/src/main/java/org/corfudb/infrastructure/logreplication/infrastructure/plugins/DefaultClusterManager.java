@@ -82,6 +82,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
     private CorfuStore corfuStore;
 
+    private ConfigStreamListener configStreamListener;
+
     public void start() {
         configId = 0L;
         shutdown = false;
@@ -103,7 +105,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        corfuStore.subscribe(new ConfigStreamListener(this), CONFIG_NAMESPACE,
+        configStreamListener = new ConfigStreamListener(this);
+        corfuStore.subscribe(configStreamListener, CONFIG_NAMESPACE,
                 Collections.singletonList(new TableSchema(CONFIG_TABLE_NAME, CommonTypes.Uuid.class, CommonTypes.Uuid.class, CommonTypes.Uuid.class)), ts);
         thread = new Thread(clusterManagerCallback);
         thread.start();
@@ -115,11 +118,12 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         if (corfuRuntime != null) {
             corfuRuntime.shutdown();
         }
-        try {
-            thread.join();
-        } catch (InterruptedException ie) {
-            throw new UnrecoverableCorfuInterruptedError(ie);
+
+        if(configStreamListener != null) {
+            corfuStore.unsubscribe(configStreamListener);
         }
+
+        log.info("Shutdown Cluster Manager completed.");
     }
 
     public static TopologyDescriptor readConfig() {

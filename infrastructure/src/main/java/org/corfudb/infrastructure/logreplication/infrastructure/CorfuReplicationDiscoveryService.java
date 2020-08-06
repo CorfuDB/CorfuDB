@@ -25,6 +25,8 @@ import org.corfudb.util.retry.RetryNeededException;
 import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
 import org.corfudb.utils.lock.LockListener;
+import org.corfudb.utils.lock.states.HasLeaseState;
+import org.corfudb.utils.lock.states.LockState;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
@@ -51,6 +53,16 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Wait interval (in seconds) between consecutive fetch topology attempts to cap exponential back-off.
      */
     private static final int FETCH_THRESHOLD = 300;
+
+    /**
+     * Fraction of Lease Duration for Lease Renewal
+     */
+    private static final int RENEWAL_LEASE_FRACTION = 4;
+
+    /**
+     * Fraction of Lease Duration for Lease Monitoring
+     */
+    private static final int MONITOR_LEASE_FRACTION = 10;
 
     /**
      * Bookkeeping the topologyConfigId, version number and other log replication state information.
@@ -130,6 +142,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private volatile AtomicBoolean isLeader;
 
     private LogReplicationServer logReplicationServerHandler;
+
+    private LockClient lockClient;
 
     /**
      * Indicates the server has been started. A server is started once it is determined
@@ -363,14 +377,17 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         try {
 
             Lock.setLeaseDuration(serverContext.getLockLeaseDuration());
+            LockClient.setDurationBetweenLockMonitorRuns(serverContext.getLockLeaseDuration()/MONITOR_LEASE_FRACTION);
+            LockState.setDurationBetweenLeaseRenewals(serverContext.getLockLeaseDuration()/RENEWAL_LEASE_FRACTION);
+            HasLeaseState.setDurationBetweenLeaseChecks(serverContext.getLockLeaseDuration()/MONITOR_LEASE_FRACTION);
 
             IRetry.build(IntervalRetry.class, () -> {
                 try {
-                    LockClient lock = new LockClient(logReplicationNodeId, getCorfuRuntime());
+                    lockClient = new LockClient(logReplicationNodeId, getCorfuRuntime());
                     // Callback on lock acquisition or revoke
                     LockListener logReplicationLockListener = new LogReplicationLockListener(this);
                     // Register Interest on the shared Log Replication Lock
-                    lock.registerInterest(LOCK_GROUP, LOCK_NAME, logReplicationLockListener);
+                    lockClient.registerInterest(LOCK_GROUP, LOCK_NAME, logReplicationLockListener);
                 } catch (Exception e) {
                     log.error("Error while attempting to register interest on log replication lock {}:{}", LOCK_GROUP, LOCK_NAME, e);
                     throw new RetryNeededException();
@@ -686,7 +703,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Override
     public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
-        LogReplicationMetadata.ReplicationStatusVal status;
         if (ClusterRole.ACTIVE == localClusterDescriptor.getRole()) {
             return logReplicationMetadataManager.getReplicationRemainingPercent();
         } else if (ClusterRole.STANDBY == localClusterDescriptor.getRole()) {
@@ -701,8 +717,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             replicationManager.stop();
         }
 
-        if(clusterManagerAdapter != null) {
+        if (clusterManagerAdapter != null) {
             clusterManagerAdapter.shutdown();
+        }
+
+        if (lockClient != null) {
+            lockClient.shutdown();
         }
     }
 

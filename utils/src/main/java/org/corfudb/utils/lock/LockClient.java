@@ -48,9 +48,13 @@ public class LockClient {
     // single threaded scheduler to monitor locks
     private final ScheduledExecutorService lockMonitorScheduler;
 
+    private final ScheduledExecutorService taskScheduler;
+
+    private final ExecutorService lockListenerExecutor;
+
     // duration between monitoring runs
     @Setter
-    private static int DurationBetweenLockMonitorRuns = 60;
+    private static int DurationBetweenLockMonitorRuns = 10;
 
     // The context contains objects that are shared across the locks in this client.
     private final ClientContext clientContext;
@@ -73,7 +77,7 @@ public class LockClient {
     //TODO need to determine if the application should provide a clientId or should it be internally generated.
     public LockClient(UUID clientId, CorfuRuntime corfuRuntime) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
 
-        ScheduledExecutorService taskScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        this.taskScheduler = Executors.newScheduledThreadPool(1, (r) ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(r);
             t.setName("LockTaskThread");
@@ -81,7 +85,7 @@ public class LockClient {
             return t;
         });
 
-        ExecutorService lockListenerExecutor = Executors.newFixedThreadPool(1, (r) ->
+        this.lockListenerExecutor = Executors.newFixedThreadPool(1, (r) ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(r);
             t.setName("LockListenerThread");
@@ -152,6 +156,13 @@ public class LockClient {
                 TimeUnit.SECONDS
 
         ));
+    }
+
+    public void shutdown() {
+        log.info("Shutdown Lock Client");
+        this.lockMonitorScheduler.shutdown();
+        this.taskScheduler.shutdown();
+        this.lockListenerExecutor.shutdown();
     }
 
     /**
