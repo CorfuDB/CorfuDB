@@ -5,6 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.API;
 
 import java.util.concurrent.atomic.LongAccumulator;
 
@@ -22,6 +23,7 @@ public class NettyCorfuMessageEncoder extends MessageToByteEncoder<CorfuMsg> {
                           CorfuMsg corfuMsg,
                           ByteBuf byteBuf) throws Exception {
         try {
+            byteBuf.writeByte(API.LEGACY_CORFU_MSG_MARK); // Temporary -- Marks the Corfu msg as legacy.
             corfuMsg.serialize(byteBuf);
             if(log.isDebugEnabled()) {
                 long prev = maxValue.get();

@@ -15,6 +15,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.CorfuExceptions;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
@@ -67,7 +68,7 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     protected final AtomicLong idGenerator = new AtomicLong();
 
-    private final ClientConfig config;
+    protected final ClientConfig config;
 
     final ReentrantReadWriteLock requestLock = new ReentrantReadWriteLock();
 
@@ -229,6 +230,7 @@ public abstract class ChannelHandler extends ResponseHandler {
             CompletableFuture<T> retVal = new CompletableFuture<>();
             pendingRequests.put(header.getRequestId(), retVal);
             ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+            outBuf.writeByte(API.PROTO_CORFU_MSG_MARK);
             // TODO(Maithem): remove allocation
             outBuf.writeBytes(request.toByteArray());
             // TODO(Maithem): Handle pipeline errors

@@ -127,6 +127,10 @@ public class ServerContext implements AutoCloseable {
 
     @Getter
     @Setter
+    private org.corfudb.infrastructure.protocol.IServerRouter requestRouter;
+
+    @Getter
+    @Setter
     private IReconfigurationHandlerPolicy failureHandlerPolicy;
 
     @Getter
@@ -187,7 +191,7 @@ public class ServerContext implements AutoCloseable {
         }
     }
 
-    int getBaseServerThreadCount() {
+    public int getBaseServerThreadCount() {
         Integer threadCount = getServerConfig(Integer.class, "--base-server-threads");
         return threadCount == null ? 1 : threadCount;
     }
@@ -417,6 +421,17 @@ public class ServerContext implements AutoCloseable {
      * @return A list of servers registered in serverRouter
      */
     public List<AbstractServer> getServers() {
+        return getServers(false);
+    }
+
+    /**
+     * Get the list of servers registered in requestRouter if useRequestRouter is set to true.
+     * Otherwise, the list of servers registered in serverRouter is returned.
+     * @param useRequestRouter Flag indicating which router to use
+     * @return A list of servers registered in requestRouter or
+     */
+    public List<AbstractServer> getServers(boolean useRequestRouter) {
+        if(useRequestRouter) return requestRouter.getServers();
         return serverRouter.getServers();
     }
 
@@ -434,6 +449,26 @@ public class ServerContext implements AutoCloseable {
      * @param serverEpoch the epoch to set
      */
     public synchronized void setServerEpoch(long serverEpoch, IServerRouter r) {
+        Long lastEpoch = dataStore.get(SERVER_EPOCH_RECORD);
+        if (lastEpoch == null || lastEpoch < serverEpoch) {
+            dataStore.put(SERVER_EPOCH_RECORD, serverEpoch);
+            r.setServerEpoch(serverEpoch);
+            getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
+        } else if (serverEpoch == lastEpoch) {
+            // Setting to the same epoch, don't need to do anything.
+        } else {
+            // Regressing, throw an exception.
+            throw new WrongEpochException(lastEpoch);
+        }
+    }
+
+    /**
+     * Set the request router epoch.
+     *
+     * @param serverEpoch The epoch to set.
+     * @param r The request router.
+     */
+    public synchronized void setServerEpoch(long serverEpoch, org.corfudb.infrastructure.protocol.IServerRouter r) {
         Long lastEpoch = dataStore.get(SERVER_EPOCH_RECORD);
         if (lastEpoch == null || lastEpoch < serverEpoch) {
             dataStore.put(SERVER_EPOCH_RECORD, serverEpoch);

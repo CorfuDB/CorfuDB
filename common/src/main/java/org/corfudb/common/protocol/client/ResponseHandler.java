@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBufInputStream;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 
@@ -20,6 +21,14 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;
+
+        // Temporary -- If message is not a new Protobuf message, forward the message.
+        if(msgBuf.getByte(msgBuf.readerIndex()) != API.PROTO_CORFU_MSG_MARK) {
+            ctx.fireChannelRead(msg);
+            return;
+        }
+
+        msgBuf.readByte();
         ByteBufInputStream msgInputStream = new ByteBufInputStream(msgBuf);
 
         try {
