@@ -135,6 +135,9 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                     log.warn("Exception caught while verifying remote leader.", ex);
                     fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_NOT_FOUND, leader));
                 }
+        } else {
+            log.info("Remote Leader already present {}. Skip leader verification.", fsm.getRemoteLeader().get());
+            fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
         }
     }
 }
