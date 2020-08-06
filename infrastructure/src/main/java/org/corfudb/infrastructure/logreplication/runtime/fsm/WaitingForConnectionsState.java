@@ -43,5 +43,6 @@ public class WaitingForConnectionsState implements LogReplicationRuntimeState {
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
         // Wait for connections to come up ..
+        log.info("Waiting for connections to remote cluster to be established..");
     }
 }

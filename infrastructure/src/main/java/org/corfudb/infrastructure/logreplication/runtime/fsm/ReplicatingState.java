@@ -41,12 +41,15 @@ public class ReplicatingState implements LogReplicationRuntimeState {
 
                 // If the leader is the node that become unavailable, verify new leader and attempt to reconnect.
                 if (fsm.getRemoteLeader().isPresent() && fsm.getRemoteLeader().get().equals(endpointDown)) {
+                    log.warn("Connection to remote leader endpoint={} is down. Attempt to reconnect.", endpointDown);
+                    fsm.resetRemoteLeaderEndpoint();
                     // If remaining connections verify leadership on connected endpoints, otherwise, return to init
                     // state, until a connection is available.
                     return fsm.getConnectedEndpoints().size() == 0 ? fsm.getStates().get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY) :
                             fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 }
 
+                log.debug("Connection lost to non-leader node {}", endpointDown);
                 // If a non-leader node loses connectivity, reconnect async and continue.
                 return null;
             case ON_CONNECTION_UP:
@@ -89,8 +92,16 @@ public class ReplicatingState implements LogReplicationRuntimeState {
 
     @Override
     public void onExit(LogReplicationRuntimeState to) {
-        if (to.getType().equals(LogReplicationRuntimeStateType.STOPPED)) {
-            replicationSourceManager.shutdown();
+        switch (to.getType()) {
+            case STOPPED:
+                replicationSourceManager.shutdown();
+                break;
+            case VERIFYING_REMOTE_LEADER:
+            case WAITING_FOR_CONNECTIVITY:
+                replicationSourceManager.stopLogReplication();
+                break;
+            default:
+                break;
         }
     }
 

@@ -55,7 +55,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
     public final String streamA = "Table001";
 
     public final int numWrites = 5000;
-    public final int lockLeaseDuration = 8;
+    public final int lockLeaseDuration = 10;
 
     public final int activeSiteCorfuPort = 9000;
     public final int standbySiteCorfuPort = 9001;
@@ -200,7 +200,20 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void stopActiveLogReplicator() {
-        List<String> paramsPs = Arrays.asList("/bin/sh", "-c", "ps aux | grep CorfuInterClusterReplicationServer | grep 9010");
+        if(runProcess) {
+            stopLogReplicator(true);
+        }
+    }
+
+    public void stopStandbyLogReplicator() {
+        if (runProcess) {
+            stopLogReplicator(false);
+        }
+    }
+
+    private void stopLogReplicator(boolean active) {
+        int port = active ? activeReplicationServerPort : standbyReplicationServerPort;
+        List<String> paramsPs = Arrays.asList("/bin/sh", "-c", "ps aux | grep CorfuInterClusterReplicationServer | grep " + port);
         String result = runCommandForOutput(paramsPs);
 
         // Get PID
@@ -222,9 +235,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
         List<String> paramsKill = Arrays.asList("/bin/sh", "-c", "kill -9 " + pid);
         runCommandForOutput(paramsKill);
 
-        if (activeReplicationServer != null) {
+        if (active && activeReplicationServer != null) {
             activeReplicationServer.destroyForcibly();
             activeReplicationServer = null;
+        } else if (!active && standbyReplicationServer != null) {
+            standbyReplicationServer.destroyForcibly();
+            standbyReplicationServer = null;
         }
     }
 
@@ -264,11 +280,29 @@ public class LogReplicationAbstractIT extends AbstractIT {
         }
     }
 
+    public void startStandbyLogReplicator() {
+        try {
+            if (runProcess) {
+                // Start Log Replication Server on Active Site
+                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath, lockLeaseDuration);
+            } else {
+                executorService.submit(() -> {
+                    CorfuInterClusterReplicationServer.main(new String[]{"-m", "--plugin=" + pluginConfigFilePath,
+                            "--address=localhost", String.valueOf(standbyReplicationServerPort)});
+                });
+            }
+        } catch (Exception e) {
+            System.out.println("Error caught while running Log Replication Server");
+        }
+    }
+
     public void verifyDataOnStandby(int expectedConsecutiveWrites) {
         // Wait until data is fully replicated
         while (mapAStandby.size() != expectedConsecutiveWrites) {
             // Block until expected number of entries is reached
         }
+
+        System.out.println("Number updates on Standby :: " + expectedConsecutiveWrites);
 
         // Verify data is present in Standby Site
         assertThat(mapAStandby.size()).isEqualTo(expectedConsecutiveWrites);

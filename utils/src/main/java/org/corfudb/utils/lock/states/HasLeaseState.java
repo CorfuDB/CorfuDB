@@ -1,5 +1,6 @@
 package org.corfudb.utils.lock.states;
 
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.utils.lock.Lock;
 
@@ -23,7 +24,8 @@ public class HasLeaseState extends LockState {
     //TODO move these to configs.
 
     // duration after which a local task checks if a lease has expired.
-    private static int DURATION_BETWEEN_LEASE_CHECKS = 60;
+    @Setter
+    private static int durationBetweenLeaseChecks = 30;
 
     // task to renew lease
     private Optional<ScheduledFuture<?>> leaseRenewalFuture = Optional.empty();
@@ -200,7 +202,7 @@ public class HasLeaseState extends LockState {
 
                         },
                         0,
-                        DURATION_BETWEEN_LEASE_CHECKS,
+                        durationBetweenLeaseChecks,
                         TimeUnit.SECONDS
                 ));
         }

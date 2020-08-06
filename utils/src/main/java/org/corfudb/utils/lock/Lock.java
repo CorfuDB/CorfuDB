@@ -74,16 +74,16 @@ import java.util.concurrent.LinkedBlockingQueue;
 @Slf4j
 public class Lock {
 
-    // lease duration in 60 seconds
+    // Lease duration in 60 seconds
     @Setter
     @VisibleForTesting
     public static int leaseDuration = 60;
 
-    // id of the lock
+    // Id of the lock
     @Getter
     private final LockDataTypes.LockId lockId;
 
-    //Common context object
+    // Common context object
     @Getter
     private final ClientContext clientContext;
 
@@ -97,11 +97,11 @@ public class Lock {
     // Executor service to consume FSM events
     private final ExecutorService eventConsumer;
 
-    // current state of the FSM
+    // Current state of the FSM
     @Getter
     private volatile LockState state;
 
-    //Map of pre-created FSM state objects
+    // Map of pre-created FSM state objects
     @Getter
     private Map<LockStateType, LockState> states = new HashMap<>();
 
