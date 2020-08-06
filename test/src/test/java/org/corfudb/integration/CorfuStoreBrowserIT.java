@@ -147,9 +147,10 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         runtime = createRuntime(singleNodeEndpoint);
         final int numItems = 100;
         final int batchSize = 10;
+        final int itemSize = 100;
 
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
-        Assert.assertEquals(browser.loadTable(namespace, tableName, numItems, batchSize), batchSize);
+        Assert.assertEquals(browser.loadTable(namespace, tableName, numItems, batchSize, itemSize), batchSize);
     }
 
     /**

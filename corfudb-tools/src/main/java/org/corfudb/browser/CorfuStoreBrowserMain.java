@@ -37,6 +37,7 @@ public class CorfuStoreBrowserMain {
         "[--diskPath=<pathToTempDirForLargeTables>] "+
         "[--numItems=<numItems>] "+
         "[--batchSize=<itemsPerTransaction>] "+
+        "[--itemSize=<sizeOfEachRecordValue>] "+
         "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
@@ -51,6 +52,7 @@ public class CorfuStoreBrowserMain {
         + "--diskPath=<pathToTempDirForLargeTables> Path to Temp Dir\n"
         + "--numItems=<numItems> Total Number of items for loadTable\n"
         + "--batchSize=<batchSize> Number of records per transaction for loadTable\n"
+        + "--itemSize=<itemSize> Size of each item's payload for loadTable\n"
         + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) {
@@ -130,7 +132,11 @@ public class CorfuStoreBrowserMain {
                     if (opts.get("--batchSize") != null) {
                         batchSize = Integer.parseInt(opts.get("--batchSize").toString());
                     }
-                    browser.loadTable(namespace, tableName, numItems, batchSize);
+                    int itemSize = 1024;
+                    if (opts.get("--itemSize") != null) {
+                        itemSize = Integer.parseInt(opts.get("--itemSize").toString());
+                    }
+                    browser.loadTable(namespace, tableName, numItems, batchSize, itemSize);
                     break;
             }
         } catch (Throwable t) {
