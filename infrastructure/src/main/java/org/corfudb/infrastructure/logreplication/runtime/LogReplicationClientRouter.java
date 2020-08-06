@@ -202,6 +202,11 @@ public class LogReplicationClientRouter implements IClientRouter {
                 log.info("Send message to {}, type={}", endpoint, message.getMsgType());
                 channelAdapter.send(endpoint, CorfuMessageConverter.toProtoBuf(message));
 
+            } catch (NetworkException ne) {
+                log.error("Caught Network Exception while trying to send message to remote leader {}", endpoint);
+                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
+                        endpoint));
+                throw ne;
             } catch (Exception e) {
                 outstandingRequests.remove(requestId);
                 log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
@@ -413,7 +418,8 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public synchronized void onConnectionDown(String endpoint) {
         log.info("Connection lost to remote endpoint {} on cluster {}", endpoint, remoteClusterId);
-        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN));
+        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
+                endpoint));
         // Attempt to reconnect to this endpoint
         channelAdapter.connectAsync(endpoint);
     }
