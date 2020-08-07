@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
@@ -13,8 +12,9 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.*;
 import org.corfudb.runtime.view.Address;
 
-import java.util.*;
-import java.util.stream.Stream;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
@@ -314,18 +314,17 @@ public class LogReplicationMetadataManager {
                 " persistSiteConfigID " + persistSiteConfigID + " persistSnapStart " + persistSnapStart);
     }
 
-    public void setReplicationRemainingPercent(String clusterId, long percentComplete,
+    public void setReplicationRemainingEntries(String clusterId, long remainingEntries,
                                                ReplicationStatusVal.SyncType type) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
-        ReplicationStatusVal val = ReplicationStatusVal.newBuilder().setReplicationCompletion(percentComplete)
+        ReplicationStatusVal val = ReplicationStatusVal.newBuilder().setRemainingEntriesToSend(remainingEntries)
                 .setType(type).build();
         TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
         txBuilder.update(REPLICATION_STATUS_TABLE, key, val, null);
         txBuilder.commit();
     }
 
-    public Map<String, ReplicationStatusVal> getReplicationRemainingPercent() {
-
+    public Map<String, ReplicationStatusVal> getReplicationRemainingEntries() {
         Map<String, ReplicationStatusVal> replicationStatusMap = new HashMap<>();
         QueryResult<CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal>> entries =
                 corfuStore.query(NAMESPACE).executeQuery(REPLICATION_STATUS_TABLE, (x) -> {return true;});
@@ -336,7 +335,7 @@ public class LogReplicationMetadataManager {
         return replicationStatusMap;
     }
 
-    public ReplicationStatusVal getReplicationRemainingPercent(String clusterId) {
+    public ReplicationStatusVal getReplicationRemainingEntries(String clusterId) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
         CorfuRecord record = corfuStore.query(NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
         if (record == null) {
@@ -404,9 +403,9 @@ public class LogReplicationMetadataManager {
             builder.append(" ");
         }
         builder.append("Replication Completion: ");
-        Map<String, ReplicationStatusVal> replicationStatusMap = getReplicationRemainingPercent();
+        Map<String, ReplicationStatusVal> replicationStatusMap = getReplicationRemainingEntries();
         replicationStatusMap.entrySet().forEach( entry -> builder.append(entry.getKey())
-                .append(entry.getValue().getReplicationCompletion()));
+                .append(entry.getValue().getRemainingEntriesToSend()));
 
         builder.append("Data Consistent: ").append(getDataConsistentOnStandby());
         return builder.toString();
