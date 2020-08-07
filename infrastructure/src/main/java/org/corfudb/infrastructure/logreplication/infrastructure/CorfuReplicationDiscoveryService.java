@@ -704,7 +704,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     @Override
     public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
         if (ClusterRole.ACTIVE == localClusterDescriptor.getRole()) {
-            return logReplicationMetadataManager.getReplicationRemainingPercent();
+            return logReplicationMetadataManager.getReplicationRemainingEntries();
         } else if (ClusterRole.STANDBY == localClusterDescriptor.getRole()) {
             return logReplicationMetadataManager.getDataConsistentOnStandby();
         }

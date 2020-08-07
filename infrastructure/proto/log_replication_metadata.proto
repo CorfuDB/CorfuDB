@@ -38,7 +38,7 @@ message LogReplicationMetadataVal {
  * Active Site sets the completionPercent, Standby sets the dataConsistent boolean
  */
 message ReplicationStatusVal {
-  uint64 replicationCompletion = 1;
+  uint64 remainingEntriesToSend = 1;
   bool dataConsistent = 2;
   enum SyncType {
     SNAPSHOT = 0;
