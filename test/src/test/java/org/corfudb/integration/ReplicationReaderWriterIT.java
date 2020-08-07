@@ -379,7 +379,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
 
-    void accessTxStream(Iterator iterator, int num) {
+    private void accessTxStream(Iterator iterator, int num) {
 
         int i = 0;
         while (iterator.hasNext() && i++ < num) {
@@ -498,7 +498,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
                     })
                     .setSerializer(Serializers.PRIMITIVE)
                     .open();
-            long size = testTable.size();
+            testTable.size();
         } catch (Exception e) {
             System.out.println("caught a exception " + e);
             assertThat(e).isInstanceOf(TrimmedException.class);

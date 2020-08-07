@@ -28,7 +28,7 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
 
     @Setter
     @Getter
-    IClientRouter router;
+    private IClientRouter router;
 
     @Getter
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)

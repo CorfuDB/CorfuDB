@@ -219,6 +219,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
             default:
                 log.error("Invalid event type {}", event.type);
+                break;
         }
     }
 

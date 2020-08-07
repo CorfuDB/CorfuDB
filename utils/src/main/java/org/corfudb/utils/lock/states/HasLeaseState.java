@@ -104,7 +104,7 @@ public class HasLeaseState extends LockState {
     @Override
     public void onEntry(LockState from) {
         notify(() -> lock.getLockListener().lockAcquired(lock.getLockId()), "Lock Acquired");
-        //Record the lease time
+        // Record the lease time
         leaseTime = Optional.of(Instant.now());
         startLeaseRenewal();
         startLeaseMonitor();
@@ -188,12 +188,12 @@ public class HasLeaseState extends LockState {
 
     /**
      * An independent task is run to make sure the lease is renewed on time. This task generates
-     * a LEASE_EXPIRED event if the lease was not be renewed on time.
+     * a LEASE_EXPIRED event if the lease was not renewed on time.
      */
     private void startLeaseMonitor() {
         synchronized (leaseMonitorFuture) {
             if (!leaseMonitorFuture.isPresent() || leaseMonitorFuture.get().isDone())
-                leaseMonitorFuture = Optional.of(taskScheduler.scheduleWithFixedDelay(
+                leaseMonitorFuture = Optional.of(leaseMonitorScheduler.scheduleWithFixedDelay(
                         () -> {
                             if (leaseTime.isPresent() && leaseTime.get().isBefore(Instant.now().minusSeconds(Lock.leaseDuration))) {
                                 log.info("Lock: {} lease expired for lock {}", lock.getLockId());
