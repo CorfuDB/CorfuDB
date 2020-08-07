@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -271,6 +272,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         }
 
         log.info("main: Server exiting due to shutdown");
+        flushAsyncLogAppender();
     }
 
     private ServerContext getServerContext(Map<String, Object> opts ) {
@@ -337,10 +339,23 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     public void cleanShutdown() {
         log.info("CleanShutdown: Starting Cleanup.");
         shutdownServer = true;
-        activeServer.close();
+        if (activeServer != null) {
+            activeServer.close();
+        }
         if (replicationDiscoveryService != null) {
             replicationDiscoveryService.shutdown();
         }
+        flushAsyncLogAppender();
+    }
+
+    /**
+     * Flush the logs of the async log appender. Useful call to make during clean shutdown
+     * to ensure that all the logs are indeed flushed out to disk for debugging.
+     */
+    public static void flushAsyncLogAppender() {
+        // Flush the async appender before exiting to prevent the loss of logs
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        loggerContext.stop();
     }
 
     /**
