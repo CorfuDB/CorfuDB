@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -271,6 +272,9 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         }
 
         log.info("main: Server exiting due to shutdown");
+        // Flush the async appender before exiting to prevent the loss of logs
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        loggerContext.stop();
     }
 
     private ServerContext getServerContext(Map<String, Object> opts ) {
@@ -341,6 +345,9 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         if (replicationDiscoveryService != null) {
             replicationDiscoveryService.shutdown();
         }
+        // Flush the async appender before exiting to prevent the loss of logs
+        LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
+        loggerContext.stop();
     }
 
     /**
