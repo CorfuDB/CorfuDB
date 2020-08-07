@@ -247,6 +247,7 @@ public class SnapshotSender {
         // TODO: Do we need to persist the lastTransferDone in the event of failover?
         // Get global tail, this will represent the timestamp for a consistent snapshot/cut of the data
         baseSnapshotTimestamp = runtime.getAddressSpaceView().getLogTail();
+        fsm.getAckReader().setBaseSnapshot(baseSnapshotTimestamp);
 
         // Starting a new snapshot sync, reset the log reader's snapshot timestamp
         snapshotReader.reset(baseSnapshotTimestamp);
