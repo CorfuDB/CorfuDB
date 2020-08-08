@@ -23,7 +23,7 @@ import java.util.UUID;
 /**
  * Utility class to convert between legacy Corfu Messages and ProtoBuf messages
  */
-public class CorfuMessageConverter {
+public class CorfuMessageConverterUtils {
 
     /**
      * Convert between legacy Java CorfuMsg to protoBuf definition.

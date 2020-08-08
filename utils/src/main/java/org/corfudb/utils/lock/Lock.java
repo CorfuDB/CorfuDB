@@ -194,7 +194,7 @@ public class Lock {
      * @param from initial state
      * @param to   final state
      */
-    void transition(LockState from, LockState to) {
+    private void transition(LockState from, LockState to) {
         from.onExit(to);
         to.clear();
         to.onEntry(from);

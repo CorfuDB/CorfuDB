@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
-import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;

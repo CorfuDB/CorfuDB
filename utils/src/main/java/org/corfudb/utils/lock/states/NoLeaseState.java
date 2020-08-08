@@ -1,12 +1,9 @@
 package org.corfudb.utils.lock.states;
 
-import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.utils.lock.Lock;
 
 import java.util.Optional;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  * This class represents the state when the <class>Lock</class> has does not have the lease. The lock has either never

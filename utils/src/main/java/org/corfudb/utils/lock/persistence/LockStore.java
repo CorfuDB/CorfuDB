@@ -303,8 +303,8 @@ public class LockStore {
     @Data
     @AllArgsConstructor
     private class ObservedLock {
-        LockData lockData;
-        Instant timestamp;
+        private LockData lockData;
+        private Instant timestamp;
     }
 
 }

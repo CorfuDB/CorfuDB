@@ -18,7 +18,7 @@ import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
-import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverter;
+import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverterUtils;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
 import java.io.File;
@@ -51,7 +51,7 @@ public class LogReplicationServerRouter implements IServerRouter {
      */
     @Getter
     @Setter
-    volatile long serverEpoch;
+    private volatile long serverEpoch;
 
     /** The {@link AbstractServer}s this {@link LogReplicationServerRouter} routes messages for. */
     final List<AbstractServer> servers;
@@ -91,7 +91,7 @@ public class LogReplicationServerRouter implements IServerRouter {
         log.info("Ready to send response {}", outMsg.getMsgType());
         outMsg.copyBaseFields(inMsg);
         try {
-            serverAdapter.send(CorfuMessageConverter.toProtoBuf(outMsg));
+            serverAdapter.send(CorfuMessageConverterUtils.toProtoBuf(outMsg));
             log.trace("Sent response: {}", outMsg);
         } catch (IllegalArgumentException e) {
             log.warn("Illegal response type. Ignoring message.", e);
@@ -133,7 +133,7 @@ public class LogReplicationServerRouter implements IServerRouter {
         try {
             log.info("Received message {}", protoMessage.getType().name());
             // Transform protoBuf into CorfuMessage
-            corfuMsg = CorfuMessageConverter.fromProtoBuf(protoMessage);
+            corfuMsg = CorfuMessageConverterUtils.fromProtoBuf(protoMessage);
         } catch (CorfuMessageProtoBufException e) {
             log.error("Exception while trying to convert {} from protoBuf", protoMessage.getType(), e);
             return;

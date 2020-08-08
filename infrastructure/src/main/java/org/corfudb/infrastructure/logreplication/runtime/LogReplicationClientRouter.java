@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
+import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverterUtils;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.Messages.CorfuMessage;
@@ -19,8 +20,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.Utils;
-import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverter;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
 import java.io.File;
@@ -70,7 +69,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      * to the remote node.
      */
     @Getter
-    volatile CompletableFuture<Void> remoteLeaderConnectionFuture;
+    private volatile CompletableFuture<Void> remoteLeaderConnectionFuture;
 
     /**
      * The current request ID.
@@ -200,7 +199,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                 // In the case the message is intended for a specific endpoint, we do not
                 // block on connection future, this is the case of leader verification.
                 log.info("Send message to {}, type={}", endpoint, message.getMsgType());
-                channelAdapter.send(endpoint, CorfuMessageConverter.toProtoBuf(message));
+                channelAdapter.send(endpoint, CorfuMessageConverterUtils.toProtoBuf(message));
 
             } catch (NetworkException ne) {
                 log.error("Caught Network Exception while trying to send message to remote leader {}", endpoint);
@@ -249,7 +248,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         // Get Remote Leader
         if(runtimeFSM.getRemoteLeader().isPresent()) {
             String remoteLeader = runtimeFSM.getRemoteLeader().get();
-            channelAdapter.send(remoteLeader, CorfuMessageConverter.toProtoBuf(message));
+            channelAdapter.send(remoteLeader, CorfuMessageConverterUtils.toProtoBuf(message));
             log.trace("Sent one-way message: {}", message);
         } else {
             log.error("Leader not found to remote cluster {}, dropping {}", remoteClusterId, message.getMsgType());
@@ -328,7 +327,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public void receive(CorfuMessage msg) {
         try {
-            CorfuMsg corfuMsg = CorfuMessageConverter.fromProtoBuf(msg);
+            CorfuMsg corfuMsg = CorfuMessageConverterUtils.fromProtoBuf(msg);
 
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (corfuMsg.getMsgType() == CorfuMsgType.LOG_REPLICATION_LEADERSHIP_LOSS) {

@@ -30,6 +30,8 @@ public abstract class LockState {
     protected final LockStore lockStore;
     // Task scheduler to be used by lock states
     protected final ScheduledExecutorService taskScheduler;
+    // Dedicated scheduler to be used in HasLeaseState to monitor acquired lock
+    protected final ScheduledExecutorService leaseMonitorScheduler;
     // Listener executor (for lock lost, lockAcquired) notifications.
     protected final ExecutorService lockListenerExecutor;
 
@@ -38,6 +40,7 @@ public abstract class LockState {
         this.lockStore = lock.getClientContext().getLockStore();
         this.taskScheduler =  lock.getClientContext().getTaskScheduler();
         this.lockListenerExecutor =  lock.getClientContext().getLockListenerExecutor();
+        this.leaseMonitorScheduler = lock.getClientContext().getLeaseMonitorScheduler();
     }
 
     /**

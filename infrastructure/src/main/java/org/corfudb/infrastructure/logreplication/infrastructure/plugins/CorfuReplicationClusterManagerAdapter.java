@@ -18,7 +18,7 @@ public interface CorfuReplicationClusterManagerAdapter {
     /**
      *   Register the discovery service
      */
-     void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
+    void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService);
 
      /**
      * Set the localEndpoint

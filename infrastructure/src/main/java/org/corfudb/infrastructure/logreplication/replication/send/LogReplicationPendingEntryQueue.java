@@ -44,7 +44,6 @@ public class LogReplicationPendingEntryQueue {
     }
 
     public boolean isFull() {
-        //System.out.print("\nsize " + list.size() +" maxSize " + maxSize);
         return (list.size() >= maxSize);
     }
 
@@ -56,17 +55,17 @@ public class LogReplicationPendingEntryQueue {
      * Remove all the entries whose timestamp is not larger than the address
      * @param address
      */
-    void evictAccordingToTimestamp(long address) {
+    public void evictAccordingToTimestamp(long address) {
         log.trace("evict address " + address);
         list.removeIf(a -> (a.getData().getMetadata().getTimestamp() <= address));
     }
 
-    void evictAccordingToSeqNum(long seqNum) {
+    public void evictAccordingToSeqNum(long seqNum) {
         log.trace("evict seqNum " + seqNum);
         list.removeIf(a -> (a.getData().getMetadata().getSnapshotSyncSeqNum() <= seqNum));
     }
 
-    void append(LogReplicationEntry data) {
+    public void append(LogReplicationEntry data) {
         LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data);
         list.add(entry);
     }

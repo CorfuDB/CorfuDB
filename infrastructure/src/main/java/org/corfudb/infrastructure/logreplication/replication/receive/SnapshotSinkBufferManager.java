@@ -12,7 +12,7 @@ import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAP
 public class SnapshotSinkBufferManager extends SinkBufferManager {
 
      // It is used to remember the SNAPSHOT_END message sequence number.
-    long snapshotEndSeq = Long.MAX_VALUE;
+    private long snapshotEndSeq = Long.MAX_VALUE;
 
     /**
      *
@@ -34,7 +34,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      * @return Previous in order message's snapshotSeqNumber.
      */
     @Override
-    long getPreSeq(LogReplicationEntry entry) {
+    public long getPreSeq(LogReplicationEntry entry) {
         return entry.getMetadata().getSnapshotSyncSeqNum() - 1;
     }
 
@@ -44,7 +44,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      * @return entry's snapshotSeqNum
      */
     @Override
-    long getCurrentSeq(LogReplicationEntry entry) {
+    public long getCurrentSeq(LogReplicationEntry entry) {
         if (entry.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
             snapshotEndSeq = entry.getMetadata().getSnapshotSyncSeqNum();
         }
@@ -90,7 +90,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
     /**
      * Go through the buffer to find messages that are in order with the last processed message.
      */
-    void processBuffer() {
+    public void processBuffer() {
         while (true) {
             LogReplicationEntry dataMessage = buffer.get(lastProcessedSeq);
             if (dataMessage == null) {
@@ -103,7 +103,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
         }
     }
 
-    boolean shouldAck() {
+    public boolean shouldAck() {
         if (lastProcessedSeq == snapshotEndSeq) {
             return true;
         }

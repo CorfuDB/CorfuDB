@@ -26,7 +26,7 @@ public abstract class SinkBufferManager {
      * For logEntry buffer, the key is the entry's previousTimeStamp
      * For Snapshot buffer, the key is the previous entry's snapshotSeqNumber
      */
-    HashMap<Long, LogReplicationEntry> buffer;
+    public HashMap<Long, LogReplicationEntry> buffer;
 
     /*
      * While processing a message in the buffer, it will call
@@ -37,7 +37,7 @@ public abstract class SinkBufferManager {
     /*
      * Could be LOG_ENTRY or SNAPSHOT
      */
-    MessageType type;
+    public MessageType type;
 
     /*
      * The max number of entries in the buffer.
@@ -62,14 +62,14 @@ public abstract class SinkBufferManager {
     /*
      * Time last ack sent.
      */
-    long ackTime = 0;
+    public long ackTime = 0;
 
     /*
      * The lastProcessedSeq message's ack value.
      * For snapshot, it is the entry's seqNumber.
      * For log entry, it is the entry's timestamp.
      */
-    long lastProcessedSeq;
+    public long lastProcessedSeq;
 
     /**
      *
@@ -96,7 +96,7 @@ public abstract class SinkBufferManager {
      *
      * @return
      */
-    boolean shouldAck() {
+    public boolean shouldAck() {
         long currentTime = java.lang.System.currentTimeMillis();
         ackCnt++;
 
@@ -152,21 +152,21 @@ public abstract class SinkBufferManager {
     }
 
     // Process messages in the buffer that are in order
-    abstract void processBuffer();
+    public abstract void processBuffer();
 
     /**
      * Get the previous in order message's sequence.
      * @param entry
      * @return
      */
-    abstract long getPreSeq(LogReplicationEntry entry);
+    public abstract long getPreSeq(LogReplicationEntry entry);
 
     /**
      * Get the current message's sequence.
      * @param entry
      * @return
      */
-    abstract long getCurrentSeq(LogReplicationEntry entry);
+    public abstract long getCurrentSeq(LogReplicationEntry entry);
 
     /**
      * Make an Ack with the lastProcessedSeq

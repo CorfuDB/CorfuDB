@@ -14,12 +14,12 @@ public class OpaqueStream {
     /**
      * The stream view backing this adapter.
      */
-    final IStreamView streamView;
+    private final IStreamView streamView;
 
     /**
      * Necessary until the runtime is no longer necessary for deserialization.
      */
-    final CorfuRuntime runtime;
+    private final CorfuRuntime runtime;
 
     public OpaqueStream(CorfuRuntime runtime, IStreamView streamView) {
         this.runtime = runtime;

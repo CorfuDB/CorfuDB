@@ -50,9 +50,6 @@ public class StreamsLogEntryReader implements LogEntryReader {
     // Timestamp of the transaction log that is the previous message
     private long preMsgTs;
 
-    // the timestamp of the transaction log that is the current message
-    private long currentMsgTs;
-
     // the sequence number of the message based on the globalBaseSnapshot
     private long sequence;
 
@@ -86,7 +83,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private LogReplicationEntry generateMessageWithOpaqueEntryList(List<OpaqueEntry> opaqueEntryList, UUID logEntryRequestId) {
         // Set the last timestamp as the max timestamp
-        currentMsgTs = opaqueEntryList.get(opaqueEntryList.size() - 1).getVersion();
+        long currentMsgTs = opaqueEntryList.get(opaqueEntryList.size() - 1).getVersion();
         LogReplicationEntry txMessage = new LogReplicationEntry(MSG_TYPE, topologyConfigId, logEntryRequestId,
                 currentMsgTs, preMsgTs, globalBaseSnapshot, sequence, opaqueEntryList);
         preMsgTs = currentMsgTs;
@@ -235,9 +232,9 @@ public class StreamsLogEntryReader implements LogEntryReader {
      * The class used to track the transaction opaque stream
      */
     public static class TxOpaqueStream {
-        CorfuRuntime rt;
-        OpaqueStream txStream;
-        Iterator iterator;
+        private CorfuRuntime rt;
+        private OpaqueStream txStream;
+        private Iterator iterator;
         
         public TxOpaqueStream(CorfuRuntime rt) {
             //create an opaque stream for transaction stream
@@ -250,7 +247,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
          * Set the iterator with entries from current seekAddress till snapshot
          * @param snapshot
          */
-        void streamUpTo(long snapshot) {
+        private void streamUpTo(long snapshot) {
             log.trace("StreamUpTo {}", snapshot);
             iterator = txStream.streamUpTo(snapshot).iterator();
         }
@@ -258,14 +255,14 @@ public class StreamsLogEntryReader implements LogEntryReader {
         /**
          * Set the iterator with entries from current seekAddress till end of the log tail
          */
-        void streamUpTo() {
+        private void streamUpTo() {
             streamUpTo(rt.getAddressSpaceView().getLogTail());
         }
             
         /**
          * Tell if the transaction stream has the next entry
          */
-        boolean hasNext() {
+        private boolean hasNext() {
             if (!iterator.hasNext()) {
                 streamUpTo();
             }
@@ -275,7 +272,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         /**
          * Get the next entry from the transaction stream.
          */
-        OpaqueEntry next() {
+        private OpaqueEntry next() {
             if (!hasNext())
                 return null;
 

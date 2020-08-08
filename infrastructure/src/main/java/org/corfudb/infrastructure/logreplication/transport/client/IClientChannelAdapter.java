@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.transport.client;
 
 import lombok.Getter;
 
-import lombok.Setter;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 import org.corfudb.runtime.Messages.CorfuMessage;

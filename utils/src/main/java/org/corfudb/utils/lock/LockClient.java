@@ -42,13 +42,18 @@ public class LockClient {
     @Getter
     private final Map<LockId, Lock> locks = new ConcurrentHashMap<>();
 
-    // lock data store
+    // Lock data store
     private final LockStore lockStore;
 
-    // single threaded scheduler to monitor locks
+    // Single threaded scheduler to monitor locks
     private final ScheduledExecutorService lockMonitorScheduler;
 
     private final ScheduledExecutorService taskScheduler;
+
+    // Single threaded scheduler to monitor the acquired locks (lease)
+    // A dedicated scheduler is required in case the task scheduler is stuck in some database operation
+    // and the previous lock owner can effectively expire the lock.
+    private final ScheduledExecutorService leaseMonitorScheduler;
 
     private final ExecutorService lockListenerExecutor;
 
@@ -85,6 +90,14 @@ public class LockClient {
             return t;
         });
 
+        this.leaseMonitorScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        {
+            Thread t = Executors.defaultThreadFactory().newThread(r);
+            t.setName("LeaseMonitorThread");
+            t.setDaemon(true);
+            return t;
+        });
+
         this.lockListenerExecutor = Executors.newFixedThreadPool(1, (r) ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(r);
@@ -103,7 +116,7 @@ public class LockClient {
 
         this.clientId = clientId;
         this.lockStore = new LockStore(corfuRuntime, clientId);
-        this.clientContext = new ClientContext(clientId, lockStore, taskScheduler, lockListenerExecutor);
+        this.clientContext = new ClientContext(clientId, lockStore, taskScheduler, lockListenerExecutor, leaseMonitorScheduler);
     }
 
     /**
@@ -175,13 +188,16 @@ public class LockClient {
         private final UUID clientUuid;
         private final LockStore lockStore;
         private final ScheduledExecutorService taskScheduler;
+        private final ScheduledExecutorService leaseMonitorScheduler;
         private final ExecutorService lockListenerExecutor;
 
-        public ClientContext(UUID clientUuid, LockStore lockStore, ScheduledExecutorService taskScheduler, ExecutorService lockListenerExecutor) {
+        public ClientContext(UUID clientUuid, LockStore lockStore, ScheduledExecutorService taskScheduler,
+                             ExecutorService lockListenerExecutor, ScheduledExecutorService leaseMonitorScheduler) {
             this.clientUuid = clientUuid;
             this.lockStore = lockStore;
             this.taskScheduler = taskScheduler;
             this.lockListenerExecutor = lockListenerExecutor;
+            this.leaseMonitorScheduler = leaseMonitorScheduler;
         }
     }
 

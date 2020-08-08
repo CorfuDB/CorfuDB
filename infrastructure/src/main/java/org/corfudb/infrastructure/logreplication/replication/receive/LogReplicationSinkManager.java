@@ -25,7 +25,6 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
@@ -222,7 +221,7 @@ public class LogReplicationSinkManager implements DataReceiver {
          // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
          // If there is a siteConfig change, the discovery service will detect it and reset the state.
         if (message.getMetadata().getTopologyConfigId() != topologyConfigId) {
-            log.trace("Sink manager with config id {} ignored msg id {}", topologyConfigId,
+            log.warn("Sink manager with config id {} ignored msg id {}", topologyConfigId,
                     message.getMetadata().getTopologyConfigId());
             return null;
         }
@@ -411,6 +410,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 break;
             default:
                 log.warn("Message type {} should not be applied as snapshot sync.", message.getMetadata().getMessageMetadataType());
+                break;
         }
     }
 
@@ -442,7 +442,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private boolean receivedValidMessage(LogReplicationEntry message) {
         return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE
-                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END)
+                || message.getMetadata().getMessageMetadataType() == SNAPSHOT_END)
                 || rxState == RxState.LOG_ENTRY_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
 

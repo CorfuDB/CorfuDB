@@ -62,7 +62,7 @@ public class LogEntryWriter {
      * @param metadata
      * @throws ReplicationWriterException
      */
-    void verifyMetadata(LogReplicationEntryMetadata metadata) throws ReplicationWriterException {
+    private void verifyMetadata(LogReplicationEntryMetadata metadata) throws ReplicationWriterException {
         if (metadata.getMessageMetadataType() != MessageType.LOG_ENTRY_MESSAGE) {
             log.error("Wrong message metadata {}, expecting  type {} snapshot {}", metadata,
                     MessageType.LOG_ENTRY_MESSAGE, srcGlobalSnapshot);
@@ -74,7 +74,7 @@ public class LogEntryWriter {
      * Convert message data to an MultiObjectSMREntry and write to log.
      * @param txMessage
      */
-    void processMsg(LogReplicationEntry txMessage) {
+    private void processMsg(LogReplicationEntry txMessage) {
         List<OpaqueEntry> opaqueEntryList = txMessage.getOpaqueEntryList();
 
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();

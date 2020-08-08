@@ -1,15 +1,8 @@
 package org.corfudb.integration;
 
-import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import lombok.Value;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.ISerializer;
-
-import java.lang.ref.SoftReference;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class TestSerializer implements ISerializer {
 

@@ -9,7 +9,13 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.Re
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.collections.*;
+import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.QueryResult;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
 
 import java.util.HashMap;

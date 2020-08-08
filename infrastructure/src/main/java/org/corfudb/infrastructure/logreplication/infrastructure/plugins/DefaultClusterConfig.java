@@ -7,10 +7,6 @@ import java.util.List;
 
 public final class DefaultClusterConfig {
 
-    private DefaultClusterConfig() {
-
-    }
-
     @Getter
     private static List<String> activeNodesUuid = Arrays.asList("123e4567-e89b-12d3-a456-556642440000");
 
@@ -67,4 +63,8 @@ public final class DefaultClusterConfig {
 
     @Getter
     private static int logSinkAckCycleTimer = 1000;
+
+    private DefaultClusterConfig() {
+
+    }
 }

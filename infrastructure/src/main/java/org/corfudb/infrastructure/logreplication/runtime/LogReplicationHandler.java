@@ -28,7 +28,7 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
 
     @Setter
     @Getter
-    IClientRouter router;
+    private IClientRouter router;
 
     @Getter
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
@@ -51,21 +51,21 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE)
     private static Object handleLogReplicationNegotiation(CorfuPayloadMsg<LogReplicationNegotiationResponse> msg,
                                                           ChannelHandlerContext ctx, IClientRouter r) {
-        log.info("Handle log replication Negotiation Response");
+        log.debug("Handle log replication Negotiation Response");
         return msg.getPayload();
     }
 
     @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE)
     private static Object handleLogReplicationQueryLeadershipResponse(CorfuPayloadMsg<LogReplicationQueryLeaderShipResponse> msg,
                                                                       ChannelHandlerContext ctx, IClientRouter r) {
-        log.info("Handle log replication query leadership response msg {}", msg);
+        log.debug("Handle log replication query leadership response msg {}", msg);
         return msg.getPayload();
     }
 
     @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_LEADERSHIP_LOSS)
     private static Object handleLogReplicationLeadershipLoss(CorfuPayloadMsg<Messages.LogReplicationLeadershipLoss> msg,
                                                                       ChannelHandlerContext ctx, IClientRouter r) {
-        log.info("Handle log replication leadership loss msg {}", msg);
+        log.debug("Handle log replication leadership loss msg {}", msg);
         return msg.getPayload();
     }
 
