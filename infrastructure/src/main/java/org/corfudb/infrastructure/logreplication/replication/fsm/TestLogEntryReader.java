@@ -10,8 +10,6 @@ import java.util.UUID;
  */
 public class TestLogEntryReader implements LogEntryReader {
 
-    public TestLogEntryReader() {}
-
     @Override
     public LogReplicationEntry read(UUID logEntryRequestId) {
         return null;

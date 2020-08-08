@@ -3,24 +3,22 @@ package org.corfudb.infrastructure.logreplication;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.util.NodeLocator;
 import org.corfudb.util.serializer.Serializers;
 
 import java.io.IOException;
-import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class LogReplicationTest {
 
-    String endpoint;
+    private String endpoint;
 
     private final int ITERATIONS = 10;
 
-    CorfuTable<String, String> table1;
-    CorfuTable<String, String> table2;
-    CorfuTable<String, String> table3;
-    CorfuRuntime runtime;
+    private CorfuTable<String, String> table1;
+    private CorfuTable<String, String> table2;
+    private CorfuTable<String, String> table3;
+    private CorfuRuntime runtime;
 
     public LogReplicationTest(String endpoint) {
         this.endpoint = endpoint;

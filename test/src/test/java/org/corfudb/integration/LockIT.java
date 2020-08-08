@@ -32,12 +32,12 @@ import java.util.stream.Collectors;
 
 public class LockIT extends AbstractIT implements Observer {
 
-    static final int LOCK_TIME_CONSTANT = 6;
-    static final int LOCK_LEASE_DURATION = 15;
-    final int RENEW_CYCLES = 5;
+    private static final int LOCK_TIME_CONSTANT = 6;
+    private static final int LOCK_LEASE_DURATION = 15;
+    private final int RENEW_CYCLES = 5;
 
-    static final String LOCK_GROUP = "Default_Lock_Group";
-    static final String LOCK_NAME = "Test_Lock";
+    private static final String LOCK_GROUP = "Default_Lock_Group";
+    private static final String LOCK_NAME = "Test_Lock";
 
     private Map<UUID, ObservableValue> lockAcquiredObservables = new HashMap<>();
     private Map<UUID, ObservableValue> lockRevokedObservables = new HashMap<>();

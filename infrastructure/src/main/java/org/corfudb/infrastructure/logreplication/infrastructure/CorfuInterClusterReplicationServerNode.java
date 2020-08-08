@@ -130,7 +130,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         log.info("close: Server shutdown and resources released");
     }
 
-    LogReplicationServer getLogReplicationServer() {
+    public LogReplicationServer getLogReplicationServer() {
         return (LogReplicationServer)serverMap.get(LogReplicationServer.class);
     }
 }

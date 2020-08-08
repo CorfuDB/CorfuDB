@@ -17,12 +17,12 @@ import java.util.Map;
 @Slf4j
 public abstract class CorfuReplicationClusterManagerBaseAdapter implements CorfuReplicationClusterManagerAdapter {
     @Getter
-    CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
+    public CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService;
 
     @Getter
-    TopologyConfigurationMsg topologyConfig;
+    public TopologyConfigurationMsg topologyConfig;
 
-    String localEndpoint;
+    public String localEndpoint;
 
     public void register(CorfuReplicationDiscoveryServiceAdapter corfuReplicationDiscoveryService) {
         this.corfuReplicationDiscoveryService = corfuReplicationDiscoveryService;

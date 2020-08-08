@@ -36,7 +36,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
-import static org.junit.Assert.assertTrue;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -56,14 +55,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     public final static String nettyConfig = "src/test/resources/transport/nettyConfig.properties";
 
-    static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
-    static final int WRITER_PORT = DEFAULT_PORT + 1;
-    static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
+    private static final String SOURCE_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
+    private static final int WRITER_PORT = DEFAULT_PORT + 1;
+    private static final String DESTINATION_ENDPOINT = DEFAULT_HOST + ":" + WRITER_PORT;
 
-    static final String ACTIVE_CLUSTER_ID = UUID.randomUUID().toString();
-    static final String REMOTE_CLUSTER_ID = UUID.randomUUID().toString();
-    static final int CORFU_PORT = 9000;
-    static final String TABLE_PREFIX = "test";
+    private static final String ACTIVE_CLUSTER_ID = UUID.randomUUID().toString();
+    private static final String REMOTE_CLUSTER_ID = UUID.randomUUID().toString();
+    private static final int CORFU_PORT = 9000;
+    private static final String TABLE_PREFIX = "test";
 
     static private final int NUM_KEYS = 10;
 
@@ -91,34 +90,34 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     static private TestConfig testConfig = new TestConfig();
 
-    Process sourceServer;
-    Process destinationServer;
+    private Process sourceServer;
+    private Process destinationServer;
 
     // Connect with sourceServer to generate data
-    CorfuRuntime srcDataRuntime = null;
+    private CorfuRuntime srcDataRuntime = null;
 
     // Connect with sourceServer to read snapshot data
-    CorfuRuntime readerRuntime = null;
+    private CorfuRuntime readerRuntime = null;
 
     // Connect with destinationServer to write snapshot data
-    CorfuRuntime writerRuntime = null;
+    private CorfuRuntime writerRuntime = null;
 
     // Connect with destinationServer to verify data
-    CorfuRuntime dstDataRuntime = null;
+    private CorfuRuntime dstDataRuntime = null;
 
-    SourceForwardingDataSender sourceDataSender;
+    private SourceForwardingDataSender sourceDataSender;
 
     // List of all opened maps backed by Corfu on Source and Destination
-    HashMap<String, CorfuTable<Long, Long>> srcCorfuTables = new HashMap<>();
-    HashMap<String, CorfuTable<Long, Long>> dstCorfuTables = new HashMap<>();
+    private HashMap<String, CorfuTable<Long, Long>> srcCorfuTables = new HashMap<>();
+    private HashMap<String, CorfuTable<Long, Long>> dstCorfuTables = new HashMap<>();
 
     // The in-memory data for corfu tables for verification.
-    HashMap<String, HashMap<Long, Long>> srcDataForVerification = new HashMap<>();
-    HashMap<String, HashMap<Long, Long>> dstDataForVerification = new HashMap<>();
+    private HashMap<String, HashMap<Long, Long>> srcDataForVerification = new HashMap<>();
+    private HashMap<String, HashMap<Long, Long>> dstDataForVerification = new HashMap<>();
 
-    CorfuRuntime srcTestRuntime;
+    private CorfuRuntime srcTestRuntime;
 
-    CorfuRuntime dstTestRuntime;
+    private CorfuRuntime dstTestRuntime;
 
     /* ********* Test Observables ********** */
 
@@ -152,13 +151,16 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // A semaphore that allows to block until the observed value reaches the expected value
     private final Semaphore blockUntilExpectedValueReached = new Semaphore(1, true);
 
-
     // A semaphore that allows to block until the observed value reaches the expected value
     private final Semaphore blockUntilExpectedAckType = new Semaphore(1, true);
 
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
     private LogReplicationMetadataManager logReplicationMetadataManager;
+
+    private final String t0 = TABLE_PREFIX + 0;
+    private final String t1 = TABLE_PREFIX + 1;
+    private final String t2 = TABLE_PREFIX + 2;
 
     /**
      * Setup Test Environment
@@ -300,7 +302,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
 
-    void verifyTables(HashMap<String, CorfuTable<Long, Long>> tables0, HashMap<String, CorfuTable<Long, Long>> tables1) {
+    private void verifyTables(HashMap<String, CorfuTable<Long, Long>> tables0, HashMap<String, CorfuTable<Long, Long>> tables1) {
             for (String name : tables0.keySet()) {
                 CorfuTable<Long, Long> table = tables0.get(name);
                 CorfuTable<Long, Long> mapKeys = tables1.get(name);
@@ -323,7 +325,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      * @param tables
      * @param hashMap
      */
-    void waitData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
+    private void waitData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
@@ -333,7 +335,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         }
     }
 
-    void verifyData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
+    private void verifyData(HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
@@ -417,10 +419,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
     }
-
-    private final String t0 = TABLE_PREFIX + 0;
-    private final String t1 = TABLE_PREFIX + 1;
-    private final String t2 = TABLE_PREFIX + 2;
 
     /**
      * In this test we emulate the following scenario, 3 tables (T0, T1, T2). Only T0 and T1 are replicated.
@@ -860,7 +858,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Wait until an error occurs and drop snapshot sync request or we'll get into an infinite loop
         // as the snapshot sync will always fail due to the log being trimmed with no checkpoint.
         expectedErrors = 1;
-        LogReplicationSourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(), WAIT.ON_ERROR);
+        startSnapshotSync(srcCorfuTables.keySet(), WAIT.ON_ERROR);
 
         // Verify its in require snapshot sync state and that data was not completely transferred to destination
         // checkStateChange(sourceManager.getLogReplicationFSM(), LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
@@ -951,7 +949,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Wait until an error occurs and drop snapshot sync request or we'll get into an infinite loop
         // as the snapshot sync will always fail due to the log being trimmed with no checkpoint.
         expectedErrors = 1;
-        LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), WAIT.ON_ERROR, true);
+        startLogEntrySync(srcCorfuTables.keySet(), WAIT.ON_ERROR, true);
 
         // Verify its in require snapshot sync state and that data was not completely transferred to destination
 //        checkStateChange(fsm, LogReplicationStateType.IN_REQUIRE_SNAPSHOT_SYNC, true);
@@ -1206,11 +1204,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                                             Set<WAIT> waitConditions) throws InterruptedException {
-        // Config
-        int msg_size = MSG_SIZE;
-        if (waitConditions.contains(WAIT.ON_TIMEOUT_ERROR)) {
-            msg_size = SMALL_MSG_SIZE;
-        }
+
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, BATCH_SIZE, SMALL_MSG_SIZE);
 
         // Data Sender
@@ -1285,18 +1279,17 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // Callback for observed values
     @Override
     public void update(Observable o, Object arg) {
-        if (o == ackMessages) {
+        if (o.equals(ackMessages)) {
             verifyExpectedAckMessage((ObservableAckMsg)o);
-        } else if (o == errorsLogEntrySync) {
+        } else if (o.equals(errorsLogEntrySync)) {
             verifyExpectedValue(expectedErrors, errorsLogEntrySync.getValue());
-        } else if (o == sinkReceivedMessages) {
+        } else if (o.equals(sinkReceivedMessages)) {
             verifyExpectedValue(expectedSinkReceivedMessages, sinkReceivedMessages.getValue());
         }
     }
 
     private void verifyExpectedValue(long expectedValue, long currentValue) {
         // If expected value, release semaphore / unblock the wait
-        // System.out.print("\nexpected " + expectedValue + " currentValue " + currentValue);
         if (expectedValue == currentValue) {
             if (expectedAckMsgType != null) {
                 blockUntilExpectedValueReached.release();
@@ -1321,6 +1314,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     if (expectedAckTimestamp == logReplicationEntry.getMetadata().timestamp) {
                         blockUntilExpectedAckTs.release();
                     }
+                    break;
+                default:
                     break;
             }
         }
@@ -1355,15 +1350,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     @Data
     public static class TestConfig {
-        int dropMessageLevel = 0;
-        boolean trim = false;
-        boolean writingSrc = false;
-        boolean writingDst = false;
-        boolean deleteOP = false;
-        WAIT waitOn = WAIT.ON_ACK;
-
-        public TestConfig() {}
-
+        private int dropMessageLevel = 0;
+        private boolean trim = false;
+        private boolean writingSrc = false;
+        private boolean writingDst = false;
+        private boolean deleteOP = false;
+        private WAIT waitOn = WAIT.ON_ACK;
+        
         public TestConfig clear() {
             dropMessageLevel = 0;
             trim = false;

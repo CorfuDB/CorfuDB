@@ -72,7 +72,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
-        log.debug("onEntry :: Verifying Remote Leader, transition from {}", from);
+        log.debug("onEntry :: Verifying Remote Leader, transition from {}", from.getType());
         // Verify Leadership on connected nodes (ignore those for which leadership is pending)
         this.worker.submit(this::verifyLeadership);
     }

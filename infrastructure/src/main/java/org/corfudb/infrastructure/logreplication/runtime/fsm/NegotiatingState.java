@@ -112,6 +112,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 // Negotiation to leader node completed, unblock channel in the router.
                 router.getRemoteLeaderConnectionFuture().complete(null);
             } else {
+                log.debug("No leader found during negotiation.");
                 // No leader found at the time of negotiation
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
             }
@@ -192,8 +193,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * "lastLogEntryProcessed": "-1"
          */
         if (negotiationResponse.getSnapshotStart() == -1) {
-            log.info("No snapshot available in remote. Initiate SNAPSHOT sync to {}.", fsm.getRemoteClusterId());
-            negotiationResponse.getLastLogProcessed();
+            log.info("No snapshot available in remote. Initiate SNAPSHOT sync to {}", fsm.getRemoteClusterId());
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                     new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
             return;
@@ -290,7 +290,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         /*
          * For other scenarios, the standby site is in a non-recognizable state, trigger a snapshot full sync.
          */
-        log.warn("Could not recognize the standby cluster state according to the response {}, will restart with a snapshot full sync event " ,
+        log.warn("Could not recognize the standby cluster state according to the response {}, will restart with a snapshot full sync event" ,
                 negotiationResponse);
         fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                 new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));

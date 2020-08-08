@@ -71,6 +71,12 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     @Getter
     public transient boolean haveUpcallResult = false;
 
+    /**
+     * The SMREntry's serialized size in bytes. This is set during reading from or writing to the log.
+     */
+    @Getter
+    Integer serializedSize = null;
+
     /** Set the upcall result for this entry. */
     public void setUpcallResult(Object result) {
         upcallResult = result;
@@ -97,12 +103,6 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         this.SMRArguments = smrArguments;
         this.serializerType = serializer;
     }
-
-    /**
-     * The SMREntry's serialized size in bytes. This is set during reading from or writing to the log.
-     */
-    @Getter
-    Integer serializedSize = null;
 
     /**
      * This function provides the remaining buffer. Child entries
