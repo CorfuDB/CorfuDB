@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
-import org.corfudb.runtime.Messages;
 
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_MESSAGE;
 import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_REPLICATED;
@@ -32,7 +31,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      * @return log entry message's previousTimestamp.
      */
     @Override
-    long getPreSeq(LogReplicationEntry entry) {
+    public long getPreSeq(LogReplicationEntry entry) {
         return entry.getMetadata().getPreviousTimestamp();
     }
 
@@ -42,7 +41,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      * @return log entry message's timestamp.
      */
     @Override
-    long getCurrentSeq(LogReplicationEntry entry) {
+    public long getCurrentSeq(LogReplicationEntry entry) {
         return entry.getMetadata().getTimestamp();
     }
 

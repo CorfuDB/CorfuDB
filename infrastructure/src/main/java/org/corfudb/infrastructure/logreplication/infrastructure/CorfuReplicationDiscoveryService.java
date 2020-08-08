@@ -219,6 +219,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
             default:
                 log.error("Invalid event type {}", event.type);
+                break;
         }
     }
 
@@ -610,8 +611,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         updateLocalTopology(discoveredTopology);
         updateReplicationManagerTopology(discoveredTopology);
-        // Update topology config id in metadata manager
-        logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
+        updateTopologyConfigId(topologyDescriptor.getTopologyConfigId());
         log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
     }
