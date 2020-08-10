@@ -267,9 +267,6 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
 
     @Test
     public void testLockHolderChangesSourceDuringLogEntrySync() throws Exception {
-        final int corfuExitErrorCode = 100;
-        exit.expectSystemExitWithStatus(corfuExitErrorCode);
-
         final int numWriteIterations = 20;
         final Duration waitBetweenWrites = Duration.ofSeconds(2);
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
@@ -341,8 +338,6 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
 
     @Test
     public void testLockHolderContinuouslyFlappingSource() throws Exception {
-        final int corfuExitErrorCode = 100;
-        exit.expectSystemExitWithStatus(corfuExitErrorCode);
         final int numWriteIterations = 20;
         final Duration waitBetweenWrites = Duration.ofSeconds(2);
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
@@ -417,8 +412,6 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
 
     @Test
     public void testLockHolderContinuouslyFlappingDestination() throws Exception {
-        final int corfuExitErrorCode = 100;
-        exit.expectSystemExitWithStatus(corfuExitErrorCode);
         final int numWriteIterations = 20;
         final Duration waitBetweenWrites = Duration.ofSeconds(2);
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
@@ -491,8 +484,6 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
 
     @Test
     public void testNoLockHolderOnSource() throws Exception {
-        final int corfuExitErrorCode = 100;
-        exit.expectSystemExitWithStatus(corfuExitErrorCode);
         final int numWriteIterations = 10;
         final Duration waitBetweenWrites = Duration.ofSeconds(1);
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
@@ -585,8 +576,6 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
 
     @Test
     public void testLockHolderChangesDestinationDuringLogEntrySync() throws Exception {
-        final int corfuExitErrorCode = 100;
-        exit.expectSystemExitWithStatus(corfuExitErrorCode);
         final int numWriteIterations = 30;
         final Duration waitBetweenWrites = Duration.ofSeconds(1);
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
