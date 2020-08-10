@@ -1,20 +1,12 @@
 package org.corfudb.util.serializer;
 
+import com.alibaba.fastjson.JSON;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufInputStream;
-import io.netty.buffer.ByteBufOutputStream;
-
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.util.UUID;
-
+import java.nio.charset.StandardCharsets;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.ICorfuSMR;
 
 /**
  * Created by mwei on 2/10/16.
@@ -49,29 +41,15 @@ public class JsonSerializer implements ISerializer {
         String className = new String(classNameBytes);
         if (className.equals("null")) {
             return null;
-        } else if (className.equals("CorfuObject")) {
-            int smrClassNameLength = b.readShort();
-            byte[] smrClassNameBytes = new byte[smrClassNameLength];
-            b.readBytes(smrClassNameBytes, 0, smrClassNameLength);
-            String smrClassName = new String(smrClassNameBytes);
-            try {
-                return rt.getObjectsView().build()
-                        .setStreamID(new UUID(b.readLong(), b.readLong()))
-                        .setType((Class<? extends ICorfuSMR>) Class.forName(smrClassName))
-                        .open();
-            } catch (ClassNotFoundException cnfe) {
-                log.error("Exception during deserialization!", cnfe);
-                throw new RuntimeException(cnfe);
-            }
-        } else {
-            try (ByteBufInputStream bbis = new ByteBufInputStream(b)) {
-                try (InputStreamReader r = new InputStreamReader(bbis)) {
-                    return gson.fromJson(r, Class.forName(className));
-                }
-            } catch (IOException | ClassNotFoundException ie) {
-                log.error("Exception during deserialization!", ie);
-                throw new RuntimeException(ie);
-            }
+        }
+
+        int numJsonBytes = b.readInt();
+        String jsonString = b.readCharSequence(numJsonBytes, StandardCharsets.UTF_8).toString();
+
+        try {
+            return JSON.parseObject(jsonString, Class.forName(className));
+        } catch (ClassNotFoundException e) {
+            throw new IllegalArgumentException(e);
         }
     }
 
@@ -84,34 +62,19 @@ public class JsonSerializer implements ISerializer {
     @Override
     public void serialize(Object o, ByteBuf b) {
         String className = o == null ? "null" : o.getClass().getName();
-        if (className.endsWith(ICorfuSMR.CORFUSMR_SUFFIX)) {
-            className = "CorfuObject";
-            byte[] classNameBytes = className.getBytes();
-            b.writeShort(classNameBytes.length);
-            b.writeBytes(classNameBytes);
-            String smrClass = className.split("\\$")[0];
-            byte[] smrClassNameBytes = smrClass.getBytes();
-            b.writeShort(smrClassNameBytes.length);
-            b.writeBytes(smrClassNameBytes);
-            UUID id = ((ICorfuSMR) o).getCorfuStreamID();
-            log.trace("Serializing a CorfuObject of type {} as a stream pointer to {}",
-                    smrClass, id);
-            b.writeLong(id.getMostSignificantBits());
-            b.writeLong(id.getLeastSignificantBits());
-        } else {
-            byte[] classNameBytes = className.getBytes();
-            b.writeShort(classNameBytes.length);
-            b.writeBytes(classNameBytes);
-            if (o == null) {
-                return;
-            }
-            try (ByteBufOutputStream bbos = new ByteBufOutputStream(b)) {
-                try (OutputStreamWriter osw = new OutputStreamWriter(bbos)) {
-                    gson.toJson(o, o.getClass(), osw);
-                }
-            } catch (IOException ie) {
-                log.error("Exception during serialization!", ie);
-            }
+        byte[] classNameBytes = className.getBytes();
+        b.writeShort(classNameBytes.length);
+        b.writeBytes(classNameBytes);
+        if (o == null) {
+            return;
         }
+        b.markWriterIndex();
+        b.writeInt(0);
+        String jsonOutput= JSON.toJSONString(o);
+        int bytesWritten = b.writeCharSequence(jsonOutput, StandardCharsets.UTF_8);
+        int endIdx = b.writerIndex();
+        b.resetWriterIndex();
+        b.writeInt(bytesWritten);
+        b.writerIndex(endIdx);
     }
 }

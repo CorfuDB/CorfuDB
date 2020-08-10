@@ -27,16 +27,6 @@
 
         <!-- external dependencies -->
         <dependency>
-            <groupId>org.immutables</groupId>
-            <artifactId>gson</artifactId>
-            <version>${immutables.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.immutables</groupId>
-            <artifactId>value</artifactId>
-            <version>${immutables.version}</version>
-        </dependency>
-        <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
             <version>3.1.0</version>

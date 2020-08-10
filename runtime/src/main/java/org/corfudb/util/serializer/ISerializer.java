@@ -1,51 +1,22 @@
 package org.corfudb.util.serializer;
 
-import com.esotericsoftware.kryo.Kryo;
 import com.google.common.collect.ImmutableMap;
-
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-
 import java.util.function.Function;
-
-import de.javakaffee.kryoserializers.guava.ImmutableListSerializer;
-import de.javakaffee.kryoserializers.guava.ImmutableMapSerializer;
-import de.javakaffee.kryoserializers.guava.ImmutableMultimapSerializer;
-import de.javakaffee.kryoserializers.guava.ImmutableSetSerializer;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-
 import net.openhft.hashing.LongHashFunction;
-
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.Utils;
-import org.objenesis.strategy.StdInstantiatorStrategy;
 
 /**
  * This class represents a serializer, which takes an object and reads/writes it to a bytebuf.
  * Created by mwei on 9/17/15.
  */
 public interface ISerializer {
-
-    // Used for default cloning.
-    ThreadLocal<Kryo> kryos = new ThreadLocal<Kryo>() {
-        protected Kryo initialValue() {
-            Kryo kryo = new Kryo();
-            // Use an instantiator that does not require no-args
-            kryo.setInstantiatorStrategy(new Kryo.DefaultInstantiatorStrategy(
-                    new StdInstantiatorStrategy()));
-            ImmutableListSerializer.registerSerializers(kryo);
-            ImmutableSetSerializer.registerSerializers(kryo);
-            ImmutableMapSerializer.registerSerializers(kryo);
-            ImmutableMultimapSerializer.registerSerializers(kryo);
-            // configure kryo instance, customize settings
-            return kryo;
-        }
-
-        ;
-    };
 
     byte getType();
 
@@ -143,15 +114,5 @@ public interface ISerializer {
             b.release();
             return Utils.longToBigEndianByteArray(hash);
         }
-    }
-
-    /**
-     * Clone an object through serialization.
-     *
-     * @param o The object to clone.
-     * @return The cloned object.
-     */
-    default Object clone(Object o, CorfuRuntime rt) {
-        return kryos.get().copy(o);
     }
 }

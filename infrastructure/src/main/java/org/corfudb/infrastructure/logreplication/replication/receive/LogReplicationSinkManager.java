@@ -1,9 +1,20 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
+import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
+
+
 import com.google.common.annotations.VisibleForTesting;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.Properties;
+import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -15,19 +26,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Address;
-import org.immutables.value.internal.$guava$.annotations.$VisibleForTesting;
-
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.Properties;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
 
 /**
  * This class represents the Log Replication Manager at the destination.
@@ -77,7 +75,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      */
     private long topologyConfigId = 0;
 
-    @$VisibleForTesting
+    @VisibleForTesting
     private int rxMessageCounter = 0;
 
     // Count number of received messages, used for testing purposes
