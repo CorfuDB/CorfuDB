@@ -2,6 +2,8 @@ package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.Sleep;
@@ -30,6 +32,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 
+@Slf4j
 public class LockIT extends AbstractIT implements Observer {
 
     private static final int LOCK_TIME_CONSTANT = 6;
@@ -79,7 +82,7 @@ public class LockIT extends AbstractIT implements Observer {
                     .build();
 
            // Since this is the only client, lock should've been acquired, verify, block until condition is met
-           System.out.println("***** Wait until lock is acquired");
+           log.debug("***** Wait until lock is acquired");
            waitCondition = WaitConditionType.LOCK_ACQUIRED;
            blockUntilWaitCondition.acquire();
 
@@ -92,7 +95,7 @@ public class LockIT extends AbstractIT implements Observer {
 
            // Verify for 5 cycles that the lock is renewed
            for (int i=0; i < RENEW_CYCLES; i++) {
-               System.out.println("***** Wait until lock is renewed");
+               log.debug("***** Wait until lock is renewed");
                // TODO: inspect the     // how many times the lease has been acquired by a different client
                //    int32 lease_acquisition_number = 3;
                //    // how many times the lease has been renewed since the last acquisition
@@ -104,7 +107,7 @@ public class LockIT extends AbstractIT implements Observer {
                assertThat(lockRevokedObservables.get(clientId).getValue()).isEqualTo(0);
            }
        } catch (Exception e) {
-           System.out.println("Unexpected exception: " + e);
+           log.debug("Unexpected exception: " + e);
            throw e;
        } finally {
            shutdown();
@@ -147,7 +150,7 @@ public class LockIT extends AbstractIT implements Observer {
             // Since this is the only client, ALL locks should've been acquired, verify, block until condition is met
             waitCondition = WaitConditionType.LOCK_ACQUIRED;
             for (int i=0; i<numLocks; i++) {
-                System.out.println("***** Wait until lock " + i + " is acquired");
+                log.debug("***** Wait until lock " + i + " is acquired");
                 blockUntilWaitCondition.acquire();
             }
 
@@ -155,7 +158,7 @@ public class LockIT extends AbstractIT implements Observer {
             lockIds.forEach(lockId ->
                 assertThat(client.getLocks().get(lockId).getState().getType()).isEqualTo(LockStateType.HAS_LEASE));
         } catch (Exception e) {
-            System.out.println("Unexpected exception: " + e);
+            log.debug("Unexpected exception: " + e);
             throw e;
         } finally {
             shutdown();
@@ -231,7 +234,7 @@ public class LockIT extends AbstractIT implements Observer {
 
             // Verify for 5 cycles that the lock is renewed
             for (int i=0; i < RENEW_CYCLES; i++) {
-                System.out.println("***** Wait until lock is renewed");
+                log.debug("***** Wait until lock is renewed");
                 // Wait for the renewal cycle + 1, and verify that the lock is still acquired by the same client
                 Sleep.sleepUninterruptibly(Duration.ofSeconds(LOCK_TIME_CONSTANT + 1));
                 clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
@@ -240,7 +243,7 @@ public class LockIT extends AbstractIT implements Observer {
             }
 
         } catch (Exception e) {
-            System.out.println("Caught Exception: " + e);
+            log.debug("Caught Exception: " + e);
             throw e;
         } finally {
             shutdown();
@@ -315,7 +318,7 @@ public class LockIT extends AbstractIT implements Observer {
             // Verify that if clientWithLock is shutdown, a new client acquires the lock
             clientIdToRuntimeMap.get(clientWithLock.getClientId()).shutdown();
 
-            System.out.println("***** Re-acquire lock");
+            log.debug("***** Re-acquire lock");
 
             // Block until any client acquires the lock
             if (lockHasNotBeenAcquired(lockAcquiredObservables)) {
@@ -331,7 +334,7 @@ public class LockIT extends AbstractIT implements Observer {
             assertThat(newClientWithLock).isNotEqualTo(clientsWithLock);
 
         } catch (Exception e) {
-            System.out.println("Caught Exception: " + e);
+            log.debug("Caught Exception: " + e);
             throw e;
         } finally {
             shutdown();

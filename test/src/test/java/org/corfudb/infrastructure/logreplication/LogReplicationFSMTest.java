@@ -1,41 +1,11 @@
 package org.corfudb.infrastructure.logreplication;
 
+import static java.lang.Thread.sleep;
+import static org.assertj.core.api.Assertions.assertThat;
+
+
 import com.google.common.reflect.TypeToken;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.compression.Codec;
-import org.corfudb.common.util.ObservableValue;
-import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
-import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
-import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
-import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
-import org.corfudb.infrastructure.logreplication.replication.fsm.InSnapshotSyncState;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationState;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
-import org.corfudb.infrastructure.logreplication.replication.fsm.TestDataSender;
-import org.corfudb.infrastructure.logreplication.replication.fsm.TestLogEntryReader;
-import org.corfudb.infrastructure.logreplication.replication.fsm.TestReaderConfiguration;
-import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotReader;
-import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
-import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.runtime.view.Address;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -47,9 +17,38 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
-
-import static java.lang.Thread.sleep;
-import static org.assertj.core.api.Assertions.assertThat;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.compression.Codec;
+import org.corfudb.common.util.ObservableValue;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
+import org.corfudb.infrastructure.logreplication.replication.fsm.EmptyDataSender;
+import org.corfudb.infrastructure.logreplication.replication.fsm.EmptySnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.fsm.InSnapshotSyncState;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationState;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationStateType;
+import org.corfudb.infrastructure.logreplication.replication.fsm.TestDataSender;
+import org.corfudb.infrastructure.logreplication.replication.fsm.TestLogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.fsm.TestReaderConfiguration;
+import org.corfudb.infrastructure.logreplication.replication.fsm.TestSnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.DefaultReadProcessor;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.view.AbstractViewTest;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 
 @Slf4j
 /**
@@ -363,7 +362,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
-        System.out.println("**** Wait for snapshot sync to complete");
+        log.debug("**** Wait for snapshot sync to complete");
 
         // Block until the snapshot sync completes and next transition occurs.
         while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
@@ -488,7 +487,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionObservable.addObserver(this);
 
         if (observeSnapshotSync) {
-            System.out.println("Observe snapshot sync");
+            log.debug("Observe snapshot sync");
             snapshotMessageCounterObservable = ((InSnapshotSyncState) fsm.getStates()
                     .get(LogReplicationStateType.IN_SNAPSHOT_SYNC)).getSnapshotSender().getObservedCounter();
             snapshotMessageCounterObservable.addObserver(this);
@@ -507,7 +506,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                             UUID eventId, boolean waitUntilExpected)
             throws InterruptedException {
 
-        System.out.println("Insert event: " + eventType);
+        log.debug("Insert event: " + eventType);
 
         LogReplicationEvent event;
 
@@ -570,11 +569,11 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 // Wait until some thread is waiting to acquire...
             }
             transitionAvailable.release();
-            // System.out.println("Transition::#"  + transitionObservable.getValue() + "::" + fsm.getState().getType());
+            // log.debug("Transition::#"  + transitionObservable.getValue() + "::" + fsm.getState().getType());
         } else if (obs == snapshotMessageCounterObservable) {
             if (limitSnapshotMessages == snapshotMessageCounterObservable.getValue() && observeSnapshotSync) {
                 // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
-                // System.out.println("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
+                // log.debug("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
                 fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
             }
         }
