@@ -1,16 +1,19 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.fail;
+
+
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataControl;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 
-import static org.assertj.core.api.Assertions.fail;
-
 /**
  * Test Default Data Control Implementation, used for source and sink (destination) nodes.
  */
+@Slf4j
 public class DefaultDataControl implements DataControl {
 
     @Setter
@@ -39,7 +42,7 @@ public class DefaultDataControl implements DataControl {
             // System.out.println("----- Drop snapshot sync request: " + controlCallsCount);
         } else if (sourceManager != null) {
             // Request/Start Snapshot Sync on Source
-            System.out.println("----- Start Snapshot Sync on Source: " + controlCallsCount);
+            log.debug("----- Start Snapshot Sync on Source: " + controlCallsCount);
             sourceManager.startSnapshotSync();
         } else {
             fail("Source Manager has not been set for DataControl implementation.");

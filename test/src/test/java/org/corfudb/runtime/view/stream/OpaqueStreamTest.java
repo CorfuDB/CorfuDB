@@ -1,8 +1,13 @@
 package org.corfudb.runtime.view.stream;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+
 import com.google.common.reflect.TypeToken;
+import java.util.UUID;
+import java.util.stream.Stream;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.CustomSerializer;
-import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -12,13 +17,9 @@ import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.Test;
 
-import java.util.UUID;
-import java.util.stream.Stream;
-
+@Slf4j
 public class OpaqueStreamTest extends AbstractViewTest {
 
     @Test
@@ -58,7 +59,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         Stream<OpaqueEntry> stream = opaqueStream.streamUpTo(snapshot);
 
         stream.forEach(entry -> {
-            System.out.println(entry.getVersion() + " " + entry.getEntries());
+            log.debug(entry.getVersion() + " " + entry.getEntries());
         });
 
     }
@@ -103,7 +104,7 @@ public class OpaqueStreamTest extends AbstractViewTest {
         Stream<OpaqueEntry> stream = opaqueStream.streamUpTo(snapshot);
 
         stream.forEach(entry -> {
-            System.out.println(entry.getVersion() + " " + entry.getEntries());
+            log.debug(entry.getVersion() + " " + entry.getEntries());
         });
 
         CorfuRuntime rt3 = getNewRuntime(getDefaultNode()).connect();

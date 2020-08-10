@@ -1,6 +1,20 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
+
+
 import com.google.common.reflect.TypeToken;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -11,26 +25,12 @@ import org.corfudb.runtime.CheckpointWriter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.NodeLocator;
 import org.junit.Test;
-
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
 
 
 /**
@@ -43,6 +43,7 @@ import static org.assertj.core.api.Assertions.fail;
  * 2. Compare performance of both, for the same described scenarios (example: reading in presence of holes,
  * reading a large stream from a fresh runtime).
  */
+@Slf4j
 public class StreamAddressDiscoveryIT extends AbstractIT {
 
     private CorfuRuntime createDefaultRuntimeUsingFollowBackpointers() {
@@ -152,13 +153,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Read S1 from new runtime (following backpointers)
             long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers(stream1Name,
                     PARAMETERS.NUM_ITERATIONS_LARGE);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (following backpointers): "
+            log.debug("**** Total time new runtime to sync 'Stream 1' (following backpointers): "
                     + totalTimeFollowBackpointers);
 
             // Read S1 from new runtime (retrieving address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps(stream1Name,
                     PARAMETERS.NUM_ITERATIONS_LARGE);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (address maps): "
+            log.debug("**** Total time new runtime to sync 'Stream 1' (address maps): "
                     + totalTimeAddressMaps);
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
@@ -196,7 +197,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         final int numKeys = PARAMETERS.NUM_ITERATIONS_LARGE;
 
         try {
-            System.out.println("**** Start multi-threaded benchmark");
+            log.debug("**** Start multi-threaded benchmark");
 
             CorfuTable<Integer, String> table = rt1w.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
@@ -218,7 +219,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             executor.shutdown();
             executor.awaitTermination(2, TimeUnit.MINUTES);
-            System.out.println(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
+            log.debug(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
                             " %s ms (for follow backpointers)",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
 
@@ -242,20 +243,20 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             executor2.shutdown();
             executor2.awaitTermination(2, TimeUnit.MINUTES);
-            System.out.println(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
+            log.debug(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
                             " %s ms (for stream address maps)",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
 
             // Read from fresh runtime (follow backpointers)
             long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (following backpointers): "
+            log.debug("**** Total time new runtime to sync 'Stream 1' (following backpointers): "
                     + totalTimeFollowBackpointers);
 
             // Read from fresh runtime (stream address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync 'Stream 1' (address maps): "
+            log.debug("**** Total time new runtime to sync 'Stream 1' (address maps): "
                     + totalTimeAddressMaps);
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
@@ -309,7 +310,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         }
 
         try {
-            System.out.println("**** Start multi-threaded benchmark");
+            log.debug("**** Start multi-threaded benchmark");
 
             // RUNTIME FOLLOW BACKPOINTERS (WRITE)
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
@@ -333,7 +334,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             executor.shutdown();
             executor.awaitTermination(2, TimeUnit.MINUTES);
-            System.out.println(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
+            log.debug(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
                             " %s ms (for follow backpointers)",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
 
@@ -359,20 +360,20 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             executor.shutdown();
             executor.awaitTermination(2, TimeUnit.MINUTES);
-            System.out.println(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
+            log.debug(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
                             " %s ms (for stream address maps)",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
 
             // Read from fresh runtime (follow backpointers)
             long totalTimeFollowBackpointers = readFromNewRuntimeFollowingBackpointers("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync stream (following backpointers): "
+            log.debug("**** Total time new runtime to sync stream (following backpointers): "
                     + totalTimeFollowBackpointers);
 
             // Read from fresh runtime (stream address map)
             long totalTimeAddressMaps = readFromNewRuntimeUsingAddressMaps("streamTable",
                     numKeys);
-            System.out.println("**** Total time new runtime to sync stream (address maps): "
+            log.debug("**** Total time new runtime to sync stream (address maps): "
                     + totalTimeAddressMaps);
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
@@ -413,7 +414,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         final int numKeys = 10000;
 
         try {
-            System.out.println("Start multi-threaded benchmark");
+            log.debug("Start multi-threaded benchmark");
 
             CorfuTable<Integer, String> table = rt1.getObjectsView().build()
                     .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
@@ -439,7 +440,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             executor.shutdown();
             executor.awaitTermination(1, TimeUnit.MINUTES);
 
-            System.out.println(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in: %s ms",
+            log.debug(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in: %s ms",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
 
             // Read from fresh runtime (following backpointers)
@@ -464,7 +465,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             long followBackpointersTime = System.currentTimeMillis() - startTime;
 
-            System.out.println(String.format("**** New runtime read (following backpointers) completed in: %s ms",
+            log.debug(String.format("**** New runtime read (following backpointers) completed in: %s ms",
                     followBackpointersTime));
 
             assertThat(table2.size()).isEqualTo(numKeys);
@@ -491,13 +492,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             long addressMapTime = System.currentTimeMillis() - startTime;
 
-            System.out.println(String.format("**** New runtime read (stream address maps) completed in: %s ms",
+            log.debug(String.format("**** New runtime read (stream address maps) completed in: %s ms",
                     addressMapTime));
 
             assertThat(table3.size()).isEqualTo(numKeys);
             assertThat(addressMapTime).isLessThanOrEqualTo(followBackpointersTime);
         } catch(Exception e) {
-            System.out.println("**** Exception: " + e);
+            log.debug("**** Exception: " + e);
             // Exception
         } finally {
             rt1.shutdown();
