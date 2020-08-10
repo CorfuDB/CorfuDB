@@ -1,6 +1,17 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+
 import com.google.common.reflect.TypeToken;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.Arrays;
+import java.util.List;
+import java.util.StringJoiner;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -17,16 +28,7 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.util.Arrays;
-import java.util.List;
-import java.util.StringJoiner;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
+@Slf4j
 public class LogReplicationAbstractIT extends AbstractIT {
 
     private static final int MSG_SIZE = 65536;
@@ -70,13 +72,13 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public void testEndToEndSnapshotAndLogEntrySync() throws Exception {
         try {
-            System.out.println("\nSetup active and standby Corfu's");
+            log.debug("\nSetup active and standby Corfu's");
             setupActiveAndStandbyCorfu();
 
-            System.out.println("Open map on active and standby");
+            log.debug("Open map on active and standby");
             openMap();
 
-            System.out.println("Write data to active CorfuDB before LR is started ...");
+            log.debug("Write data to active CorfuDB before LR is started ...");
             // Add Data for Snapshot Sync
             writeToActive(0, numWrites);
 
@@ -88,13 +90,13 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             startLogReplicatorServers();
 
-            System.out.println("Wait ... Snapshot log replication in progress ...");
+            log.debug("Wait ... Snapshot log replication in progress ...");
             verifyDataOnStandby(numWrites);
 
             // Add Delta's for Log Entry Sync
             writeToActive(numWrites, numWrites/2);
 
-            System.out.println("Wait ... Delta log replication in progress ...");
+            log.debug("Wait ... Delta log replication in progress ...");
             verifyDataOnStandby((numWrites + (numWrites / 2)));
         } finally {
             executorService.shutdownNow();
@@ -137,7 +139,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
             standbyRuntime = new CorfuRuntime(standbyEndpoint).connect();
         } catch (Exception e) {
-            System.out.println("Error while starting Corfu");
+            log.debug("Error while starting Corfu");
             throw  e;
         }
     }
@@ -191,7 +193,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 });
             }
         } catch (Exception e) {
-            System.out.println("Error caught while running Log Replication Server");
+            log.debug("Error caught while running Log Replication Server");
         }
     }
 
@@ -226,7 +228,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             }
         }
 
-        System.out.println("*** Active PID :: " + pid);
+        log.debug("*** Active PID :: " + pid);
 
         List<String> paramsKill = Arrays.asList("/bin/sh", "-c", "kill -9 " + pid);
         runCommandForOutput(paramsKill);
@@ -272,7 +274,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 });
             }
         } catch (Exception e) {
-            System.out.println("Error caught while running Log Replication Server");
+            log.debug("Error caught while running Log Replication Server");
         }
     }
 
@@ -288,7 +290,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
                 });
             }
         } catch (Exception e) {
-            System.out.println("Error caught while running Log Replication Server");
+            log.debug("Error caught while running Log Replication Server");
         }
     }
 
@@ -298,7 +300,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
             // Block until expected number of entries is reached
         }
 
-        System.out.println("Number updates on Standby :: " + expectedConsecutiveWrites);
+        log.debug("Number updates on Standby :: " + expectedConsecutiveWrites);
 
         // Verify data is present in Standby Site
         assertThat(mapAStandby.size()).isEqualTo(expectedConsecutiveWrites);
@@ -380,7 +382,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
         Serializers.registerSerializer(protoBufSerializer);
 
         // Trim
-        System.out.println("**** Trim Log @address=" + trimMark);
+        log.debug("**** Trim Log @address=" + trimMark);
         cpRuntime.getAddressSpaceView().prefixTrim(trimMark);
         cpRuntime.getAddressSpaceView().invalidateClientCache();
         cpRuntime.getAddressSpaceView().invalidateServerCaches();

@@ -1,14 +1,16 @@
 package org.corfudb.infrastructure.logreplication;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+
 import com.google.common.reflect.TypeToken;
+import java.io.IOException;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.serializer.Serializers;
 
-import java.io.IOException;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
+@Slf4j
 public class LogReplicationTest {
 
     private String endpoint;
@@ -47,10 +49,10 @@ public class LogReplicationTest {
         runtime.parseConfigurationString(endpoint);
         runtime.registerSystemDownHandler(() -> {throw new RuntimeException("Disconnected from database. Terminating thread.");});
 
-        System.out.println("Connecting to Corfu " + endpoint);
+        log.debug("Connecting to Corfu " + endpoint);
         runtime.connect();
 
-        System.out.println("Connected to Corfu " + endpoint);
+        log.debug("Connected to Corfu " + endpoint);
 
         //Create tables
         table1 = runtime.getObjectsView()
@@ -103,11 +105,11 @@ public class LogReplicationTest {
 
     private void verifyData() {
         if (table1.isEmpty() && table2.isEmpty() && table3.isEmpty()) {
-            System.out.println("All tables are EMPTY");
+            log.debug("All tables are EMPTY");
         } else {
-            System.out.println("Table1: " + table1.keySet());
-            System.out.println("Table2: " + table2.keySet());
-            System.out.println("Table3: " + table3.keySet());
+            log.debug("Table1: " + table1.keySet());
+            log.debug("Table2: " + table2.keySet());
+            log.debug("Table3: " + table3.keySet());
 
             for (int i = 0; i < ITERATIONS; i++) {
 
@@ -124,14 +126,14 @@ public class LogReplicationTest {
         LogReplicationTest lrTest = new LogReplicationTest(endpoint);
         lrTest.setupEnv();
         if(args[1].equalsIgnoreCase("sender")) {
-            System.out.println("Generating data for the tables");
+            log.debug("Generating data for the tables");
             lrTest.generateData();
-            System.out.println("Generated data for the tables");
+            log.debug("Generated data for the tables");
         }
         else {
-            System.out.println("Verifying data for the tables");
+            log.debug("Verifying data for the tables");
             lrTest.verifyData();
-            System.out.println("Verified data for the tables");
+            log.debug("Verified data for the tables");
         }
     }
 }

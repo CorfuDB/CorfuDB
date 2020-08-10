@@ -1,6 +1,22 @@
 package org.corfudb.integration;
 
+import static java.lang.Thread.sleep;
+import static org.assertj.core.api.Assertions.assertThat;
+
+
 import com.google.common.reflect.TypeToken;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
+import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogEntryWriter;
@@ -26,22 +42,6 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.Semaphore;
-import java.util.stream.Stream;
-
-import static java.lang.Thread.sleep;
-import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
 public class ReplicationReaderWriterIT extends AbstractIT {
@@ -206,15 +206,15 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             }
             rt.getObjectsView().TXEnd();
         }
-        System.out.println("\ngenerate transactions num " + numT);
+        log.debug("\ngenerate transactions num " + numT);
     }
 
     public static void verifyData(String tag, HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, HashMap<Long, Long>> hashMap) {
-        System.out.println("\n" + tag);
+        log.debug("\n" + tag);
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             HashMap<Long, Long> mapKeys = hashMap.get(name);
-            System.out.println("table " + name + " key size " + table.keySet().size() +
+            log.debug("table " + name + " key size " + table.keySet().size() +
                     " hashMap size " + mapKeys.size());
 
             assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
@@ -228,11 +228,11 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     }
 
     public static void verifyTable(String tag, HashMap<String, CorfuTable<Long, Long>> tables, HashMap<String, CorfuTable<Long, Long>> hashMap) {
-        System.out.println("\n" + tag);
+        log.debug("\n" + tag);
         for (String name : hashMap.keySet()) {
             CorfuTable<Long, Long> table = tables.get(name);
             CorfuTable<Long, Long> mapKeys = hashMap.get(name);
-            System.out.println("table " + name + " key size " + table.keySet().size() +
+            log.debug("table " + name + " key size " + table.keySet().size() +
                     " hashMap size " + mapKeys.size());
 
             assertThat(mapKeys.keySet().containsAll(table.keySet())).isTrue();
@@ -259,16 +259,16 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         IStreamView txStream = rt.getStreamsView().getUnsafe(ObjectsView.TRANSACTION_STREAM_ID, options);
         List<ILogData> dataList = txStream.remaining();
-        System.out.println("\ndataList size " + dataList.size());
+        log.debug("\ndataList size " + dataList.size());
         for (ILogData data : txStream.remaining()) {
-            System.out.println(data);
+            log.debug("{}", data);
         }
     }
 
     public static void printTails(String tag, CorfuRuntime rt0, CorfuRuntime rt1) {
-        System.out.println("\n" + tag);
-        System.out.println("src dataTail " + rt0.getAddressSpaceView().getLogTail());
-        System.out.println("dst dataTail " + rt1.getAddressSpaceView().getLogTail());
+        log.debug("\n" + tag);
+        log.debug("src dataTail " + rt0.getAddressSpaceView().getLogTail());
+        log.debug("dst dataTail " + rt1.getAddressSpaceView().getLogTail());
 
     }
 
@@ -288,7 +288,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             SnapshotReadMessage snapshotReadMessage = reader.read(snapshotSyncId);
             for (LogReplicationEntry data : snapshotReadMessage.getMessages()) {
                 msgQ.add(data);
-                System.out.println("generate msg " + cnt);
+                log.debug("generate msg " + cnt);
             }
 
             if (snapshotReadMessage.isEndRead()) {
@@ -312,7 +312,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         StreamsSnapshotWriter writer = new StreamsSnapshotWriter(rt, config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
-            System.out.println("msgQ is empty");
+            log.debug("msgQ is empty");
         }
 
         long topologyConfigId = msgQ.get(0).getMetadata().getTopologyConfigId();
@@ -356,7 +356,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
                 blockOnce = false;
             }
 
-            System.out.println(" msgQ size " + msgQ.size());
+            log.debug(" msgQ size " + msgQ.size());
 
         } while (entry != null);
 
@@ -369,7 +369,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         LogEntryWriter writer = new LogEntryWriter(rt, config, logReplicationMetadataManager);
 
         if (msgQ.isEmpty()) {
-            System.out.println("msgQ is empty");
+            log.debug("msgQ is empty");
         }
 
         for (LogReplicationEntry msg : msgQ) {
@@ -394,7 +394,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         rt.getAddressSpaceView().invalidateServerCaches();
         rt.getAddressSpaceView().invalidateClientCache();
         waitSem.release();
-        System.out.println("\ntrim at " + token + " currentTail " + rt.getAddressSpaceView().getLogTail());
+        log.debug("\ntrim at " + token + " currentTail " + rt.getAddressSpaceView().getLogTail());
     }
 
     /**
@@ -419,12 +419,12 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         Token trimMark = rt.getAddressSpaceView().getTrimMark();
 
         while (trimMark.getSequence() != (token.getSequence() + 1)) {
-            System.out.println("trimMark " + trimMark + " trimToken " + token);
+            log.debug("trimMark " + trimMark + " trimToken " + token);
             trimMark = rt.getAddressSpaceView().getTrimMark();
         }
 
         rt.getAddressSpaceView().invalidateServerCaches();
-        System.out.println("trim " + token);
+        log.debug("trim " + token);
     }
 
     private void trimDelay() {
@@ -434,7 +434,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             }
             checkpointAndTrim( srcDataRuntime);
         } catch (Exception e) {
-            System.out.println("caught an exception " + e);
+            log.debug("caught an exception " + e);
         }
     }
 
@@ -445,7 +445,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             }
             trimAlone(srcDataRuntime.getAddressSpaceView().getLogTail(), srcDataRuntime);
         } catch ( Exception e) {
-            System.out.println("caught an exception " + e);
+            log.debug("caught an exception " + e);
         }
     }
 
@@ -472,7 +472,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             accessTxStream(iterator, (int)tail);
         } catch (Exception e) {
             result = e;
-            System.out.println("caught an exception " + e + " tail " + tail);
+            log.debug("caught an exception " + e + " tail " + tail);
         } finally {
             assertThat(result).isInstanceOf(TrimmedException.class);
         }
@@ -498,7 +498,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
                     .open();
             testTable.size();
         } catch (Exception e) {
-            System.out.println("caught a exception " + e);
+            log.debug("caught a exception " + e);
             assertThat(e).isInstanceOf(TrimmedException.class);
         }
     }
@@ -522,8 +522,8 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             readLogEntryMsgs(msgQ, srcHashMap.keySet(), readerRuntime, true);
         } catch (Exception e) {
             result = e;
-            System.out.println("msgQ size " + msgQ.size());
-            System.out.println("caught an exception " + e + " tail " + tail);
+            log.debug("msgQ size " + msgQ.size());
+            log.debug("caught an exception " + e + " tail " + tail);
         } finally {
             assertThat(result).isInstanceOf(TrimmedException.class);
         }
@@ -561,9 +561,9 @@ public class ReplicationReaderWriterIT extends AbstractIT {
             readSnapLogMsgs(msgQ, srcHashMap.keySet(), readerRuntime, true);
         } catch (Exception e) {
             result = e;
-            System.out.println("caught an exception " + e + " tail " + tail);
+            log.debug("caught an exception " + e + " tail " + tail);
         } finally {
-            System.out.println("msgQ size " + msgQ.size());
+            log.debug("msgQ size " + msgQ.size());
             assertThat(result).isInstanceOf(TrimmedException.class);
         }
     }
@@ -578,7 +578,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     @Test
     public void testWriteSMREntries() throws Exception {
         // setup environment
-        System.out.println("\ntest start");
+        log.debug("\ntest start");
         setupEnv();
 
         openStreams(srcTables, srcDataRuntime);
@@ -614,7 +614,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     @Test
     public void testSnapshotTransfer() throws Exception {
         // setup environment
-        System.out.println("\ntest start ok");
+        log.debug("\ntest start ok");
         setupEnv();
 
         openStreams(srcTables, srcDataRuntime);
@@ -643,14 +643,14 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         //verify data with hashtable
         verifyTable("after snap write at dst", dstTables, srcTables);
-        System.out.println("test done");
+        log.debug("test done");
     }
 
 
     @Test
     public void testLogEntryTransferWithNoSerializer() throws IOException {
         // setup environment
-        System.out.println("\ntest start ok");
+        log.debug("\ntest start ok");
         setupEnv();
         ISerializer serializer = new TestSerializer(Byte.MAX_VALUE);
         
@@ -683,7 +683,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         try {
             verifyData("after log writing at dst", dstTables, srcHashMap);
         } catch (Exception e) {
-            System.out.println("caught an exception");
+            log.debug("caught an exception");
             result = e;
         } finally {
             assertThat(result instanceof SerializerException).isTrue();
@@ -693,7 +693,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
     @Test
     public void testLogEntryTransferWithSerializer() throws Exception {
         // setup environment
-        System.out.println("\ntest start ok");
+        log.debug("\ntest start ok");
         setupEnv();
         ISerializer serializer = new TestSerializer(Byte.MAX_VALUE);
 

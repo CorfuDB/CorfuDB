@@ -1,18 +1,20 @@
 package org.corfudb.integration;
 
-import org.junit.Before;
-import org.junit.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+
 
 import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.Before;
+import org.junit.Test;
 
 /**
  * This suite of tests verifies the behavior of log replication in the event of
  * Checkpoint and Trim both in the sender (source/active cluster) and receiver (sink/standby cluster)
  */
+@Slf4j
 public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
     /**
@@ -55,14 +57,14 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
             // Stop Log Replication on Active, so we can write some data into active Corfu
             // and checkpoint so we enforce a subsequent Snapshot Sync
-            System.out.println("Stop Active Log Replicator ...");
+            log.debug("Stop Active Log Replicator ...");
             stopActiveLogReplicator();
 
             // Checkpoint & Trim on the Standby (so shadow stream get trimmed)
             checkpointAndTrim(false, Collections.singletonList(mapAStandby));
 
             // Write Entry's to Active Cluster (while replicator is down)
-            System.out.println("Write additional entries to active CorfuDB ...");
+            log.debug("Write additional entries to active CorfuDB ...");
             writeToActive((numWrites + (numWrites/2)), numWrites/2);
 
             // Confirm data does exist on Active Cluster
@@ -74,13 +76,13 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
             // Checkpoint & Trim on the Active so we force a snapshot sync on restart
             checkpointAndTrim(true, Collections.singletonList(mapA));
 
-            System.out.println("Start active Log Replicator again ...");
+            log.debug("Start active Log Replicator again ...");
             startActiveLogReplicator();
 
-            System.out.println("Verify Data on Standby ...");
+            log.debug("Verify Data on Standby ...");
             verifyDataOnStandby((numWrites*2));
 
-            System.out.println("Entries :: " + mapAStandby.keySet());
+            log.debug("Entries :: " + mapAStandby.keySet());
 
         } finally {
 
@@ -135,7 +137,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
             if (stop) {
                 // Stop Log Replication on Active, so we can test re-negotiation in the event of trims
-                System.out.println("Stop Active Log Replicator ...");
+                log.debug("Stop Active Log Replicator ...");
                 stopActiveLogReplicator();
             }
 
@@ -143,7 +145,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
             checkpointAndTrim(false, Collections.singletonList(mapAStandby));
 
             // Write Entry's to Active Cluster (while replicator is down)
-            System.out.println("Write additional entries to active CorfuDB ...");
+            log.debug("Write additional entries to active CorfuDB ...");
             writeToActive((numWrites + (numWrites/2)), numWrites/2);
 
             // Confirm data does exist on Active Cluster
@@ -153,15 +155,15 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
                 // Confirm new data does not exist on Standby Cluster
                 assertThat(mapAStandby.size()).isEqualTo((numWrites + (numWrites / 2)));
 
-                System.out.println("Start active Log Replicator again ...");
+                log.debug("Start active Log Replicator again ...");
                 startActiveLogReplicator();
             }
 
             // Since we did not checkpoint data should be transferred in delta's
-            System.out.println("Verify Data on Standby ...");
+            log.debug("Verify Data on Standby ...");
             verifyDataOnStandby((numWrites*2));
 
-            System.out.println("Entries :: " + mapAStandby.keySet());
+            log.debug("Entries :: " + mapAStandby.keySet());
         } finally {
 
             executorService.shutdownNow();
@@ -187,13 +189,13 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
     @Test
     public void testSnapshotSyncEndToEndWithCheckpointedStreams() throws Exception {
         try {
-            System.out.println("\nSetup active and standby Corfu's");
+            log.debug("\nSetup active and standby Corfu's");
             setupActiveAndStandbyCorfu();
 
-            System.out.println("Open map on active and standby");
+            log.debug("Open map on active and standby");
             openMap();
 
-            System.out.println("Write data to active CorfuDB before LR is started ...");
+            log.debug("Write data to active CorfuDB before LR is started ...");
             // Add Data for Snapshot Sync
             writeToActive(0, numWrites);
 
@@ -208,7 +210,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
             startLogReplicatorServers();
 
-            System.out.println("Wait ... Snapshot log replication in progress ...");
+            log.debug("Wait ... Snapshot log replication in progress ...");
             verifyDataOnStandby(numWrites);
         } finally {
             executorService.shutdownNow();
