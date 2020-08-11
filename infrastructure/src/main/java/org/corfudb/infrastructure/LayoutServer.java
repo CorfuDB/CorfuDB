@@ -3,12 +3,23 @@ package org.corfudb.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.API;
+import org.corfudb.common.protocol.proto.CorfuProtocol;
+import org.corfudb.common.protocol.proto.CorfuProtocol.BootstrapLayoutResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.CommitLayoutResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.common.protocol.proto.CorfuProtocol.PrepareLayoutResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ProposeLayoutResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.infrastructure.ServerThreadFactory.ExceptionHandler;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -65,10 +76,14 @@ public class LayoutServer extends AbstractServer {
 
     /**
      * HandlerMethod for this server.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @Getter
     private final HandlerMethods handler =
             HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /** RequestHandlerMethods for the layout server. */
+    private final RequestHandlerMethods handlerMethods = RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @NonNull
     private final ExecutorService executor;
@@ -78,6 +93,12 @@ public class LayoutServer extends AbstractServer {
 
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
+        //[RM] Remove this after Protobuf for RPC Completion
+        return getState() == ServerState.READY;
+    }
+
+    @Override
+    public boolean isServerReadyToHandleReq(Header requestHeader) {
         return getState() == ServerState.READY;
     }
 
@@ -105,7 +126,13 @@ public class LayoutServer extends AbstractServer {
 
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        //[RM] Remove this after Protobuf for RPC Completion
         executor.submit(() -> getHandler().handle(msg, ctx, r));
+    }
+
+    @Override
+    protected void processRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
     @Override
@@ -114,14 +141,32 @@ public class LayoutServer extends AbstractServer {
         executor.shutdown();
     }
 
-
     private boolean isBootstrapped(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        //[RM] Remove this after Protobuf for RPC Completion
         if (getCurrentLayout() == null) {
             log.warn("Received message but not bootstrapped! Message={}", msg);
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.LAYOUT_NOBOOTSTRAP));
             return false;
         }
         return true;
+    }
+
+    private boolean isBootstrapped(Header reqHeader, ChannelHandlerContext ctx, IRequestRouter r) {
+        if(getCurrentLayout() == null) {
+            r.sendNoBootstrapError(reqHeader, ctx);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void handleWrongEpochError(Header reqHeader, ChannelHandlerContext ctx, IRequestRouter r, long serverEpoch) {
+        final Header responseHeader = API.generateResponseHeader(reqHeader, false, true);
+        final ServerError wrongEpochError = API.getWrongEpochServerError("WRONG_EPOCH error "
+                + "triggered by " + reqHeader.toString(), serverEpoch);
+
+        final Response response = API.getErrorResponseNoPayload(responseHeader, wrongEpochError);
+        r.sendResponse(response, ctx);
     }
 
     // Helper Methods
@@ -136,6 +181,7 @@ public class LayoutServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.LAYOUT_REQUEST)
     public synchronized void handleMessageLayoutRequest(CorfuPayloadMsg<Long> msg,
                                                     ChannelHandlerContext ctx, IServerRouter r) {
+        //[RM] Remove this after Protobuf for RPC Completion
         if (!isBootstrapped(msg, ctx, r)) {
             return;
         }
@@ -155,6 +201,26 @@ public class LayoutServer extends AbstractServer {
         }
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.GET_LAYOUT)
+    public synchronized void handleGetLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        if(!isBootstrapped(req.getHeader(), ctx, r)) return;
+
+        final long payloadEpoch = req.getGetLayoutRequest().getEpoch();
+        final long serverEpoch = getServerEpoch();
+
+        if(payloadEpoch <= serverEpoch) {
+            final Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+            final Response response = API.getGetLayoutResponse(responseHeader, getCurrentLayout().asJSONString());
+            r.sendResponse(response, ctx);
+        } else {
+            //TODO: Client is ahead of the server. Is any other handling required?
+            log.warn("handleGetLayout[{}]: Payload epoch {} ahead of Server epoch {}",
+                    req.getHeader().getRequestId(), payloadEpoch, serverEpoch);
+
+            handleWrongEpochError(req.getHeader(), ctx, r, serverEpoch);
+        }
+    }
+
     /**
      * Sets the new layout if the server has not been bootstrapped with one already.
      *
@@ -167,6 +233,7 @@ public class LayoutServer extends AbstractServer {
             @NonNull CorfuPayloadMsg<LayoutBootstrapRequest> msg,
             ChannelHandlerContext ctx,
             @NonNull IServerRouter r) {
+        //[RM] Remove this after Protobuf for RPC Completion
 
         if (getCurrentLayout() == null) {
             Layout layout = msg.getPayload().getLayout();
@@ -193,6 +260,42 @@ public class LayoutServer extends AbstractServer {
         }
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.BOOTSTRAP_LAYOUT)
+    public synchronized void handleBootstrapLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        final Header requestHeader = req.getHeader();
+        final Header responseHeader;
+        final Response response;
+
+        if(getCurrentLayout() == null) {
+            final Layout layout = Layout.fromJSONString(req.getBootstrapLayoutRequest().getLayout());
+            log.info("handleBootstrapLayout[{}]: Bootstrap with new layout={}", requestHeader.getRequestId(), layout);
+
+            if(layout.getClusterId() == null) {
+                log.warn("handleBootstrapLayout[{}]: The layout={} does not have a clusterId",
+                        requestHeader.getRequestId(), layout);
+
+                responseHeader = API.generateResponseHeader(requestHeader, false, false);
+                response = API.getBootstrapLayoutResponse(responseHeader, BootstrapLayoutResponse.Type.NACK);
+            } else {
+                setCurrentLayout(layout);
+                serverContext.setServerEpoch(layout.getEpoch(), r);
+                responseHeader = API.generateResponseHeader(requestHeader, false, true);
+                response = API.getBootstrapLayoutResponse(responseHeader, BootstrapLayoutResponse.Type.ACK);
+            }
+        } else {
+            log.warn("handleBootstrapLayout[{}]: Got a request to bootstrap a server which is "
+                    + "already bootstrapped, rejecting!", requestHeader.getRequestId());
+
+            responseHeader = API.generateResponseHeader(requestHeader, false, true);
+            final ServerError alreadyBootstrapped = API.getBootstrappedServerError("BOOTSTRAPPED " +
+                    "error triggered by " + requestHeader.toString());
+
+            response = API.getErrorResponseNoPayload(responseHeader, alreadyBootstrapped);
+        }
+
+        r.sendResponse(response, ctx);
+    }
+
     /**
      * Accepts a prepare message if the rank is higher than any accepted so far.
      *
@@ -207,6 +310,7 @@ public class LayoutServer extends AbstractServer {
             @NonNull CorfuPayloadMsg<LayoutPrepareRequest> msg,
             ChannelHandlerContext ctx,
             @NonNull IServerRouter r) {
+        //[RM] Remove this after Protobuf for RPC Completion
 
         // Check if the prepare is for the correct epoch
         if (!isBootstrapped(msg, ctx, r)) {
@@ -246,6 +350,50 @@ public class LayoutServer extends AbstractServer {
         }
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.PREPARE_LAYOUT)
+    public synchronized void handlePrepareLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        final Header requestHeader = req.getHeader();
+        if(!isBootstrapped(requestHeader, ctx, r)) return;
+
+        final long payloadEpoch = req.getPrepareLayoutRequest().getEpoch();
+        final long serverEpoch = getServerEpoch();
+        final Rank phase1Rank = getPhase1Rank(payloadEpoch);
+        final Rank prepareRank = new Rank(req.getPrepareLayoutRequest().getRank(),
+                new UUID(requestHeader.getClientId().getMsb(), requestHeader.getClientId().getLsb()));
+
+        if(payloadEpoch != serverEpoch) {
+            handleWrongEpochError(requestHeader, ctx, r, serverEpoch);
+            return;
+        }
+
+        final Layout proposedLayout = getProposedLayout(payloadEpoch);
+        final Header responseHeader;
+        final Response response;
+
+        // If the PREPARE_LAYOUT rank is less than or equal to the highest phase 1 rank, reject.
+        if(phase1Rank != null && prepareRank.lessThanEqualTo(phase1Rank)) {
+            log.debug("handlePrepareLayout[{}]: Rejected phase 1 prepare of rank={}, phase1Rank={}",
+                    requestHeader.getRequestId(), prepareRank, phase1Rank);
+
+            responseHeader = API.generateResponseHeader(requestHeader, false, false);
+            response = API.getPrepareLayoutResponse(responseHeader, PrepareLayoutResponse.Type.REJECT,
+                    phase1Rank.getRank(), proposedLayout.asJSONString());
+        } else {
+            // Return the layout with the highest rank proposed before.
+            Rank highestProposedRank = proposedLayout == null ? new Rank(-1L,
+                    new UUID(requestHeader.getClientId().getMsb(), requestHeader.getClientId().getLsb())) : getPhase2Rank(payloadEpoch);
+
+            setPhase1Rank(prepareRank, payloadEpoch);
+            log.debug("handlePrepareLayout[{}]: New phase 1 rank={}", requestHeader.getRequestId(), prepareRank);
+
+            responseHeader = API.generateResponseHeader(requestHeader, false, true);
+            response = API.getPrepareLayoutResponse(responseHeader, PrepareLayoutResponse.Type.ACK,
+                    highestProposedRank.getRank(), proposedLayout.asJSONString());
+        }
+
+        r.sendResponse(response, ctx);
+    }
+
     /**
      * Accepts a proposal for which it had accepted in the prepare phase.
      * A minor optimization is to reject any duplicate propose messages.
@@ -259,6 +407,7 @@ public class LayoutServer extends AbstractServer {
             @NonNull CorfuPayloadMsg<LayoutProposeRequest> msg,
             ChannelHandlerContext ctx,
             @NonNull IServerRouter r) {
+        //[RM] Remove this after Protobuf for RPC Completion
 
         if (!isBootstrapped(msg, ctx, r)) {
             return;
@@ -324,6 +473,82 @@ public class LayoutServer extends AbstractServer {
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.PROPOSE_LAYOUT)
+    public synchronized void handleProposeLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        final Header requestHeader = req.getHeader();
+        if(!isBootstrapped(requestHeader, ctx, r)) return;
+
+        final long payloadEpoch = req.getProposeLayoutRequest().getEpoch();
+        final long serverEpoch = getServerEpoch();
+        final Rank phase1Rank = getPhase1Rank(payloadEpoch);
+        final Rank proposeRank = new Rank(req.getProposeLayoutRequest().getRank(),
+                new UUID(requestHeader.getClientId().getMsb(), requestHeader.getClientId().getLsb()));
+
+        if(payloadEpoch != serverEpoch) {
+            handleWrongEpochError(requestHeader, ctx, r, serverEpoch);
+            return;
+        }
+
+        final Header responseHeader;
+        final Response response;
+
+        // If there is not corresponding PREPARE_LAYOUT, reject.
+        if(phase1Rank == null) {
+            log.debug("handleProposeLayout[{}]: Rejected phase 2 propose of rank={}, phase1Rank=none",
+                    requestHeader.getRequestId(), proposeRank);
+
+            responseHeader = API.generateResponseHeader(requestHeader, false, false);
+            response = API.getProposeLayoutResponse(responseHeader, ProposeLayoutResponse.Type.REJECT, -1L);
+            r.sendResponse(response, ctx);
+            return;
+        }
+
+        // If the rank in PROPOSE_LAYOUT is less than or equal to the highest observed
+        // rank from PREPARE_LAYOUT, reject.
+        if(!proposeRank.equals(phase1Rank)) {
+            log.debug("handleProposeLayout[{}]: Rejected phase 2 propose of rank={}, phase1Rank={}",
+                    requestHeader.getRequestId(), proposeRank, phase1Rank);
+
+            responseHeader = API.generateResponseHeader(requestHeader, false, false);
+            response = API.getProposeLayoutResponse(responseHeader, ProposeLayoutResponse.Type.REJECT, phase1Rank.getRank());
+            r.sendResponse(response, ctx);
+            return;
+        }
+
+        final Rank phase2Rank = getPhase2Rank(payloadEpoch);
+        final Layout proposeLayout = Layout.fromJSONString(req.getProposeLayoutRequest().getLayout());
+
+        // Make sure that the layout epoch is the same as the PROPOSE_LAYOUT epoch.
+        if(proposeLayout.getEpoch() != payloadEpoch) {
+            log.debug("handleProposeLayout[{}]: layout {} and payload {} epoch should be the same",
+                    requestHeader.getRequestId(), proposeLayout.getEpoch(), payloadEpoch);
+
+            responseHeader = API.generateResponseHeader(requestHeader, false, false);
+            response = API.getProposeLayoutResponse(responseHeader, ProposeLayoutResponse.Type.REJECT, phase1Rank.getRank());
+            r.sendResponse(response, ctx);
+            return;
+        }
+
+        // In addition, if the rank in PROPOSE_LAYOUT is equal to the current phase 2 rank,
+        // reject. This can happen in case of duplicate messages.
+        if (proposeRank.equals(phase2Rank)) {
+            log.debug("handleProposeLayout[{}]: Rejected phase 2 propose of rank={}, phase2Rank={}",
+                    requestHeader.getRequestId(), proposeRank, phase2Rank);
+
+            responseHeader = API.generateResponseHeader(requestHeader, false, false);
+            response = API.getProposeLayoutResponse(responseHeader, ProposeLayoutResponse.Type.REJECT, phase2Rank.getRank());
+            r.sendResponse(response, ctx);
+            return;
+        }
+
+        log.debug("handleProposeLayout[{}]: New phase 2 rank={}, layout={}",
+                requestHeader.getRequestId(), proposeRank, proposeLayout);
+
+        setPhase2Data(new Phase2Data(proposeRank, proposeLayout), payloadEpoch);
+        responseHeader = API.generateResponseHeader(requestHeader, false, true);
+        response = API.getProposeLayoutResponse(responseHeader, ProposeLayoutResponse.Type.ACK, proposeRank.getRank());
+        r.sendResponse(response, ctx);
+    }
 
     /**
      * Force layout enables the server to bypass consensus
@@ -336,6 +561,7 @@ public class LayoutServer extends AbstractServer {
     private synchronized void forceLayout(@Nonnull CorfuPayloadMsg<LayoutCommittedRequest> msg,
                                                @Nonnull ChannelHandlerContext ctx,
                                                @Nonnull IServerRouter r) {
+        //[RM] Remove this after Protobuf for RPC Completion
         final long payloadEpoch = msg.getPayload().getEpoch();
         final long serverEpoch = getServerEpoch();
 
@@ -355,6 +581,32 @@ public class LayoutServer extends AbstractServer {
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
+    private synchronized void forceLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        final long payloadEpoch = req.getCommitLayoutRequest().getEpoch();
+        final long serverEpoch = getServerEpoch();
+        final Header requestHeader = req.getHeader();
+        final Header responseHeader;
+        final Response response;
+
+        if(payloadEpoch != serverEpoch) {
+            log.warn("forceLayout[{}]: Trying to force a layout with an old epoch: payloadEpoch={}, serverEpoch={}",
+                    requestHeader.getRequestId(), payloadEpoch, serverEpoch);
+
+            responseHeader = API.generateResponseHeader(requestHeader, false, false);
+            response = API.getCommitLayoutResponse(responseHeader, CommitLayoutResponse.Type.NACK);
+            r.sendResponse(response, ctx);
+            return;
+        }
+
+        final Layout layout = Layout.fromJSONString(req.getCommitLayoutRequest().getLayout());
+
+        setCurrentLayout(layout);
+        serverContext.setServerEpoch(layout.getEpoch(), r);
+        log.warn("forceLayout[{}]: Forcing new layout={}", requestHeader.getRequestId(), layout);
+        responseHeader = API.generateResponseHeader(requestHeader, false, true);
+        response = API.getCommitLayoutResponse(responseHeader, CommitLayoutResponse.Type.ACK);
+        r.sendResponse(response, ctx);
+    }
 
     /**
      * Accepts any committed layouts for the current epoch or newer epochs.
@@ -373,6 +625,7 @@ public class LayoutServer extends AbstractServer {
             @NonNull CorfuPayloadMsg<LayoutCommittedRequest> msg,
             ChannelHandlerContext ctx,
             @NonNull IServerRouter r) {
+        //[RM] Remove this after Protobuf for RPC Completion
 
         if (msg.getPayload().getForce()) {
             forceLayout(msg, ctx, r);
@@ -398,6 +651,32 @@ public class LayoutServer extends AbstractServer {
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.COMMIT_LAYOUT)
+    public synchronized void handleCommitLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        if(req.getCommitLayoutRequest().getForced()) {
+            forceLayout(req, ctx, r);
+            return;
+        }
+
+        if(!isBootstrapped(req.getHeader(), ctx, r)) return;
+
+        final long payloadEpoch = req.getCommitLayoutRequest().getEpoch();
+        final long serverEpoch = getServerEpoch();
+        final Layout layout = Layout.fromJSONString(req.getCommitLayoutRequest().getLayout());
+
+        if(payloadEpoch < serverEpoch) {
+            handleWrongEpochError(req.getHeader(), ctx, r, serverEpoch);
+            return;
+        }
+
+        setCurrentLayout(layout);
+        serverContext.setServerEpoch(payloadEpoch, r);
+
+        final Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+        final Response response = API.getCommitLayoutResponse(responseHeader, CommitLayoutResponse.Type.ACK);
+        log.info("handleCommitLayout[{}]: New layout committed: {}", req.getHeader().getRequestId(), layout);
+        r.sendResponse(response, ctx);
+    }
 
     public Layout getCurrentLayout() {
         Layout layout = serverContext.getCurrentLayout();
