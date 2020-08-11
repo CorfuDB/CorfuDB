@@ -9,8 +9,8 @@ import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
-import org.corfudb.infrastructure.protocol.AnnotatedServerHandler;
-import org.corfudb.infrastructure.protocol.RequestHandlerMethods;
+import org.corfudb.infrastructure.RequestHandler;
+import org.corfudb.infrastructure.RequestHandlerMethods;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -66,7 +66,7 @@ public class BaseServer extends AbstractServer {
     }
 
     @Override
-    protected void processRequest(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
+    protected void processRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
         executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
@@ -95,14 +95,13 @@ public class BaseServer extends AbstractServer {
      * @param ctx   The channel context.
      * @param r     The server router.
      */
-    @AnnotatedServerHandler(type = CorfuProtocol.MessageType.PING)
-    private void handlePing(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
-        log.info("Ping message received from {} {}", req.getHeader().getClientId().getMsb(),
-                req.getHeader().getClientId().getLsb());
+    @RequestHandler(type = CorfuProtocol.MessageType.PING)
+    private void handlePing(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.info("handlePing[{}]: Ping message received from {} {}", req.getHeader().getRequestId(),
+                req.getHeader().getClientId().getMsb(), req.getHeader().getClientId().getLsb());
 
-        //TODO(Zach): checkArgument(req.hasPingRequest());
         Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        Response response = API.newPingResponse(responseHeader);
+        Response response = API.getPingResponse(responseHeader);
         r.sendResponse(response, ctx);
     }
 
@@ -172,9 +171,8 @@ public class BaseServer extends AbstractServer {
      * @param ctx The channel context.
      * @param r The server router.
      */
-    @AnnotatedServerHandler(type = CorfuProtocol.MessageType.SEAL)
-    private synchronized void handleSeal(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
-        //TODO(Zach): checkArgument(req.hasSealRequest());
+    @RequestHandler(type = CorfuProtocol.MessageType.SEAL)
+    private synchronized void handleSeal(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
         try {
             long epoch = req.getSealRequest().getEpoch();
             String remoteHostAddress;
@@ -184,15 +182,18 @@ public class BaseServer extends AbstractServer {
                 remoteHostAddress = "unavailable";
             }
 
-            log.info("handleSeal: Received SEAL from (clientId={}:{}), moving to new epoch {},",
-                    req.getHeader().getClientId(), remoteHostAddress, epoch);
-            //TODO(Zach): serverContext.setServerEpoch(epoch, r);
-            //Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-            //Response response = API.newSealResponse(responseHeader);
-            //r.sendResponse(response, ctx);
+            log.info("handleSeal[{}]: Received SEAL from (clientId={}:{}), moving to new epoch {},",
+                    req.getHeader().getRequestId(), req.getHeader().getClientId(), remoteHostAddress, epoch);
+
+            // TODO(Zach):
+            // serverContext.setServerEpoch(epoch, r);
+            Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+            Response response = API.getSealResponse(responseHeader);
+            r.sendResponse(response, ctx);
         } catch (WrongEpochException e) {
-            log.debug("handleSeal: Rejected SEAL current={}, requested={}",
-                    e.getCorrectEpoch(), req.getSealRequest().getEpoch());
+            log.debug("handleSeal[{}]: Rejected SEAL current={}, requested={}",
+                    req.getHeader().getRequestId(), e.getCorrectEpoch(), req.getSealRequest().getEpoch());
+
             r.sendWrongEpochError(req.getHeader(), ctx);
         }
     }
@@ -221,12 +222,13 @@ public class BaseServer extends AbstractServer {
      * @param ctx The channel context.
      * @param r The server router.
      */
-    @AnnotatedServerHandler(type = CorfuProtocol.MessageType.RESET)
-    private void handleReset(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
-        log.warn("Remote reset requested from client {}", req.getHeader().getClientId());
-        //TODO(Zach): checkArgument(req.hasResetRequest());
+    @RequestHandler(type = CorfuProtocol.MessageType.RESET)
+    private void handleReset(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.warn("handleReset[{}]: Remote reset requested from client {}",
+                req.getHeader().getRequestId(), req.getHeader().getClientId());
+
         Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        Response response = API.newResetResponse(responseHeader);
+        Response response = API.getResetResponse(responseHeader);
         r.sendResponse(response, ctx);
         CorfuServer.restartServer(true);
     }
@@ -256,12 +258,13 @@ public class BaseServer extends AbstractServer {
      * @param ctx   The channel context.
      * @param r     The server router.
      */
-    @AnnotatedServerHandler(type = CorfuProtocol.MessageType.RESTART)
-    private void handleRestart(Request req, ChannelHandlerContext ctx, org.corfudb.infrastructure.protocol.IServerRouter r) {
-        log.warn("Remote restart requested from client {}", req.getHeader().getClientId());
-        //TODO(Zach): checkArgument(req.hasRestartRequest());
+    @RequestHandler(type = CorfuProtocol.MessageType.RESTART)
+    private void handleRestart(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.warn("handleRestart[{}]: Remote restart requested from client {}",
+                req.getHeader().getRequestId(), req.getHeader().getClientId());
+
         Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        Response response = API.newRestartResponse(responseHeader);
+        Response response = API.getRestartResponse(responseHeader);
         r.sendResponse(response, ctx);
         CorfuServer.restartServer(false);
     }

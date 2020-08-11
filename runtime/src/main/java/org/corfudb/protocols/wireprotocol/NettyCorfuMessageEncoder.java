@@ -3,11 +3,9 @@ package org.corfudb.protocols.wireprotocol;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
-
+import java.util.concurrent.atomic.LongAccumulator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.API;
-
-import java.util.concurrent.atomic.LongAccumulator;
 
 /**
  * Created by mwei on 10/1/15.
