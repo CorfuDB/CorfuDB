@@ -4,11 +4,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
-
 import java.util.List;
-
 import lombok.extern.slf4j.Slf4j;
-
+import org.corfudb.common.protocol.API;
 
 /**
  * Created by mwei on 10/1/15.
@@ -19,6 +17,11 @@ public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {
     @Override
     protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf,
                           List<Object> list) throws Exception {
+        if(byteBuf.getByte(byteBuf.readerIndex()) != API.LEGACY_CORFU_MSG_MARK) {
+            throw new IllegalStateException("Received incorrectly marked message.");
+        }
+
+        byteBuf.readByte();
         list.add(CorfuMsg.deserialize(byteBuf));
     }
 
