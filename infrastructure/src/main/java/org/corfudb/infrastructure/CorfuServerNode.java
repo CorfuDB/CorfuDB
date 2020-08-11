@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -50,6 +51,9 @@ public class CorfuServerNode implements AutoCloseable {
     @Getter
     private final NettyServerRouter router;
 
+    @Getter
+    private final NettyRequestRouter requestRouter;
+
     // This flag makes the closing of the CorfuServer idempotent.
     private final AtomicBoolean close;
 
@@ -84,11 +88,16 @@ public class CorfuServerNode implements AutoCloseable {
         this.serverMap = serverMap;
         router = new NettyServerRouter(serverMap.values().asList(), serverContext);
         this.serverContext.setServerRouter(router);
+
+        requestRouter = new NettyRequestRouter(ImmutableList.<AbstractServer>builder()
+                .add(serverMap.getOrDefault(BaseServer.class, new BaseServer(serverContext))).build(), serverContext);
+        this.serverContext.setRequestRouter(requestRouter);
+
         // If the node is started in the single node setup and was bootstrapped,
         // set the server epoch as well.
         if(serverContext.isSingleNodeSetup() && serverContext.getCurrentLayout() != null){
-            serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(),
-                    router);
+            serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(), router);
+            serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(), requestRouter);
         }
         this.close = new AtomicBoolean(false);
     }
@@ -205,7 +214,7 @@ public class CorfuServerNode implements AutoCloseable {
                     .channel(context.getChannelImplementation().getServerChannelClass());
             bootstrapConfigurer.configure(bootstrap);
 
-            bootstrap.childHandler(getServerChannelInitializer(context, router));
+            bootstrap.childHandler(getServerChannelInitializer(context, router, requestRouter));
             boolean bindToAllInterfaces =
                     Optional.ofNullable(context.getServerConfig(Boolean.class, "--bind-to-all-interfaces"))
                             .orElse(false);
@@ -241,10 +250,12 @@ public class CorfuServerNode implements AutoCloseable {
      *
      * @param context The {@link ServerContext} to use.
      * @param router  The {@link NettyServerRouter} to initialize the channel with.
+     * @param rRouter The {@link NettyRequestRouter} to initialize the channel with.
      * @return A {@link ChannelInitializer} to initialize the channel.
      */
     private static ChannelInitializer getServerChannelInitializer(@Nonnull ServerContext context,
-                                                                  @Nonnull NettyServerRouter router) {
+                                                                  @Nonnull NettyServerRouter router,
+                                                                  @Nonnull NettyRequestRouter rRouter) {
 
         // Generate the initializer.
         return new ChannelInitializer() {
@@ -323,6 +334,10 @@ public class CorfuServerNode implements AutoCloseable {
                     ch.pipeline().addLast("sasl/plain-text", new
                             PlainTextSaslNettyServer());
                 }
+
+                // New message router -- Route to appropriate server handler class -- Forward legacy messages
+                ch.pipeline().addLast(rRouter);
+
                 // Transform the framed message into a Corfu message.
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
