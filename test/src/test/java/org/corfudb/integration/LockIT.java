@@ -12,6 +12,7 @@ import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
 import org.corfudb.utils.lock.LockDataTypes;
 import org.corfudb.utils.lock.LockListener;
+import org.corfudb.utils.lock.states.HasLeaseState;
 import org.corfudb.utils.lock.states.LockState;
 import org.corfudb.utils.lock.states.LockStateType;
 import org.junit.Test;
@@ -36,6 +37,7 @@ import java.util.stream.Collectors;
 public class LockIT extends AbstractIT implements Observer {
 
     private static final int LOCK_TIME_CONSTANT = 6;
+    private static final int MONITOR_LOCK_TIME_CONSTANT = 2;
     private static final int LOCK_LEASE_DURATION = 15;
     private final int RENEW_CYCLES = 5;
 
@@ -88,6 +90,11 @@ public class LockIT extends AbstractIT implements Observer {
 
            int lockCount = 1;
            assertThat(lockAcquiredObservables.get(clientId).getValue()).isEqualTo(lockCount);
+           while (client.getLocks().get(lockId).getState().getType() != LockStateType.HAS_LEASE) {
+               // This is required because we might attempt to retrieve the lock state before it is
+               // updated. The lock listener (our blocking condition) is notified previous to updating
+               // the new state of the Lock FSM.
+           }
            assertThat(client.getLocks().get(lockId).getState().getType()).isEqualTo(LockStateType.HAS_LEASE);
            assertThat(lockRevokedObservables.get(clientId).getValue()).isEqualTo(0);
 
@@ -96,10 +103,6 @@ public class LockIT extends AbstractIT implements Observer {
            // Verify for 5 cycles that the lock is renewed
            for (int i=0; i < RENEW_CYCLES; i++) {
                log.debug("***** Wait until lock is renewed");
-               // TODO: inspect the     // how many times the lease has been acquired by a different client
-               //    int32 lease_acquisition_number = 3;
-               //    // how many times the lease has been renewed since the last acquisition
-               //    int32 lease_renewal_number = 4;
                // Wait for the renewal cycle + 1, and verify that the lock is still acquired
                Sleep.sleepUninterruptibly(Duration.ofSeconds(LOCK_TIME_CONSTANT + 1));
                assertThat(lockAcquiredObservables.get(clientId).getValue()).isEqualTo(lockCount);
@@ -383,7 +386,8 @@ public class LockIT extends AbstractIT implements Observer {
 
         LockState.setDurationBetweenLeaseRenewals(LOCK_TIME_CONSTANT);
         LockState.setMaxTimeForNotificationListenerProcessing(LOCK_TIME_CONSTANT);
-        LockClient.setDurationBetweenLockMonitorRuns(LOCK_TIME_CONSTANT);
+        LockClient.setDurationBetweenLockMonitorRuns(MONITOR_LOCK_TIME_CONSTANT);
+        HasLeaseState.setDurationBetweenLeaseChecks(MONITOR_LOCK_TIME_CONSTANT);
         Lock.setLeaseDuration(LOCK_LEASE_DURATION);
     }
 
