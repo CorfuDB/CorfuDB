@@ -179,7 +179,7 @@ public class TableRegistry {
                 log.debug("registerTable: new schema:"+tableDescriptors.getFileDescriptorsMap());
             }
         }
-        int numRetries = 3; // Since this is an internal transaction, retry a few times before giving up.
+        int numRetries = 9; // Since this is an internal transaction, retry a few times before giving up.
         long finalAddress = Address.NON_ADDRESS;
         while (numRetries-- > 0) {
             try {
