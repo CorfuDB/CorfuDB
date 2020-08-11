@@ -134,6 +134,10 @@ public class ServerContext implements AutoCloseable {
 
     @Getter
     @Setter
+    private IRequestRouter requestRouter;
+
+    @Getter
+    @Setter
     private IReconfigurationHandlerPolicy failureHandlerPolicy;
 
     @Getter
@@ -481,6 +485,26 @@ public class ServerContext implements AutoCloseable {
             dataStore.put(SERVER_EPOCH_RECORD, serverEpoch);
             r.setServerEpoch(serverEpoch);
             getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
+        } else if (serverEpoch == lastEpoch) {
+            // Setting to the same epoch, don't need to do anything.
+        } else {
+            // Regressing, throw an exception.
+            throw new WrongEpochException(lastEpoch);
+        }
+    }
+
+    /**
+     * Set the request router epoch.
+     *
+     * @param serverEpoch The epoch to set.
+     * @param r The request router.
+     */
+    public synchronized void setServerEpoch(long serverEpoch, IRequestRouter r) {
+        Long lastEpoch = dataStore.get(SERVER_EPOCH_RECORD);
+        if (lastEpoch == null || lastEpoch < serverEpoch) {
+            dataStore.put(SERVER_EPOCH_RECORD, serverEpoch);
+            r.setServerEpoch(serverEpoch);
+            requestRouter.getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
         } else if (serverEpoch == lastEpoch) {
             // Setting to the same epoch, don't need to do anything.
         } else {
