@@ -184,7 +184,7 @@ public class BaseServer extends AbstractServer {
 
             log.info("handleSeal[{}]: Received SEAL from (clientId={}:{}), moving to new epoch {},",
                     req.getHeader().getRequestId(), req.getHeader().getClientId(), remoteHostAddress, epoch);
-            
+
             serverContext.setServerEpoch(epoch, r);
             Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
             Response response = API.getSealResponse(responseHeader);
