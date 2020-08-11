@@ -1,0 +1,318 @@
+syntax = "proto3";
+
+package org.corfudb.common;
+
+option java_package = "org.corfudb.common.protocol.proto";
+
+
+enum ProtocolVersion {
+  v0 = 0;
+}
+
+enum MessageType {
+  PING = 0;
+  AUTHENTICATE = 1;
+  RESTART = 2;
+  RESET = 3;
+  SEAL  = 4;
+  GET_LAYOUT  = 5;
+  PREPARE_LAYOUT  = 6;
+  PROPOSE_LAYOUT = 7;
+  COMMIT_LAYOUT = 8;
+  GET_TOKEN = 9;
+  COMMIT_TRANSACTION = 10;
+  BOOTSTRAP = 11;
+  QUERY_STREAM = 16;
+  READ_LOG = 17;
+  QUERY_LOG_METADATA = 18;
+  TRIM_LOG = 19;
+  COMPACT_LOG = 20;
+  FLASH = 21;
+  QUERY_NODE = 22;
+  REPORT_FAILURE = 23;
+  HEAL_FAILURE = 24;
+  EXECUTE_WORKFLOW = 26;
+}
+
+enum ERROR {
+  OK = 0;
+  UNKNOWN = 1;
+  WRONG_EPOCH = 2;
+  NOT_READY = 3;
+  WRONG_CLUSTER = 4;
+  TRIMMED = 5;
+  OVERWRITE = 6;
+  IO = 7;
+  BOOTSTRAPPED = 8;
+  NOT_BOOTSTRAPPED = 9;
+}
+
+enum Priority {
+  NORMAL = 0;
+  HIGH = 1;
+}
+
+message UUID {
+  int64 lsb = 1;
+  int64 msb = 2;
+}
+
+// Payload for ERROR type WRONG_CLUSTER
+message WrongClusterPayload {
+  UUID serverClusterId = 1;
+  UUID clientClusterId = 2;
+}
+
+message ServerError {
+  ERROR code = 1;
+  string message = 2;
+
+  oneof payload {
+    int64 wrongEpochPayload = 11;
+    WrongClusterPayload wrongClusterPayload = 12;
+  }
+}
+
+message PingRequest {
+}
+
+message PingResponse {
+}
+
+message AuthenticateRequest {
+
+}
+
+message AuthenticateResponse {
+
+}
+
+message RestartRequest {
+}
+
+message RestartResponse {
+}
+
+message ResetRequest {
+}
+
+message ResetResponse {
+}
+
+message SealRequest {
+  int64 epoch = 1;
+}
+
+message SealResponse {
+}
+
+// Retrieve layout
+message GetLayoutRequest {
+  int64 epoch = 1;
+}
+
+message GetLayoutResponse {
+
+}
+
+// Request in first phase of Paxos
+message PrepareLayoutRequest {
+  int64 epoch = 1;
+  int64 rank = 2;
+}
+
+message PrepareLayoutResponse {
+
+}
+
+message ProposeLayoutRequest {
+
+}
+
+message ProposeLayoutResponse {
+
+}
+
+message CommitLayoutRequest {
+
+}
+
+message CommitLayoutResponse {
+
+}
+
+message GetTokenRequest {
+
+}
+
+message GetTokenResponse {
+
+}
+
+message CommitTransactionRequest {
+
+}
+
+message CommitTransactionResponse {
+
+}
+
+message BootstrapRequest {
+
+}
+
+
+message BootstrapResponse {
+
+}
+
+message QueryStreamRequest {
+
+}
+
+message QueryStreamResponse {
+
+}
+
+message ReadLogRequest {
+
+}
+
+message ReadLogResponse {
+
+}
+
+message QueryLogMetadataRequest {
+
+}
+
+message QueryLogMetadataResponse {
+
+}
+
+message TrimLogRequest {
+
+}
+
+message TrimLogResponse {
+
+}
+
+message CompactRequest {
+
+}
+
+message CompactResponse {
+
+}
+
+message FlashRequest {
+
+}
+
+message FlashResponse {
+
+}
+
+message QueryNodeRequest {
+
+}
+
+message QueryNodeResponse {
+
+}
+
+message ReportFailureRequest {
+
+}
+
+message ReportFailureResponse {
+
+}
+
+message HealFailureRequest {
+
+}
+
+message HealFailureResponse {
+
+}
+
+message ExecuteWorkflowRequest {
+
+}
+
+message ExecuteWorkflowResponse {
+
+}
+
+message Header {
+  ProtocolVersion version = 1;
+  int64 request_id = 2;
+  Priority priority = 3;
+  MessageType type = 4;
+  int64 epoch = 5;
+  UUID cluster_id = 6;
+  UUID client_id = 7;
+  bool ignore_cluster_id = 8;
+  bool ignore_epoch = 9;
+}
+
+message Request {
+  Header header = 1;
+
+  oneof payload {
+    PingRequest pingRequest = 100;
+    AuthenticateRequest authenticateRequest = 101;
+    RestartRequest restartRequest = 102;
+    ResetRequest resetRequest = 103;
+    SealRequest sealRequest = 104;
+    GetLayoutRequest getLayoutRequest = 105;
+    PrepareLayoutRequest prepareLayoutRequest = 106;
+    ProposeLayoutRequest proposeLayoutRequest = 107;
+    CommitLayoutRequest commitLayoutRequest = 108;
+    GetTokenRequest getTokenRequest = 109;
+    CommitTransactionRequest commitTransactionRequest = 110;
+    BootstrapRequest bootstrapRequest = 111;
+    QueryStreamRequest queryStreamRequest = 112;
+    ReadLogRequest ReadLogRequest = 113;
+    QueryLogMetadataRequest queryLogMetadataRequest = 114;
+    TrimLogRequest trimLogRequest = 115;
+    CompactRequest compactRequest = 116;
+    FlashRequest flashRequest = 117;
+    QueryNodeRequest queryNodeRequest = 118;
+    ReportFailureRequest reportFailureRequest = 119;
+    HealFailureRequest healFailureRequest = 120;
+    ExecuteWorkflowRequest executeWorkflowRequest = 121;
+  }
+}
+
+message Response {
+  Header header = 1;
+  ServerError error = 2;
+
+  oneof payload {
+    PingResponse pingResponse = 100;
+    AuthenticateResponse authenticateResponse = 101;
+    RestartResponse restartResponse = 102;
+    ResetResponse resetResponse = 103;
+    SealResponse sealResponse = 104;
+    GetLayoutResponse getLayoutResponse = 105;
+    PrepareLayoutResponse prepareLayoutResponse = 106;
+    ProposeLayoutResponse proposeLayoutResponse = 107;
+    CommitLayoutResponse commitLayoutResponse = 108;
+    GetTokenResponse getTokenResponse = 109;
+    CommitTransactionResponse commitTransactionResponse = 110;
+    BootstrapResponse bootstrapResponse = 111;
+    QueryStreamResponse queryStreamResponse = 112;
+    ReadLogResponse readLogResponse = 113;
+    QueryLogMetadataResponse queryLogMetadataResponse = 114;
+    TrimLogResponse trimLogResponse = 115;
+    CompactResponse compactResponse = 116;
+    FlashResponse flashResponse = 117;
+    QueryNodeResponse queryNodeResponse = 118;
+    ReportFailureResponse reportFailureResponse = 119;
+    HealFailureResponse healFailureResponse = 120;
+    ExecuteWorkflowResponse executeWorkflowResponse = 121;
+  }
+}
