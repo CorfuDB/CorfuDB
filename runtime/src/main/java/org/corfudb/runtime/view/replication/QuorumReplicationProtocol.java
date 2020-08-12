@@ -150,8 +150,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         QuorumFuturesFactory.CompositeFuture<Boolean> future = null;
         data.setRank(rank);
         try {
-            try (ILogData.SerializationHandle sh =
-                         data.getSerializedForm()) {
+            try (ILogData.SerializationHandle sh = data.getSerializedForm(true)) {
                 future = getWriteFuture(runtimeLayout, sh.getSerialized());
                 CFUtils.getUninterruptibly(future, QuorumUnreachableException.class,
                         OverwriteException.class, DataOutrankedException.class);
@@ -179,7 +178,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
         ILogData data = new LogData(type);
         data.setRank(rank);
         data.setGlobalAddress(position);
-        return data.getSerializedForm();
+        return data.getSerializedForm(true);
     }
 
     private boolean isEmptyType(DataType type) {
@@ -230,7 +229,7 @@ public class QuorumReplicationProtocol extends AbstractReplicationProtocol {
                             LogData logDataExisting = rr.getAddresses().get(address);
                             logDataExisting.releaseBuffer();
                             logDataExisting.setRank(dh.getRef().getRank());
-                            dh.setRef(logDataExisting.getSerializedForm().getSerialized());
+                            dh.setRef(logDataExisting.getSerializedForm(true).getSerialized());
                             otherValueAdopted.set(true);
                             // value adopted - continue on phase 2
                         } else {
