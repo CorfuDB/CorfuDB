@@ -179,6 +179,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     DiscoveryServiceEvent event = eventQueue.take();
                     processEvent(event);
                 } catch (Exception e) {
+                    // TODO: We should take care of which exceptions really end up being
+                    //  caught at this level, or we could be stopping LR completely on
+                    //  any exception.
                     log.error("Caught an exception. Stop discovery service.", e);
                     shouldRun = false;
                     stopLogReplication();
@@ -188,11 +191,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 }
             }
         } catch (Exception e) {
-            log.error("Unhandled exception caught during log replication service discovery. Retry,", e);
+            log.error("Unhandled exception caught during log replication service discovery.", e);
         } finally {
             if (runtime != null) {
                 runtime.shutdown();
             }
+
+            interClusterReplicationService.close();
         }
     }
 
@@ -463,7 +468,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Stop Log Replication
      */
     private void stopLogReplication() {
-        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && isLeader.get()) {
+        if (localClusterDescriptor != null && localClusterDescriptor.getRole() == ClusterRole.ACTIVE && isLeader.get()) {
             log.info("Stopping log replication.");
             replicationManager.stop();
         }
@@ -628,7 +633,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private boolean processDiscoveredTopology(TopologyDescriptor topology, boolean update) {
         // Health check - confirm this node belongs to a cluster in the topology
         if (topology != null && clusterPresentInTopology(topology, update)) {
-            log.info("Node[{}] belongs to cluster, descriptor={}", localEndpoint, localClusterDescriptor);
+            log.info("Node[{}] belongs to cluster, descriptor={}, topology={}", localEndpoint, localClusterDescriptor, topology);
             if (!serverStarted) {
                 bootstrapLogReplicationService();
                 registerToLogReplicationLock();
@@ -639,7 +644,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         // If a cluster descriptor is not found, this node does not belong to any cluster in the topology
         // wait for updates to the topology config to start, if this cluster ever becomes part of the topology
         log.warn("Node[{}] does not belong to any cluster provided by the discovery service, topology={}", localEndpoint,
-                topologyDescriptor);
+                topology);
         return false;
     }
 

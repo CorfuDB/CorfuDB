@@ -88,7 +88,7 @@ public class LogReplicationServerRouter implements IServerRouter {
 
     @Override
     public void sendResponse(CorfuMsg inMsg, CorfuMsg outMsg) {
-        log.info("Ready to send response {}", outMsg.getMsgType());
+        log.trace("Ready to send response {}", outMsg.getMsgType());
         outMsg.copyBaseFields(inMsg);
         try {
             serverAdapter.send(CorfuMessageConverterUtils.toProtoBuf(outMsg));
@@ -131,7 +131,7 @@ public class LogReplicationServerRouter implements IServerRouter {
     public void receive(CorfuMessage protoMessage) {
         CorfuMsg corfuMsg;
         try {
-            log.info("Received message {}", protoMessage.getType().name());
+            log.trace("Received message {}", protoMessage.getType().name());
             // Transform protoBuf into CorfuMessage
             corfuMsg = CorfuMessageConverterUtils.fromProtoBuf(protoMessage);
         } catch (CorfuMessageProtoBufException e) {
