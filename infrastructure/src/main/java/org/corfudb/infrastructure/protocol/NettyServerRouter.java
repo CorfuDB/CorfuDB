@@ -18,6 +18,7 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.infrastructure.AbstractServer;
+import org.corfudb.infrastructure.IRequestRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.view.Layout;
 
@@ -161,7 +162,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
                     }
 
                     try {
-                        handler.handleRequest(request, ctx, this);
+                        handler.handleRequest(request, ctx, (IRequestRouter) this);
                     } catch(Throwable t) {
                         log.error("channelRead: Handling {} failed due to {}:{}",
                                 header.getType(),t.getClass().getSimpleName(), t.getMessage(), t);

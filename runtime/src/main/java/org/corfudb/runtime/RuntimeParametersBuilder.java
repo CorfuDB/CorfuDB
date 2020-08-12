@@ -3,7 +3,7 @@ package org.corfudb.runtime;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.common.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.util.MetricsUtils;
 

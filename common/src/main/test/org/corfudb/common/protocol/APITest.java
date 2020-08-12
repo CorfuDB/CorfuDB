@@ -45,7 +45,7 @@ class APITest {
         long epoch = random.nextLong();
         UUID clusterId = UUID.randomUUID();
         UUID clientId = UUID.randomUUID();
-        CorfuProtocol.Header header = API.newHeader(
+        CorfuProtocol.Header header = API.getHeader(
                 requestID, CorfuProtocol.Priority.HIGH, CorfuProtocol.MessageType.PING,epoch,
                 clusterId, clientId, true, false);
         assertThat(header.getRequestId()).isEqualTo(requestID);
@@ -61,7 +61,7 @@ class APITest {
     @Test
     void newPingRequest() {
         CorfuProtocol.Header header = getRandomHeader(PING);
-        CorfuProtocol.Request request = API.newPingRequest(header);
+        CorfuProtocol.Request request = API.getPingRequest(header);
         assertThat(request.getHeader()).isEqualTo(header);
         assertThat(request.hasPingRequest()).isTrue();
     }
@@ -97,7 +97,7 @@ class APITest {
     @Test
     void newRestartRequest() {
         CorfuProtocol.Header header = getRandomHeader(RESTART);
-        CorfuProtocol.Request request = API.newPingRequest(header);
+        CorfuProtocol.Request request = API.getPingRequest(header);
         assertThat(request.getHeader()).isEqualTo(header);
         assertThat(request.hasPingRequest()).isTrue();
     }
@@ -109,7 +109,7 @@ class APITest {
     @Test
     void newResetRequest() {
         CorfuProtocol.Header header = getRandomHeader(RESET);
-        CorfuProtocol.Request request = API.newResetRequest(header);
+        CorfuProtocol.Request request = API.getResetRequest(header);
         assertThat(request.getHeader()).isEqualTo(header);
         assertThat(request.hasResetRequest()).isTrue();
     }
@@ -122,7 +122,7 @@ class APITest {
     void newSealRequest() {
         CorfuProtocol.Header header = getRandomHeader(SEAL);
         long epoch = new Random().nextLong();
-        CorfuProtocol.Request request = API.newSealRequest(header,epoch);
+        CorfuProtocol.Request request = API.getSealRequest(header,epoch);
         assertThat(request.getHeader()).isEqualTo(header);
         assertThat(request.hasSealRequest()).isTrue();
         assertThat(request.getSealRequest().getEpoch()).isEqualTo(epoch);
@@ -138,7 +138,7 @@ class APITest {
         long epoch = random.nextLong();
         UUID clusterId = UUID.randomUUID();
         UUID clientId = UUID.randomUUID();
-        return API.newHeader(
+        return API.getHeader(
                 requestID, CorfuProtocol.Priority.HIGH, messageType,epoch,
                 clusterId, clientId, true, false);
     }

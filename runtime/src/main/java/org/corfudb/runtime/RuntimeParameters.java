@@ -5,7 +5,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import lombok.ToString;
-import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.common.ChannelImplementation;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.runtime.clients.NettyClientRouter;

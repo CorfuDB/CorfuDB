@@ -17,8 +17,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
-import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.common.security.sasl.plaintext.PlainTextSaslNettyServer;
+import org.corfudb.common.security.tls.SslContextConstructor;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 

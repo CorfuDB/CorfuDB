@@ -10,7 +10,6 @@ import org.corfudb.common.protocol.client.RequestHandler;
 import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
-import org.corfudb.runtime.CorfuSchema;
 
 @Slf4j
 public class ServerRequestHandler extends RequestHandler {
@@ -114,7 +113,7 @@ public class ServerRequestHandler extends RequestHandler {
         ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
         // Temporary marker to indicate new Protobuf Message
         byteBuf.writeByte(0x2);
-        byteBuf.writeBytes(API.newResetResponse(request.getHeader()).toByteArray());
+        byteBuf.writeBytes(API.getResetResponse(request.getHeader()).toByteArray());
         ctx.writeAndFlush(byteBuf);
 
         CorfuServer.restartServer(true);
@@ -130,7 +129,7 @@ public class ServerRequestHandler extends RequestHandler {
         ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
         // Temporary marker to indicate new Protobuf Message
         byteBuf.writeByte(0x2);
-        byteBuf.writeBytes(API.newRestartResponse(request.getHeader()).toByteArray());
+        byteBuf.writeBytes(API.getRestartResponse(request.getHeader()).toByteArray());
         ctx.writeAndFlush(byteBuf);
 
         CorfuServer.restartServer(false);
@@ -151,7 +150,7 @@ public class ServerRequestHandler extends RequestHandler {
         ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
         // Temporary marker to indicate new Protobuf Message
         byteBuf.writeByte(0x2);
-        byteBuf.writeBytes(API.newSealResponse(request.getHeader()).toByteArray());
+        byteBuf.writeBytes(API.getSealResponse(request.getHeader()).toByteArray());
         ctx.writeAndFlush(byteBuf);
     }
 

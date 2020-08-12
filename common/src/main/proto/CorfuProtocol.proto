@@ -3,6 +3,7 @@ syntax = "proto3";
 package org.corfudb.common;
 
 option java_package = "org.corfudb.common.protocol.proto";
+option optimize_for = LITE_RUNTIME;
 
 
 enum ProtocolVersion {
@@ -14,14 +15,15 @@ enum MessageType {
   AUTHENTICATE = 1;
   RESTART = 2;
   RESET = 3;
-  SEAL  = 4;
-  GET_LAYOUT  = 5;
-  PREPARE_LAYOUT  = 6;
+  SEAL = 4;
+  GET_LAYOUT = 5;
+  PREPARE_LAYOUT = 6;
   PROPOSE_LAYOUT = 7;
   COMMIT_LAYOUT = 8;
   GET_TOKEN = 9;
   COMMIT_TRANSACTION = 10;
-  BOOTSTRAP = 11;
+  BOOTSTRAP_SEQUENCER = 11;
+  BOOTSTRAP = 12;
   QUERY_STREAM = 16;
   READ_LOG = 17;
   QUERY_LOG_METADATA = 18;
@@ -57,6 +59,21 @@ message UUID {
   int64 msb = 2;
 }
 
+// Used to request a range of addresses for a stream.
+// Range defined by [start, end).
+message StreamAddressRange {
+  UUID streamId = 1;
+  int64 startAddress = 2;
+  int64 endAddress = 3;
+}
+
+// Token returned by the sequencer.
+// Combination of the sequence number and epoch at which it was acquired.
+message Token {
+  int64 epoch = 1;
+  int64 sequence = 2;
+}
+
 // Payload for ERROR type WRONG_CLUSTER
 message WrongClusterPayload {
   UUID serverClusterId = 1;
@@ -79,14 +96,16 @@ message PingRequest {
 message PingResponse {
 }
 
+// TODO(Zach): Update handshake logic
 message AuthenticateRequest {
-    UUID clientId = 1;
-    UUID serverId = 2;
+  UUID clientId = 1;
+  UUID serverId = 2;
 }
 
+// TODO(Zach): Update handshake logic
 message AuthenticateResponse {
-    UUID serverId = 1;
-    string corfuVersion = 2;
+  UUID serverId = 1;
+  string corfuVersion = 2;
 }
 
 message RestartRequest {
@@ -114,7 +133,7 @@ message GetLayoutRequest {
 }
 
 message GetLayoutResponse {
-
+  //TODO: How to represent a layout?
 }
 
 // Request in first phase of Paxos
@@ -168,8 +187,15 @@ message BootstrapResponse {
 
 }
 
+// Represents the request sent to the sequencer to retrieve one or several streams address map.
 message QueryStreamRequest {
+  enum ReqType {
+    STREAMS = 0;
+    ALL_STREAMS = 1;
+  }
 
+  ReqType type = 1;
+  repeated StreamAddressRange streamRanges = 2;
 }
 
 message QueryStreamResponse {

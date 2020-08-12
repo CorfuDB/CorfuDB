@@ -25,9 +25,9 @@ import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.security.sasl.SaslUtils;
-import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
-import org.corfudb.security.tls.SslContextConstructor;
+import org.corfudb.common.security.sasl.SaslUtils;
+import org.corfudb.common.security.sasl.plaintext.PlainTextSaslNettyClient;
+import org.corfudb.common.security.tls.SslContextConstructor;
 import org.corfudb.util.Sleep;
 
 import javax.annotation.Nonnull;
