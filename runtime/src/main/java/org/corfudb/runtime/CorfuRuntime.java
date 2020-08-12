@@ -1140,6 +1140,7 @@ public class CorfuRuntime {
                     } catch (WrongClusterException we) {
                         // It is futile trying to re-connect to the wrong cluster
                         log.warn("Giving up since cluster is incorrect or reconfigured!");
+                        parameters.getSystemDownHandler().run();
                         throw we;
                     } catch (ExecutionException ee){
                         if (ee.getCause() instanceof TimeoutException) {

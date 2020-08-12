@@ -151,6 +151,8 @@ public abstract class AbstractView {
                     log.warn("layoutHelper: System seems unavailable", re);
                 } else if (re instanceof WrongClusterException) {
                     log.warn("layoutHelper: Cluster reconfiguration or incorrect cluster", re);
+                    log.info("layoutHelper: Invoking the systemDownHandler.");
+                    runtime.getParameters().getSystemDownHandler().run();
                     throw re;
                 }else {
                     throw re;
