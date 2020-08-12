@@ -168,7 +168,7 @@ public class TopologyDescriptor {
             }
         }
 
-        log.warn("Endpoint {} does not belong to any cluster defined in {}", endpoint, clusters);
+        log.trace("Endpoint {} does not belong to any cluster defined in {}", endpoint, clusters);
         return null;
     }
 

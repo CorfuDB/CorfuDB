@@ -88,17 +88,17 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
     }
 
     /**
-     * Closes the currently running corfu server.
+     * Closes the currently running corfu log replication server.
      */
     @Override
     public void close() {
 
         if (!close.compareAndSet(false, true)) {
-            log.trace("close: Server already shutdown");
+            log.trace("close: Log Replication Server already shutdown");
             return;
         }
 
-        log.info("close: Shutting down Corfu server and cleaning resources");
+        log.info("close: Shutting down Log Replication server and cleaning resources");
         serverContext.close();
 
         this.router.getServerAdapter().stop();
@@ -107,7 +107,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
         // A executor service to create the shutdown threads
         // plus name the threads correctly.
         final ExecutorService shutdownService = Executors.newFixedThreadPool(serverMap.size(),
-                new ServerThreadFactory("CorfuServer-shutdown-",
+                new ServerThreadFactory("ReplicationCorfuServer-shutdown-",
                         new ServerThreadFactory.ExceptionHandler()));
 
         // Turn into a list of futures on the shutdown, returning
@@ -127,7 +127,7 @@ public class CorfuInterClusterReplicationServerNode implements AutoCloseable {
 
         CompletableFuture.allOf(shutdownFutures).join();
         shutdownService.shutdown();
-        log.info("close: Server shutdown and resources released");
+        log.info("close: Log Replication Server shutdown and resources released");
     }
 
     public LogReplicationServer getLogReplicationServer() {
