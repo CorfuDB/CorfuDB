@@ -222,7 +222,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<CorfuMsg>
         b.group(eventLoopGroup);
         b.channel(parameters.getSocketType().getChannelClass());
         parameters.getNettyChannelOptions().forEach(b::option);
-        b.handler(getChannelInitializerPeer()); // Temporary
+        b.handler(getChannelInitializer()); // Temporary
         b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, (int) timeoutConnect);
 
         // Asynchronously connect, retrying until shut down.

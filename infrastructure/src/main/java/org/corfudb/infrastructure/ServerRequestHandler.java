@@ -137,7 +137,7 @@ public class ServerRequestHandler extends RequestHandler {
     }
 
     @Override
-    protected void handleSeal(Request request, ChannelHandlerContext ctx) {
+    protected synchronized void handleSeal(Request request, ChannelHandlerContext ctx) {
         log.warn("handleSeal: Received SEAL request from client with " +
                         "LSB: {} MSB:{}, " +
                         "moving to new epoch {}",

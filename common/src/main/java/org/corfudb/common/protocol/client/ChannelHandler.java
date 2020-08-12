@@ -11,6 +11,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleStateHandler;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -24,8 +25,12 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.common.protocol.CorfuExceptions.PeerUnavailable;
+import org.corfudb.common.security.sasl.SaslUtils;
+import org.corfudb.common.security.sasl.plaintext.PlainTextSaslNettyClient;
+import org.corfudb.common.security.tls.SslContextConstructor;
 
 import javax.annotation.Nonnull;
+import javax.net.ssl.SSLException;
 import java.net.InetSocketAddress;
 import java.sql.Time;
 import java.util.Map;
@@ -76,10 +81,25 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     final ReentrantReadWriteLock requestLock = new ReentrantReadWriteLock();
 
+    SslContext sslContext;
+
     public ChannelHandler(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, ClientConfig clientConfig) {
         this.remoteAddress = remoteAddress;
         this.eventLoopGroup = eventLoopGroup;
         this.config = clientConfig;
+
+        if (config.isEnableTls()) {
+            try {
+                sslContext = SslContextConstructor.constructSslContext(false,
+                        config.getKeyStore(),
+                        config.getKeyStorePasswordFile(),
+                        config.getTrustStore(),
+                        config.getTrustStorePasswordFile());
+            } catch (SSLException e) {
+                // TODO(Chetan): Throw Custom error
+                throw new Error(e);
+            }
+        }
 
         //TODO(Maithem): Set pooled allocator
         Bootstrap bootstrap = new Bootstrap();
@@ -180,13 +200,22 @@ public abstract class ChannelHandler extends ResponseHandler {
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
-                /*ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
-                        config.getKeepAlivePeriodInMs(), 0));*/
-
+                ch.pipeline().addLast(new IdleStateHandler(config.getIdleConnectionTimeoutInMs(),
+                        config.getKeepAlivePeriodInMs(), 0));
+                if (config.isEnableTls()) {
+                    ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
+                }
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
                         0, 4, 0,
                         4));
+
+                if (config.isEnableSasl()) {
+                    PlainTextSaslNettyClient saslPeerClient =
+                            SaslUtils.enableSaslPlainText(config.getSaslUsernameFile(),
+                                    config.getSaslPasswordFile());
+                    ch.pipeline().addLast("sasl/plain-text", saslPeerClient);
+                }
 
                 /**
                  ch.pipeline().addLast(new NettyCorfuMessageDecoder());

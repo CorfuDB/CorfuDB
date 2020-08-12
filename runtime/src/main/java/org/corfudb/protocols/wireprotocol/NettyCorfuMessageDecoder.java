@@ -1,7 +1,9 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.MessageToMessageDecoder;
 
 import java.util.List;
@@ -14,7 +16,7 @@ import org.corfudb.common.protocol.API;
  * Created by mwei on 10/1/15.
  */
 @Slf4j
-public class NettyCorfuMessageDecoder extends MessageToMessageDecoder<ByteBuf> {
+public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {
 
     @Override
     protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf,
@@ -29,7 +31,6 @@ public class NettyCorfuMessageDecoder extends MessageToMessageDecoder<ByteBuf> {
         list.add(CorfuMsg.deserialize(byteBuf));
     }
 
-    @Override
     protected void decodeLast(ChannelHandlerContext ctx, ByteBuf in,
                               List<Object> out) throws Exception {
         //log.info("Netty channel handler context goes inactive, received out size is {}",

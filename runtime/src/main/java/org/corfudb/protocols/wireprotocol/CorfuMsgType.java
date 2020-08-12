@@ -113,8 +113,8 @@ public enum CorfuMsgType {
     KNOWN_ADDRESS_RESPONSE(87, new TypeToken<CorfuPayloadMsg<KnownAddressResponse>>() {}),
 
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true, false),
-    ;
 
+    PROTO_MESSAGE(201, TypeToken.of(CorfuMsg.class), true, true);
 
     public final int type;
     public final TypeToken<? extends CorfuMsg> messageType;

@@ -411,7 +411,7 @@ public class CorfuServerNode implements AutoCloseable {
                         "--enable-sasl-plain-text-auth");
 
                 // If TLS is enabled, setup the encryption pipeline.
-                /*if (tlsEnabled) {
+                if (tlsEnabled) {
                     SSLEngine engine = sslContext.newEngine(ch.alloc());
                     engine.setEnabledCipherSuites(enabledTlsCipherSuites);
                     engine.setEnabledProtocols(enabledTlsProtocols);
@@ -437,10 +437,10 @@ public class CorfuServerNode implements AutoCloseable {
                 // Transform the framed message into a Corfu message.
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
-                ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
+                /*ch.pipeline().addLast(new ServerHandshakeHandler(context.getNodeId(),
                         Version.getVersionString() + "("
                                 + GitRepositoryState.getRepositoryState().commitIdAbbrev + ")",
-                        context.getServerConfig(String.class, "--HandshakeTimeout")));
+                        context.getServerConfig(String.class, "--HandshakeTimeout")));*/
                 // Route the message to the server class.
                 ch.pipeline().addLast(router);
             }
