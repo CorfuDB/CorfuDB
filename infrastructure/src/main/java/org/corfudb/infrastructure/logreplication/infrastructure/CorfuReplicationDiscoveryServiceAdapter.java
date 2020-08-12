@@ -23,4 +23,6 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      * @return
      */
     Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
+
+    void forceSnapshotFullSync(String clusterId);
 }
