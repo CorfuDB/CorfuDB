@@ -40,8 +40,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
 
         // To reduce the overhead of serialization, we serialize only the
         // first time we write, saving when we go down the chain.
-        try (ILogData.SerializationHandle sh =
-                     data.getSerializedForm()) {
+        try (ILogData.SerializationHandle sh = data.getSerializedForm(true)) {
             log.trace("Write[{}]: chain head {}/{}", globalAddress, 1, numUnits);
             // In chain replication, we start at the chain head.
             try {

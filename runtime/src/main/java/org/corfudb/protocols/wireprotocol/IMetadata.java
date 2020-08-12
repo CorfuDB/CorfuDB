@@ -2,7 +2,16 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.esotericsoftware.kryo.NotNull;
 import com.google.common.reflect.TypeToken;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Value;
+import org.corfudb.common.compression.Codec;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
 
+import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -13,18 +22,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import javax.annotation.Nullable;
-
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Value;
-
-import org.corfudb.common.compression.Codec;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.Layout;
-
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_ID;
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_START_LOG_ADDRESS;
 import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
@@ -34,10 +31,6 @@ import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.C
  * Created by mwei on 9/18/15.
  */
 public interface IMetadata {
-
-    Map<Byte, LogUnitMetadataType> metadataTypeMap =
-            Arrays.<LogUnitMetadataType>stream(LogUnitMetadataType.values())
-                    .collect(Collectors.toMap(LogUnitMetadataType::asByte, Function.identity()));
 
     EnumMap<IMetadata.LogUnitMetadataType, Object> getMetadataMap();
 
@@ -54,11 +47,12 @@ public interface IMetadata {
 
     /**
      * Get whether or not this entry contains a given stream.
-     * @param stream    The stream to check.
-     * @return          True, if the entry contains the given stream.
+     *
+     * @param stream The stream to check.
+     * @return True, if the entry contains the given stream.
      */
     default boolean containsStream(UUID stream) {
-        return  getBackpointerMap().keySet().contains(stream);
+        return getBackpointerMap().containsKey(stream);
     }
 
     /**
@@ -107,27 +101,29 @@ public interface IMetadata {
         getMetadataMap().put(LogUnitMetadataType.EPOCH, epoch);
     }
 
-    default void setClientId(UUID clientId) {getMetadataMap().put(LogUnitMetadataType.CLIENT_ID, clientId); }
+    default void setClientId(UUID clientId) {
+        getMetadataMap().put(LogUnitMetadataType.CLIENT_ID, clientId);
+    }
 
     @SuppressWarnings("unchecked")
     @Nullable
     default UUID getClientId() {
-            return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CLIENT_ID,
-                    null);
+        return (UUID) getMetadataMap().getOrDefault(LogUnitMetadataType.CLIENT_ID, null);
     }
 
-    default void setThreadId(Long threadId) {getMetadataMap().put(LogUnitMetadataType.THREAD_ID, threadId); }
+    default void setThreadId(Long threadId) {
+        getMetadataMap().put(LogUnitMetadataType.THREAD_ID, threadId);
+    }
 
     @SuppressWarnings("unchecked")
     @Nullable
     default Long getThreadId() {
-        return (Long) getMetadataMap().getOrDefault(LogUnitMetadataType.THREAD_ID,
-                null);
+        return (Long) getMetadataMap().getOrDefault(LogUnitMetadataType.THREAD_ID, null);
     }
-
 
     /**
      * Get Log's global address (global tail).
+     *
      * @return global address
      */
     @SuppressWarnings("unchecked")

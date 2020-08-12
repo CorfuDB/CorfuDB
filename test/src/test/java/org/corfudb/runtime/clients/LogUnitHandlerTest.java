@@ -351,7 +351,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         ILogData data = new LogData(type);
         data.setRank(rank);
         data.setGlobalAddress(position);
-        return data.getSerializedForm();
+        return data.getSerializedForm(true);
     }
 
     @Test
