@@ -1,22 +1,23 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
-import java.util.EnumMap;
-import java.util.concurrent.atomic.AtomicReference;
-
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.WriteSizeException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.util.EnumMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Created by mwei on 8/15/16.
@@ -32,13 +33,19 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     @Getter
     byte[] data;
 
-    private ByteBuf serializedCache = null;
+    private SerializedCache serializedCache = null;
 
     private int lastKnownSize = NOT_KNOWN;
 
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
 
     private final EnumMap<LogUnitMetadataType, Object> metadataMap;
+
+    @RequiredArgsConstructor
+    private static class SerializedCache {
+        private final ByteBuf buffer;
+        private final int metadataOffset;
+    }
 
     public static LogData getTrimmed(long address) {
         LogData logData = new LogData(DataType.TRIMMED);
@@ -69,6 +76,17 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
      */
     public Object getPayload(CorfuRuntime runtime) {
         Object value = payload.get();
+
+        // This is only needed for unit test framework to work. Since unit
+        // tests do not serialize payload to byte array, the address will
+        // not be set in the following codes, so doing here instead.
+        if (value instanceof LogEntry) {
+            if (!Address.isAddress(((LogEntry) value).getGlobalAddress())) {
+                ((LogEntry) value).setGlobalAddress(getGlobalAddress());
+            }
+            return value;
+        }
+
         if (value == null) {
             synchronized (this.payload) {
                 value = this.payload.get();
@@ -78,9 +96,9 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                     } else {
                         ByteBuf serializedBuf = Unpooled.wrappedBuffer(data);
                         if (hasPayloadCodec()) {
-                            // if the payload has a codec we need to decode it before deserialization
+                            // If the payload has a codec we need to decode it before deserialization.
                             ByteBuf compressedBuf = ICorfuPayload.fromBuffer(data, ByteBuf.class);
-                            byte[] compressedArrayBuf= new byte[compressedBuf.readableBytes()];
+                            byte[] compressedArrayBuf = new byte[compressedBuf.readableBytes()];
                             compressedBuf.readBytes(compressedArrayBuf);
                             serializedBuf = Unpooled.wrappedBuffer(getPayloadCodecType()
                                     .getInstance().decompress(ByteBuffer.wrap(compressedArrayBuf)));
@@ -119,20 +137,41 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     @Override
     public synchronized void releaseBuffer() {
         if (serializedCache != null) {
-            serializedCache.release();
-            if (serializedCache.refCnt() == 0) {
+            serializedCache.buffer.release();
+            if (serializedCache.buffer.refCnt() == 0) {
                 serializedCache = null;
             }
         }
     }
 
     @Override
-    public synchronized void acquireBuffer() {
+    public synchronized void acquireBuffer(boolean metadata) {
         if (serializedCache == null) {
-            serializedCache = Unpooled.buffer();
-            doSerializeInternal(serializedCache);
+            acquireBufferInternal(metadata);
         } else {
-            serializedCache.retain();
+            if (metadata) {
+                serializedCache.buffer.resetReaderIndex();
+                serializedCache.buffer.writerIndex(serializedCache.metadataOffset);
+                doSerializeMetadataInternal(serializedCache.buffer);
+            }
+            serializedCache.buffer.retain();
+        }
+    }
+
+    public synchronized void updateAcquiredBuffer(boolean metadata) {
+        Preconditions.checkState(serializedCache != null,
+                "updateAcquiredBuffer requires serialized form");
+        acquireBufferInternal(metadata);
+    }
+
+    private void acquireBufferInternal(boolean metadata) {
+        ByteBuf buf = Unpooled.buffer();
+        if (metadata) {
+            int metadataOffset = doSerializeInternal(buf);
+            serializedCache = new SerializedCache(buf, metadataOffset);
+        } else {
+            doSerializePayloadInternal(buf);
+            serializedCache = new SerializedCache(buf, buf.writerIndex());
         }
     }
 
@@ -166,11 +205,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
             data = null;
         }
 
-        if (type.isMetadataAware()) {
-            metadataMap = ICorfuPayload.enumMapFromBuffer(buf, IMetadata.LogUnitMetadataType.class);
-        } else {
-            metadataMap = new EnumMap<>(IMetadata.LogUnitMetadataType.class);
-        }
+        metadataMap = ICorfuPayload.enumMapFromBuffer(buf, IMetadata.LogUnitMetadataType.class);
     }
 
     /**
@@ -191,7 +226,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     /**
      * Constructor for generating LogData.
      *
-     * @param type The type of log data to instantiate.
+     * @param type   The type of log data to instantiate.
      * @param object The actual data/value
      */
     public LogData(DataType type, final Object object) {
@@ -219,8 +254,8 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     /**
      * Constructor for generating LogData.
      *
-     * @param type The type of log data to instantiate.
-     * @param object The actual data/value
+     * @param type      The type of log data to instantiate.
+     * @param object    The actual data/value
      * @param codecType The encoder/decoder type
      */
     public LogData(DataType type, final Object object, final Codec.Type codecType) {
@@ -240,9 +275,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         if (token.getBackpointerMap().size() > 0) {
             setBackpointerMap(token.getBackpointerMap());
         }
-        if (payload.get() instanceof LogEntry) {
-            ((LogEntry) payload.get()).setGlobalAddress(token.getSequence());
-        }
     }
 
     /**
@@ -250,7 +282,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
      *
      * @param buf The buffer to read from
      */
-    public byte[] byteArrayFromBuf(final ByteBuf buf) {
+    private byte[] byteArrayFromBuf(final ByteBuf buf) {
         ByteBuf readOnlyCopy = buf.asReadOnly();
         readOnlyCopy.resetReaderIndex();
         byte[] outArray = new byte[readOnlyCopy.readableBytes()];
@@ -261,21 +293,29 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     @Override
     public void doSerialize(ByteBuf buf) {
         if (serializedCache != null) {
-            serializedCache.resetReaderIndex();
-            buf.writeBytes(serializedCache);
+            serializedCache.buffer.resetReaderIndex();
+            buf.writeBytes(serializedCache.buffer);
         } else {
             doSerializeInternal(buf);
         }
     }
 
-    void doSerializeInternal(ByteBuf buf) {
+    private int doSerializeInternal(ByteBuf buf) {
+        doSerializePayloadInternal(buf);
+        int metadataOffset = buf.writerIndex();
+        doSerializeMetadataInternal(buf);
+
+        return metadataOffset;
+    }
+
+    private void doSerializePayloadInternal(ByteBuf buf) {
         ICorfuPayload.serialize(buf, type);
         if (type == DataType.DATA) {
             if (data == null) {
                 int lengthIndex = buf.writerIndex();
                 buf.writeInt(0);
                 if (hasPayloadCodec()) {
-                    // if the payload has a codec we need to also compress the payload
+                    // If the payload has a codec we need to also compress the payload
                     ByteBuf serializeBuf = Unpooled.buffer();
                     Serializers.CORFU.serialize(payload.get(), serializeBuf);
                     doCompressInternal(serializeBuf, buf);
@@ -292,10 +332,10 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
                 lastKnownSize = data.length;
             }
         }
+    }
 
-        if (type.isMetadataAware()) {
-            ICorfuPayload.serialize(buf, metadataMap);
-        }
+    private void doSerializeMetadataInternal(ByteBuf buf) {
+        ICorfuPayload.serialize(buf, metadataMap);
     }
 
     private void doCompressInternal(ByteBuf bufData, ByteBuf buf) {
@@ -307,8 +347,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     /**
      * LogData are considered equals if clientId and threadId are equal.
      * Here, it means or both of them are null or both of them are the same.
-     * @param o
-     * @return
      */
     @Override
     public boolean equals(Object o) {
@@ -339,13 +377,22 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     /**
      * Verify that max payload is enforced for the specified limit.
      *
-     * @param limit Max write limit.
+     * @param limit Max write limit
+     * @return the serialized size of the payload
      */
-    public void checkMaxWriteSize(int limit) {
-        try (ILogData.SerializationHandle sh = this.getSerializedForm()) {
-            if (limit != 0 && getSizeEstimate() > limit) {
-                throw new WriteSizeException(getSizeEstimate(), limit);
-            }
+    public int checkMaxWriteSize(int limit) {
+        Preconditions.checkState(serializedCache != null,
+                "checkMaxWriteSize requires serialized form");
+
+        int payloadSize = getSizeEstimate();
+        if (log.isTraceEnabled()) {
+            log.trace("checkMaxWriteSize: payload size is {} bytes.", payloadSize);
         }
+
+        if (payloadSize > limit) {
+            throw new WriteSizeException(payloadSize, limit);
+        }
+
+        return payloadSize;
     }
 }
