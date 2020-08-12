@@ -6,6 +6,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.runtime.CorfuRuntime;
@@ -205,5 +206,20 @@ public class CorfuReplicationManager {
                 startLogReplicationRuntime(clusterInfo);
             }
         }
+    }
+
+    /**
+     * Given a clusterId, stop the current log replication event and
+     * @param clusterID
+     */
+    public void enforceSnapshotFullSync(String clusterID) {
+        CorfuLogReplicationRuntime replicationRuntime = runtimeToRemoteCluster.get(clusterID);
+        if (replicationRuntime == null) {
+            log.error("There are no replicationRuntime in the map for clusterID {}", clusterID);
+            return;
+        }
+
+        replicationRuntime.getSourceManager().stopLogReplication();
+        replicationRuntime.getSourceManager().startSnapshotSync();
     }
 }

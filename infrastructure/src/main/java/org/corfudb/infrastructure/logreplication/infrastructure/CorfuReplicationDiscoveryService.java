@@ -217,6 +217,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 processUpgrade(event);
                 break;
 
+            case ENFORCE_SNAPSHOT_FULL_SYNC:
+                processEnforceSnapshotFullSync(event);
+                break;
+
             default:
                 log.error("Invalid event type {}", event.type);
         }
@@ -670,6 +674,14 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
     }
 
+    /**
+     * Enforce a snapshot full sync for the specified standby site.
+     * @param event
+     */
+    private void processEnforceSnapshotFullSync(DiscoveryServiceEvent event) {
+        replicationManager.enforceSnapshotFullSync(event.getRemoteSiteInfo().getClusterId());
+    }
+
     public synchronized void input(DiscoveryServiceEvent event) {
         eventQueue.add(event);
         notifyAll();
@@ -710,6 +722,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
         log.error("Received Replication Status Query in Incorrect Role {}.", localClusterDescriptor.getRole());
         return null;
+    }
+
+    @Override
+    public void forceSnapshotFullSync(String clusterId) {
+        input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_FULL_SYNC, clusterId));
     }
 
     public void shutdown() {
