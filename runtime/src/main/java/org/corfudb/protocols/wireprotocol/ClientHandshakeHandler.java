@@ -151,9 +151,9 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx)
         throws Exception {
-        ctx.pipeline().remove(this);
-        this.fireHandshakeSucceeded(ctx);
-        /* log.info("channelActive: Outgoing connection established to: {}", ctx.channel().remoteAddress());
+        /*ctx.pipeline().remove(this);
+        this.fireHandshakeSucceeded(ctx);*/
+        log.info("channelActive: Outgoing connection established to: {}", ctx.channel().remoteAddress());
 
         // Write the handshake & add a timeout listener.
         CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE
@@ -162,7 +162,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         log.debug("channelActive: Initiate handshake. Send handshake message.");
         ctx.writeAndFlush(handshake);
         log.debug("channelActive: Add {} to channel pipeline.", READ_TIMEOUT_HANDLER);
-        ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER, new ReadTimeoutHandler(this.handshakeTimeout)); */
+        ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER, new ReadTimeoutHandler(this.handshakeTimeout));
     }
 
     /**

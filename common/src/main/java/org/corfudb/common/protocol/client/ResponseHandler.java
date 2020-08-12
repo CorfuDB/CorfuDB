@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.API;
+import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 
@@ -39,7 +40,7 @@ public abstract class ResponseHandler extends ChannelInboundHandlerAdapter {
                 log.debug("Response {} pi {} from {}", header.getType(), ctx.channel().remoteAddress());
             }
 
-            if (response.hasError()) {
+            if (response.getError().getCode()!= CorfuProtocol.ERROR.OK) {
                 // propagate error to the client and return right away
                 handleServerError(response);
                 return;

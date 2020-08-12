@@ -88,7 +88,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
             log.warn("Exception occurred when sending response {}, caused by {}", response.getHeader(), e.getCause(), e);
         } finally {
             IOUtils.closeQuietly(responseOutputStream);
-            outBuf.release();
+            // outBuf.release();
         }
     }
 
