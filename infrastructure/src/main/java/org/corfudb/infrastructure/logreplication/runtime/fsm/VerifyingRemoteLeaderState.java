@@ -108,7 +108,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                                 .toArray(new CompletableFuture<?>[pendingLeadershipQueries.size()])).get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
                         if (leadershipResponse.isLeader()) {
-                            log.info("Leader for remote cluster, node={}", leadershipResponse.getEndpoint());
+                            log.info("Received Leadership Response :: leader for remote cluster, node={}", leadershipResponse.getEndpoint());
                             leader = leadershipResponse.getEndpoint();
                             fsm.setRemoteLeaderEndpoint(leader);
 
@@ -120,8 +120,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_FOUND, leader));
                             return;
                         } else {
-                            log.debug("Node {} is not the leader. Leadership={}", leadershipResponse.getEndpoint(),
-                                    leadershipResponse.isLeader());
+                            log.debug("Received Leadership Response :: node {} is not the leader", leadershipResponse.getEndpoint());
 
                             // Remove CF for completed request
                             pendingLeadershipQueries.remove(leadershipResponse.getEndpoint());

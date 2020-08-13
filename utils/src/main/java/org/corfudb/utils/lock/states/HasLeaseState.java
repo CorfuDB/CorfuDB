@@ -171,11 +171,13 @@ public class HasLeaseState extends LockState {
                                     lock.input(LockEvent.LEASE_RENEWED);
                                     leaseTime = Optional.of(Instant.now());
                                 } else {
-                                    log.info("Lock: {} lease revoked for lock {}", lock.getLockId());
+                                    log.info("Lease revoked for lock {}:{}", lock.getLockId().getLockGroup(),
+                                            lock.getLockId().getLockName());
                                     lock.input(LockEvent.LEASE_REVOKED);
                                 }
                             } catch (Exception e) {
-                                log.error("Lock: {} could not renew lease for lock {}", lock.getLockId(), e);
+                                log.error("Could not renew lease for lock {}:{}", lock.getLockId().getLockGroup(),
+                                        lock.getLockId().getLockName(), e);
                             }
                         },
                         0,
