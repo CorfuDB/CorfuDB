@@ -27,7 +27,7 @@ public class DiscoveryServiceEvent {
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId) {
         this.type = type;
-        this.remoteSiteInfo = new ClusterDescriptor(clusterId, LogReplicationClusterInfo.ClusterRole.STANDBY, 9000);
+        this.remoteSiteInfo = new ClusterDescriptor(clusterId, LogReplicationClusterInfo.ClusterRole.STANDBY);
     }
 
     public enum DiscoveryServiceEventType {
