@@ -13,7 +13,7 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiati
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -32,13 +32,13 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private Optional<String> leaderEndpoint;
 
-    private ExecutorService worker;
+    private ThreadPoolExecutor worker;
 
     private LogReplicationClientRouter router;
 
     private LogReplicationMetadataManager metadataManager;
 
-    public NegotiatingState(CorfuLogReplicationRuntime fsm, ExecutorService worker, LogReplicationClientRouter router,
+    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router,
                             LogReplicationMetadataManager metadataManager) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
@@ -93,11 +93,16 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
-        // Start Negotiation
+        log.debug("OnEntry :: negotiating state from {}", from.getType());
+        log.debug("Submitted tasks to worker :: size={} activeCount={} taskCount={}", worker.getQueue().size(),
+                worker.getActiveCount(), worker.getTaskCount());
         worker.submit(this::negotiate);
     }
 
     private void negotiate() {
+
+        log.debug("Enter :: negotiate");
+
         try {
             if(fsm.getRemoteLeader().isPresent()) {
                 String remoteLeader = fsm.getRemoteLeader().get();
@@ -122,6 +127,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         } catch (Exception e) {
             log.error("Unexpected exception during negotiation, retry.", e);
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
+        } finally {
+            log.debug("Exit :: negotiate");
         }
     }
 

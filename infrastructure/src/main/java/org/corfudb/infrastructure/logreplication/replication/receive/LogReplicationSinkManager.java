@@ -388,8 +388,8 @@ public class LogReplicationSinkManager implements DataReceiver {
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
                 logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
 
-        log.info("Sink manager completed SNAPSHOT transfer for {} and has transit to {} state.",
-                inputEntry, rxState);
+        log.info("Sink manager completed SNAPSHOT transfer {} for ts={} and has transit to {} state.",
+                inputEntry.getMetadata().getSyncRequestId(), inputEntry.getMetadata().getTimestamp(), rxState);
     }
 
     /**
