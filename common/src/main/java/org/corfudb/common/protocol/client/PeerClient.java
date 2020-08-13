@@ -1,18 +1,15 @@
 package org.corfudb.common.protocol.client;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import lombok.Builder;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.API;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
-import org.corfudb.common.protocol.proto.CorfuProtocol.StreamAddressRange;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
+import org.corfudb.common.protocol.proto.CorfuProtocol;
+import org.corfudb.common.protocol.proto.CorfuProtocol.*;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.UUID;
@@ -24,11 +21,15 @@ import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @NoArgsConstructor
-public class PeerClient extends ChannelHandler {
+public class PeerClient extends ResponseHandler{
 
     // set epoch
     // client id
     // cluster id
+
+    @Getter
+    @Setter
+    private ChannelHandler channelHandler;
 
     final Priority priority = Priority.NORMAL;
 
@@ -37,12 +38,12 @@ public class PeerClient extends ChannelHandler {
     final UUID clusterId = API.DEFAULT_UUID;
 
     public PeerClient(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, ClientConfig config) {
-        super(remoteAddress, eventLoopGroup, config);
+        this.channelHandler = new ChannelHandler(remoteAddress, eventLoopGroup, config,this);
     }
 
     private Header getHeader(MessageType type, boolean ignoreClusterId, boolean ignoreEpoch) {
-        return API.getHeader(generateRequestId(), priority, type, epoch,
-                clusterId, config.getClientId(), ignoreClusterId, ignoreEpoch);
+        return API.getHeader(channelHandler.generateRequestId(), priority, type, epoch,
+                clusterId, channelHandler.config.getClientId(), ignoreClusterId, ignoreEpoch);
     }
 
     /**
@@ -55,11 +56,11 @@ public class PeerClient extends ChannelHandler {
         Header header = getHeader(MessageType.PING, true, true);
         log.info("sealRemoteServer: send PING from me(clientId={}) to the server",
                 header.getClientId());
-        return sendRequest(API.getPingRequest(header));
+        return channelHandler.sendRequest(API.getPingRequest(header));
     }
 
     protected void handlePing(Response response) {
-        completeRequest(response.getHeader().getRequestId(), true);
+        channelHandler.completeRequest(response.getHeader().getRequestId(), true);
     }
 
     /**
@@ -72,14 +73,14 @@ public class PeerClient extends ChannelHandler {
         Header header = getHeader(MessageType.RESTART, true, true);
         log.warn("sealRemoteServer: send RESTART from me(clientId={}) to the server",
                 header.getClientId());
-        return sendRequest(API.getRestartRequest(header));
+        return channelHandler.sendRequest(API.getRestartRequest(header));
     }
 
     protected void handleRestart(Response response) {
         log.warn("handleRestart: Restart response received from the server with " +
                         "LSB: {} MSB:{}", response.getHeader().getClientId().getLsb(),
                 response.getHeader().getClientId().getMsb());
-        completeRequest(response.getHeader().getRequestId(), true);
+        channelHandler.completeRequest(response.getHeader().getRequestId(), true);
     }
 
     /**
@@ -93,20 +94,21 @@ public class PeerClient extends ChannelHandler {
         Header header = getHeader(MessageType.RESET, true, true);
         log.warn("sealRemoteServer: send RESET from me(clientId={}) to the server",
                 header.getClientId());
-        return sendRequest(API.getResetRequest(header));
+        return channelHandler.sendRequest(API.getResetRequest(header));
     }
 
     protected void handleReset(Response response) {
         log.warn("handleReset: Reset response received from the server with " +
                         "LSB: {} MSB:{}", response.getHeader().getClientId().getLsb(),
                 response.getHeader().getClientId().getMsb());
-        completeRequest(response.getHeader().getRequestId(), true);
+        channelHandler.completeRequest(response.getHeader().getRequestId(), true);
     }
 
     public CompletableFuture<Response> authenticate() {
         Header header = getHeader(MessageType.AUTHENTICATE, false, true);
         // TODO(Zach): Handle timeout?
-        return sendRequest(API.getAuthenticateRequest(header, config.getClientId(), config.getNodeId()));
+        return channelHandler.sendRequest(API.getAuthenticateRequest(header,
+                channelHandler.config.getClientId(), channelHandler.config.getNodeId()));
     }
 
     protected void handleAuthenticate(Response response) {
@@ -116,12 +118,12 @@ public class PeerClient extends ChannelHandler {
 
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
         // which indicates node id matching is not required.
-        if (config.getNodeId().equals(API.DEFAULT_UUID)) {
+        if (channelHandler.config.getNodeId().equals(API.DEFAULT_UUID)) {
             log.info("handleAuthenticate: node id matching is not requested by client.");
-        } else if (!config.getNodeId().equals(serverId)) {
+        } else if (!channelHandler.config.getNodeId().equals(serverId)) {
             log.error("handleAuthenticate: Handshake validation failed. Server node id mismatch.");
-            log.debug("handleAuthenticate: Client opened socket to server [{}] instead, connected to: [{}]",
-                    config.getNodeId(), serverId);
+            log.debug("handleAuthenticate: Client opened socket to server [{}] instead, " +
+                            "connected to: [{}]", channelHandler.config.getNodeId(), serverId);
             // TODO(Zach): Any remaining handling
             return;
         }
@@ -141,13 +143,19 @@ public class PeerClient extends ChannelHandler {
         Header header = getHeader(MessageType.SEAL, false, true);
         log.info("sealRemoteServer: send SEAL from me(clientId={}) to new epoch {}",
                 header.getClientId(), newEpoch);
-        return sendRequest(API.getSealRequest(header, newEpoch));
+        return channelHandler.sendRequest(API.getSealRequest(header, newEpoch));
     }
 
     protected void handleSeal(Response response) {
         log.warn("handleReset: SealResponse received from the server with " +
                         "LSB: {} MSB:{}", response.getHeader().getClientId().getLsb(),
                 response.getHeader().getClientId().getMsb());
+    }
+
+    @Override
+    protected void handleServerError(Response response) {
+        CorfuProtocol.ServerError serverError = response.getError();
+        channelHandler.completeErrorRequest(response.getHeader().getRequestId(), channelHandler.getCorfuException(serverError));
     }
 
     protected void handleGetLayout(Response response) {
@@ -180,7 +188,7 @@ public class PeerClient extends ChannelHandler {
 
     public CompletableFuture<Response> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
         Header header = getHeader(MessageType.QUERY_STREAM, false, false);
-        return sendRequest(API.getQueryStreamRequest(header, streamsAddressesRange));
+        return channelHandler.sendRequest(API.getQueryStreamRequest(header, streamsAddressesRange));
     }
 
     protected void handleQueryStream(Response response) {

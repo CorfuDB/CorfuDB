@@ -2,13 +2,9 @@ package org.corfudb.common.protocol.client;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.EventLoopGroup;
+import io.netty.channel.*;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
@@ -20,11 +16,12 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.CorfuExceptions;
+import org.corfudb.common.protocol.CorfuExceptions.PeerUnavailable;
+import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
-import org.corfudb.common.protocol.CorfuExceptions.PeerUnavailable;
 import org.corfudb.common.security.sasl.SaslUtils;
 import org.corfudb.common.security.sasl.plaintext.PlainTextSaslNettyClient;
 import org.corfudb.common.security.tls.SslContextConstructor;
@@ -32,13 +29,8 @@ import org.corfudb.common.security.tls.SslContextConstructor;
 import javax.annotation.Nonnull;
 import javax.net.ssl.SSLException;
 import java.net.InetSocketAddress;
-import java.sql.Time;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -50,7 +42,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 @Slf4j
 @NoArgsConstructor
-public abstract class ChannelHandler extends ResponseHandler {
+public class ChannelHandler extends ChannelInboundHandlerAdapter {
 
     //TODO(Maithem): what if the consuming client is using a different protobuf lib version?
 
@@ -58,7 +50,11 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     protected EventLoopGroup eventLoopGroup;
 
+    @Setter
     private volatile Channel channel;
+
+    @Setter
+    private PeerClient peerClient;
 
     private volatile CompletableFuture<Channel> channelCf = new CompletableFuture<>();
 
@@ -83,10 +79,11 @@ public abstract class ChannelHandler extends ResponseHandler {
 
     SslContext sslContext;
 
-    public ChannelHandler(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, ClientConfig clientConfig) {
+    public ChannelHandler(InetSocketAddress remoteAddress, EventLoopGroup eventLoopGroup, ClientConfig clientConfig, PeerClient peerClient) {
         this.remoteAddress = remoteAddress;
         this.eventLoopGroup = eventLoopGroup;
         this.config = clientConfig;
+        this.peerClient = peerClient;
 
         if (config.isEnableTls()) {
             try {
@@ -278,6 +275,132 @@ public abstract class ChannelHandler extends ResponseHandler {
     }
 
     @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        ByteBuf msgBuf = (ByteBuf) msg;
+
+        // Temporary -- If message is not a new Protobuf message, forward the message.
+        if(msgBuf.getByte(msgBuf.readerIndex()) != API.PROTO_CORFU_MSG_MARK) {
+            ctx.fireChannelRead(msg);
+            return;
+        }
+
+        msgBuf.readByte();
+        ByteBufInputStream msgInputStream = new ByteBufInputStream(msgBuf);
+
+        try {
+            Response response = Response.parseFrom(msgInputStream);
+            Header header = response.getHeader();
+
+            if (log.isDebugEnabled()) {
+                log.debug("Response {} pi {} from {}", header.getType(), ctx.channel().remoteAddress());
+            }
+
+            if (response.getError().getCode()!= CorfuProtocol.ERROR.OK) {
+                // propagate error to the client and return right away
+                peerClient.handleServerError(response);
+                return;
+            }
+
+            // throw exceptions here?
+
+            switch (header.getType()) {
+                case PING:
+                    checkArgument(response.hasPingResponse());
+                    peerClient.handlePing(response);
+                    break;
+                case RESTART:
+                    checkArgument(response.hasRestartResponse());
+                    peerClient.handleRestart(response);
+                    break;
+                case AUTHENTICATE:
+                    checkArgument(response.hasAuthenticateResponse());
+                    peerClient.handleAuthenticate(response);
+                    break;
+                case SEAL:
+                    checkArgument(response.hasSealResponse());
+                    peerClient.handleSeal(response);
+                    break;
+                case GET_LAYOUT:
+                    checkArgument(response.hasGetLayoutResponse());
+                    peerClient.handleGetLayout(response);
+                    break;
+                case PREPARE_LAYOUT:
+                    checkArgument(response.hasPrepareLayoutResponse());
+                    peerClient.handlePrepareLayout(response);
+                    break;
+                case PROPOSE_LAYOUT:
+                    checkArgument(response.hasProposeLayoutResponse());
+                    peerClient.handleProposeLayout(response);
+                    break;
+                case COMMIT_LAYOUT:
+                    checkArgument(response.hasCommitLayoutResponse());
+                    peerClient.handleCommitLayout(response);
+                    break;
+                case GET_TOKEN:
+                    checkArgument(response.hasGetTokenResponse());
+                    peerClient.handleGetToken(response);
+                    break;
+                case COMMIT_TRANSACTION:
+                    checkArgument(response.hasCommitTransactionResponse());
+                    peerClient.handleCommitTransaction(response);
+                    break;
+                case BOOTSTRAP:
+                    checkArgument(response.hasBootstrapResponse());
+                    peerClient.handleBootstrap(response);
+                    break;
+                case QUERY_STREAM:
+                    checkArgument(response.hasQueryStreamResponse());
+                    peerClient.handleQueryStream(response);
+                    break;
+                case READ_LOG:
+                    checkArgument(response.hasReadLogResponse());
+                    peerClient.handleReadLog(response);
+                    break;
+                case QUERY_LOG_METADATA:
+                    checkArgument(response.hasQueryLogMetadataResponse());
+                    peerClient.handleQueryLogMetadata(response);
+                    break;
+                case TRIM_LOG:
+                    checkArgument(response.hasTrimLogResponse());
+                    peerClient.handleTrimLog(response);
+                    break;
+                case COMPACT_LOG:
+                    checkArgument(response.hasCompactResponse());
+                    peerClient.handleCompactLog(response);
+                    break;
+                case FLASH:
+                    checkArgument(response.hasFlashResponse());
+                    peerClient.handleFlash(response);
+                    break;
+                case QUERY_NODE:
+                    checkArgument(response.hasQueryNodeResponse());
+                    peerClient.handleQueryNode(response);
+                    break;
+                case REPORT_FAILURE:
+                    checkArgument(response.hasReportFailureResponse());
+                    peerClient.handleReportFailure(response);
+                    break;
+                case HEAL_FAILURE:
+                    checkArgument(response.hasHealFailureResponse());
+                    peerClient.handleHealFailure(response);
+                    break;
+                case EXECUTE_WORKFLOW:
+                    checkArgument(response.hasExecuteWorkflowResponse());
+                    peerClient.handleExecuteWorkFlow(response);
+                    break;
+                case UNRECOGNIZED:
+                default:
+                    // Clean exception? what does this message print?
+                    log.error("Unknown message {}", response);
+                    throw new UnsupportedOperationException();
+            }
+        } finally {
+            msgInputStream.close();
+            msgBuf.release();
+        }
+    }
+
+    @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         super.channelActive(ctx);
         this.timeoutTask = this.eventLoopGroup.scheduleAtFixedRate(() -> checkRequestTimeout(),
@@ -306,22 +429,15 @@ public abstract class ChannelHandler extends ResponseHandler {
         cf.complete(result);
     }
 
-    @Override
-    protected void handleServerError(Response response) {
-        Header header = response.getHeader();
-        CompletableFuture cf = pendingRequests.remove(response.getHeader().getRequestId());
+    protected void completeErrorRequest(long requestId, Exception result) {
+        CompletableFuture cf = pendingRequests.remove(requestId);
+
         if (cf == null || cf.isDone()) {
-            log.debug("[{}] failed to complete request {}", remoteAddress, header.getRequestId());
-        }
-
-        ServerError serverError = response.getError();
-
-        if (log.isDebugEnabled()) {
-            log.debug("");
+            log.debug("[{}] failed to complete request {}", remoteAddress, requestId);
         }
 
         // TODO(Maithem): what happens if we complete if its already completed
-        cf.completeExceptionally(getCorfuException(serverError));
+        cf.completeExceptionally(result);
     }
 
     CorfuExceptions getCorfuException(ServerError serverError) {

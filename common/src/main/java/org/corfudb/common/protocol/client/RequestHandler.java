@@ -140,6 +140,7 @@ public abstract class RequestHandler extends ChannelInboundHandlerAdapter {
     }
 
     protected abstract void handlePing(Request request, ChannelHandlerContext ctx);
+    protected abstract void handleReset(Request request, ChannelHandlerContext ctx);
     protected abstract void handleRestart(Request request, ChannelHandlerContext ctx);
     protected abstract void handleAuthenticate(Request request, ChannelHandlerContext ctx);
     protected abstract void handleSeal(Request request, ChannelHandlerContext ctx);
