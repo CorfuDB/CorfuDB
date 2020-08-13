@@ -17,7 +17,7 @@ message CorfuMessage {
 
 // Payload Types (supported for now as it is only used by Log Replication):
 // - LogReplicationEntry
-// - LogReplicationNegotiationResponse
+// - LogReplicationQueryMetadataResponse
 // - LogReplicationQueryLeadershipResponse
 // - LogReplicationLeadershipLoss
 
@@ -26,7 +26,7 @@ message LogReplicationEntry {
     bytes data = 2;
 }
 
-message LogReplicationNegotiationResponse {
+message LogReplicationMetadataResponse {
     uint64 siteConfigID = 1;
     string version = 2;
     uint64 snapshotStart = 3;
@@ -67,6 +67,7 @@ enum LogReplicationEntryType {
     LOG_ENTRY_REPLICATED = 3;
     SNAPSHOT_REPLICATED = 4;
     SNAPSHOT_END = 5;
+    SNAPSHOT_TRANSFER_COMPLETE = 6;
 }
 
 enum CorfuPriorityLevel {
@@ -76,8 +77,8 @@ enum CorfuPriorityLevel {
 
 enum CorfuMessageType {
     LOG_REPLICATION_ENTRY = 0;
-    LOG_REPLICATION_NEGOTIATION_REQUEST = 1;
-    LOG_REPLICATION_NEGOTIATION_RESPONSE = 2;
+    LOG_REPLICATION_METADATA_REQUEST = 1;
+    LOG_REPLICATION_METADATA_RESPONSE = 2;
     LOG_REPLICATION_QUERY_LEADERSHIP = 3;
     LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE = 4;
     LOG_REPLICATION_LEADERSHIP_LOSS = 5;

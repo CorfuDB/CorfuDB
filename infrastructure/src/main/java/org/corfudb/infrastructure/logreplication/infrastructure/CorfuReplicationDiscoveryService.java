@@ -435,6 +435,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             case STANDBY:
                 // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
                 log.info("Start as Sink (receiver)");
+                interClusterReplicationService.getLogReplicationServer().getSinkManager().reset();
                 interClusterReplicationService.getLogReplicationServer().setLeadership(true);
                 break;
             default:
@@ -528,8 +529,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             stopLogReplication();
         }
-
-        //TODO pankti: read the configuration again and refresh the LogReplicationConfig object
 
         // Update topology, cluster, and node configs
         updateLocalTopology(newTopology);
@@ -694,6 +693,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Active Cluster - Read the shared metadata table to find the status of any ongoing snapshot or log entry sync
      * and return a completion percentage.
+     *
      * Standby Cluster - Read the shared metadata table and find if data is consistent(returns false if
      * snapshot sync is in the apply phase)
      */

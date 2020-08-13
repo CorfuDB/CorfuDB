@@ -52,20 +52,21 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
     }
 
     /**
-     * Make an Ack message with Snapshot type and lastProcesseSeq.
-     * @param entry
-     * @return
+     * Generate log entry sync acknowledgement metadata
+     *
+     * @param entry log replication entry message
+     * @return ack message metadata
      */
     @Override
-    public LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
+    public LogReplicationEntryMetadata generateAckMetadata(LogReplicationEntry entry) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());
 
         /*
-         * If SNAPSHOT_END message has been processed, send back SNAPSHOT_END to notify
-         * sender the completion of the snapshot replication.
+         * If SNAPSHOT_END message has been processed, send back SNAPSHOT_TRANSFER_COMPLETE to notify
+         * sender the completion of the snapshot replication transfer.
          */
         if (lastProcessedSeq == snapshotEndSeq) {
-            metadata.setMessageMetadataType(MessageType.SNAPSHOT_END);
+            metadata.setMessageMetadataType(MessageType.SNAPSHOT_TRANSFER_COMPLETE);
         } else {
             metadata.setMessageMetadataType(MessageType.SNAPSHOT_REPLICATED);
         }
