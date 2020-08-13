@@ -106,6 +106,13 @@ public class LayoutViewTest extends AbstractViewTest {
     }
 
     @Test
+    public void getUUID() {
+       UUID uuid = CorfuRuntime.getStreamID("nsx-policy-manager all_opened_streams 1183");
+        System.out.println("");
+        System.out.println("UUID:: " + uuid);
+    }
+
+    @Test
     public void canTolerateLayoutServerFailure()
             throws Exception {
         addServer(SERVERS.PORT_0);

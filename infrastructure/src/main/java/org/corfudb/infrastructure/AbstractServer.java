@@ -68,6 +68,26 @@ public abstract class AbstractServer {
         processRequest(msg, ctx, r);
     }
 
+    /**
+     * Handle an incoming message (not Netty specific).
+     *
+     * @param msg An incoming message.
+     * @param r   The router that took in the message.
+     */
+    public final void handleMessage(CorfuMsg msg, IServerRouter r) {
+        if (getState() == ServerState.SHUTDOWN) {
+            log.warn("Server received {} but is already shutdown.", msg.getMsgType().toString());
+            return;
+        }
+
+        if (!isServerReadyToHandleMsg(msg)) {
+            r.sendResponse(msg, CorfuMsgType.NOT_READY.msg());
+            return;
+        }
+
+        processRequest(msg, null, r);
+    }
+
     protected void setState(ServerState newState) {
         state.updateAndGet(currState -> {
             if (currState == ServerState.SHUTDOWN && newState != ServerState.SHUTDOWN) {

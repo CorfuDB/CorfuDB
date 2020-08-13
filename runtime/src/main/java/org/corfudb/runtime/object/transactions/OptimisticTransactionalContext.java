@@ -183,6 +183,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
         return addToWriteSet(proxy, updateEntry, conflictObjects);
     }
 
+    @Override
+    public void logUpdate(UUID streamId, SMREntry updateEntry) {
+        addToWriteSet(streamId, updateEntry);
+    }
+
     /**
      * Commit a transaction into this transaction by merging the read/write
      * sets.

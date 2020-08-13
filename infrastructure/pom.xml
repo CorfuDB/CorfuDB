@@ -97,7 +97,7 @@
             <plugin>
                 <groupId>com.github.os72</groupId>
                 <artifactId>protoc-jar-maven-plugin</artifactId>
-                <version>3.7.0.1</version>
+                <version>3.11.1</version>
                 <executions>
                     <execution>
                         <phase>generate-sources</phase>
@@ -107,10 +107,23 @@
                         <configuration>
                             <protocVersion>3.6.1</protocVersion>
                             <includeStdTypes>true</includeStdTypes>
-                            <addProtoSources>inputs</addProtoSources>
+                            <includeDirectories>
+                                <includeDirectory>../runtime/proto</includeDirectory>
+                                <includeDirectory>proto</includeDirectory>
+                            </includeDirectories>
                             <inputDirectories>
-                                <include>src/proto</include>
+                                <include>../runtime/proto</include>
+                                <include>proto</include>
                             </inputDirectories>
+                            <outputTargets>
+                                <outputTarget>
+                                    <type>java</type>
+                                </outputTarget>
+                                <outputTarget>
+                                    <type>grpc-java</type>
+                                    <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.15.0:exe:${os.detected.classifier}</pluginArtifact>
+                                </outputTarget>
+                            </outputTargets>
                             <outputDirectory>
                                 target/generated-sources
                             </outputDirectory>
@@ -148,6 +161,31 @@
                     <shadedClassifierName>shaded</shadedClassifierName>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>com.github.os72</groupId>
+                <artifactId>protoc-jar-maven-plugin</artifactId>
+                <version>3.11.1</version>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <protocVersion>3.1.0</protocVersion>
+                            <includeStdTypes>true</includeStdTypes>
+                            <addProtoSources>inputs</addProtoSources>
+                            <includeMavenTypes>direct</includeMavenTypes>
+                            <inputDirectories>
+                                <inputDirectory>proto</inputDirectory>
+                            </inputDirectories>
+                            <outputDirectory>
+                                target/generated-sources
+                            </outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
@@ -162,8 +200,11 @@
             <artifactId>runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
-
-
+        <dependency>
+            <groupId>org.corfudb</groupId>
+            <artifactId>utils</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- External Dependencies-->
         <dependency>
             <groupId>com.google.protobuf</groupId>
@@ -184,6 +225,11 @@
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
             <version>${logback.classic.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.1.0</version>
         </dependency>
     </dependencies>
 

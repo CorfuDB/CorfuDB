@@ -14,6 +14,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Arrays;
 
 /**
  * This test suit exercises the ability to enable TLS on Corfu servers and runtime
@@ -164,7 +165,7 @@ public class SecurityIT extends AbstractIT {
         // Create Runtime parameters for enabling TLS
         final CorfuRuntime.CorfuRuntimeParameters runtimeParameters = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
-                .layoutServer(NodeLocator.parseString(singleNodeEndpoint))
+                .layoutServers(Arrays.asList(NodeLocator.parseString(singleNodeEndpoint)))
                 .tlsEnabled(tlsEnabled)
                 .keyStore(runtimePathToKeyStore)
                 .ksPasswordFile(runtimePathToKeyStorePassword)
@@ -219,7 +220,7 @@ public class SecurityIT extends AbstractIT {
         // Start a Corfu runtime with incorrect truststore
         final CorfuRuntime.CorfuRuntimeParameters runtimeParameters = CorfuRuntime.CorfuRuntimeParameters
                 .builder()
-                .layoutServer(NodeLocator.parseString(singleNodeEndpoint))
+                .layoutServers(Arrays.asList(NodeLocator.parseString(singleNodeEndpoint)))
                 .tlsEnabled(tlsEnabled)
                 .keyStore(runtimePathToKeyStore)
                 .ksPasswordFile(runtimePathToKeyStorePassword)
