@@ -1,9 +1,32 @@
 package org.corfudb.runtime.view;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus.STABLE;
+import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
+import static org.corfudb.test.TestUtils.waitForLayoutChange;
+
+
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
 import com.google.common.io.Files;
+import java.io.File;
+import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import lombok.Getter;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.compression.Codec;
@@ -34,29 +57,6 @@ import org.corfudb.util.Sleep;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.io.File;
-import java.io.IOException;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
-import java.util.stream.LongStream;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus.STABLE;
-import static org.corfudb.test.TestUtils.setAggressiveTimeouts;
-import static org.corfudb.test.TestUtils.waitForLayoutChange;
 
 /**
  * Created by zlokhandwala on 2019-06-06.
@@ -1451,11 +1451,11 @@ public class StateTransferTest extends AbstractViewTest {
             Token trimMark2 = Token.of(l1.getEpoch(), 150);
 
             rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0)
-                    .prefixTrim(trimMark0);
+                    .prefixTrim(trimMark0).join();
             rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_1)
-                    .prefixTrim(trimMark1);
+                    .prefixTrim(trimMark1).join();
             rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_2)
-                    .prefixTrim(trimMark2);
+                    .prefixTrim(trimMark2).join();
 
             autoCommitService.runAutoCommit();
 
