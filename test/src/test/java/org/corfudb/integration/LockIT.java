@@ -153,13 +153,18 @@ public class LockIT extends AbstractIT implements Observer {
             // Since this is the only client, ALL locks should've been acquired, verify, block until condition is met
             waitCondition = WaitConditionType.LOCK_ACQUIRED;
             for (int i=0; i<numLocks; i++) {
-                log.debug("***** Wait until lock " + i + " is acquired");
+                log.debug("***** Wait until lock {} is acquired", i);
                 blockUntilWaitCondition.acquire();
             }
 
             assertThat(lockAcquiredObservables.get(clientId).getValue()).isEqualTo(numLocks);
-            lockIds.forEach(lockId ->
-                assertThat(client.getLocks().get(lockId).getState().getType()).isEqualTo(LockStateType.HAS_LEASE));
+            lockIds.forEach(lockId -> {
+                    while(client.getLocks().get(lockId).getState().getType() != LockStateType.HAS_LEASE) {
+                        // Lock state might take longer to update as the listener is updated before the FSM transitions
+                        // to the new state
+                    }
+                    assertThat(client.getLocks().get(lockId).getState().getType()).isEqualTo(LockStateType.HAS_LEASE);
+            });
         } catch (Exception e) {
             log.debug("Unexpected exception: " + e);
             throw e;
@@ -230,17 +235,29 @@ public class LockIT extends AbstractIT implements Observer {
             }
 
             // Verify that only one client has acquired the lock
-            List<LockClient> clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
+            // We might need to verify for several cycles as
+            // the observable indicating the lock was acquired is
+            // triggered before the state update
+            List<LockClient> clientsWithLock;
+            do {
+                clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
+            } while (clientsWithLock == null || clientsWithLock.isEmpty());
+
             assertThat(clientsWithLock.size()).isEqualTo(1);
             LockClient clientWithLock = clientsWithLock.get(0);
-
 
             // Verify for 5 cycles that the lock is renewed
             for (int i=0; i < RENEW_CYCLES; i++) {
                 log.debug("***** Wait until lock is renewed");
                 // Wait for the renewal cycle + 1, and verify that the lock is still acquired by the same client
                 Sleep.sleepUninterruptibly(Duration.ofSeconds(LOCK_TIME_CONSTANT + 1));
-                clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
+
+                // We might need to verify for several cycles as
+                // the observable indicating the lock was acquired is
+                // triggered before the state update
+                do {
+                    clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
+                } while (clientsWithLock == null || clientsWithLock.isEmpty());
                 assertThat(clientsWithLock.size()).isEqualTo(1);
                 assertThat(clientsWithLock.get(0)).isEqualTo(clientWithLock);
             }
@@ -314,7 +331,14 @@ public class LockIT extends AbstractIT implements Observer {
             }
 
             // Verify that only one client has acquired the lock
-            List<LockClient> clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
+            // We might need to verify for several cycles as
+            // the observable indicating the lock was acquired is
+            // triggered before the state update
+            List<LockClient> clientsWithLock;
+            do {
+                clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
+            } while (clientsWithLock == null || clientsWithLock.isEmpty());
+
             assertThat(clientsWithLock.size()).isEqualTo(1);
             LockClient clientWithLock = clientsWithLock.get(0);
 
@@ -330,7 +354,14 @@ public class LockIT extends AbstractIT implements Observer {
             }
 
             // Verify that only one client has acquired the lock
-            clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
+
+            // We might need to verify for several cycles as
+            // the observable indicating the lock was acquired is
+            // triggered before the state update
+            do {
+                clientsWithLock = getClientsThatAcquiredLock(lockId, clientIdToLockClient);
+            } while (clientsWithLock == null || clientsWithLock.isEmpty());
+
             assertThat(clientsWithLock.size()).isEqualTo(1);
             LockClient newClientWithLock = clientsWithLock.get(0);
 
