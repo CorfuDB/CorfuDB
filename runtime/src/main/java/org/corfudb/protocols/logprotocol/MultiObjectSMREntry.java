@@ -6,6 +6,7 @@ import io.netty.buffer.Unpooled;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.Serializers;
 
 import java.util.Collections;
@@ -136,7 +137,9 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
             // The stream exists and it needs to be deserialized
             byte[] streamUpdatesBuf = streamBuffers.get(id);
             ByteBuf buf = Unpooled.wrappedBuffer(streamUpdatesBuf);
-            MultiSMREntry multiSMREntry = (MultiSMREntry) Serializers.CORFU.deserialize(buf, null);
+            byte magicByte = buf.readByte(); //
+            checkState(magicByte == CorfuSerializer.corfuPayloadMagic, "Not a ICorfuSerializable object");// strip magic
+            MultiSMREntry multiSMREntry = (MultiSMREntry) MultiSMREntry.deserialize(buf, null, isOpaque());
             multiSMREntry.setGlobalAddress(getGlobalAddress());
             streamBuffers.remove(id);
             return multiSMREntry;

@@ -3,6 +3,7 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.collect.ImmutableSet;
 
 import java.util.Set;
+import java.util.UUID;
 
 import lombok.Getter;
 
@@ -79,6 +80,11 @@ public class SnapshotTransactionalContext extends AbstractTransactionalContext {
                                                     Object[] conflictObject) {
         throw new UnsupportedOperationException(
                 "Can't modify object during a read-only transaction!");
+    }
+
+    @Override
+    public void logUpdate(UUID streamId, SMREntry updateEntry) {
+        throw new UnsupportedOperationException("Can't modify object during a read-only transaction!");
     }
 
     @Override

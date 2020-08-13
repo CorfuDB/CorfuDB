@@ -71,7 +71,7 @@ public class TransactionPoller implements Runnable {
         } catch (Throwable t) {
             // We don't want the thread running the poller to be terminated due to
             // some unexpected exception, so catch all here.
-            log.error("Encountered an exception while polling the txn stream: {}", t);
+            log.error("Encountered an exception while polling the txn stream", t);
 
             streamContexts.forEach(sc -> sc.setPollerException(t));
         } finally {

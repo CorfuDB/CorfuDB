@@ -150,7 +150,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx)
         throws Exception {
-        log.info("channelActive: Outgoing connection established to: {}", ctx.channel().remoteAddress());
+        log.info("channelActive: Outgoing connection established to: {} from id={}", ctx.channel().remoteAddress(), ctx.channel().localAddress());
 
         // Write the handshake & add a timeout listener.
         CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE

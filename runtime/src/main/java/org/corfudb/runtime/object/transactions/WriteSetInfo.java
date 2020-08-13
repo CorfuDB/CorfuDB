@@ -37,6 +37,13 @@ public class WriteSetInfo extends ConflictSetInfo {
         }
     }
 
+    public void add(UUID streamId, SMREntry updateEntry) {
+        synchronized (getRootContext().getTransactionID()) {
+            // add the SMRentry to the list of updates for this stream
+            writeSet.addTo(streamId, updateEntry);
+        }
+    }
+
     @Override
     public void mergeInto(ConflictSetInfo other) {
         if (!(other instanceof WriteSetInfo)) {

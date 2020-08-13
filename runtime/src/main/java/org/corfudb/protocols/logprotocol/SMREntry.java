@@ -48,6 +48,9 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     @Getter
     private ISerializer serializerType;
 
+    @Getter
+    private byte serializerId = -1;
+
     /** An undo record, which can be used to undo this method.
      *
      */
@@ -67,6 +70,12 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
     /** If there is an upcall result for this modification. */
     @Getter
     public transient boolean haveUpcallResult = false;
+
+    /**
+     * The SMREntry's serialized size in bytes. This is set during reading from or writing to the log.
+     */
+    @Getter
+    Integer serializedSize = null;
 
     /** Set the upcall result for this entry. */
     public void setUpcallResult(Object result) {
@@ -103,26 +112,64 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
      */
     @Override
     void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
+        int readIndex = b.readerIndex();
+
         super.deserializeBuffer(b, rt);
         short methodLength = b.readShort();
         byte[] methodBytes = new byte[methodLength];
         b.readBytes(methodBytes, 0, methodLength);
         SMRMethod = new String(methodBytes);
-        serializerType = Serializers.getSerializer(b.readByte());
+        byte serializerId = b.readByte();
         byte numArguments = b.readByte();
         Object[] arguments = new Object[numArguments];
+
+        if (!opaque) {
+            serializerType = Serializers.getSerializer(serializerId);
+        } else {
+            this.serializerId = serializerId;
+        }
+
         for (byte arg = 0; arg < numArguments; arg++) {
             int len = b.readInt();
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
-            arguments[arg] = serializerType.deserialize(objBuf, rt);
+            if (opaque) {
+                byte[] argBytes = new byte[len];
+                objBuf.readBytes(argBytes);
+                arguments[arg] = argBytes;
+            } else {
+                arguments[arg] = serializerType.deserialize(objBuf, rt);
+            }
             b.skipBytes(len);
         }
         SMRArguments = arguments;
+        serializedSize = b.readerIndex() - readIndex + 1;
+    }
+
+
+    /**
+     * Calculate an Opaque SMR entry's serialized size.
+     * @throws IllegalAccessException
+     */
+    private int calculateOpaqueSMREntrySerializedSize() {
+        if (!opaque) {
+            return 0;
+        }
+
+        int size = 0;
+
+        for (Object smrArg : SMRArguments) {
+            size += ((byte[])smrArg).length;
+        }
+
+        size += (SMRMethod.length() * Character.BYTES);
+        size += Integer.BYTES;
+
+        return size;
     }
 
     /**
-     * Given a buffer with the reader index pointing to a serialized SMREntry, this method will
-     * seek the buffer's reader index to the end of the entry.
+     * Given a buffer with the logreader index pointing to a serialized SMREntry, this method will
+     * seek the buffer's logreader index to the end of the entry.
      */
     public static void seekToEnd(ByteBuf b) {
         // Magic
@@ -146,21 +193,35 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
 
     @Override
     public void serialize(ByteBuf b) {
+        int startWriterIndex = b.writerIndex();
         super.serialize(b);
         b.writeShort(SMRMethod.length());
         b.writeBytes(SMRMethod.getBytes());
-        b.writeByte(serializerType.getType());
+        if (opaque) {
+            //TODO(Maithem) add test for serialize/desrialize of opaque entries
+            if (serializerId == -1) {
+                throw new IllegalStateException("opaque entry doesn't have a serializer id");
+            }
+            b.writeByte(serializerId);
+        } else {
+            b.writeByte(serializerType.getType());
+        }
         b.writeByte(SMRArguments.length);
         Arrays.stream(SMRArguments)
                 .forEach(x -> {
                     int lengthIndex = b.writerIndex();
                     b.writeInt(0);
-                    serializerType.serialize(x, b);
+                    if (opaque) {
+                        b.writeBytes((byte[]) x);
+                    } else {
+                        serializerType.serialize(x, b);
+                    }
                     int length = b.writerIndex() - lengthIndex - 4;
                     b.writerIndex(lengthIndex);
                     b.writeInt(length);
                     b.writerIndex(lengthIndex + length + 4);
                 });
+        serializedSize = b.writerIndex() - startWriterIndex;
     }
 
     @Override

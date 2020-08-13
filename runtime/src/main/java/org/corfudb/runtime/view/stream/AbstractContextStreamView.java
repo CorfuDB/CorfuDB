@@ -140,14 +140,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             if (entry.isHole()) {
                 return nextUpTo(maxGlobal);
             }
-
-            // Process the next entry, checking if the context has changed.
-            // If the context has changed, we read again, since this entry
-            // does not contain any data, and we need to follow the new
-            // context.
-            if (processEntryForContext(entry)) {
-                return nextUpTo(maxGlobal);
-            }
         }
 
         // Return the entry.
@@ -182,9 +174,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
         // Check if the last entry updates the context.
         if (doesEntryUpdateContext(entries.get(entries.size() - 1))) {
-            // The entry which updates the context must be the last one, so
-            // process it
-            processEntryForContext(entries.get(entries.size() - 1));
 
             // Remove the entry which updates the context
             entries.remove(entries.size() - 1);
