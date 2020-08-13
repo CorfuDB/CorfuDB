@@ -123,9 +123,10 @@ public class LogReplicationServer extends AbstractServer {
 
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP)
     private void handleLogReplicationQueryLeadership(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.info("Log Replication Query Leadership Request received by Server.");
+        log.debug("Log Replication Query Leadership Request received by Server.");
         LogReplicationQueryLeaderShipResponse resp = new LogReplicationQueryLeaderShipResponse(0,
                 isLeader.get(), serverContext.getLocalEndpoint());
+        log.debug("Send Log Replication Leadership Response isLeader={}, endpoint={}", resp.isLeader(), resp.getEndpoint());
         r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE.payloadMsg(resp));
     }
 

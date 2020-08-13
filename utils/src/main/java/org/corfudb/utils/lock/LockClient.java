@@ -301,7 +301,7 @@ public class LockClient {
                             locks.get(lockId).input(LockEvent.LEASE_REVOKED);
                         }
                     } catch (Exception ex) {
-
+                        log.error("Caught exception while monitoring locks.", ex);
                     }
                 },
                 lockConfig.getLockMonitorDurationInSeconds(),

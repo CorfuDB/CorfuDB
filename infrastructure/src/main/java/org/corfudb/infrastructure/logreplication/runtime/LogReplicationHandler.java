@@ -44,7 +44,7 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_ENTRY)
     private static Object handleLogReplicationAck(CorfuPayloadMsg<LogReplicationEntry> msg,
                                                   ChannelHandlerContext ctx, IClientRouter r) {
-        log.info("Handle log replication ACK");
+        log.debug("Handle log replication ACK");
         return msg.getPayload();
     }
 
@@ -58,7 +58,7 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     @ClientHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE)
     private static Object handleLogReplicationQueryLeadershipResponse(CorfuPayloadMsg<LogReplicationQueryLeaderShipResponse> msg,
                                                                       ChannelHandlerContext ctx, IClientRouter r) {
-        log.debug("Handle log replication query leadership response msg {}", msg);
+        log.trace("Handle log replication query leadership response msg {}", msg);
         return msg.getPayload();
     }
 

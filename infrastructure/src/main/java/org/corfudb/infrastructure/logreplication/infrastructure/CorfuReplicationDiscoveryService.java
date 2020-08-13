@@ -23,19 +23,15 @@ import org.corfudb.util.retry.ExponentialBackoffRetry;
 import org.corfudb.util.retry.IRetry;
 import org.corfudb.util.retry.IntervalRetry;
 import org.corfudb.util.retry.RetryNeededException;
-import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
 import org.corfudb.utils.lock.LockConfig;
-import org.corfudb.utils.lock.LockDataTypes;
 import org.corfudb.utils.lock.LockListener;
 import org.corfudb.utils.lock.states.LockStateType;
 
 import javax.annotation.Nonnull;
-import java.io.InputStream;
 import java.time.Duration;
-import java.util.Optional;
-import java.util.Properties;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -191,6 +187,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     DiscoveryServiceEvent event = eventQueue.take();
                     processEvent(event);
                 } catch (Exception e) {
+                    // TODO: We should take care of which exceptions really end up being
+                    //  caught at this level, or we could be stopping LR completely on
+                    //  any exception.
                     log.error("Caught an exception. Stop discovery service.", e);
                     shouldRun = false;
                     stopLogReplication();
@@ -203,6 +202,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             log.error("Unhandled exception caught during log replication service discovery.", e);
         } finally {
             runtime.cleanup(CorfuRuntime::shutdown);
+            interClusterReplicationService.close();
         }
     }
 
@@ -463,7 +463,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Stop Log Replication
      */
     private void stopLogReplication() {
-        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && isLeader.get()) {
+        if (localClusterDescriptor != null && localClusterDescriptor.getRole() == ClusterRole.ACTIVE && isLeader.get()) {
             log.info("Stopping log replication.");
             replicationManager.stop();
         }
@@ -629,7 +629,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private boolean processDiscoveredTopology(TopologyDescriptor topology, boolean update) {
         // Health check - confirm this node belongs to a cluster in the topology
         if (topology != null && clusterPresentInTopology(topology, update)) {
-            log.info("Node[{}] belongs to cluster, descriptor={}", localEndpoint, localClusterDescriptor);
+            log.info("Node[{}] belongs to cluster, descriptor={}, topology={}", localEndpoint, localClusterDescriptor, topology);
             if (!serverStarted) {
                 bootstrapLogReplicationService();
                 registerToLogReplicationLock();
@@ -640,7 +640,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         // If a cluster descriptor is not found, this node does not belong to any cluster in the topology
         // wait for updates to the topology config to start, if this cluster ever becomes part of the topology
         log.warn("Node[{}] does not belong to any cluster provided by the discovery service, topology={}", localEndpoint,
-                topologyDescriptor);
+                topology);
         return false;
     }
 
