@@ -157,7 +157,7 @@ public class HasLeaseState extends LockState {
                 taskFuture.cancel(true);
                 log.error("Lock: {} {} callback cancelled due to timeout!", lock.getLockId(), callback);
             }
-        }, lockConfig.getLockMaxTimeListenerNotificationSeconds(), TimeUnit.SECONDS);
+        }, lockConfig.getLockDurationBetweenNotificationCallbacksSeconds(), TimeUnit.SECONDS);
     }
 
     /**

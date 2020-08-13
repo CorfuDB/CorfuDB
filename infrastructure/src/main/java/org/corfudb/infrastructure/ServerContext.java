@@ -327,14 +327,14 @@ public class ServerContext implements AutoCloseable {
      * Generate a Node Id if not present.
      */
     private void generateNodeId() {
-        UUID serverId;
-        if (serverConfig.get("--node-id") != null) {
-            serverId = UuidUtils.fromBase64(getServerConfig(String.class, "--node-id"));
-        } else {
-            serverId = UUID.randomUUID();
-        }
         String currentId = getDataStore().get(NODE_ID_RECORD);
         if (currentId == null) {
+            UUID serverId;
+            if (serverConfig.get("--node-id") != null) {
+                serverId = UuidUtils.fromBase64(getServerConfig(String.class, "--node-id"));
+            } else {
+                serverId = UUID.randomUUID();
+            }
             String idString = UuidUtils.asBase64(serverId);
             log.info("No Node Id, setting to new Id={}", idString);
             getDataStore().put(NODE_ID_RECORD, idString);

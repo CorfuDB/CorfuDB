@@ -387,7 +387,7 @@ public class LockIT extends AbstractIT implements Observer {
                 .lockMonitorDurationInSeconds(MONITOR_LOCK_TIME_CONSTANT)
                 .lockDurationBetweenLeaseChecksSeconds(MONITOR_LOCK_TIME_CONSTANT)
                 .lockDurationBetweenLeaseRenewalsSeconds(LOCK_TIME_CONSTANT)
-                .lockMaxTimeListenerNotificationSeconds(LOCK_TIME_CONSTANT)
+                .lockDurationBetweenNotificationCallbacksSeconds(LOCK_TIME_CONSTANT)
                 .build();
     }
 

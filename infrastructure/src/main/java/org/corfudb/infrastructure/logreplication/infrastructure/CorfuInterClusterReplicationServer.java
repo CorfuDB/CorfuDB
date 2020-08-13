@@ -300,7 +300,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
      * @param serverContext server context (server information)
      * @return completable future for discovered topology
      */
-    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) throws Exception {
+    private CompletableFuture<CorfuInterClusterReplicationServerNode> startDiscoveryService(ServerContext serverContext) {
 
         log.info("Start Discovery Service.");
         CompletableFuture<CorfuInterClusterReplicationServerNode> discoveryServiceCallback = new CompletableFuture<>();

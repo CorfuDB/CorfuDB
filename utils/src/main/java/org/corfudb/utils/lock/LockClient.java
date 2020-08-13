@@ -14,6 +14,7 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.concurrent.SingletonResource;
 import org.corfudb.utils.lock.LockDataTypes.LockData;
 import org.corfudb.utils.lock.LockDataTypes.LockId;
 import org.corfudb.utils.lock.persistence.LockStore;
@@ -128,6 +129,42 @@ public class LockClient {
     }
 
     /**
+     * Create a new LockClient instance given the lock config, nodeId, lock listener, runtime and optional
+     * init state for the lock. This method is used primarily in testing to achieve a specific desired behavior,
+     * hence no lock monitoring is invoked, and no events are being input for the created lock.
+     *
+     * @param lockConfig            A configuration for a distributed lock.
+     * @param logReplicationNodeId  Current log replication node id.
+     * @param lockListener          Lock event listener.
+     * @param runtime               Corfu runtime singleton resource.
+     * @param initState             An optional init state.
+     * @return                      A new instance of a lock client.
+     * @throws Exception            In case we fail to create lock client.
+     */
+    @VisibleForTesting
+    public static LockClient newInstance(LockConfig lockConfig, UUID logReplicationNodeId,
+                                         LockListener lockListener,
+                                         SingletonResource<CorfuRuntime> runtime, Optional<LockStateType> initState) throws Exception {
+        LockClient lockClient =
+                new LockClient(logReplicationNodeId,
+                        lockConfig, runtime.get());
+
+        LockDataTypes.LockId lockId = LockDataTypes.LockId.newBuilder()
+                .setLockGroup(lockConfig.getLockGroup())
+                .setLockName(lockConfig.getLockName())
+                .build();
+
+        lockClient.getLocks().computeIfAbsent(
+                lockId,
+                key -> initState.map(lockStateType ->
+                        new Lock(lockId, lockListener, lockClient.getClientContext(), lockConfig,
+                                lockStateType))
+                        .orElseGet(() -> new Lock(lockId, lockListener, lockClient.getClientContext(), lockConfig)));
+
+        return lockClient;
+    }
+
+    /**
      * Application registers interest for a lock [lockgroup, lockname]. The <class>Lock</class> will then
      * make periodic attempts to acquire lock. Lock is acquired when the <class>Lock</class> is able to write
      * a lease record in a common table that is being written to/read by all the registered <class>Lock</class>
@@ -147,7 +184,7 @@ public class LockClient {
                 .setLockGroup(lockConfig.getLockGroup())
                 .setLockName(lockConfig.getLockName())
                 .build();
-        if (!locks.containsKey(lockId)){
+        if (!locks.containsKey(lockId)) {
             throw new IllegalStateException("Can only deregister if the known " +
                     "lock is present in the map.");
         }
@@ -167,7 +204,7 @@ public class LockClient {
                 .setLockGroup(lockConfig.getLockGroup())
                 .setLockName(lockConfig.getLockName())
                 .build();
-        if (!locks.containsKey(lockId)){
+        if (!locks.containsKey(lockId)) {
             throw new IllegalStateException("Can only resume interest if the known " +
                     "lock is present in the map.");
         }
@@ -190,7 +227,7 @@ public class LockClient {
                 .setLockGroup(lockConfig.getLockGroup())
                 .setLockName(lockConfig.getLockName())
                 .build();
-        if (!locks.containsKey(lockId)){
+        if (!locks.containsKey(lockId)) {
             throw new IllegalStateException("Can only force acquire if the known " +
                     "lock is present in the map.");
         }
@@ -235,6 +272,7 @@ public class LockClient {
 
     /**
      * Get current lock data.
+     *
      * @param lockGroup
      * @param lockName
      * @return
@@ -258,7 +296,7 @@ public class LockClient {
                 () -> {
                     try {
                         Collection<LockId> locksWithExpiredLeases = lockStore.filterLocksWithExpiredLeases(locks.keySet());
-                        for(LockId lockId : locksWithExpiredLeases) {
+                        for (LockId lockId : locksWithExpiredLeases) {
                             log.debug("LockClient: lease revoked for lock {}", lockId.getLockName());
                             locks.get(lockId).input(LockEvent.LEASE_REVOKED);
                         }

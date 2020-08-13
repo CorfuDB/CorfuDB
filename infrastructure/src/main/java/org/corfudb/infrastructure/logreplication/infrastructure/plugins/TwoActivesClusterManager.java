@@ -3,13 +3,14 @@ package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 /**
  * A file reader cluster manager that provides the following static topology:
  * - 1 active corfu node
- * - 1 active LR
- * - 1 standby corfu nodes
- * - 2 standby LRs
+ * - 2 active LRs
+ * - 1 standby corfu node
+ * - 1 standby LR
  */
-public class TwoStandbysClusterManager extends FileReaderClusterManager {
+public class TwoActivesClusterManager extends FileReaderClusterManager {
+
     @Override
     String getConfigFilePath() {
-        return "corfu_replication_config_two_standbys.properties";
+        return "corfu_replication_config_two_actives.properties";
     }
 }

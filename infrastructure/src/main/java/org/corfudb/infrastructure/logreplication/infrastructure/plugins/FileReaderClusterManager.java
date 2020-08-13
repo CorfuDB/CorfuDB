@@ -19,6 +19,9 @@ import java.util.stream.IntStream;
 import static org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole.ACTIVE;
 import static org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole.STANDBY;
 
+/**
+ * An abstract class that represents a cluster manager that provides a static topology from a particular file.
+ */
 @Slf4j
 public abstract class FileReaderClusterManager extends CorfuReplicationClusterManagerBaseAdapter {
     @Getter
@@ -31,7 +34,7 @@ public abstract class FileReaderClusterManager extends CorfuReplicationClusterMa
 
         private String clusterRoleToRolePrefix(LogReplicationClusterInfo.ClusterRole role) {
             if (role == ACTIVE) {
-                return "primary";
+                return "active";
             } else if (role == STANDBY) {
                 return "standby";
             } else {
@@ -65,6 +68,10 @@ public abstract class FileReaderClusterManager extends CorfuReplicationClusterMa
         }
     }
 
+    /**
+     * Get a topology file resource path.
+     * @return A resource path for a topology file.
+     */
     abstract String getConfigFilePath();
 
     private ImmutableList<NodeDescriptor> getNodeDescriptors(ClusterConfigKeys keys, Properties props) {

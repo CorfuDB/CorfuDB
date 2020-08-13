@@ -642,7 +642,7 @@ public class CorfuReplicationLeaderIT extends AbstractIT {
         final Duration waitBetweenWrites = Duration.ofSeconds(1);
         final Duration mainThreadSleepDuration = Duration.ofSeconds(1);
         final Duration replicationDuration = Duration.ofSeconds(5);
-        String pluginConfigPath = "src/test/resources/topology/two_standbys_no_lock_holder.properties";
+        String pluginConfigPath = "src/test/resources/topology/two_standbys.properties";
         String configPath = "disable_lock_config.properties";
         ImmutableList<Tuple<UUID, CorfuInterClusterReplicationServer>> primaries =
                 ONE_PRIMARY_REPLICATION_SERVER_PORT.stream()

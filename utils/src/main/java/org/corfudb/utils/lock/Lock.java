@@ -110,17 +110,7 @@ public class Lock {
      */
     public Lock(LockDataTypes.LockId lockId, LockListener lockListener, LockClient.ClientContext clientContext,
                 LockConfig lockConfig) {
-        this.lockId = lockId;
-        this.clientContext = clientContext;
-        this.lockListener = lockListener;
-        this.eventConsumer = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("lock-event-consumer").build());
-        this.lockConfig = lockConfig;
-        initializeStates();
-        // set initial state as NO_LEASE
-        this.state = states.get(LockStateType.NO_LEASE);
-
-        eventConsumer.submit(this::consume);
+        this(lockId, lockListener, clientContext, lockConfig, LockStateType.NO_LEASE);
     }
 
     public Lock(LockDataTypes.LockId lockId, LockListener lockListener,

@@ -43,19 +43,19 @@ import java.util.concurrent.LinkedBlockingQueue;
 @Slf4j
 public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAdapter {
     public static final String CONFIG_FILE_PATH = "src/test/resources/corfu_replication_config.properties";
-    private static final String DEFAULT_ACTIVE_CLUSTER_NAME = "primary_site";
+    private static final String DEFAULT_ACTIVE_CLUSTER_NAME = "active_site";
     private static final String DEFAULT_STANDBY_CLUSTER_NAME = "standby_site";
 
     private static final int NUM_NODES_PER_CLUSTER = 3;
 
-    private static final String ACTIVE_CLUSTER_NAME = "primary_site";
+    private static final String ACTIVE_CLUSTER_NAME = "active_site";
     private static final String STANDBY_CLUSTER_NAME = "standby_site";
-    private static final String ACTIVE_CLUSTER_CORFU_PORT = "primary_site_corfu_portnumber";
+    private static final String ACTIVE_CLUSTER_CORFU_PORT = "active_site_corfu_portnumber";
     private static final String STANDBY_CLUSTER_CORFU_PORT = "standby_site_corfu_portnumber";
-    private static final String LOG_REPLICATION_SERVICE_ACTIVE_PORT_NUM = "primary_site_portnumber";
+    private static final String LOG_REPLICATION_SERVICE_ACTIVE_PORT_NUM = "active_site_portnumber";
     private static final String LOG_REPLICATION_SERVICE_STANDBY_PORT_NUM = "standby_site_portnumber";
 
-    private static final String ACTIVE_CLUSTER_NODE = "primary_site_node";
+    private static final String ACTIVE_CLUSTER_NODE = "active_site_node";
     private static final String STANDBY_CLUSTER_NODE = "standby_site_node";
 
 

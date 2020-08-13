@@ -53,7 +53,7 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 // If a non-leader node loses connectivity, reconnect async and continue.
                 return null;
             case REMOTE_LEADER_LOSS:
-                if (fsm.getRemoteLeader().isPresent() && fsm.getRemoteLeader().get().equals(event.getEndpoint())) {
+                if (!fsm.getConnectedEndpoints().isEmpty() && fsm.getRemoteLeader().isPresent() && fsm.getRemoteLeader().get().equals(event.getEndpoint())) {
                     fsm.resetRemoteLeaderEndpoint();
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 }

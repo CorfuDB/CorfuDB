@@ -95,7 +95,7 @@ public class NoLeaseState extends LockState {
                 lock.input(LockEvent.LEASE_ACQUIRED);
             }
         } catch (Exception e) {
-            log.error("Lock: {} could not acquire lease {}", lock.getLockId(), e);
+            log.error("Lock: {} could not acquire lease", lock.getLockId(), e);
         }
     }
 
@@ -104,7 +104,7 @@ public class NoLeaseState extends LockState {
             lockStore.forceAcquire(lock.getLockId());
         }
         catch (Exception e) {
-            log.error("Lock: {} could not force-acquire lease {}", lock.getLockId(), e);
+            log.error("Lock: {} could not force-acquire lease", lock.getLockId(), e);
         }
 
     }
