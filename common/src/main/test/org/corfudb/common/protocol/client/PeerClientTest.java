@@ -1,156 +1,148 @@
 package org.corfudb.common.protocol.client;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.channel.embedded.EmbeddedChannel;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.corfudb.common.protocol.API;
 import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
-import org.mockito.runners.MockitoJUnitRunner;
 
+import java.io.IOException;
 import java.util.Random;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.*;
 
 /**
  * This class contains the tests for all the methods of PeerClient.
  * <p>
  * Created by fchetan on 7/23/20
  */
-@RunWith(MockitoJUnitRunner.class)
 @Slf4j
 class PeerClientTest {
 
-    private final PeerClient spyPeerClient = Mockito.spy(new PeerClient());
+    private final PeerClient peerClient = new PeerClient();
+
+    private final ChannelHandler channelHandler = new ChannelHandler();
+
+    private final EmbeddedChannel embeddedChannel = new EmbeddedChannel();
 
     private final UUID clientId = UUID.randomUUID();
 
-    @BeforeEach
-    void setUp() throws Exception {
-
-    }
-
     @Test
     void ping() {
-        // Set clientID required for the header of each request object.
-        spyPeerClient.setConfig(ClientConfig.builder().clientId(clientId).build());
+        // Since there is no server, the Request objects are written into the embeddedChannel.
+        // We inspect these Request objects from the embeddedChannel later in each test.
+        channelHandler.setChannel(embeddedChannel);
+        peerClient.setChannelHandler(channelHandler);
 
-        // Since there is no server,
-        // return true when sendRequest() is called with any Request class.
-        // We inspect the Request object passed as an argument to sendRequest() later in each test.
-        doReturn(CompletableFuture.completedFuture(true)).
-                when(spyPeerClient).sendRequest(any(CorfuProtocol.Request.class));
+        // Set the clientID required for the header of each request object.
+        peerClient.getChannelHandler().setConfig(ClientConfig.builder().clientId(clientId).build());
 
-        // Call the ping method and check its return value.
-        try {
-            Assertions.assertThat(spyPeerClient.ping().get()).isEqualTo(true);
-        } catch (InterruptedException | ExecutionException e) {
-            log.error(e.getMessage());
-        }
+        // Call the ping method and check its outbound value in the embeddedChannel.
+        Assertions.assertThat(peerClient.ping());
 
-        verifyRequest(CorfuProtocol.MessageType.PING);
+        // Read the out bound message from the embeddedChannel
+        ByteBuf outBuf = embeddedChannel.readOutbound();
+        verifyRequest(outBuf,CorfuProtocol.MessageType.PING);
+        outBuf.release();
     }
 
 
     @Test
     void restart() {
-        // Set clientID required for the header of each request object.
-        spyPeerClient.setConfig(ClientConfig.builder().clientId(clientId).build());
+        // Since there is no server, the Request objects are written into the embeddedChannel.
+        // We inspect these Request objects from the embeddedChannel later in each test.
+        channelHandler.setChannel(embeddedChannel);
+        peerClient.setChannelHandler(channelHandler);
 
-        // Since there is no server,
-        // return true when sendRequest() is called with any Request class.
-        // We inspect the Request object passed as an argument to sendRequest() later in each test.
-        doReturn(CompletableFuture.completedFuture(true)).
-                when(spyPeerClient).sendRequest(any(CorfuProtocol.Request.class));
+        // Set the clientID required for the header of each request object.
+        peerClient.getChannelHandler().setConfig(ClientConfig.builder().clientId(clientId).build());
 
-        // Call the restart method and check its return value.
-        try {
-            Assertions.assertThat(spyPeerClient.restart().get()).isEqualTo(true);
-        } catch (InterruptedException | ExecutionException e) {
-            log.error(e.getMessage());
-        }
+        // Call the restart method and check its outbound value in the embeddedChannel.
+        Assertions.assertThat(peerClient.restart());
 
-        verifyRequest(CorfuProtocol.MessageType.RESTART);
+        // Read the out bound message from the embeddedChannel
+        ByteBuf outBuf = embeddedChannel.readOutbound();
+        verifyRequest(outBuf,CorfuProtocol.MessageType.RESTART);
+        outBuf.release();
     }
 
     @Test
     void reset() {
-        // Set clientID required for the header of each request object.
-        spyPeerClient.setConfig(ClientConfig.builder().clientId(clientId).build());
+        // Since there is no server, the Request objects are written into the embeddedChannel.
+        // We inspect these Request objects from the embeddedChannel later in each test.
+        channelHandler.setChannel(embeddedChannel);
+        peerClient.setChannelHandler(channelHandler);
 
-        // Since there is no server,
-        // return true when sendRequest() is called with any Request class.
-        // We inspect the Request object passed as an argument to sendRequest() later in each test.
-        doReturn(CompletableFuture.completedFuture(true)).
-                when(spyPeerClient).sendRequest(any(CorfuProtocol.Request.class));
+        // Set the clientID required for the header of each request object.
+        peerClient.getChannelHandler().setConfig(ClientConfig.builder().clientId(clientId).build());
 
-        // Call the reset method and check its return value.
-        try {
-            Assertions.assertThat(spyPeerClient.reset().get()).isEqualTo(true);
-        } catch (InterruptedException | ExecutionException e) {
-            log.error(e.getMessage());
-        }
+        // Call the reset method and check its outbound value in the embeddedChannel.
+        Assertions.assertThat(peerClient.reset());
 
-        verifyRequest(CorfuProtocol.MessageType.RESET);
+        // Read the out bound message from the embeddedChannel
+        ByteBuf outBuf = embeddedChannel.readOutbound();
+        verifyRequest(outBuf,CorfuProtocol.MessageType.RESET);
+        outBuf.release();
     }
 
     @Test
     void sealRemoteServer() {
-        // Set clientID required for the header of each request object.
-        spyPeerClient.setConfig(ClientConfig.builder().clientId(clientId).build());
+        // Since there is no server, the Request objects are written into the embeddedChannel.
+        // We inspect these Request objects from the embeddedChannel later in each test.
+        channelHandler.setChannel(embeddedChannel);
+        peerClient.setChannelHandler(channelHandler);
 
-        // Since there is no server,
-        // return true when sendRequest() is called with any Request class.
-        // We inspect the Request object passed as an argument to sendRequest() later in each test.
-        doReturn(CompletableFuture.completedFuture(true)).
-                when(spyPeerClient).sendRequest(any(CorfuProtocol.Request.class));
+        // Set the clientID required for the header of each request object.
+        peerClient.getChannelHandler().setConfig(ClientConfig.builder().clientId(clientId).build());
 
-        // Call the sealRemoteServer method and check its return value.
+        long epoch = new Random().nextLong();
+
+        // Call the seal method and check its outbound value in the embeddedChannel.
+        Assertions.assertThat(peerClient.sealRemoteServer(epoch));
+
+        // Read the out bound message from the embeddedChannel
+        ByteBuf outBuf = embeddedChannel.readOutbound();
+        verifyRequest(outBuf,CorfuProtocol.MessageType.SEAL);
+        outBuf.release();
+    }
+
+    private void verifyRequest(ByteBuf outBuf, CorfuProtocol.MessageType messageType) {
+        outBuf.readByte();
+        ByteBufInputStream msgInputStream = new ByteBufInputStream(outBuf);
+        Request outBoundRequest;
         try {
-            long epoch = new Random().nextLong();
-            Assertions.assertThat(spyPeerClient.sealRemoteServer(epoch).get()).isEqualTo(true);
-        } catch (InterruptedException | ExecutionException e) {
+            outBoundRequest = Request.parseFrom(msgInputStream);
+            CorfuProtocol.Header header = outBoundRequest.getHeader();
+
+            // (Optional) Check that the request contained the Client ID set initially.
+            Assertions.assertThat(outBoundRequest.getHeader().getClientId())
+                    .isEqualTo(API.getUUID(clientId));
+
+            // Check the payload type of Request that was was passed as an argument to sendRequest().
+            switch (messageType) {
+                case PING:
+                    Assertions.assertThat(outBoundRequest.hasPingRequest()).isTrue();
+                    Assertions.assertThat(header.getType()).isEqualTo(CorfuProtocol.MessageType.PING);
+                    break;
+                case RESTART:
+                    Assertions.assertThat(outBoundRequest.hasRestartRequest()).isTrue();
+                    Assertions.assertThat(header.getType()).isEqualTo(CorfuProtocol.MessageType.RESTART);
+                    break;
+                case RESET:
+                    Assertions.assertThat(outBoundRequest.hasResetRequest()).isTrue();
+                    Assertions.assertThat(header.getType()).isEqualTo(CorfuProtocol.MessageType.RESET);
+                    break;
+                case SEAL:
+                    Assertions.assertThat(outBoundRequest.hasSealRequest()).isTrue();
+                    Assertions.assertThat(header.getType()).isEqualTo(CorfuProtocol.MessageType.SEAL);
+                    break;
+            }
+            msgInputStream.close();
+        } catch (IOException e) {
             log.error(e.getMessage());
         }
-
-        verifyRequest(CorfuProtocol.MessageType.SEAL);
     }
-
-    private void verifyRequest(CorfuProtocol.MessageType messageType) {
-        // Check that sendRequest() was invoked once and get (capture) its argument.
-        ArgumentCaptor<Request> requestArgumentCaptor = ArgumentCaptor.forClass(Request.class);
-        verify(spyPeerClient, times(1))
-                .sendRequest(requestArgumentCaptor.capture());
-        Request spyPeerClientRequest = requestArgumentCaptor.getAllValues().get(0);
-
-        // (Optional) Check that the request contained the Client ID set initially.
-        Assertions.assertThat(spyPeerClientRequest.getHeader().getClientId())
-                .isEqualTo(API.getUUID(clientId));
-
-        // Check the payload type of Request that was was passed as an argument to sendRequest().
-        switch (messageType) {
-            case PING:
-                Assertions.assertThat(spyPeerClientRequest.hasPingRequest()).isTrue();
-                break;
-            case RESTART:
-                Assertions.assertThat(spyPeerClientRequest.hasRestartRequest()).isTrue();
-                break;
-            case RESET:
-                Assertions.assertThat(spyPeerClientRequest.hasResetRequest()).isTrue();
-                break;
-            case SEAL:
-                Assertions.assertThat(spyPeerClientRequest.hasSealRequest()).isTrue();
-                break;
-        }
-    }
-
-
 }
