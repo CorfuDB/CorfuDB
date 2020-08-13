@@ -1,7 +1,19 @@
 package org.corfudb.runtime.collections;
 
+import static com.google.common.base.Preconditions.checkState;
+
+
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.InvalidProtocolBufferException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -13,15 +25,6 @@ import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitLis
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
 
 /**
  * Persisted Queue supported by CorfuDB using distributed State Machine Replication.
@@ -157,40 +160,36 @@ public class CorfuQueue<E> {
      *         element prevents it from being added to this queue
      */
     public CorfuRecordId enqueue(E e) {
+        checkState(TransactionalContext.isInTransaction(), "must be called within a transaction!");
         final CorfuRecordId id = new CorfuRecordId(0, guidGenerator.nextLong());
 
-        // If we are in a transaction, then we need the commit address of this transaction
-        // to fix up as the txSequence
-        if (TransactionalContext.isInTransaction()) {
-            /**
-             * This is a callback that is placed into the root transaction's context on
-             * the thread local stack which will be invoked right after this transaction
-             * is deemed successful and has obtained a final sequence number to write.
-             */
-            class QueueEntryAddressGetter implements PreCommitListener {
-                private CorfuRecordId recordId;
-                private QueueEntryAddressGetter(CorfuRecordId recordId) {
-                    this.recordId = recordId;
-                }
+        /**
+         * This is a callback that is placed into the root transaction's context on
+         * the thread local stack which will be invoked right after this transaction
+         * is deemed successful and has obtained a final sequence number to write.
+         */
+        @AllArgsConstructor
+         class QueueEntryAddressGetter implements PreCommitListener {
+             private final CorfuRecordId recordId;
 
-                /**
-                 * If we are in a transaction, determine the commit address and fix it up in
-                 * the queue entry.
-                 * @param tokenResponse
-                 */
-                @Override
-                public void preCommitCallback(TokenResponse tokenResponse) {
-                    recordId.setTxSequence(tokenResponse.getSequence());
-                    log.trace("preCommitCallback for Queue: " + recordId.toString());
-                }
-            }
-            QueueEntryAddressGetter addressGetter = new QueueEntryAddressGetter(id);
-            log.trace("enqueue: Adding preCommitListener for Queue: " + id.toString());
-            TransactionalContext.getRootContext().addPreCommitListener(addressGetter);
-        }
+             /**
+              * If we are in a transaction, determine the commit address and fix it up in
+              * the queue entry.
+              * @param tokenResponse
+              */
+             @Override
+             public void preCommitCallback(TokenResponse tokenResponse) {
+                 recordId.setTxSequence(tokenResponse.getSequence());
+                 log.trace("preCommitCallback for Queue: " + recordId.toString());
+             }
+         }
 
-        corfuTable.put(id, e);
-        return id;
+         QueueEntryAddressGetter addressGetter = new QueueEntryAddressGetter(id);
+         log.trace("enqueue: Adding preCommitListener for Queue: " + id.toString());
+         TransactionalContext.getRootContext().addPreCommitListener(addressGetter);
+
+         corfuTable.put(id, e);
+         return id;
     }
 
     /**
