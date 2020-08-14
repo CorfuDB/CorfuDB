@@ -1,28 +1,47 @@
 package org.corfudb.runtime.collections;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+
 import com.google.common.primitives.UnsignedBytes;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuQueueRecord;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-
 /**
  * Created by Sundar Sridharan on May 22, 2019
  */
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Simple test of basic operations to check that insert order is preserved in the queue.
  * Created by hisundar on 05/27/2019
  */
+@Slf4j
 public class CorfuQueueTest extends AbstractViewTest {
+
+    @Test
+    public void failNonTxnEnqueue() {
+        CorfuQueue<String>
+                corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test");
+        assertThatThrownBy(() -> corfuQueue.enqueue("c"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("must be called within a transaction!");
+    }
+
+    private void executeTxn(CorfuRuntime rt, Runnable runnable) {
+        rt.getObjectsView().TXBegin();
+        runnable.run();
+        rt.getObjectsView().TXEnd();
+    }
 
     @Test
     @SuppressWarnings("unchecked")
@@ -30,9 +49,9 @@ public class CorfuQueueTest extends AbstractViewTest {
         CorfuQueue<String>
                 corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test");
 
-        corfuQueue.enqueue("c");
-        corfuQueue.enqueue("b");
-        corfuQueue.enqueue("a");
+        executeTxn(getDefaultRuntime(), () -> corfuQueue.enqueue("c"));
+        executeTxn(getDefaultRuntime(), () -> corfuQueue.enqueue("b"));
+        executeTxn(getDefaultRuntime(), () -> corfuQueue.enqueue("a"));
 
         List<CorfuQueueRecord<String>> records = corfuQueue.entryList();
 
@@ -66,9 +85,9 @@ public class CorfuQueueTest extends AbstractViewTest {
                 corfuQueue = new CorfuQueue<>(getDefaultRuntime(), "test", Serializers.JAVA,
                 Index.Registry.empty());
 
-        corfuQueue.enqueue("c");
-        corfuQueue.enqueue("b");
-        corfuQueue.enqueue("a");
+        executeTxn(getDefaultRuntime(), () -> corfuQueue.enqueue("c"));
+        executeTxn(getDefaultRuntime(), () -> corfuQueue.enqueue("b"));
+        executeTxn(getDefaultRuntime(), () -> corfuQueue.enqueue("a"));
 
         final int expected = 3;
         List<CorfuQueueRecord<String>> records = corfuQueue.entryList();
@@ -105,9 +124,7 @@ public class CorfuQueueTest extends AbstractViewTest {
         bmap.put(new ByteArray("fg".getBytes()), "fg");
         bmap.put(new ByteArray("abcd".getBytes()), "abcd");
         for (Map.Entry<ByteArray, String> b : bmap.entrySet()) {
-            System.out.println(b);
+            log.debug("{}", b);
         }
-
-
     }
 }
