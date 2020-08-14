@@ -2,6 +2,7 @@ package org.corfudb.utils.lock.states;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.utils.lock.Lock;
+import org.corfudb.utils.lock.persistence.LockStoreException;
 
 import java.util.Optional;
 
@@ -42,8 +43,14 @@ public class NoLeaseState extends LockState {
                 return Optional.empty();
             }
             case FORCE_LEASE_ACQUIRED: {
-                forceAcquire();
-                return Optional.of(lock.getStates().get(LockStateType.HAS_LEASE));
+                try {
+                    forceAcquire();
+                    return Optional.of(lock.getStates().get(LockStateType.HAS_LEASE));
+                }
+                catch (Exception e) {
+                    log.error("Lock: {} could not acquire lease", lock.getLockId(), e);
+                }
+                return Optional.empty();
             }
             case LEASE_REVOKED: {
                 //lock client revoked the lease on this lock, should try to acquire lease.
@@ -99,14 +106,8 @@ public class NoLeaseState extends LockState {
         }
     }
 
-    private void forceAcquire() {
-        try {
-            lockStore.forceAcquire(lock.getLockId());
-        }
-        catch (Exception e) {
-            log.error("Lock: {} could not force-acquire lease", lock.getLockId(), e);
-        }
-
+    private void forceAcquire() throws LockStoreException {
+        lockStore.forceAcquire(lock.getLockId());
     }
 
 }

@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
@@ -13,6 +14,7 @@ import java.util.UUID;
 /**
  * This class describes a Cluster or Site in terms of its Log Replication Nodes
  */
+@AllArgsConstructor
 public class ClusterDescriptor {
 
     private static int CORFU_PORT = 9000;
@@ -24,10 +26,10 @@ public class ClusterDescriptor {
     ClusterRole role;
 
     @Getter
-    List<NodeDescriptor> nodesDescriptors;
+    private int corfuPort;    // Port on which Corfu DB runs on this cluster
 
     @Getter
-    private int corfuPort;    // Port on which Corfu DB runs on this cluster
+    List<NodeDescriptor> nodesDescriptors;
 
     public ClusterDescriptor(ClusterConfigurationMsg clusterConfig) {
         this.clusterId = clusterConfig.getId();
@@ -52,14 +54,6 @@ public class ClusterDescriptor {
                     info.clusterId, nodeInfo.getNodeId());
             this.nodesDescriptors.add(newNode);
         }
-    }
-
-    public ClusterDescriptor(String clusterId, ClusterRole roleType, int corfuPort,
-                             List<NodeDescriptor> nodeDescriptors) {
-        this.clusterId = clusterId;
-        this.role = roleType;
-        this.corfuPort = corfuPort;
-        this.nodesDescriptors = nodeDescriptors;
     }
 
     public ClusterConfigurationMsg convertToMessage() {
