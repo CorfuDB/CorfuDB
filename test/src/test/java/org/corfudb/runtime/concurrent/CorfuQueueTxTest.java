@@ -1,5 +1,19 @@
 package org.corfudb.runtime.concurrent;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+
+import com.google.protobuf.ByteString;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.TreeMap;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.collections.CorfuQueue;
@@ -9,19 +23,6 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Hashtable;
-import java.util.TreeMap;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by hisundar on 5/30/19.
@@ -50,6 +51,10 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
     protected final int numIterations = PARAMETERS.NUM_ITERATIONS_MODERATE;
     protected final Long numConflictKeys = 2L;
 
+    private ByteString getByteString(String string) {
+        return ByteString.copyFromUtf8(string);
+    }
+
     /**
      * This concurrent test validates that the CorfuQueue::enqueue operations
      * are ordered by that of the parent transaction and fail if transaction aborts.
@@ -69,8 +74,8 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
     public void queueOrderedByTransaction(TransactionType txnType) throws Exception {
         final int numThreads = PARAMETERS.CONCURRENCY_TWO;
         Map<Long, Long> conflictMap = instantiateCorfuObject(CorfuTable.class, "conflictMap");
-        CorfuQueue<String>
-                corfuQueue = new CorfuQueue<>(getRuntime(), "testQueue");
+        CorfuQueue
+                corfuQueue = new CorfuQueue(getRuntime(), "testQueue");
         class Record {
             @Getter
             public CorfuRecordId id;
@@ -93,7 +98,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                     TXBegin(txnType);
                     Long coinToss = new Random().nextLong() % numConflictKeys;
                     conflictMap.put(coinToss, coinToss);
-                    corfuQueue.enqueue(queueData);
+                    corfuQueue.enqueue(getByteString(queueData));
                     // Each transaction may or may not sleep to simulate out of order between enQ & commit
                     TimeUnit.MILLISECONDS.sleep(coinToss);
                     lock.lock();
@@ -111,12 +116,12 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
         executeScheduled(numThreads, PARAMETERS.TIMEOUT_LONG);
 
         // Re-open the queue to ensure that the ordering is retrieved from a persisted source.
-        CorfuQueue<String>
-                corfuQueue2 = new CorfuQueue<>(getRuntime(), "testQueue");
+        CorfuQueue
+                corfuQueue2 = new CorfuQueue(getRuntime(), "testQueue");
 
         // After all concurrent transactions are complete, validate that number of Queue entries
         // are the same as the number of successful transactions.
-        List<CorfuQueue.CorfuQueueRecord<String>> records = corfuQueue2.entryList();
+        List<CorfuQueue.CorfuQueueRecord> records = corfuQueue2.entryList();
         assertThat(validator.size()).isEqualTo(records.size());
 
         // Also validate that the order of the queue matches that of the commit order.
@@ -127,7 +132,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
             assertThat(testOrder.compareTo(order)).isLessThanOrEqualTo(0);
             log.debug("queue entry"+i+":"+order+"UUID:"+order.toByteArray());
             testOrder = order;
-            assertThat(validator.get(i).getData()).isEqualTo(records.get(i).getEntry());
+            assertThat(getByteString(validator.get(i).getData())).isEqualTo(records.get(i).getEntry());
         }
         int idx = validator.size() - 1;
         byte[] fromRecId = records.get(idx).getRecordId().toByteArray();
@@ -165,19 +170,8 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
             tables.put(i, instantiateCorfuObject(CorfuTable.class, "testTable" +i));
         }
 
-        CorfuQueue<String>
-                corfuQueue = new CorfuQueue<>(getRuntime(), "testQueue");
-        class Record {
-            @Getter
-            public CorfuRecordId id;
-            @Getter
-            public String data;
-
-            public Record(CorfuRecordId id, String data) {
-                this.id = id;
-                this.data = data;
-            }
-        }
+        CorfuQueue
+                corfuQueue = new CorfuQueue(getRuntime(), "testQueue");
 
         Map<Long, String> validator = new Hashtable<>();
         ReentrantLock lock = new ReentrantLock();
@@ -204,7 +198,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                         semId.acquire();
                     }
 
-                    corfuQueue.enqueue(queueData);
+                    corfuQueue.enqueue(getByteString(queueData));
 
                     if (tableID == semIdOwner) {
                         semId.release();
@@ -234,7 +228,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
 
         // After all concurrent transactions are complete, validate that number of Queue entries
         // are the same as the number of successful transactions.
-        List<CorfuQueue.CorfuQueueRecord<String>> records = corfuQueue.entryList();
+        List<CorfuQueue.CorfuQueueRecord> records = corfuQueue.entryList();
         assertThat(validator.size()).isEqualTo(records.size());
 
         Map<Long, String> sortedMap = new TreeMap<>(validator);
@@ -243,8 +237,8 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
         int cnt = 0;
         for (Map.Entry<Long, String> entry : sortedMap.entrySet()) {
             CorfuRecordId id = records.get(i).getRecordId();
-            String val0 = entry.getValue();
-            String val1 = records.get(i).getEntry();
+            ByteString val0 = getByteString(entry.getValue());
+            ByteString val1 = records.get(i).getEntry();
 
             if (entry.getKey() != id.getTxSequence() || !val0.equals(val1)) {
                 log.warn("\nentry: " + entry + " queue item: " + records.get(i));

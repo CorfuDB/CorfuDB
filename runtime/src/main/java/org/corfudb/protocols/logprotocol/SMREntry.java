@@ -1,12 +1,13 @@
 package org.corfudb.protocols.logprotocol;
 
-import io.netty.buffer.ByteBuf;
+import static com.google.common.base.Preconditions.checkState;
 
+
+import io.netty.buffer.ByteBuf;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -16,8 +17,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
-
-import static com.google.common.base.Preconditions.checkState;
 
 /**
  * Created by mwei on 1/8/16.
@@ -143,28 +142,6 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         }
         SMRArguments = arguments;
         serializedSize = b.readerIndex() - readIndex + 1;
-    }
-
-
-    /**
-     * Calculate an Opaque SMR entry's serialized size.
-     * @throws IllegalAccessException
-     */
-    private int calculateOpaqueSMREntrySerializedSize() {
-        if (!opaque) {
-            return 0;
-        }
-
-        int size = 0;
-
-        for (Object smrArg : SMRArguments) {
-            size += ((byte[])smrArg).length;
-        }
-
-        size += (SMRMethod.length() * Character.BYTES);
-        size += Integer.BYTES;
-
-        return size;
     }
 
     /**
