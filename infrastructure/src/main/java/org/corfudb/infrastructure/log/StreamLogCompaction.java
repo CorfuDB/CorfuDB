@@ -44,9 +44,10 @@ public class StreamLogCompaction {
     public StreamLogCompaction(StreamLog streamLog, long initialDelay, long period, TimeUnit timeUnit,
                                Duration shutdownTimer) {
         this.shutdownTimer = shutdownTimer;
+
         Runnable task = () -> {
             log.debug("Start log compaction.");
-            try (Timer.Context context = MetricsUtils.getConditionalContext(compactionTimer)){
+            try (Timer.Context context = MetricsUtils.getConditionalContext(compactionTimer)) {
                 streamLog.compact();
             } catch (Exception ex) {
                 log.error("Can't compact stream log.", ex);
