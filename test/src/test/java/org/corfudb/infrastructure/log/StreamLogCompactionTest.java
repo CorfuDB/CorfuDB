@@ -13,6 +13,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 @Slf4j
 public class StreamLogCompactionTest extends AbstractCorfuTest {
@@ -46,11 +47,10 @@ public class StreamLogCompactionTest extends AbstractCorfuTest {
         doThrow(new RuntimeException("err")).when(streamLog).compact();
 
         final long initialCompactionCounter = getCompactionCounter();
-        StreamLogCompaction compaction = new StreamLogCompaction(streamLog,
-                                                                 initialDelay,
-                                                                 period,
-                                                                 TimeUnit.MILLISECONDS,
-                                                                 PARAMETERS.TIMEOUT_VERY_SHORT);
+        StreamLogCompaction compaction = new StreamLogCompaction(
+                streamLog,
+                initialDelay, period, TimeUnit.MILLISECONDS, PARAMETERS.TIMEOUT_VERY_SHORT
+        );
 
         // If metrics are enabled, set an expectation of two compactions more than current
         // compaction count

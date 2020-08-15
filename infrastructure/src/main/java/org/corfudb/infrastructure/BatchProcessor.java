@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.util.LinkedList;
@@ -37,13 +36,13 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 @Slf4j
 public class BatchProcessor implements AutoCloseable {
 
-    final private int BATCH_SIZE = 50;
+    private final int BATCH_SIZE = 50;
 
-    final private boolean sync;
+    private final boolean sync;
 
-    final private StreamLog streamLog;
+    private final StreamLog streamLog;
 
-    final private BlockingQueue<BatchWriterOperation> operationsQueue;
+    private final BlockingQueue<BatchWriterOperation> operationsQueue;
 
     private ExecutorService processorService = Executors
             .newSingleThreadExecutor(new ThreadFactoryBuilder()

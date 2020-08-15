@@ -8,16 +8,17 @@ import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.buffer.Unpooled;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.format.Types;
 import org.corfudb.format.Types.LogEntry;
 import org.corfudb.format.Types.LogHeader;
 import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ResourceQuota;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -60,6 +61,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
@@ -81,6 +85,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             .setLength(-1)
             .build()
             .getSerializedSize();
+
     public static final int VERSION = 2;
     public static final int RECORDS_PER_LOG_FILE = 10000;
     private final Path logDir;
@@ -88,6 +93,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     private final StreamLogDataStore dataStore;
 
+    @Getter
     private ConcurrentMap<String, SegmentHandle> writeChannels;
     private final Set<FileChannel> channelsToSync;
     private final MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
@@ -105,6 +111,12 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
+
+    /**
+     * Prevents corfu from reading and executing maintenance
+     * operations (reset log unit and stream log compaction) in parallel
+     */
+    private final ReadWriteLock resetLock = new ReentrantReadWriteLock();
 
     /**
      * Returns a file-based stream log object.
@@ -387,7 +399,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public synchronized void compact() {
-        trimPrefix();
+        Lock lock = resetLock.writeLock();
+        lock.lock();
+        try {
+            trimPrefix();
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
@@ -691,6 +709,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @return The log unit entry at that address, or NULL if there was no entry.
      */
     private LogData readRecord(SegmentHandle segment, long address) throws IOException {
+
         FileChannel fileChannel = segment.getReadChannel();
 
         AddressMetaData metaData = segment.getKnownAddresses().get(address);
@@ -750,6 +769,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      * @param address The address to open.
      * @return The FileChannel for that address.
      */
+    @VisibleForTesting
     SegmentHandle getSegmentHandleForAddress(long address) {
         long segment = address / RECORDS_PER_LOG_FILE;
 
@@ -776,6 +796,11 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 IOUtils.closeQuietly(writeCh);
                 IOUtils.closeQuietly(readCh);
                 throw new IllegalStateException(e);
+            } catch (RuntimeException ex) {
+                //Prevents file resources leaks in case of any RuntimeException.
+                IOUtils.closeQuietly(writeCh);
+                IOUtils.closeQuietly(readCh);
+                throw ex;
             }
         });
 
@@ -961,6 +986,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      */
     private AddressMetaData writeRecord(SegmentHandle segment, long address,
                                         LogData entry) throws IOException {
+
         LogEntry logEntry = getLogEntry(address, entry);
         Metadata metadata = getMetadata(logEntry);
 
@@ -975,7 +1001,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             syncTailSegment(address);
             logMetadata.update(entry, false);
         }
-
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
     }
 
@@ -1054,13 +1079,20 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public Set<Long> getKnownAddressesInRange(long rangeStart, long rangeEnd) {
 
-        Set<Long> result = new HashSet<>();
-        for (long address = rangeStart; address <= rangeEnd; address++) {
-            if (getSegmentHandleForAddress(address).getKnownAddresses().containsKey(address)) {
-                result.add(address);
+        Lock lock = resetLock.readLock();
+        lock.lock();
+
+        try {
+            Set<Long> result = new HashSet<>();
+            for (long address = rangeStart; address <= rangeEnd; address++) {
+                if (getSegmentHandleForAddress(address).getKnownAddresses().containsKey(address)) {
+                    result.add(address);
+                }
             }
+            return result;
+        } finally {
+            lock.unlock();
         }
-        return result;
     }
 
     @Override
@@ -1169,20 +1201,27 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
     @Override
     public LogData read(long address) {
-        if (isTrimmed(address)) {
-            return LogData.getTrimmed(address);
-        }
-        SegmentHandle segment = getSegmentHandleForAddress(address);
+        Lock lock = resetLock.readLock();
+        lock.lock();
 
         try {
-            if (segment.getPendingTrims().contains(address)) {
+            if (isTrimmed(address)) {
                 return LogData.getTrimmed(address);
             }
-            return readRecord(segment, address);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            SegmentHandle segment = getSegmentHandleForAddress(address);
+
+            try {
+                if (segment.getPendingTrims().contains(address)) {
+                    return LogData.getTrimmed(address);
+                }
+                return readRecord(segment, address);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            } finally {
+                segment.release();
+            }
         } finally {
-            segment.release();
+            lock.unlock();
         }
     }
 
@@ -1200,21 +1239,33 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
      *
      * @param endSegment The segment index of the last segment up to (including) the end segment.
      */
-    private void closeSegmentHandlers(long endSegment) {
+    @VisibleForTesting
+    void closeSegmentHandlers(long endSegment) {
         for (SegmentHandle sh : writeChannels.values()) {
             if (sh.getSegment() > endSegment) {
                 continue;
             }
 
-            if (sh.getRefCount() != 0) {
-                log.warn("closeSegmentHandlers: Segment {} is trimmed, but refCount is {}, attempting to trim anyways",
-                        sh.getSegment(), sh.getRefCount()
-                );
-            }
-            channelsToSync.remove(sh.getWriteChannel());
-            sh.close();
-            writeChannels.remove(sh.getFileName());
+            closeSegment(sh);
         }
+    }
+
+    private void closeAllSegmentHandlers() {
+        for (SegmentHandle sh : writeChannels.values()) {
+            closeSegment(sh);
+        }
+    }
+
+    @VisibleForTesting
+    void closeSegment(SegmentHandle sh) {
+        if (sh.getRefCount() != 0) {
+            log.warn("closeSegmentHandlers: Segment {} is trimmed, but refCount is {}, attempting to trim anyways",
+                    sh.getSegment(), sh.getRefCount()
+            );
+        }
+        channelsToSync.remove(sh.getWriteChannel());
+        sh.close();
+        writeChannels.remove(sh.getFileName());
     }
 
     /**
@@ -1256,28 +1307,27 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     @Override
     public void reset() {
         // Trim all segments
-        long endSegment = Math.max(logMetadata.getGlobalTail(), 0L) / RECORDS_PER_LOG_FILE;
-        log.warn("Global Tail:{}, endSegment={}", logMetadata.getGlobalTail(), endSegment);
+        log.warn("Reset. Global Tail:{}", logMetadata.getGlobalTail());
 
-        // Close segments before deleting their corresponding log files
-        closeSegmentHandlers(endSegment);
+        Lock lock = resetLock.writeLock();
+        lock.lock();
 
-        deleteFilesMatchingFilter(file -> {
-            try {
-                String segmentStr = file.getName().split("\\.")[0];
-                return Long.parseLong(segmentStr) <= endSegment;
-            } catch (Exception e) {
-                log.warn("reset: ignoring file {}", file.getName());
-                return false;
-            }
-        });
+        try {
 
-        dataStore.resetStartingAddress();
-        dataStore.resetTailSegment();
-        logMetadata = new LogMetadata();
-        writeChannels.clear();
-        logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
-        log.info("reset: Completed, end segment {}", endSegment);
+            // Close segments before deleting their corresponding log files
+            closeAllSegmentHandlers();
+
+            deleteFilesMatchingFilter(file -> true);
+
+            dataStore.resetStartingAddress();
+            dataStore.resetTailSegment();
+            logMetadata = new LogMetadata();
+
+            logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
+            log.info("reset: Completed");
+        } finally {
+            lock.unlock();
+        }
     }
 
     @VisibleForTesting
