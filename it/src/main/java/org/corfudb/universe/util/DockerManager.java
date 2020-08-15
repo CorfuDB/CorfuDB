@@ -167,7 +167,7 @@ public class DockerManager {
     /**
      * Run `docker exec` on a container
      */
-    public String execCommand(String containerName, String... command) throws DockerException, InterruptedException {
+    public void execCommand(String containerName, String... command) throws DockerException, InterruptedException {
         log.info("Executing docker command: {}", String.join(" ", command));
 
         ExecCreation execCreation = docker.execCreate(
@@ -177,7 +177,7 @@ public class DockerManager {
                 DockerClient.ExecCreateParam.attachStderr()
         );
 
-        return docker.execStart(execCreation.id()).readFully();
+        docker.execStart(execCreation.id());
     }
 
     public void addShutdownHook(String containerName) {
