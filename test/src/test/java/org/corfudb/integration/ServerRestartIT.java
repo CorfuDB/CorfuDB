@@ -1,8 +1,9 @@
 package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import com.google.common.reflect.TypeToken;
 
+
+import com.google.common.reflect.TypeToken;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -25,7 +26,6 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CheckpointWriter;
@@ -41,6 +41,7 @@ import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.Utils;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -796,7 +797,8 @@ public class ServerRestartIT extends AbstractIT {
             runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
 
             // Fetch Address Space for the given stream
-            StreamAddressSpace addressSpace = runtimeRestart.getAddressSpaceView().getLogAddressSpace()
+            StreamAddressSpace addressSpace = Utils.getLogAddressSpace(runtimeRestart
+                    .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID("test"));
 

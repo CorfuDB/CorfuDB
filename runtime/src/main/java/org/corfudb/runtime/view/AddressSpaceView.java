@@ -10,13 +10,28 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.NavigableSet;
+import java.util.Set;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -35,24 +50,6 @@ import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.NavigableSet;
-import java.util.Set;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
 
 /**
  * A view of the address space implemented by Corfu.
@@ -503,28 +500,14 @@ public class AddressSpaceView extends AbstractView {
      * Get the log's tail, i.e., last address in the address space.
      */
     public Long getLogTail() {
-        return layoutHelper(
-                e -> Utils.getLogTail(e.getLayout(), runtime));
+        return layoutHelper(Utils::getLogTail);
     }
 
     /**
      * Get all tails, includes: log tail and stream tails.
      */
     public TailsResponse getAllTails() {
-        return layoutHelper(
-                e -> Utils.getAllTails(e.getLayout(), runtime));
-    }
-
-    /**
-     * Get log address space, which includes:
-     * 1. Addresses belonging to each stream.
-     * 2. Log Tail.
-     *
-     * @return
-     */
-    public StreamsAddressResponse getLogAddressSpace() {
-        return layoutHelper(
-                e -> Utils.getLogAddressSpace(e.getLayout(), runtime));
+        return layoutHelper(Utils::getAllTails);
     }
 
     /**
