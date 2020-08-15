@@ -241,11 +241,7 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
 
     @Override
     public String execute(String command) {
-        try {
-            return dockerManager.execCommand(params.getName(), command);
-        } catch (DockerException | InterruptedException e) {
-            throw new NodeException("Can't execute command: " + command, e);
-        }
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     /**
