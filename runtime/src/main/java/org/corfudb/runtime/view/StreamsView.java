@@ -80,7 +80,7 @@ public class StreamsView extends AbstractView {
      * @return A view
      */
     public IStreamView get(UUID streamId, StreamOptions options) {
-        IStreamView stream = runtime.getLayoutView().getLayout().getLatestSegment()
+        IStreamView stream = runtime.getLayoutView().getLayout().getLastSegment()
                 .getReplicationMode()
                 .getStreamView(runtime, streamId, options);
         openedStreams.add(stream);
@@ -93,7 +93,7 @@ public class StreamsView extends AbstractView {
      * @param options open options
      */
     public IStreamView getUnsafe(UUID stream, StreamOptions options) {
-        return runtime.getLayoutView().getLayout().getLatestSegment()
+        return runtime.getLayoutView().getLayout().getLastSegment()
                 .getReplicationMode().getUnsafeStreamView(runtime, stream, options);
     }
 
