@@ -177,65 +177,72 @@ public abstract class AbstractQueuedStreamView extends
                        Function<TokenResponse, Boolean> deacquisitionCallback) {
         final LogData ld = new LogData(DataType.DATA, object, runtime.getParameters().getCodecType());
 
-        // Validate if the  size of the log data is under max write size.
-        ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
+        // Opening serialization handle before acquiring token, this way we prevent the
+        // readers to wait for the possibly long serialization time in writer.
+        // The serialization here only serializes the payload because the token is not
+        // acquired yet, thus metadata is incomplete. Once a token is acquired, the
+        // writer will append the serialized metadata to the buffer.
+        try (ILogData.SerializationHandle sh = ld.getSerializedForm(false)) {
+            // Validate if the  size of the log data is under max write size.
+            int payloadSize = ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
-        // First, we get a token from the sequencer.
-        TokenResponse tokenResponse = runtime.getSequencerView()
-                .next(id);
+            // First, we get a token from the sequencer.
+            TokenResponse tokenResponse = runtime.getSequencerView().next(id);
 
-        // We loop forever until we are interrupted, since we may have to
-        // acquire an address several times until we are successful.
-        for (int x = 0; x < runtime.getParameters().getWriteRetry(); x++) {
-            // Next, we call the acquisitionCallback, if present, informing
-            // the client of the token that we acquired.
-            if (acquisitionCallback != null) {
-                if (!acquisitionCallback.apply(tokenResponse)) {
-                    // The client did not like our token, so we end here.
-                    // We'll leave the hole to be filled by the client or
-                    // someone else.
-                    log.debug("Acquisition rejected token={}", tokenResponse);
-                    return -1L;
-                }
-            }
-
-            // Now, we do the actual write. We could get an overwrite
-            // exception here - any other exception we should pass up
-            // to the client.
-            try {
-                runtime.getAddressSpaceView().write(tokenResponse, ld);
-                // The write completed successfully, so we return this
-                // address to the client.
-                return tokenResponse.getToken().getSequence();
-            } catch (OverwriteException oe) {
-                log.trace("Overwrite occurred at {}", tokenResponse);
-                // We got overwritten, so we call the deacquisition callback
-                // to inform the client we didn't get the address.
-                if (deacquisitionCallback != null) {
-                    if (!deacquisitionCallback.apply(tokenResponse)) {
-                        log.debug("Deacquisition requested abort");
-                        return -1L;
+            // We loop forever until we are interrupted, since we may have to
+            // acquire an address several times until we are successful.
+            for (int retry = 0; retry < runtime.getParameters().getWriteRetry(); retry++) {
+                // Next, we call the acquisitionCallback, if present, informing
+                // the client of the token that we acquired.
+                if (acquisitionCallback != null) {
+                    if (!acquisitionCallback.apply(tokenResponse)) {
+                        // The client did not like our token, so we end here.
+                        // We'll leave the hole to be filled by the client or
+                        // someone else.
+                        log.warn("Acquisition rejected token={}", tokenResponse);
+                        return Address.NON_ADDRESS;
                     }
                 }
-                // Request a new token, informing the sequencer we were
-                // overwritten.
-                tokenResponse = runtime.getSequencerView().next(id);
-            } catch (StaleTokenException te) {
-                log.trace("Token grew stale occurred at {}", tokenResponse);
-                if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
-                    log.debug("Deacquisition requested abort");
-                    return -1L;
+
+                // Now, we do the actual write. We could get an overwrite
+                // exception here - any other exception we should pass up
+                // to the client.
+                try {
+                    runtime.getAddressSpaceView().write(tokenResponse, ld);
+                    // The write completed successfully, so we return this
+                    // address to the client.
+                    return tokenResponse.getToken().getSequence();
+                } catch (OverwriteException oe) {
+                    log.warn("Overwrite occurred at {}", tokenResponse);
+                    // We got overwritten, so we call the deacquisition callback
+                    // to inform the client we didn't get the address.
+                    if (deacquisitionCallback != null) {
+                        if (!deacquisitionCallback.apply(tokenResponse)) {
+                            log.debug("Deacquisition requested abort");
+                            return Address.NON_ADDRESS;
+                        }
+                    }
+                    // Request a new token, informing the sequencer we were
+                    // overwritten.
+                    tokenResponse = runtime.getSequencerView().next(id);
+                } catch (StaleTokenException te) {
+                    log.warn("Token grew stale occurred at {}", tokenResponse);
+                    if (deacquisitionCallback != null && !deacquisitionCallback.apply(tokenResponse)) {
+                        log.debug("Deacquisition requested abort");
+                        return Address.NON_ADDRESS;
+                    }
+                    // Request a new token, informing the sequencer we were
+                    // overwritten.
+                    tokenResponse = runtime.getSequencerView().next(id);
                 }
-                // Request a new token, informing the sequencer we were
-                // overwritten.
-                tokenResponse = runtime.getSequencerView().next(id);
             }
+
+            log.error("append[{}]: failed after {} retries, stream: {}, write size {} bytes",
+                    tokenResponse.getSequence(),
+                    runtime.getParameters().getWriteRetry(),
+                    this.id, payloadSize);
         }
 
-        log.error("append[{}]: failed after {} retries, write size {} bytes",
-                tokenResponse.getSequence(),
-                runtime.getParameters().getWriteRetry(),
-                ILogData.getSerializedSize(object, runtime.getParameters().getCodecType()));
         throw new AppendException();
     }
 

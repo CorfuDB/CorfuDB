@@ -39,6 +39,7 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -138,7 +139,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     /* ******** Expected Values on Observables ******** */
 
     // Set per test according to the expected number of ACKs that will unblock the code waiting for the value change
-    private int expectedAckMessages = 0;
+    private long expectedAckMessages = 0;
 
     // Set per test according to the expected ACK's timestamp.
     private long expectedAckTimestamp = Long.MAX_VALUE;
@@ -297,7 +298,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 }
             }
             rt.getObjectsView().TXEnd();
-            long tail = rt.getAddressSpaceView().getLogAddressSpace().getAddressMap().get(ObjectsView.TRANSACTION_STREAM_ID).getTail();
+            long tail = Utils.getLogAddressSpace(rt
+                    .getLayoutView().getRuntimeLayout())
+                    .getAddressMap()
+                    .get(ObjectsView.TRANSACTION_STREAM_ID).getTail();
             expectedAckTimestamp = Math.max(tail, expectedAckTimestamp);
         }
 
@@ -772,9 +776,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Start Log Entry Sync
         // We need to block until the error is received and verify the state machine is shutdown
         testConfig.clear();
-        expectedAckMessages = srcDataRuntime.getAddressSpaceView().getLogAddressSpace().getAddressMap()
-                .get(ObjectsView.TRANSACTION_STREAM_ID)
-                .getTail().intValue();
+        expectedAckMessages = Utils.getLogAddressSpace(srcDataRuntime
+                .getLayoutView().getRuntimeLayout())
+                .getAddressMap()
+                .get(ObjectsView.TRANSACTION_STREAM_ID).getTail();
 
         LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ACK);
 

@@ -1,9 +1,24 @@
 package org.corfudb.runtime.view;
 
+import static java.util.Objects.requireNonNull;
+
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -22,21 +37,6 @@ import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.ThreadSafeStreamView;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
-
-import static java.util.Objects.requireNonNull;
 
 /**
  * This class represents the layout of a Corfu instance.
@@ -285,21 +285,8 @@ public class Layout {
      * Return latest segment.
      * @return the latest segment.
      */
-    public LayoutSegment getLatestSegment() {
+    public LayoutSegment getLastSegment() {
         return this.getSegments().get(this.getSegments().size() - 1);
-    }
-
-    /**
-     * Get the last node in the last segment.
-     *
-     * @return Returns the last node in the last segment.
-     */
-    public String getLastAddedNodeInLastSegment() {
-
-        // Fetching the latest segment. Note: This is the unbounded segment with ongoing writes.
-        // Returning the last node in the first stripe for determinism.
-        List<String> firstStripeLogServers = getLatestSegment().getFirstStripe().getLogServers();
-        return firstStripeLogServers.get(firstStripeLogServers.size() - 1);
     }
 
     /**

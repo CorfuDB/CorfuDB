@@ -103,6 +103,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      * Metrics: meter (counter), histogram.
      */
     private final Timer timerAccess;
+    private final Timer timerAccessPerStream;
     private final Timer timerLogWrite;
     private final Timer timerTxn;
     private final Timer timerUpcall;
@@ -142,6 +143,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
         final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
         timerAccess = metrics.timer(CorfuComponent.OBJECT + "access");
+        timerAccessPerStream = metrics.timer(CorfuComponent.OBJECT + "access-" + streamID);
         timerLogWrite = metrics.timer(CorfuComponent.OBJECT + "log-write");
         timerTxn = metrics.timer(CorfuComponent.OBJECT + "txn");
         timerUpcall = metrics.timer(CorfuComponent.OBJECT + "upcall");
@@ -164,7 +166,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(timerAccess)) {
-            return accessInner(accessMethod, conflictObject);
+            try (Timer.Context streamContext = MetricsUtils.getConditionalContext(timerAccessPerStream)) {
+                return accessInner(accessMethod, conflictObject);
+            }
         }
     }
 

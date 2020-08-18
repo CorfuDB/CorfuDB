@@ -1,10 +1,30 @@
 package org.corfudb.integration;
 
+import static junit.framework.TestCase.fail;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
-
 import com.google.common.reflect.TypeToken;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -32,31 +52,10 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.Utils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.io.IOException;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Optional;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
-import static junit.framework.TestCase.fail;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class ClusterReconfigIT extends AbstractIT {
 
@@ -1148,8 +1147,8 @@ public class ClusterReconfigIT extends AbstractIT {
                 .open();
 
         // Verify sequencer has correct address map for this stream (addresses and trim mark)
-        StreamAddressSpace addressSpace = runtime2.getAddressSpaceView()
-                .getLogAddressSpace()
+        StreamAddressSpace addressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
+                .getRuntimeLayout())
                 .getAddressMap().get(streamId);
 
         assertThat(addressSpace.getTrimMark()).isEqualTo(numEntries);
@@ -1162,8 +1161,8 @@ public class ClusterReconfigIT extends AbstractIT {
         }
 
         // Verify START_ADDRESS of checkpoint for stream
-        StreamAddressSpace checkpointAddressSpace = runtime2.getAddressSpaceView()
-                .getLogAddressSpace()
+        StreamAddressSpace checkpointAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
+                .getRuntimeLayout())
                 .getAddressMap().get(checkpointStreamId);
 
         // Addresses should correspond to: start, continuation and end records. (total 3 records)

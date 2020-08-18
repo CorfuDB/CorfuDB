@@ -41,8 +41,34 @@ public class StreamAddressSpace {
         this.addressMap = addressMap;
     }
 
+    public StreamAddressSpace() {
+        this.addressMap = Roaring64NavigableMap.bitmapOf();
+        this.trimMark = Address.NON_ADDRESS;
+    }
+
     public Roaring64NavigableMap getAddressMap() {
         return addressMap;
+    }
+
+    /**
+     * Merges b into a and returns a as the final result.
+     * @param a StreamAddressSpace to merge into
+     * @param b StreamAddressSpace to merge
+     * @return returns a as the merged StreamAddressSpace
+     */
+    public static StreamAddressSpace merge(StreamAddressSpace a, StreamAddressSpace b) {
+        a.mergeFrom(b);
+        return a;
+    }
+
+    // Merge another StreamAddressSpace into this instance
+    private void mergeFrom(StreamAddressSpace other) {
+        this.trimMark = Long.max(trimMark, other.getTrimMark());
+        this.addressMap.or(other.getAddressMap());
+
+        // Because the trim mark can increase after the merge another
+        // trim needs to be issued
+        this.trim(this.trimMark);
     }
 
     /**
@@ -68,7 +94,7 @@ public class StreamAddressSpace {
      */
     public Long getTail() {
         // If no address is present for this stream, the tail is given by the trim mark (last trimmed address)
-        if (addressMap.getLongCardinality() == NO_ADDRESSES) {
+        if (addressMap.isEmpty()) {
             return trimMark;
         }
 
@@ -89,7 +115,7 @@ public class StreamAddressSpace {
      * Remove addresses from the stream's address map
      * and set the new trim mark (to the greatest of all addresses to remove).
      */
-    public void removeAddresses(List<Long> addresses) {
+    private void removeAddresses(List<Long> addresses) {
         addresses.stream().forEach(addressMap::removeLong);
 
         // Recover allocated but unused memory

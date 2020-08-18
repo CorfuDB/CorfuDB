@@ -1,11 +1,15 @@
 package org.corfudb.protocols.logprotocol;
 
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.Serializers;
 
@@ -38,6 +42,10 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      * This is required to support lazy stream deserialization.
      */
     private final Map<UUID, byte[]> streamBuffers = new ConcurrentHashMap<>();
+
+    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+
+    private static final String METRIC_PREFIX = "MultiObjectSMREntry-";
 
     public MultiObjectSMREntry() {
         this.type = LogEntryType.MULTIOBJSMR;
@@ -87,34 +95,53 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      */
     @Override
     public void deserializeBuffer(ByteBuf b, CorfuRuntime rt) {
-        super.deserializeBuffer(b, rt);
-        int numStreams = b.readInt();
-        for (int i = 0; i < numStreams; i++) {
-            UUID streamId = new UUID(b.readLong(), b.readLong());
+        Timer deserializeTimer = metricRegistry.timer(METRIC_PREFIX + "deserialize");
+        try (Timer.Context context = MetricsUtils.getConditionalContext(deserializeTimer)) {
+            super.deserializeBuffer(b, rt);
+            int numStreams = b.readInt();
+            for (int i = 0; i < numStreams; i++) {
+                UUID streamId = new UUID(b.readLong(), b.readLong());
 
-            // The MultiObjectSMREntry payload is structure as follows:
-            // LogEntry Type | number of MultiSMREntry entries | MultiSMREntry id | serialized MultiSMREntry | ...
-            // Therefore we need to unpack the MultiSMREntry entries one-by-one
-            int start = b.readerIndex();
-            MultiSMREntry.seekToEnd(b);
-            int multiSMRLen = b.readerIndex() - start;
-            b.readerIndex(start);
-            byte[] streamUpdates = new byte[multiSMRLen];
-            b.readBytes(streamUpdates);
-            streamBuffers.put(streamId, streamUpdates);
+                Timer streamDeserializeTimer = metricRegistry.timer(
+                        METRIC_PREFIX + "deserialize-" + streamId);
+                // The MultiObjectSMREntry payload is structure as follows:
+                // LogEntry Type | number of MultiSMREntry entries | MultiSMREntry id | serialized MultiSMREntry | ...
+                // Therefore we need to unpack the MultiSMREntry entries one-by-one
+                try (Timer.Context streamContext = MetricsUtils.getConditionalContext(streamDeserializeTimer)) {
+                    int start = b.readerIndex();
+                    MultiSMREntry.seekToEnd(b);
+                    int multiSMRLen = b.readerIndex() - start;
+                    b.readerIndex(start);
+                    byte[] streamUpdates = new byte[multiSMRLen];
+                    b.readBytes(streamUpdates);
+                    streamBuffers.put(streamId, streamUpdates);
+                }
+            }
         }
     }
 
     @Override
     public void serialize(ByteBuf b) {
-        super.serialize(b);
-        b.writeInt(streamUpdates.size());
-        streamUpdates.entrySet().stream()
-                .forEach(x -> {
-                    b.writeLong(x.getKey().getMostSignificantBits());
-                    b.writeLong(x.getKey().getLeastSignificantBits());
-                    Serializers.CORFU.serialize(x.getValue(), b);
-                });
+        Timer serializeTimer = metricRegistry.timer(METRIC_PREFIX + "serialize");
+        Histogram sizeHistogram = metricRegistry.histogram(METRIC_PREFIX + "serialize-size");
+        int startIdx = b.writerIndex();
+        try (Timer.Context context = MetricsUtils.getConditionalContext(serializeTimer)) {
+            super.serialize(b);
+            b.writeInt(streamUpdates.size());
+            streamUpdates.entrySet().stream()
+                    .forEach(x -> {
+                        Timer streamSerializeTimer = metricRegistry.timer(METRIC_PREFIX + "serialize-" + x.getKey());
+                        Histogram streamSizeHistogram = metricRegistry.histogram(METRIC_PREFIX + "serialize-size-" + x.getKey());
+                        int streamStart = b.writerIndex();
+                        try (Timer.Context streamContext = MetricsUtils.getConditionalContext(streamSerializeTimer)) {
+                            b.writeLong(x.getKey().getMostSignificantBits());
+                            b.writeLong(x.getKey().getLeastSignificantBits());
+                            Serializers.CORFU.serialize(x.getValue(), b);
+                        }
+                        streamSizeHistogram.update(b.writerIndex() - streamStart);
+                    });
+        }
+        sizeHistogram.update(b.writerIndex() - startIdx);
     }
 
     /**
