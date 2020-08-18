@@ -93,6 +93,7 @@ public class LogReplicationSourceManager {
                 .tsPasswordFile(params.getTsPasswordFile())
                 .keyStore(params.getKeyStore())
                 .ksPasswordFile(params.getKsPasswordFile())
+                .systemDownHandler(params.getSystemDownHandler())
                 .tlsEnabled(params.isTlsEnabled()).build());
         runtime.parseConfigurationString(params.getLocalCorfuEndpoint()).connect();
 
