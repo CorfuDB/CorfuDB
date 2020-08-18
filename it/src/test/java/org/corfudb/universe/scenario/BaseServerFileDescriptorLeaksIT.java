@@ -13,6 +13,7 @@ import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.scenario.fixture.Fixture;
 import org.corfudb.universe.spec.FileDescriptorLeaksSpec;
 import org.corfudb.universe.universe.UniverseParams;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.corfudb.universe.scenario.fixture.Fixtures.TestFixtureConst.DEFAULT_STREAM_NAME;
@@ -29,6 +30,7 @@ public class BaseServerFileDescriptorLeaksIT extends GenericIntegrationTest {
      * 3) Check if there are any resource leaks
      */
     @Test(timeout = 300_000)
+    @Ignore
     public void fileDescriptorLeaksBaseServerResetTest() {
 
         workflow(wf -> {
