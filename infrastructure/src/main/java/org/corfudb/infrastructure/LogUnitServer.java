@@ -1,28 +1,11 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
-
-
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
-import java.lang.invoke.MethodHandles;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.ServerThreadFactory.ExceptionHandler;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
@@ -52,8 +35,27 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
+
+import java.lang.invoke.MethodHandles;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 
 
 /**
@@ -111,8 +113,10 @@ public class LogUnitServer extends AbstractServer {
     public LogUnitServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
-        executor = Executors.newFixedThreadPool(serverContext.getLogunitThreadCount(),
-                new ServerThreadFactory("LogUnit-", new ServerThreadFactory.ExceptionHandler()));
+        executor = Executors.newFixedThreadPool(
+                serverContext.getLogunitThreadCount(),
+                new ServerThreadFactory("LogUnit-", new ExceptionHandler())
+        );
 
         if (config.isMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
@@ -145,7 +149,9 @@ public class LogUnitServer extends AbstractServer {
     public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleTailRequest: received a tail request {}", msg);
         batchWriter.<TailsResponse>addTask(TAILS_QUERY, msg)
-                .thenAccept(tailsResp -> r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp)))
+                .thenAccept(tailsResp -> {
+                    r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp));
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
                     return null;
@@ -163,7 +169,8 @@ public class LogUnitServer extends AbstractServer {
         log.trace("handleLogAddressSpaceRequest: received a log address space request {}", msg);
         batchWriter.<StreamsAddressResponse>addTask(LOG_ADDRESS_SPACE_QUERY, payloadMsg)
                 .thenAccept(tailsResp -> r.sendResponse(ctx, msg,
-                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
+                        CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp))
+                )
                 .exceptionally(ex -> {
                     handleException(ex, ctx, payloadMsg, r);
                     return null;
@@ -240,14 +247,16 @@ public class LogUnitServer extends AbstractServer {
             msg.setPriorityLevel(PriorityLevel.HIGH);
         }
 
-        batchWriter.addTask(WRITE, msg)
+        batchWriter
+                .addTask(WRITE, msg)
                 .thenRunAsync(() -> {
                     dataCache.put(msg.getPayload().getGlobalAddress(), logData);
                     r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg());
-                }, executor).exceptionally(ex -> {
-            handleException(ex, ctx, msg, r);
-            return null;
-        });
+                }, executor)
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
     }
 
     /**
@@ -260,7 +269,8 @@ public class LogUnitServer extends AbstractServer {
         log.debug("rangeWrite: Writing {} entries [{}-{}]", range.size(),
                 range.get(0).getGlobalAddress(), range.get(range.size() - 1).getGlobalAddress());
 
-        batchWriter.addTask(RANGE_WRITE, msg)
+        batchWriter
+                .addTask(RANGE_WRITE, msg)
                 .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.WRITE_OK.msg()))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
@@ -279,7 +289,8 @@ public class LogUnitServer extends AbstractServer {
     private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
                             IServerRouter r) {
         log.debug("prefixTrim: trimming prefix to {}", msg.getPayload().getAddress());
-        batchWriter.addTask(PREFIX_TRIM, msg)
+        batchWriter
+                .addTask(PREFIX_TRIM, msg)
                 .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
@@ -353,6 +364,9 @@ public class LogUnitServer extends AbstractServer {
                     .getKnownAddressesInRange(request.getStartRange(), request.getEndRange());
             r.sendResponse(ctx, msg,
                     CorfuMsgType.KNOWN_ADDRESS_RESPONSE.payloadMsg(knownAddresses));
+        } catch (DataCorruptionException dc) {
+            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_CORRUPTION
+                    .payloadMsg(Address.NON_ADDRESS));
         } catch (Exception e) {
             handleException(e, ctx, msg, r);
         }
@@ -361,8 +375,10 @@ public class LogUnitServer extends AbstractServer {
     @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST)
     private void handleCompactRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleCompactRequest: received a compact request {}", msg);
+
         streamLog.compact();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+
     }
 
     @ServerHandler(type = CorfuMsgType.FLUSH_CACHE)
@@ -415,24 +431,28 @@ public class LogUnitServer extends AbstractServer {
                                            ChannelHandlerContext ctx, IServerRouter r) {
 
         // Check if the reset request is with an epoch greater than the last reset epoch seen to
-        // prevent multiple reset in the same epoch. and should be equal to the current router
+        // prevent multiple reset in the same epoch and should be equal to the current router
         // epoch to prevent stale reset requests from wiping out the data.
-        if (msg.getPayload() > serverContext.getLogUnitEpochWaterMark()
-                && msg.getPayload() == serverContext.getServerEpoch()) {
-            serverContext.setLogUnitEpochWaterMark(msg.getPayload());
-            batchWriter.addTask(RESET, msg)
-                    .thenRun(() -> {
-                        dataCache.invalidateAll();
-                        log.info("LogUnit Server Reset.");
-                        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
-                    }).exceptionally(ex -> {
-                handleException(ex, ctx, msg, r);
-                return null;
-            });
-        } else {
+        if (msg.getPayload() <= serverContext.getLogUnitEpochWaterMark()
+                || msg.getPayload() != serverContext.getServerEpoch()) {
             log.info("LogUnit Server Reset request received but reset already done.");
             r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+            return;
         }
+
+        serverContext.setLogUnitEpochWaterMark(msg.getPayload());
+
+        batchWriter
+                .addTask(RESET, msg)
+                .thenRun(() -> {
+                    dataCache.invalidateAll();
+                    log.info("LogUnit Server Reset.");
+                    r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+                })
+                .exceptionally(ex -> {
+                    handleException(ex, ctx, msg, r);
+                    return null;
+                });
     }
 
 
@@ -446,6 +466,7 @@ public class LogUnitServer extends AbstractServer {
         executor.shutdown();
         logCleaner.shutdown();
         batchWriter.close();
+        streamLog.close();
     }
 
     @VisibleForTesting

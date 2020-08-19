@@ -3,6 +3,9 @@ sudo: required
 dist: xenial
 jdk: openjdk8
 
+services:
+  - 'docker'
+
 before_cache:
 - rm -rf $HOME/.m2/repository/org/corfudb
 
