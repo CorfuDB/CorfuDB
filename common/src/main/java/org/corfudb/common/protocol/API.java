@@ -16,6 +16,16 @@ import org.corfudb.common.protocol.proto.CorfuProtocol.RestartRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.RestartResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.SealRequest;
 import org.corfudb.common.protocol.proto.CorfuProtocol.SealResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.GetLayoutRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.GetLayoutResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.PrepareLayoutRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.PrepareLayoutResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ProposeLayoutRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.ProposeLayoutResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.CommitLayoutRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.CommitLayoutResponse;
+import org.corfudb.common.protocol.proto.CorfuProtocol.BootstrapLayoutRequest;
+import org.corfudb.common.protocol.proto.CorfuProtocol.BootstrapLayoutResponse;
 import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.common.protocol.proto.CorfuProtocol.WrongClusterPayload;
 
@@ -32,6 +42,9 @@ public class API {
     // Temporary message header markers indicating message type.
     public static final byte LEGACY_CORFU_MSG_MARK = 0x1;
     public static final byte PROTO_CORFU_MSG_MARK = 0x2;
+
+    //TODO(Zach): Move Layout (and dependencies) to common so that a Layout object can be passed.
+    // Meanwhile, use layout.asJSONString() and layout and Layout.fromJSONString().
 
     public static CorfuProtocol.UUID getUUID(UUID uuid) {
         return CorfuProtocol.UUID.newBuilder()
@@ -105,6 +118,13 @@ public class API {
                         .setServerClusterId(serverClusterId)
                         .setClientClusterId(clientClusterId)
                         .build())
+                .build();
+    }
+
+    public static ServerError getBootstrappedServerError(String errorMsg) {
+        return ServerError.newBuilder()
+                .setCode(ERROR.BOOTSTRAPPED)
+                .setMessage(errorMsg)
                 .build();
     }
 
@@ -201,6 +221,113 @@ public class API {
                 .build();
     }
 
+    public static Request getGetLayoutRequest(Header header, long epoch) {
+        GetLayoutRequest getLayoutRequest = GetLayoutRequest.newBuilder()
+                .setEpoch(epoch)
+                .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setGetLayoutRequest(getLayoutRequest)
+                .build();
+    }
+
+    public static Response getGetLayoutResponse(Header header, String layout) {
+        GetLayoutResponse getLayoutResponse = GetLayoutResponse.newBuilder().setLayout(layout).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setGetLayoutResponse(getLayoutResponse)
+                .build();
+    }
+
+    public static Request getPrepareLayoutRequest(Header header, long epoch, long rank) {
+        PrepareLayoutRequest prepareLayoutRequest = PrepareLayoutRequest.newBuilder()
+                .setEpoch(epoch)
+                .setRank(rank)
+                .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setPrepareLayoutRequest(prepareLayoutRequest)
+                .build();
+    }
+
+    public static Response getPrepareLayoutResponse(Header header, PrepareLayoutResponse.Type type, long rank, String layout) {
+        PrepareLayoutResponse prepareLayoutResponse = PrepareLayoutResponse.newBuilder()
+                .setType(type)
+                .setRank(rank)
+                .setLayout(layout)
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setPrepareLayoutResponse(prepareLayoutResponse)
+                .build();
+    }
+
+    public static Request getProposeLayoutRequest(Header header, long epoch, long rank, String layout) {
+        ProposeLayoutRequest proposeLayoutRequest = ProposeLayoutRequest.newBuilder()
+                .setEpoch(epoch)
+                .setRank(rank)
+                .setLayout(layout)
+                .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setProposeLayoutRequest(proposeLayoutRequest)
+                .build();
+    }
+
+    public static Response getProposeLayoutResponse(Header header, ProposeLayoutResponse.Type type, long rank) {
+        ProposeLayoutResponse proposeLayoutResponse = ProposeLayoutResponse.newBuilder()
+                .setType(type)
+                .setRank(rank)
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setProposeLayoutResponse(proposeLayoutResponse)
+                .build();
+    }
+
+    public static Request getCommitLayoutRequest(Header header, boolean forced, long epoch, String layout) {
+        CommitLayoutRequest commitLayoutRequest = CommitLayoutRequest.newBuilder()
+                .setForced(forced)
+                .setEpoch(epoch)
+                .setLayout(layout)
+                .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setCommitLayoutRequest(commitLayoutRequest)
+                .build();
+    }
+
+    public static Response getCommitLayoutResponse(Header header, CommitLayoutResponse.Type type) {
+        CommitLayoutResponse commitLayoutResponse = CommitLayoutResponse.newBuilder()
+                .setType(type)
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setCommitLayoutResponse(commitLayoutResponse)
+                .build();
+    }
+
+    public static Request getBootstrapLayoutRequest(Header header, String layout) {
+        BootstrapLayoutRequest bootstrapLayoutRequest = BootstrapLayoutRequest.newBuilder().setLayout(layout).build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setBootstrapLayoutRequest(bootstrapLayoutRequest)
+                .build();
+    }
+
+    public static Response getBootstrapLayoutResponse(Header header, BootstrapLayoutResponse.Type type) {
+        BootstrapLayoutResponse bootstrapLayoutResponse = BootstrapLayoutResponse.newBuilder().setType(type).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setBootstrapLayoutResponse(bootstrapLayoutResponse)
+                .build();
+    }
+
     public static Response getErrorResponseNoPayload(Header header, ServerError error) {
         return Response.newBuilder()
                 .setHeader(header)
@@ -237,14 +364,14 @@ public class API {
             case COMMIT_LAYOUT:
                 if (request.hasCommitLayoutRequest()) return true;
                 break;
+            case BOOTSTRAP_LAYOUT:
+                if (request.hasBootstrapLayoutRequest()) return true;
+                break;
             case GET_TOKEN:
                 if (request.hasGetTokenRequest()) return true;
                 break;
             case COMMIT_TRANSACTION:
                 if (request.hasCommitTransactionRequest()) return true;
-                break;
-            case BOOTSTRAP:
-                if (request.hasBootstrapRequest()) return true;
                 break;
             case QUERY_STREAM:
                 if (request.hasQueryStreamRequest()) return true;

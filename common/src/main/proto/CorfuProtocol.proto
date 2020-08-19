@@ -19,9 +19,9 @@ enum MessageType {
   PREPARE_LAYOUT  = 6;
   PROPOSE_LAYOUT = 7;
   COMMIT_LAYOUT = 8;
-  GET_TOKEN = 9;
-  COMMIT_TRANSACTION = 10;
-  BOOTSTRAP = 11;
+  BOOTSTRAP_LAYOUT = 9;
+  GET_TOKEN = 10;
+  COMMIT_TRANSACTION = 11;
   QUERY_STREAM = 16;
   READ_LOG = 17;
   QUERY_LOG_METADATA = 18;
@@ -106,39 +106,78 @@ message SealRequest {
 message SealResponse {
 }
 
-// Retrieve layout
+// Retrieve layout.
 message GetLayoutRequest {
   int64 epoch = 1;
 }
 
 message GetLayoutResponse {
-
+  string layout = 1;
 }
 
-// Request in first phase of Paxos
+// Request in first phase of Paxos.
 message PrepareLayoutRequest {
   int64 epoch = 1;
   int64 rank = 2;
 }
 
 message PrepareLayoutResponse {
+  enum Type {
+    ACK = 0;
+    REJECT = 1;
+  }
 
+  Type type = 1;
+  int64 rank = 2;
+  string layout = 3;
 }
 
+// Request in second phase of Paxos.
 message ProposeLayoutRequest {
-
+  int64 epoch = 1;
+  int64 rank = 2;
+  string layout = 3;
 }
 
 message ProposeLayoutResponse {
+  enum Type {
+    ACK = 0;
+    REJECT = 1;
+  }
 
+  Type type = 1;
+  int64 rank = 2;
 }
 
+// If the first two phases (prepare and propose) of Paxos have been accepted, the
+// proposer sends a Committed message to commit the proposed {@link Layout}.
 message CommitLayoutRequest {
-
+  bool forced = 1;
+  int64 epoch = 2;
+  string layout = 3;
 }
 
 message CommitLayoutResponse {
+  enum Type {
+    ACK = 0;
+    NACK = 1;
+  }
 
+  Type type = 1;
+}
+
+// Request sent to bootstrap the server with a {@link Layout}.
+message BootstrapLayoutRequest {
+  string layout = 1;
+}
+
+message BootstrapLayoutResponse {
+  enum Type {
+    ACK = 0;
+    NACK = 1;
+  }
+
+  Type type = 1;
 }
 
 message GetTokenRequest {
@@ -154,15 +193,6 @@ message CommitTransactionRequest {
 }
 
 message CommitTransactionResponse {
-
-}
-
-message BootstrapRequest {
-
-}
-
-
-message BootstrapResponse {
 
 }
 
@@ -271,9 +301,9 @@ message Request {
     PrepareLayoutRequest prepareLayoutRequest = 106;
     ProposeLayoutRequest proposeLayoutRequest = 107;
     CommitLayoutRequest commitLayoutRequest = 108;
-    GetTokenRequest getTokenRequest = 109;
-    CommitTransactionRequest commitTransactionRequest = 110;
-    BootstrapRequest bootstrapRequest = 111;
+    BootstrapLayoutRequest bootstrapLayoutRequest = 109;
+    GetTokenRequest getTokenRequest = 110;
+    CommitTransactionRequest commitTransactionRequest = 111;
     QueryStreamRequest queryStreamRequest = 112;
     ReadLogRequest ReadLogRequest = 113;
     QueryLogMetadataRequest queryLogMetadataRequest = 114;
@@ -301,9 +331,9 @@ message Response {
     PrepareLayoutResponse prepareLayoutResponse = 106;
     ProposeLayoutResponse proposeLayoutResponse = 107;
     CommitLayoutResponse commitLayoutResponse = 108;
-    GetTokenResponse getTokenResponse = 109;
-    CommitTransactionResponse commitTransactionResponse = 110;
-    BootstrapResponse bootstrapResponse = 111;
+    BootstrapLayoutResponse bootstrapLayoutResponse = 109;
+    GetTokenResponse getTokenResponse = 110;
+    CommitTransactionResponse commitTransactionResponse = 111;
     QueryStreamResponse queryStreamResponse = 112;
     ReadLogResponse readLogResponse = 113;
     QueryLogMetadataResponse queryLogMetadataResponse = 114;
