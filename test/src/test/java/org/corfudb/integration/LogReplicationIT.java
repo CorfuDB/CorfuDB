@@ -16,9 +16,12 @@ import java.util.Observable;
 import java.util.Observer;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeoutException;
+
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
@@ -42,6 +45,7 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -709,23 +713,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
-    }
-
-
-    @Test
-    public void testLogEntrySyncValidCrossTablesWithTriggerTimeout() throws Exception {
-        // Write data in transaction to t0 and t1
-        Set<String> crossTables = new HashSet<>();
-        crossTables.add(t0);
-        crossTables.add(t1);
-
-        writeCrossTableTransactions(crossTables, true);
-
-        // Start Log Entry Sync
-        expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
-
-        testConfig.clear().setDropMessageLevel(2);
-        startLogEntrySync(crossTables, WAIT.ON_TIMEOUT_ERROR);
     }
 
     /**
