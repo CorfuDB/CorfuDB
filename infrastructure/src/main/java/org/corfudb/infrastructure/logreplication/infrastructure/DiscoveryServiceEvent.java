@@ -3,7 +3,6 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import lombok.Getter;
 import lombok.Setter;
 
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
 public class DiscoveryServiceEvent {

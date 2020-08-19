@@ -680,10 +680,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     /**
-     * Enforce a snapshot full sync for all standbys
+     * Enforce a snapshot full sync for all standbys if the current node is a leader node
      */
     private void processEnforceSnapshotFullSync() {
-        if (replicationManager == null) {
+        if (replicationManager == null || isLeader.get() == false) {
             return;
         }
         replicationManager.enforceSnapshotFullSync();

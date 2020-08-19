@@ -604,7 +604,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapStandby.size()).isEqualTo(thirdBatch);
     }
 
-    Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> getMetadataTable(CorfuRuntime runtime) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    private Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> getMetadataTable(CorfuRuntime runtime) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
         CorfuStore corfuStore = new CorfuStore(runtime);
         CorfuStoreMetadata.TableName metadataTableName = null;
         Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable = null;

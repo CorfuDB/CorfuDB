@@ -54,11 +54,6 @@ public class ClusterDescriptor {
         }
     }
 
-    public ClusterDescriptor(String clusterId, ClusterRole roletype) {
-        this.clusterId = clusterId;
-        this.role = roletype;
-    }
-
     public ClusterDescriptor(String clusterId, ClusterRole roleType, int corfuPort) {
         this.clusterId = clusterId;
         this.role = roleType;
