@@ -78,6 +78,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private static final String LOCK_NAME = "Log_Replication_Lock";
 
     /**
+     * System exit error code called by the Corfu Runtime systemDownHandler
+     */
+    private static final int SYSTEM_EXIT_ERROR_CODE = -3;
+    /**
      * Used by the active cluster to initiate Log Replication
      */
     @Getter
@@ -312,6 +316,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     .keyStore((String) serverContext.getServerConfig().get("--keystore"))
                     .ksPasswordFile((String) serverContext.getServerConfig().get("--keystore-password-file"))
                     .tlsEnabled((Boolean) serverContext.getServerConfig().get("--enable-tls"))
+                    .systemDownHandler(() -> System.exit(SYSTEM_EXIT_ERROR_CODE))
                     .build())
                     .parseConfigurationString(localCorfuEndpoint).connect();
         }
