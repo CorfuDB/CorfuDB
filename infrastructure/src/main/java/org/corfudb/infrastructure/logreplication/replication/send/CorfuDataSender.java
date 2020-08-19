@@ -42,7 +42,5 @@ public class CorfuDataSender implements DataSender {
     }
 
     @Override
-    public void onError(LogReplicationError error) {
-
-    }
+    public void onError(LogReplicationError error) {}
 }

@@ -69,6 +69,8 @@ public abstract class SenderBufferManager {
 
     private DataSender dataSender;
 
+    private long topologyConfigId;
+
     /*
      * The messages sent to the receiver that have not been ACKed yet.
      */
@@ -119,7 +121,6 @@ public abstract class SenderBufferManager {
             errorOnMsgTimeout = Boolean.parseBoolean(props.getProperty("log_reader_error_on_message_timeout",
                     Boolean.toString(errorOnMsgTimeout)));
             reader.close();
-
         } catch (Exception e) {
             log.warn("The config file is not available {} , will use the default values for config.", config_file, e.getCause());
 
@@ -175,36 +176,38 @@ public abstract class SenderBufferManager {
 
     /**
      * Resend the messages in the queue if they have timed out.
-     * @return false, if an entry has been resent MAX_RETRY.
-     *         true, otherwise
      */
     public LogReplicationEntry resend() {
-        //Enforce a resend or not
         LogReplicationEntry ack = null;
         boolean force = false;
         try {
             ack = processAcks();
-        } catch (TimeoutException e) {
-            log.warn("Caught a timeout exception ", e);
+        } catch (TimeoutException te) {
+            // Exceptions thrown directly from the CompletableFuture.anyOf(cfs)
+            log.warn("Caught a timeout exception while processing ACKs", te);
             force = true;
+        } catch (ExecutionException ee) {
+            // Exceptions thrown from the send message completable future will be wrapped around ExecutionException
+            log.warn("Caught an execution exception while processing ACKs", ee);
+            final Throwable cause = ee.getCause();
+            if (cause instanceof TimeoutException) {
+                force = true;
+            }
         } catch (Exception e) {
-            log.warn("Caught an Exception while processing ACKs.", e);
-            return null;
+            log.warn("Caught an exception while processing ACKs.", e);
         }
 
         for (int i = 0; i < pendingMessages.getSize(); i++) {
             LogReplicationPendingEntry entry  = pendingMessages.getList().get(i);
             if (entry.timeout(msgTimer) || force) {
-                if (errorOnMsgTimeout && entry.retry >= maxRetry) {
-                    log.warn("Entry {} of type {} has been resent max times {} for timer {}.", entry.getData().getMetadata().getTimestamp(),
-                            entry.getData().getMetadata().getMessageMetadataType(), maxRetry, msgTimer);
-                    throw new LogEntrySyncTimeoutException("timeout");
-                }
-
                 entry.retry();
+                // Update metadata as topologyConfigId could have changed in between resend cycles
+                LogReplicationEntry dataEntry = entry.getData();
+                dataEntry.getMetadata().setTopologyConfigId(topologyConfigId);
                 CompletableFuture<LogReplicationEntry> cf = dataSender.send(entry.getData());
                 addCFToAcked(entry.getData(), cf);
-                log.info("resend message " + entry.getData().getMetadata().getTimestamp());
+                log.debug("Resend message {}[ts={}]", entry.getData().getMetadata().getMessageMetadataType(),
+                        entry.getData().getMetadata().getTimestamp());
             }
         }
 
@@ -235,5 +238,9 @@ public abstract class SenderBufferManager {
 
     public void onError(LogReplicationError error) {
         dataSender.onError(error);
+    }
+
+    public void updateTopologyConfigId(long topologyConfigId) {
+        this.topologyConfigId = topologyConfigId;
     }
 }
