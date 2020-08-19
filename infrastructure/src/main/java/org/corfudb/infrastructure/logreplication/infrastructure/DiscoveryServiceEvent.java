@@ -14,7 +14,7 @@ public class DiscoveryServiceEvent {
 
     @Getter
     @Setter
-    ClusterDescriptor remoteSiteInfo;
+    ClusterDescriptor remoteClusterInfo;
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
        this.type = type;
@@ -23,11 +23,6 @@ public class DiscoveryServiceEvent {
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {
         this.type = type;
         this.topologyConfig = topologyConfigMsg;
-    }
-
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId) {
-        this.type = type;
-        this.remoteSiteInfo = new ClusterDescriptor(clusterId, LogReplicationClusterInfo.ClusterRole.STANDBY);
     }
 
     public enum DiscoveryServiceEventType {

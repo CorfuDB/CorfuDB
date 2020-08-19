@@ -31,8 +31,8 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LogReplicationMetadataManager {
 
-    private static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
-    private static final String METADATA_TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
+    public static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
+    public static final String METADATA_TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
     private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
 
     private CorfuStore corfuStore;
@@ -417,8 +417,8 @@ public class LogReplicationMetadataManager {
         return builder.toString();
     }
 
-    public static String getPersistedWriterMetadataTableName(String localClusterId) {
-        return METADATA_TABLE_PREFIX_NAME + localClusterId;
+    public static String getPersistedWriterMetadataTableName(String clusteId) {
+        return METADATA_TABLE_PREFIX_NAME + clusteId;
     }
 
     public long getLogHead() {

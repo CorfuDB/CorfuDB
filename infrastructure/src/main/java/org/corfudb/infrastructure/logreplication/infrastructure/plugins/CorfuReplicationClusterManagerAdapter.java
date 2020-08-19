@@ -60,8 +60,8 @@ public interface CorfuReplicationClusterManagerAdapter {
     Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
 
     /**
-     *
-     * @param clusterID
+     * This API enforce a full snapshot sync on all standby clusters.
+     * The command can only be executed on the active cluster not the standby clusters.
      */
-    void forceSnapshotFullSync(String clusterID);
+    void forceSnapshotFullSync();
 }

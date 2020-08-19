@@ -54,7 +54,7 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
     }
 
     @Override
-    public void forceSnapshotFullSync(String clusterId) {
-        corfuReplicationDiscoveryService.forceSnapshotFullSync(clusterId);
+    public void forceSnapshotFullSync() {
+        corfuReplicationDiscoveryService.forceSnapshotFullSync();
     }
 }

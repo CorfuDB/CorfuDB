@@ -223,7 +223,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 break;
 
             case ENFORCE_SNAPSHOT_FULL_SYNC:
-                processEnforceSnapshotFullSync(event);
+                processEnforceSnapshotFullSync();
                 break;
 
             default:
@@ -675,16 +675,18 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private void processUpgrade(DiscoveryServiceEvent event) {
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             // TODO pankti: is this correct?
-            replicationManager.restart(event.getRemoteSiteInfo());
+            replicationManager.restart(event.getRemoteClusterInfo());
         }
     }
 
     /**
-     * Enforce a snapshot full sync for the specified standby site.
-     * @param event
+     * Enforce a snapshot full sync for all standbys
      */
-    private void processEnforceSnapshotFullSync(DiscoveryServiceEvent event) {
-        replicationManager.enforceSnapshotFullSync(event.getRemoteSiteInfo().getClusterId());
+    private void processEnforceSnapshotFullSync() {
+        if (replicationManager == null) {
+            return;
+        }
+        replicationManager.enforceSnapshotFullSync();
     }
 
     public synchronized void input(DiscoveryServiceEvent event) {
@@ -730,8 +732,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     @Override
-    public void forceSnapshotFullSync(String clusterId) {
-        input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_FULL_SYNC, clusterId));
+    public void forceSnapshotFullSync() {
+        if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
+            log.error("This forceSnapshotFullSync command is not supported on standby cluster.");
+            return;
+        }
+
+        input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_FULL_SYNC));
     }
 
     public void shutdown() {

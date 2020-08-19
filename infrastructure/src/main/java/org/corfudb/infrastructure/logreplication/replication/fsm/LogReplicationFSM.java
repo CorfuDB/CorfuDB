@@ -22,6 +22,8 @@ import org.corfudb.runtime.view.Address;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -182,6 +184,13 @@ public class LogReplicationFSM {
     private final LogReplicationAckReader ackReader;
 
     /**
+     * When a snapshot full sync request is enqueue in the FSM, it will reset the CF,
+     * When a snapshot full sync request is processed, the CF will
+     */
+    @Getter
+    private CompletableFuture<UUID> snapshotFullSyncUUID = new CompletableFuture<>();
+
+    /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
      * @param runtime Corfu Runtime
@@ -257,6 +266,10 @@ public class LogReplicationFSM {
         states.put(LogReplicationStateType.STOPPED, new StoppedState());
     }
 
+    private synchronized void updateSnapshotFullSyncUUID(UUID uuid) {
+            snapshotFullSyncUUID.complete(uuid);
+    }
+
     /**
      * Input function of the FSM.
      *
@@ -272,6 +285,9 @@ public class LogReplicationFSM {
             }
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
                 log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventID());
+            }
+            if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_REQUEST) {
+                snapshotFullSyncUUID = new CompletableFuture<>();
             }
             eventQueue.put(event);
         } catch (InterruptedException ex) {
@@ -323,6 +339,9 @@ public class LogReplicationFSM {
                     LogReplicationState newState = state.processEvent(event);
                     log.trace("Transition from {} to {}", state, newState);
                     transition(state, newState);
+                    if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_REQUEST) {
+                        updateSnapshotFullSyncUUID(event.getEventID());
+                    }
                     state = newState;
                     numTransitions.setValue(numTransitions.getValue() + 1);
                 } catch (IllegalTransitionException illegalState) {
