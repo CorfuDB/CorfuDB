@@ -20,12 +20,33 @@
         </encoder>
     </appender>
 
+    <appender name="metrics-file" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIRECTORY}/corfu-metrics.9000.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>${LOG_DIRECTORY}/corfu-metrics.9000.%i.log.gz</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>30</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>100MB</maxFileSize>
+        </triggeringPolicy>
+        <encoder>
+            <pattern>
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %30.30thread | %30.30logger{30} | %msg%n%xException
+            </pattern>
+        </encoder>
+    </appender>
+
     <!-- https://logback.qos.ch/manual/appenders.html#AsyncAppender -->
     <appender name="async_file" class="ch.qos.logback.classic.AsyncAppender">
         <appender-ref ref="file" />
         <queueSize>1024</queueSize>
         <maxFlushTime>5000</maxFlushTime>
     </appender>
+
+    <logger name="org.corfudb.metrics" level="INFO" additivity="false">
+        <appender-ref ref="metrics-file"/>
+    </logger>
 
     <root level="info">
         <appender-ref ref="async_file"/>

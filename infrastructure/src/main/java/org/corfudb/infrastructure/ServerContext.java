@@ -1,14 +1,36 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
+import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
+import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
+
+
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
+import java.io.File;
+import java.nio.file.Files;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import javax.annotation.Nonnull;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
+import org.corfudb.common.stats.StatsGroup;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
@@ -25,27 +47,6 @@ import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.utils.lock.Lock;
-
-import javax.annotation.Nonnull;
-import java.io.File;
-import java.nio.file.Files;
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
-import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
 /**
  * Server Context:
@@ -157,6 +158,9 @@ public class ServerContext implements AutoCloseable {
     @Getter
     private final Set<String> dsFilePrefixesForCleanup =
             Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
+
+    @Getter
+    private final StatsGroup serverStats = new StatsGroup("");
 
     /**
      * Returns a new ServerContext.
