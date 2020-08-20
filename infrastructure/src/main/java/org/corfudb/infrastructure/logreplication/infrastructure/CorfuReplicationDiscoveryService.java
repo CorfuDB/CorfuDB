@@ -507,6 +507,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     public void processLockRelease() {
         log.debug("Lock released");
         isLeader.set(false);
+        stopLogReplication();
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
         interClusterReplicationService.getLogReplicationServer().setLeadership(false);
     }
@@ -688,21 +689,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     @Override
     public void updateTopology(LogReplicationClusterInfo.TopologyConfigurationMsg topologyConfig) {
         input(new DiscoveryServiceEvent(DiscoveryServiceEventType.DISCOVERED_TOPOLOGY, topologyConfig));
-    }
-
-    /**
-     * No work needs to be done here.  If in the Active state, writes to all replicated streams have stopped at this time.
-     * Following this, the ClusterManagerAdapter can query the status of ongoing snapshot sync on the
-     * local(active) cluster.
-     */
-    @Override
-    public void prepareToBecomeStandby() {
-        if (ClusterRole.ACTIVE == localClusterDescriptor.getRole()) {
-            log.info("Received a Request to Become Standby");
-        } else {
-            log.warn("Illegal prepareToBecomeStandby when cluster {} with role {}",
-                    localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
-        }
     }
 
     /**
