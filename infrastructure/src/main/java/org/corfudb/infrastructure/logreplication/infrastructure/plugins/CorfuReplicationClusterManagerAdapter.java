@@ -43,15 +43,6 @@ public interface CorfuReplicationClusterManagerAdapter {
     void shutdown();
 
     /**
-     * While doing a cluster role type flip, it is the API used to notify the current log
-     * replication node to prepare a cluster role type change. It will do some
-     * bookkeeping to calculate the number of log entries to be sent over
-     *
-     */
-    void prepareToBecomeStandby();
-
-
-    /**
      * This API is used to query the log replication status when it is preparing a role type flip and
      * the replicated tables should be in read-only mode.
      *

@@ -95,6 +95,8 @@ public class LogReplicationServer extends AbstractServer {
                 log.info("Sending ACK {} on {} to Client ", ack.getMetadata(), ts);
                 r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_ENTRY.payloadMsg(ack));
             }
+        } else {
+            log.warn("Dropping log replication entry as this node is not the leader.");
         }
     }
 
