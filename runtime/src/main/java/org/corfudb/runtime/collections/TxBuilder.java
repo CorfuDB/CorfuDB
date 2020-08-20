@@ -15,6 +15,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.BiFunction;
 
 /**
  * TxBuilder() is a layer that aggregates mutations made to CorfuStore protobuf tables
@@ -82,7 +83,7 @@ public class TxBuilder {
      *
      * @param tableName Table name to perform the update on.
      * @param key       Key.
-     * @param value     Value to update.
+     * @param value     New value to update.
      * @param <K>       Type of Key.
      * @param <V>       Type of Value.
      * @return TxBuilder instance.
@@ -96,6 +97,37 @@ public class TxBuilder {
         Table<K, V, M> table = getTable(tableName);
         operations.add(() -> {
             table.update(key, value, metadata);
+        });
+        return this;
+    }
+
+    /**
+     * Updates the value on the specified key by applying a BiFunction
+     *
+     * @param tableName Table name to perform the update on.
+     * @param key       Key
+     * @param mutation  Function to apply to get the new value
+     * @param arg       Argument to pass to the mutation function
+     * @param <K>       Type of Key.
+     * @param <V>       Type of Value.
+     * @return TxBuilder instance
+     */
+    @Nonnull
+    public <K extends Message, V extends Message, M extends Message>
+    TxBuilder update(@Nonnull final String tableName,
+                     @Nonnull final K key,
+                     @Nonnull BiFunction<V, V, V> mutation,
+                     @Nonnull final V arg,
+                     @Nullable final M metadata) {
+        Table<K, V, M> table = getTable(tableName);
+        V currentVal = table.get(key).getPayload();
+        if (currentVal == null) {
+            throw new IllegalArgumentException(
+                    String.format("No value found for Key %s.  Please create a record first", key));
+        }
+        V newVal = mutation.apply(currentVal, arg);
+        operations.add(() -> {
+            table.update(key, newVal, metadata);
         });
         return this;
     }

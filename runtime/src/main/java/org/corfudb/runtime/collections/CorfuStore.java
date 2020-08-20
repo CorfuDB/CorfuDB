@@ -103,7 +103,7 @@ public class CorfuStore {
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    Table<K, V, M> openTable(@Nonnull final String namespace,
+    Table<K, V, M> getTable(@Nonnull final String namespace,
                              @Nonnull final String tableName) {
         return runtime.getTableRegistry().getTable(namespace, tableName);
     }

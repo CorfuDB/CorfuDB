@@ -231,11 +231,11 @@ public class CorfuStoreIT extends AbstractIT {
         final CorfuStore store3 = new CorfuStore(runtime);
 
         // Attempting to open an unopened table with the short form should throw the IllegalArgumentException
-        assertThatThrownBy(() -> store3.openTable(namespace, tableName)).
+        assertThatThrownBy(() -> store3.getTable(namespace, tableName)).
         isExactlyInstanceOf(IllegalArgumentException.class);
 
         // Attempting to open a non-existent table should throw NoSuchElementException
-        assertThatThrownBy(() -> store3.openTable(namespace, "NonExistingTableName")).
+        assertThatThrownBy(() -> store3.getTable(namespace, "NonExistingTableName")).
                 isExactlyInstanceOf(NoSuchElementException.class);
 
         store3.openTable(namespace, tableName, Uuid.class, Uuid.class, ManagedResources.class,

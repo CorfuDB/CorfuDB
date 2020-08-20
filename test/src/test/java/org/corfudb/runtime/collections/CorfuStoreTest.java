@@ -205,7 +205,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("abc").build(),
                         user_1)
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_1")
                         .setCreateTimestamp(0L)
@@ -219,7 +219,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("bcd").build(),
                         ManagedResources.newBuilder().setCreateUser("user_2").setVersion(0L).build())
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_2")
                         .setCreateTimestamp(0L)
@@ -233,7 +233,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("cde").build(),
                         user_2)
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_2")
                         .setCreateTimestamp(0L)
@@ -241,7 +241,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         .setVersion(expectedVersion).build());
 
         corfuStore.tx(nsxManager).delete(tableName, key1).commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1)).isNull();
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1)).isNull();
         expectedVersion = 0L;
 
         corfuStore.tx(nsxManager)
@@ -250,7 +250,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("def").build(),
                         user_2)
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder(user_2)
                         .setCreateTimestamp(0L)
                         .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
@@ -345,7 +345,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("abc").build(),
                         null)
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isNull();
 
         corfuStore.tx(nsxManager)
@@ -354,7 +354,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("bcd").build(),
                         ManagedResources.newBuilder().setCreateUser("testUser").setVersion(1L).build())
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isNull();
 
         corfuStore.tx(nsxManager)
@@ -363,7 +363,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("cde").build(),
                         null)
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isNull();
     }
 
