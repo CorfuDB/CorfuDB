@@ -328,16 +328,22 @@ public class LogReplicationMetadataManager {
         TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
         txBuilder.update(REPLICATION_STATUS_TABLE, key, val, null);
         txBuilder.commit();
+
+        log.trace("setReplicationRemainingEntries: clusterId: {}, remainingEntries: {}, type: {}",
+                clusterId, remainingEntries, type);
     }
 
     public Map<String, ReplicationStatusVal> getReplicationRemainingEntries() {
         Map<String, ReplicationStatusVal> replicationStatusMap = new HashMap<>();
         QueryResult<CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal>> entries =
-                corfuStore.query(NAMESPACE).executeQuery(REPLICATION_STATUS_TABLE, (x) -> {return true;});
+                corfuStore.query(NAMESPACE).executeQuery(REPLICATION_STATUS_TABLE, record -> true);
 
         for(CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal>entry : entries.getResult()) {
             replicationStatusMap.put(entry.getKey().getClusterId(), entry.getPayload());
         }
+
+        log.debug("getReplicationRemainingEntries: replicationStatusMap size: {}", replicationStatusMap.size());
+
         return replicationStatusMap;
     }
 
@@ -356,6 +362,8 @@ public class LogReplicationMetadataManager {
         TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
         txBuilder.update(REPLICATION_STATUS_TABLE, key, val, null);
         txBuilder.commit();
+
+        log.trace("setDataConsistentOnStandby: localClusterId: {}, isConsistent: {}", localClusterId, isConsistent);
     }
 
     public Map<String, ReplicationStatusVal> getDataConsistentOnStandby() {
@@ -372,6 +380,9 @@ public class LogReplicationMetadataManager {
         }
         Map<String, ReplicationStatusVal> dataConsistentMap = new HashMap<>();
         dataConsistentMap.put(localClusterId, statusVal);
+
+        log.debug("getDataConsistentOnStandby: localClusterId: {}, statusVal: {}", localClusterId, statusVal);
+
         return dataConsistentMap;
     }
 
