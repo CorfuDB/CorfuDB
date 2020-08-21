@@ -14,14 +14,23 @@ enum MessageType {
   AUTHENTICATE = 1;
   RESTART = 2;
   RESET = 3;
-  SEAL  = 4;
-  GET_LAYOUT  = 5;
-  PREPARE_LAYOUT  = 6;
+  SEAL = 4;
+
+  // Layout Message Types
+  GET_LAYOUT = 5;
+  PREPARE_LAYOUT = 6;
   PROPOSE_LAYOUT = 7;
   COMMIT_LAYOUT = 8;
   BOOTSTRAP_LAYOUT = 9;
-  GET_TOKEN = 10;
   COMMIT_TRANSACTION = 11;
+
+  // Sequencer Message Types
+  TOKEN = 10;
+  BOOTSTRAP_SEQUENCER = 12;
+  SEQUENCER_TRIM = 13;
+  SEQUENCER_METRICS = 14;
+  STREAMS_ADDRESS = 15;
+
   QUERY_STREAM = 16;
   READ_LOG = 17;
   QUERY_LOG_METADATA = 18;
@@ -180,12 +189,256 @@ message BootstrapLayoutResponse {
   Type type = 1;
 }
 
-message GetTokenRequest {
+message Token {
+  int64 epoch = 1;
+  int64 sequence = 2;
+}
+
+/**
+  proto3 does not support non integer or string keys.
+  This message contains a map of UUID to an array of bytes.
+  The bytes array can be further parsed into a Set of bytes.
+ */
+message UUIDToListOfBytesPair {
+  UUID key = 1;
+  repeated bytes value = 2;
+}
+message UUIDToListOfBytesMap {
+  repeated UUIDToListOfBytesPair entries = 1;
+}
+
+enum TokenType {
+  // Standard token issue by sequencer or a tail-query response
+  TX_NORMAL = 0;
+
+  // Token request for optimistic TX-commit rejected due to conflict
+  TX_ABORT_CONFLICT = 1;
+
+  // Token request for optimistic TX-commit rejected due to a
+  // failover-sequencer lacking conflict-resolution info
+  TX_ABORT_NEWSEQ = 2;
+
+  // Sent when a transaction aborts a transaction due to missing information
+  // (required data evicted from cache)
+  TX_ABORT_SEQ_OVERFLOW = 3;
+
+  // Sent when a transaction aborts because it has an old version (i.e. older than
+  // the trim mark). This is to detect slow transactions
+  TX_ABORT_SEQ_TRIM = 4;
+}
+
+message TxResolutionResponse {
+  /* Response type from the sequencer.*/
+  TokenType tokenType = 1;
+
+  /* Optional. In case of a conflict, what was the address at which that conflict occurred. */
+  int64 address = 2;
+
+  /* Optional. In case of a conflict, what was the key that triggered a negative response. */
+  bytes conflictingKey = 3;
+
+  /* Optional. In case of a conflict, what was the stream ID that triggered a negative response. */
+  UUID conflictingStream = 4;
+}
+
+
+message TxResolutionInfo {
+  /* transaction ID, mostly for debugging purposes */
+  UUID TXid = 1;
+
+  /* snapshot timestamp of the txn. */
+  Token snapshotTimestamp = 2;
+
+  /** A set of poisoned streams, which have a conflict against all updates. */
+  UUIDToListOfBytesMap conflictSet = 3;
+
+  UUIDToListOfBytesMap writeConflictParamsSet = 4;
+}
+
+/**
+ * A token request is at the heart of the Corfu log protocol.
+ *
+ * <p>There are four token request scenarios, designated by the relevant constants :
+ * 0. TokenRequestType::TK_QUERY : Query of the current log tail and of specific stream-tails.
+ * 1. TokenRequestType::TK_RAW : Ask for raw (global) log token(s).
+ *              This extends the global log tail by the requested # of tokens.
+ * 2. TokenRequestType::TK_MULTI_STREAM : Ask for token(s) on multiple streams.
+ *          This extends both the global log tail, and each of the specified stream tails,
+ *          by the requested # of tokens.
+ * 3. TokenRequestType::TK_TX :
+ *          First, check transaction resolution. If transaction can commit, then behave
+ *          like TokenRequestType::TK_MULTI_STREAM.</p>
+ */
+message TokenRequest {
+  enum TokenRequestType {
+    TK_QUERY = 0;
+    TK_RAW = 1;
+    TK_MULTI_STREAM = 2;
+    TK_TX = 3;
+  }
+  TokenRequestType requestType = 11;
+  int64 numTokens = 12;
+  repeated UUID streams = 13;
+  TxResolutionInfo txnResolution = 14;
+}
+
+/**
+  proto3 does not support non integer or string keys.
+  This message contains a map of UUID to an array of bytes.
+  The bytes array can be further parsed into a Set of bytes.
+ */
+message UUIDToLongPair {
+  UUID key = 1;
+  int64 value = 2;
+}
+
+message UUIDToLongMap {
+  repeated UUIDToLongPair entries = 1;
+}
+
+message TokenResponse {
+  /** the cause/type of response. */
+  TokenType respType = 1;
+
+  // In case of a conflict, signal to the client which key was responsible for the conflict.
+  bytes conflictKey = 2;
+
+  // In case of a conflict, signal to the client which stream was responsible for the conflict.
+  UUID conflictStream = 3;
+
+  /** The current token or global log tail in the case of stream tails query */
+  Token token = 4;
+
+  /** The backPointer map, if available. */
+  UUIDToLongMap backPointerMap = 5;
+  UUIDToLongMap streamTails = 6;
+}
+
+/**
+ * This class represents the space of all addresses belonging to a stream.
+ *
+ * A stream's address space is defined by:
+ *       1. The collection of all addresses that belong to this stream.
+ *       2. The trim mark (last trimmed address, i.e., an address that is no longer present and that was subsumed by
+ *       a checkpoint).
+ */
+message StreamAddressSpace {
+  int32 NO_ADDRESSES = 1; // For numeric types, the default value is zero.
+
+  // Holds the last trimmed address for this stream.
+  // Note: keeping the last trimmed address is required in order to properly set the stream tail on sequencer resets
+  // when a stream has been checkpointed and trimmed and there are no further updates to this stream.
+  uint64 trimMark = 2;
+
+  // Holds the complete map of addresses for this stream. (of type Roaring64NavigableMap)
+  bytes addressMap = 3;
 
 }
 
-message GetTokenResponse {
+message UUIDToStreamAddressPair {
+  UUID key = 1;
+  StreamAddressSpace value = 2;
+}
 
+
+message UUIDToStreamAddressMap {
+  repeated UUIDToStreamAddressPair entries = 1;
+}
+
+// SequencerRecoveryMsg
+message BootStrapSequencerRequest {
+  int64 globalTail = 1;
+  UUIDToStreamAddressMap streamsAddressMap = 2;
+  int64 sequencerEpoch = 3;
+
+  /**
+   * Boolean flag to denote whether this bootstrap message is just updating an existing primary
+   * sequencer with the new epoch (if set to true) or bootstrapping a currently NOT_READY
+   * sequencer.
+   */
+  bool bootstrapWithoutTailsUpdate = 4;
+}
+
+message BootStrapSequencerResponse {
+
+}
+
+message SequencerTrimRequest {
+  int64 trimMark = 1;
+}
+
+message SequencerTrimResponse {
+
+}
+
+message SequencerMetricsRequest {
+
+}
+
+/**
+ * Sequencer metrics for a node.
+ */
+message SequencerMetrics {
+  enum SequencerStatus {
+    // Sequencer is in READY state, and can dispatch tokens.
+    READY = 0;
+    // Sequencer is in a NOT_READY state.
+    NOT_READY = 1;
+    // Unknown state.
+    UNKNOWN = 2;
+  }
+  /**
+   * Ready state of a sequencer to determine its READY/NOT_READY state.
+   */
+  SequencerStatus sequencerStatus = 1;
+}
+
+
+message SequencerMetricsResponse {
+    SequencerMetrics sequencerMetrics = 1;
+}
+
+/**
+ * This message represents a range of addresses for a stream.
+ *
+ * This is used to request the address map of a stream in
+ * a given boundary-- limits given by (end, start].
+ *
+ */
+message StreamAddressRange {
+  UUID streamID = 1;
+  // Start is inclusive
+  int64 start = 2;
+  // End is exclusive
+  // TODO verify (end, start] as per description above
+  int64 end = 3;
+}
+
+/**
+ * Represents the request sent to the sequencer to retrieve one or several streams address map.
+ */
+message StreamsAddressRequest {
+  enum Type {
+    /*To request specific streams*/
+    STREAMS = 0;
+    /*To request all streams*/
+    ALL_STREAMS = 1;
+  }
+  /** The type of request, one of the above. */
+  Type reqType = 1;
+  repeated StreamAddressRange streamsRanges = 2;
+}
+
+/**
+ * Represents the response sent by the sequencer when streams address maps are requested
+ * (i.e. StreamsAddressRequest)
+ *
+ * It contains a per stream map with its corresponding address space
+ * (composed of the addresses of this stream and trim mark)
+ */
+message StreamsAddressResponse {
+  uint64 logTail = 1;
+  UUIDToStreamAddressMap addressMap = 2;
 }
 
 message CommitTransactionRequest {
@@ -297,23 +550,32 @@ message Request {
     RestartRequest restartRequest = 102;
     ResetRequest resetRequest = 103;
     SealRequest sealRequest = 104;
+
+    // Layout Requests
     GetLayoutRequest getLayoutRequest = 105;
     PrepareLayoutRequest prepareLayoutRequest = 106;
     ProposeLayoutRequest proposeLayoutRequest = 107;
     CommitLayoutRequest commitLayoutRequest = 108;
     BootstrapLayoutRequest bootstrapLayoutRequest = 109;
-    GetTokenRequest getTokenRequest = 110;
-    CommitTransactionRequest commitTransactionRequest = 111;
-    QueryStreamRequest queryStreamRequest = 112;
-    ReadLogRequest ReadLogRequest = 113;
-    QueryLogMetadataRequest queryLogMetadataRequest = 114;
-    TrimLogRequest trimLogRequest = 115;
-    CompactRequest compactRequest = 116;
-    FlashRequest flashRequest = 117;
-    QueryNodeRequest queryNodeRequest = 118;
-    ReportFailureRequest reportFailureRequest = 119;
-    HealFailureRequest healFailureRequest = 120;
-    ExecuteWorkflowRequest executeWorkflowRequest = 121;
+
+    // Sequencer Requests
+    TokenRequest tokenRequest = 110;
+    BootStrapSequencerRequest BootStrapSequencerRequest = 111;
+    SequencerTrimRequest sequencerTrimRequest = 112;
+    SequencerMetricsRequest sequencerMetricsRequest = 113;
+    StreamsAddressRequest streamsAddressRequest = 114;
+
+    CommitTransactionRequest commitTransactionRequest = 115;
+    QueryStreamRequest queryStreamRequest = 116;
+    ReadLogRequest ReadLogRequest = 117;
+    QueryLogMetadataRequest queryLogMetadataRequest = 118;
+    TrimLogRequest trimLogRequest = 119;
+    CompactRequest compactRequest = 120;
+    FlashRequest flashRequest = 121;
+    QueryNodeRequest queryNodeRequest = 122;
+    ReportFailureRequest reportFailureRequest = 123;
+    HealFailureRequest healFailureRequest = 124;
+    ExecuteWorkflowRequest executeWorkflowRequest = 125;
   }
 }
 
@@ -327,22 +589,31 @@ message Response {
     RestartResponse restartResponse = 102;
     ResetResponse resetResponse = 103;
     SealResponse sealResponse = 104;
+
+    // Layout Responses
     GetLayoutResponse getLayoutResponse = 105;
     PrepareLayoutResponse prepareLayoutResponse = 106;
     ProposeLayoutResponse proposeLayoutResponse = 107;
     CommitLayoutResponse commitLayoutResponse = 108;
     BootstrapLayoutResponse bootstrapLayoutResponse = 109;
-    GetTokenResponse getTokenResponse = 110;
-    CommitTransactionResponse commitTransactionResponse = 111;
-    QueryStreamResponse queryStreamResponse = 112;
-    ReadLogResponse readLogResponse = 113;
-    QueryLogMetadataResponse queryLogMetadataResponse = 114;
-    TrimLogResponse trimLogResponse = 115;
-    CompactResponse compactResponse = 116;
-    FlashResponse flashResponse = 117;
-    QueryNodeResponse queryNodeResponse = 118;
-    ReportFailureResponse reportFailureResponse = 119;
-    HealFailureResponse healFailureResponse = 120;
-    ExecuteWorkflowResponse executeWorkflowResponse = 121;
+
+    // Sequencer Responses
+    TokenResponse tokenResponse = 110;
+    BootStrapSequencerResponse BootStrapSequencerResponse = 111;
+    SequencerTrimResponse sequencerTrimResponse = 112;
+    SequencerMetricsResponse sequencerMetricsResponse = 113;
+    StreamsAddressResponse streamsAddressResponse = 114;
+
+    CommitTransactionResponse commitTransactionResponse = 115;
+    QueryStreamResponse queryStreamResponse = 116;
+    ReadLogResponse readLogResponse = 117;
+    QueryLogMetadataResponse queryLogMetadataResponse = 118;
+    TrimLogResponse trimLogResponse = 119;
+    CompactResponse compactResponse = 120;
+    FlashResponse flashResponse = 121;
+    QueryNodeResponse queryNodeResponse = 122;
+    ReportFailureResponse reportFailureResponse = 123;
+    HealFailureResponse healFailureResponse = 124;
+    ExecuteWorkflowResponse executeWorkflowResponse = 125;
   }
 }

@@ -1,35 +1,17 @@
 package org.corfudb.common.protocol;
 
+import com.google.protobuf.ByteString;
+import lombok.NonNull;
 import org.corfudb.common.protocol.proto.CorfuProtocol;
-import org.corfudb.common.protocol.proto.CorfuProtocol.ERROR;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
-import org.corfudb.common.protocol.proto.CorfuProtocol.PingRequest;
-import org.corfudb.common.protocol.proto.CorfuProtocol.PingResponse;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Priority;
-import org.corfudb.common.protocol.proto.CorfuProtocol.ProtocolVersion;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.common.protocol.proto.CorfuProtocol.ResetRequest;
-import org.corfudb.common.protocol.proto.CorfuProtocol.ResetResponse;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
-import org.corfudb.common.protocol.proto.CorfuProtocol.RestartRequest;
-import org.corfudb.common.protocol.proto.CorfuProtocol.RestartResponse;
-import org.corfudb.common.protocol.proto.CorfuProtocol.SealRequest;
-import org.corfudb.common.protocol.proto.CorfuProtocol.SealResponse;
-import org.corfudb.common.protocol.proto.CorfuProtocol.GetLayoutRequest;
-import org.corfudb.common.protocol.proto.CorfuProtocol.GetLayoutResponse;
-import org.corfudb.common.protocol.proto.CorfuProtocol.PrepareLayoutRequest;
-import org.corfudb.common.protocol.proto.CorfuProtocol.PrepareLayoutResponse;
-import org.corfudb.common.protocol.proto.CorfuProtocol.ProposeLayoutRequest;
-import org.corfudb.common.protocol.proto.CorfuProtocol.ProposeLayoutResponse;
-import org.corfudb.common.protocol.proto.CorfuProtocol.CommitLayoutRequest;
-import org.corfudb.common.protocol.proto.CorfuProtocol.CommitLayoutResponse;
-import org.corfudb.common.protocol.proto.CorfuProtocol.BootstrapLayoutRequest;
-import org.corfudb.common.protocol.proto.CorfuProtocol.BootstrapLayoutResponse;
-import org.corfudb.common.protocol.proto.CorfuProtocol.ServerError;
-import org.corfudb.common.protocol.proto.CorfuProtocol.WrongClusterPayload;
+import org.corfudb.common.protocol.proto.CorfuProtocol.*;
+import org.corfudb.common.util.Address;
 
 import java.util.UUID;
+import java.util.*;
+
+import static org.corfudb.common.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType;
+import static org.corfudb.common.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType.*;
+import static org.corfudb.common.protocol.proto.CorfuProtocol.TokenRequest.newBuilder;
 
 /**
  * Created by Maithem on 7/1/20.
@@ -51,6 +33,10 @@ public class API {
                 .setLsb(uuid.getLeastSignificantBits())
                 .setMsb(uuid.getMostSignificantBits())
                 .build();
+    }
+
+    public static UUID getJavaUUID(CorfuProtocol.UUID uuid) {
+        return new UUID(uuid.getLsb(),uuid.getMsb());
     }
 
     public static Header getHeader(long requestId, Priority priority, MessageType type, long epoch,
@@ -221,6 +207,381 @@ public class API {
                 .build();
     }
 
+    /**
+     * Create a new TokenRequest with the parameters.
+     *
+     * @param numTokens number of tokens
+     * @param streams streams containing the Java UUIDs
+     * @param conflictInfo conflict TxResolutionInfo
+     * @param tokenRequestType The tokenRequestType indicating the scenario of the token request
+     * @return new TokenRequest proto object.
+     */
+    public static TokenRequest getTokenRequest(Long numTokens, List<UUID> streams,
+                                               TxResolutionInfo conflictInfo,
+                                               TokenRequestType tokenRequestType){
+        // converting java UUID streams to Proto UUID streams
+        List<CorfuProtocol.UUID> protoStreams = new ArrayList<>();
+        if (streams!=null)
+            streams.forEach((uuid -> protoStreams.add(getUUID(uuid))));
+
+        return newBuilder()
+                .setRequestType(tokenRequestType)
+                .setNumTokens(numTokens)
+                .addAllStreams(protoStreams)
+                .setTxnResolution(conflictInfo)
+                .build();
+    }
+
+    /**
+     * Create a new TokenRequest with the parameters.
+     *
+     * @param numTokens number of tokens
+     * @param streams streams containing the Java UUIDs
+     * @param conflictInfo conflict TxResolutionInfo
+     * @return new TokenRequest proto object.
+     */
+    public static TokenRequest getTokenRequest(Long numTokens, List<UUID> streams,
+                                               TxResolutionInfo conflictInfo){
+        return getTokenRequest(numTokens, streams, conflictInfo, TK_TX);
+    }
+
+    /**
+     * Create a new TokenRequest with the parameters.
+     *
+     * @param numTokens number of tokens
+     * @param streams streams containing the Java UUIDs
+     * @return new TokenRequest proto object.
+     */
+    public static TokenRequest getTokenRequest(Long numTokens, List<UUID> streams){
+        if (numTokens == 0) {
+            return getTokenRequest(numTokens, streams, null, TK_QUERY);
+        } else if (streams == null || streams.isEmpty()) {
+            return getTokenRequest(numTokens, null, null, TK_RAW);
+        } else {
+            return getTokenRequest(numTokens, streams, null, TK_MULTI_STREAM);
+        }
+    }
+
+    /**
+     * Given two tokens return the comparator value
+     * @param a first token
+     * @param b second token
+     * @return the value 0 if a == b;
+     *          a value less than 0 if a < b;
+     *          and a value greater than 0 if a > b
+     */
+    public static int compareToken(Token a, Token b) {
+        int epochCmp = Long.compare(a.getEpoch(), b.getEpoch());
+        if (epochCmp == 0) {
+            return Long.compare(a.getSequence(), b.getSequence());
+        }
+        return epochCmp;
+    }
+
+    /**
+     * Given two tokens return the min token
+     * @param a first token
+     * @param b second token
+     * @return the reference to the min token
+     */
+    public static Token getMinToken(Token a, Token b) {
+        if (compareToken(a,b) <= 0) {
+            return a;
+        } else {
+            return b;
+        }
+    }
+
+    public static Token getToken(long epoch, long sequence){
+        return Token.newBuilder()
+                .setEpoch(epoch)
+                .setSequence(sequence)
+                .build();
+    }
+
+    public static Token getUninitializedToken(){
+        return getToken(Address.NON_ADDRESS, Address.NON_ADDRESS);
+    }
+
+    /**
+     * Create a new TxResolutionInfo with the parameters.
+     *
+     * @param txId transaction identifier
+     * @param snapshotTimestamp transaction snapshot timestamp
+     * @param conflictMap map of conflict parameters, arranged by stream IDs
+     * @param writeConflictParamsSet map of write conflict parameters, arranged by stream IDs
+     *
+     * @return new TxResolutionInfo proto object.
+     */
+    public static TxResolutionInfo getTxResolutionInfo(UUID txId, Token snapshotTimestamp,
+            Map<UUID, Set<byte[]>> conflictMap, Map<UUID, Set<byte[]>> writeConflictParamsSet) {
+
+        // converting conflictMap of java Map<UUID, Set<byte[]>>
+        // to a Map of Proto UUIDToListOfBytesMap with entries as UUIDToListOfBytesPair
+        UUIDToListOfBytesMap.Builder protoConflictMapBuilder = UUIDToListOfBytesMap.newBuilder();
+
+        conflictMap.forEach((uuid, bytes) -> {
+            // Create a List of ByteStrings for each UUID
+            // ByteString = Protobuf's Immutable sequence of bytes (similar to byte[])
+            List<ByteString> byteStringList = new ArrayList<>();
+
+            // Parse the Set of array of bytes(byte[]) for each UUID and
+            // create a ByteString for each entry(byte[]) and add to byteStringList
+            bytes.forEach(bytes1 -> byteStringList.add(ByteString.copyFrom(bytes1)));
+
+            // Add the newly created entry of UUIDToListOfBytesPair to the UUIDToListOfBytesMap builder
+            protoConflictMapBuilder.addEntries(
+                    UUIDToListOfBytesPair.newBuilder()
+                            .setKey(getUUID(uuid))
+                            .addAllValue(byteStringList)
+                            .build()
+            );
+        });
+        protoConflictMapBuilder.build();
+
+
+        // converting writeConflictParamsSet of java Map<UUID, Set<byte[]>>
+        // to a Map of Proto UUIDToListOfBytesMap with entries as UUIDToListOfBytesPair
+        UUIDToListOfBytesMap.Builder protoWriteConflictParamsBuilder = UUIDToListOfBytesMap.newBuilder();
+        writeConflictParamsSet.forEach((uuid, bytes) -> {
+            // Create a List of ByteStrings for each UUID
+            // ByteString = Protobuf's Immutable sequence of bytes (similar to byte[])
+            List<ByteString> byteStringList = new ArrayList<>();
+
+            // Parse the Set of array of bytes(byte[]) for each UUID and
+            // create a ByteString for each entry(byte[]) and add to byteStringList
+            bytes.forEach(bytes1 -> byteStringList.add(ByteString.copyFrom(bytes1)));
+
+            // Add the newly created entry of UUIDToListOfBytesPair to the UUIDToListOfBytesMap builder
+            protoWriteConflictParamsBuilder.addEntries(
+                                    UUIDToListOfBytesPair.newBuilder()
+                                            .setKey(getUUID(uuid))
+                                            .addAllValue(byteStringList)
+                                            .build()
+            );
+        });
+        protoWriteConflictParamsBuilder.build();
+
+        return TxResolutionInfo.newBuilder()
+                .setTXid(getUUID(txId))
+                .setSnapshotTimestamp(snapshotTimestamp)
+                .setConflictSet(protoConflictMapBuilder)
+                .setWriteConflictParamsSet(protoWriteConflictParamsBuilder)
+                .build();
+    }
+
+    /**
+     * Create a new TxResolutionInfo with the parameters.
+     *
+     * @param txId transaction identifier
+     * @param snapshotTimestamp transaction snapshot timestamp
+     */
+    public static TxResolutionInfo getTxResolutionInfo(UUID txId, Token snapshotTimestamp) {
+        return getTxResolutionInfo(txId, snapshotTimestamp, Collections.emptyMap(),
+                Collections.emptyMap());
+    }
+
+    public static final byte[] TOKEN_RESPONSE_NO_CONFLICT_KEY = new byte[]{ 0 };
+    public static final UUID TOKEN_RESPONSE_NO_CONFLICT_STREAM = new UUID(0, 0);
+
+    public static UUIDToLongMap getProtoUUIDToLongMap(Map<UUID, Long> javaUuidLongMap){
+        UUIDToLongMap.Builder uuidToLongMapBuilder = UUIDToLongMap.newBuilder();
+        // For every entry in uuidLongMap,
+        // create and add a new UUIDToLongPair to the UUIDToLongMap builder
+        javaUuidLongMap.forEach((uuid, aLong) -> uuidToLongMapBuilder.addEntries(
+                UUIDToLongPair.newBuilder().setKey(getUUID(uuid)).setValue(aLong).build()
+        ));
+        return uuidToLongMapBuilder.build();
+    }
+
+    /**
+     * Create a new TokenResponse with the parameters.
+     *
+     * @param token token value
+     * @param backPointerMap  map of backPointers for all requested streams
+     */
+    public static CorfuProtocol.TokenResponse getTokenResponse(CorfuProtocol.Token token,
+                                                               UUIDToLongMap backPointerMap){
+        return getTokenResponse(
+                TokenType.TX_NORMAL,
+                ByteString.copyFrom(TOKEN_RESPONSE_NO_CONFLICT_KEY),
+                getUUID(TOKEN_RESPONSE_NO_CONFLICT_STREAM),
+                token,
+                backPointerMap,
+                UUIDToLongMap.getDefaultInstance()
+        );
+    }
+
+    /**
+     * Create a new TokenResponse with the parameters.
+     *
+     * @param tokenType token type
+     * @param conflictingKey the key responsible for the conflict
+     * @param conflictingStream the stream responsible for the conflict
+     * @param token token value
+     * @param backPointerMap map of backPointers for all requested streams
+     * @param streamTails map of streamTails
+     * @return new TokenResponse proto object
+     */
+    public static CorfuProtocol.TokenResponse getTokenResponse(TokenType tokenType,
+               ByteString conflictingKey, CorfuProtocol.UUID conflictingStream, CorfuProtocol.Token token,
+               UUIDToLongMap backPointerMap, UUIDToLongMap streamTails){
+
+        return TokenResponse.newBuilder()
+                .setRespType(tokenType)
+                .setConflictKey(conflictingKey)
+                .setConflictStream(conflictingStream)
+                .setToken(token)
+                .setBackPointerMap(backPointerMap)
+                .setStreamTails(streamTails)
+                .build();
+    }
+
+    /**
+     * Create a new {@link CorfuProtocol.Response} proto object with the parameters.
+     *
+     * @param tokenResponse token response proto object
+     * @return new {@link CorfuProtocol.Response} proto object
+     */
+    public static CorfuProtocol.Response getTokenResponse(Header header, TokenResponse tokenResponse){
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setTokenResponse(tokenResponse)
+                .build();
+    }
+
+    /**
+     * Create a new TxResolutionResponse with the parameters.
+     *
+     * @param tokenType response type from the sequencer
+     */
+    public static TxResolutionResponse getTxResolutionResponse(CorfuProtocol.TokenType tokenType,
+           long keyAddress, ByteString conflictParam, CorfuProtocol.UUID conflictStream) {
+        return TxResolutionResponse.newBuilder()
+                .setTokenType(tokenType)
+                .setAddress(Address.NON_ADDRESS)
+                .setConflictingKey(conflictParam)
+                .setConflictingStream(conflictStream)
+                .build();
+    }
+
+    /**
+     * Create a new TxResolutionResponse with the parameters.
+     *
+     * @param tokenType response type from the sequencer
+     */
+    public static TxResolutionResponse getTxResolutionResponse(CorfuProtocol.TokenType tokenType) {
+        return getTxResolutionResponse(
+                tokenType,
+                Address.NON_ADDRESS,
+                ByteString.copyFrom(TOKEN_RESPONSE_NO_CONFLICT_KEY),
+                getUUID(TOKEN_RESPONSE_NO_CONFLICT_STREAM));
+    }
+
+    public static StreamAddressRange getSteamAddressRange(CorfuProtocol.UUID streamID, long start,
+                                                         long end){
+        return StreamAddressRange.newBuilder()
+                .setStreamID(streamID)
+                .setStart(start)
+                .setEnd(end)
+                .build();
+    }
+
+    public static StreamsAddressRequest getStreamsAddressRequest(@NonNull List<StreamAddressRange> streamsRanges){
+        return StreamsAddressRequest.newBuilder()
+                .setReqType(StreamsAddressRequest.Type.STREAMS)
+                .addAllStreamsRanges(streamsRanges)
+                .build();
+    }
+
+    public static Request getSequencerTrimRequest(Header header, long trimMark) {
+        SequencerTrimRequest sequencerTrimRequest = SequencerTrimRequest.newBuilder()
+                .setTrimMark(trimMark)
+                .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setSequencerTrimRequest(sequencerTrimRequest)
+                .build();
+    }
+
+    public static SequencerMetrics getSequencerMetrics(SequencerMetrics.SequencerStatus sequencerStatus){
+        return SequencerMetrics.newBuilder()
+                .setSequencerStatus(sequencerStatus)
+                .build();
+    }
+
+    public static Response getSequencerTrimResponse(Header header) {
+        SequencerTrimResponse sequencerTrimResponse = SequencerTrimResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setSequencerTrimResponse(sequencerTrimResponse)
+                .build();
+    }
+
+    public static Request getSequencerMetricsRequest(Header header) {
+        SequencerMetricsRequest sequencerMetricsRequest = SequencerMetricsRequest.getDefaultInstance();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setSequencerMetricsRequest(sequencerMetricsRequest)
+                .build();
+    }
+
+    public static Response getSequencerMetricsResponse(Header header,
+                                                       SequencerMetrics sequencerMetrics) {
+        SequencerMetricsResponse sequencerMetricsResponse = SequencerMetricsResponse
+                .newBuilder()
+                .setSequencerMetrics(sequencerMetrics)
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setSequencerMetricsResponse(sequencerMetricsResponse)
+                .build();
+    }
+
+    public static Request getBootStrapSequencerRequest(Header header, long globalTail,
+            UUIDToStreamAddressMap streamAddressMap, long sequencerEpoch,
+                                                       boolean bootstrapWithoutTailsUpdate) {
+        BootStrapSequencerRequest bootStrapSequencerRequest = BootStrapSequencerRequest.newBuilder()
+                .setGlobalTail(globalTail)
+                .setStreamsAddressMap(streamAddressMap)
+                .setSequencerEpoch(globalTail)
+                .setBootstrapWithoutTailsUpdate(bootstrapWithoutTailsUpdate)
+                .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setBootStrapSequencerRequest(bootStrapSequencerRequest)
+                .build();
+    }
+
+    public static Response getBootStrapSequencerResponse(Header header) {
+        BootStrapSequencerResponse bootStrapSequencerResponse = BootStrapSequencerResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setBootStrapSequencerResponse(bootStrapSequencerResponse)
+                .build();
+    }
+
+    public static StreamsAddressResponse getStreamsAddressResponse(long logTail, UUIDToStreamAddressMap streamsAddressesMap) {
+        return StreamsAddressResponse.newBuilder()
+                .setLogTail(logTail)
+                .setAddressMap(streamsAddressesMap)
+                .build();
+    }
+
+    public static Response getStreamsAddressResponse(Header header, long logTail, UUIDToStreamAddressMap streamsAddressesMap) {
+        StreamsAddressResponse streamsAddressResponse =
+                getStreamsAddressResponse(logTail, streamsAddressesMap);
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setStreamsAddressResponse(streamsAddressResponse)
+                .build();
+    }
+
     public static Request getGetLayoutRequest(Header header, long epoch) {
         GetLayoutRequest getLayoutRequest = GetLayoutRequest.newBuilder()
                 .setEpoch(epoch)
@@ -367,8 +728,8 @@ public class API {
             case BOOTSTRAP_LAYOUT:
                 if (request.hasBootstrapLayoutRequest()) return true;
                 break;
-            case GET_TOKEN:
-                if (request.hasGetTokenRequest()) return true;
+            case TOKEN:
+                if (request.hasTokenRequest()) return true;
                 break;
             case COMMIT_TRANSACTION:
                 if (request.hasCommitTransactionRequest()) return true;
@@ -409,4 +770,6 @@ public class API {
 
         return false;
     }
+
+
 }

@@ -5,6 +5,7 @@ import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.protocol.proto.CorfuProtocol;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -117,6 +118,16 @@ public class Utils {
      */
     public static String toReadableId(UUID id) {
         return Long.toHexString((id.getLeastSignificantBits()) & 0xFFFF);
+    }
+
+    /**
+     * Generates a human readable UUID string (4 hex chars) using time_mid.
+     *
+     * @param id    The UUID to parse
+     * @return      A human readable UUID string
+     */
+    public static String toReadableId(CorfuProtocol.UUID id) {
+        return Long.toHexString((id.getLsb()) & 0xFFFF);
     }
 
     /**
