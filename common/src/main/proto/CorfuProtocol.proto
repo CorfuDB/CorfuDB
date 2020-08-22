@@ -410,7 +410,6 @@ message StreamAddressRange {
   // Start is inclusive
   int64 start = 2;
   // End is exclusive
-  // TODO verify (end, start] as per description above
   int64 end = 3;
 }
 

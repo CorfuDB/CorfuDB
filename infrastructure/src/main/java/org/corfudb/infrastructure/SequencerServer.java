@@ -521,7 +521,8 @@ public class SequencerServer extends AbstractServer {
             }
         }
 
-        Header responseHeader = generateResponseHeader(req.getHeader(), false, false);
+        Header responseHeader = generateResponseHeader(req.getHeader(),
+                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
         CorfuProtocol.TokenResponse tokenResponse = getTokenResponse(
                 CorfuProtocol.TokenType.TX_NORMAL,
                 ByteString.copyFrom(TOKEN_RESPONSE_NO_CONFLICT_KEY),
@@ -1297,8 +1298,7 @@ public class SequencerServer extends AbstractServer {
             UUID streamId = streamAddressRange.getStreamID();
             // Get all addresses in the requested range
             if (streamsAddressMap.containsKey(streamId)) {
-                addressMap = getAddressesInRange(streamAddressRange,
-                        streamsAddressMap.get(streamId).getAddressMap());
+                addressMap = streamsAddressMap.get(streamId).getAddressesInRange(streamAddressRange);
                 requestedAddressSpaces.put(streamId,
                         new StreamAddressSpace(streamsAddressMap.get(streamId).getTrimMark(), addressMap));
             } else {
@@ -1340,7 +1340,7 @@ public class SequencerServer extends AbstractServer {
 
     /**
      * Get addresses in range (end, start], where start > end.
-     * (This method was moved to this class from {@link StreamAddressSpace})
+     * (This method's proto version was copied to this class from {@link StreamAddressSpace})
      *
      * @return Bitmap with addresses in this range.
      */
@@ -1363,30 +1363,7 @@ public class SequencerServer extends AbstractServer {
         return addressesInRange;
     }
 
-    /**
-     * Get addresses in range (end, start], where start > end.
-     * (This method was moved to this class from {@link StreamAddressSpace})
-     *
-     * @return Bitmap with addresses in this range.
-     */
-    public Roaring64NavigableMap getAddressesInRange(StreamAddressRange range,
-                                                     Roaring64NavigableMap addressMap) {
-        Roaring64NavigableMap addressesInRange = new Roaring64NavigableMap();
-        if (range.getStart() > range.getEnd()) {
-            addressMap.forEach(address -> {
-                // Because our search is referenced to the stream's tail => (end < start]
-                if (address > range.getEnd() && address <= range.getStart()) {
-                    addressesInRange.add(address);
-                }
-            });
-        }
 
-        log.trace("getAddressesInRange[{}]: address map in range [{}-{}] has a total of {} addresses.",
-                Utils.toReadableId(range.getStreamID()), range.getEnd(),
-                range.getStart(), addressesInRange.getLongCardinality());
-
-        return addressesInRange;
-    }
 
     /**
      * Sequencer server configuration

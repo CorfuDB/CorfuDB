@@ -62,12 +62,6 @@
             <artifactId>protobuf-java</artifactId>
             <version>3.6.1</version>
         </dependency>
-        <dependency>
-            <groupId>org.roaringbitmap</groupId>
-            <artifactId>RoaringBitmap</artifactId>
-            <version>0.8.13</version>
-            <scope>compile</scope>
-        </dependency>
     </dependencies>
 
     <build>
