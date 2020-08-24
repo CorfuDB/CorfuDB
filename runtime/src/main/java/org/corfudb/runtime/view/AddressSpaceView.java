@@ -13,13 +13,26 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.NavigableSet;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -38,21 +51,6 @@ import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.NavigableSet;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 
 /**
@@ -503,17 +501,6 @@ public class AddressSpaceView extends AbstractView {
     }
 
     /**
-     * Get log address space, which includes:
-     * 1. Addresses belonging to each stream.
-     * 2. Log Tail.
-     *
-     * @return log address space
-     */
-    public StreamsAddressResponse getLogAddressSpace() {
-        return layoutHelper(Utils::getLogAddressSpace);
-    }
-
-    /**
      * Get the maximum committed log tail from all log units.
      *
      * @return the maximum committed log tail
@@ -531,7 +518,8 @@ public class AddressSpaceView extends AbstractView {
      * @param end   end of address range, inclusive
      */
     public void commit(long start, long end) {
-        if (start >= end) {
+        if (start > end) {
+            log.trace("commit: range [{}, {}] start > end, skip.", start, end);
             return;
         }
 

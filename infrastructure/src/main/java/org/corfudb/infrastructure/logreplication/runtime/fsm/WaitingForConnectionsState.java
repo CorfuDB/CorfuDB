@@ -13,7 +13,6 @@ public class WaitingForConnectionsState implements LogReplicationRuntimeState {
 
     private CorfuLogReplicationRuntime fsm;
 
-
     public WaitingForConnectionsState(CorfuLogReplicationRuntime fsm) {
         this.fsm = fsm;
     }

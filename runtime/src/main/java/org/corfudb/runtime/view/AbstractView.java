@@ -89,7 +89,6 @@ public abstract class AbstractView {
                 log.error("getLayoutUninterruptibly: Encountered error. Aborting layoutHelper", ex);
                 throw (Error) ex.getCause();
             }
-
             if (ex.getCause() instanceof RuntimeException) {
                 log.error("getLayoutUninterruptibly: Encountered unchecked exception. "
                         + "Aborting layoutHelper", ex);
@@ -151,6 +150,8 @@ public abstract class AbstractView {
                     log.warn("layoutHelper: System seems unavailable", re);
                 } else if (re instanceof WrongClusterException) {
                     log.warn("layoutHelper: Cluster reconfiguration or incorrect cluster", re);
+                    log.info("layoutHelper: Invoking the systemDownHandler.");
+                    runtime.getParameters().getSystemDownHandler().run();
                     throw re;
                 }else {
                     throw re;

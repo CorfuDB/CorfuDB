@@ -16,9 +16,12 @@ import java.util.Observable;
 import java.util.Observer;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeoutException;
+
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
@@ -39,8 +42,10 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -138,7 +143,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     /* ******** Expected Values on Observables ******** */
 
     // Set per test according to the expected number of ACKs that will unblock the code waiting for the value change
-    private int expectedAckMessages = 0;
+    private long expectedAckMessages = 0;
 
     // Set per test according to the expected ACK's timestamp.
     private long expectedAckTimestamp = Long.MAX_VALUE;
@@ -297,7 +302,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                 }
             }
             rt.getObjectsView().TXEnd();
-            long tail = rt.getAddressSpaceView().getLogAddressSpace().getAddressMap().get(ObjectsView.TRANSACTION_STREAM_ID).getTail();
+            long tail = Utils.getLogAddressSpace(rt
+                    .getLayoutView().getRuntimeLayout())
+                    .getAddressMap()
+                    .get(ObjectsView.TRANSACTION_STREAM_ID).getTail();
             expectedAckTimestamp = Math.max(tail, expectedAckTimestamp);
         }
 
@@ -707,23 +715,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         verifyData(dstCorfuTables, srcDataForVerification);
     }
 
-
-    @Test
-    public void testLogEntrySyncValidCrossTablesWithTriggerTimeout() throws Exception {
-        // Write data in transaction to t0 and t1
-        Set<String> crossTables = new HashSet<>();
-        crossTables.add(t0);
-        crossTables.add(t1);
-
-        writeCrossTableTransactions(crossTables, true);
-
-        // Start Log Entry Sync
-        expectedAckMessages =  NUM_KEYS*WRITE_CYCLES;
-
-        testConfig.clear().setDropMessageLevel(2);
-        startLogEntrySync(crossTables, WAIT.ON_TIMEOUT_ERROR);
-    }
-
     /**
      * Test Log Entry Sync, when the first transaction encountered
      * writes data across replicated and non-replicated streams.
@@ -772,9 +763,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Start Log Entry Sync
         // We need to block until the error is received and verify the state machine is shutdown
         testConfig.clear();
-        expectedAckMessages = srcDataRuntime.getAddressSpaceView().getLogAddressSpace().getAddressMap()
-                .get(ObjectsView.TRANSACTION_STREAM_ID)
-                .getTail().intValue();
+        expectedAckMessages = Utils.getLogAddressSpace(srcDataRuntime
+                .getLayoutView().getRuntimeLayout())
+                .getAddressMap()
+                .get(ObjectsView.TRANSACTION_STREAM_ID).getTail();
 
         LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ACK);
 

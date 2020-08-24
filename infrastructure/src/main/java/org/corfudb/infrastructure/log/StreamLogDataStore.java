@@ -144,7 +144,7 @@ public class StreamLogDataStore {
             return;
         }
 
-        log.debug("Update committed tail to: {}", newCommittedTail);
+        log.debug("Update committed tail to: {}, current: {}", newCommittedTail, committedTail.get());
         dataStore.put(COMMITTED_TAIL_RECORD, newCommittedTail);
         committedTail.set(newCommittedTail);
     }

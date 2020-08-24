@@ -269,11 +269,10 @@ public class ManagementViewTest extends AbstractViewTest {
      * heartbeat. This is responded with the nodeMetrics which is
      * asserted with expected values.
      *
-     * @throws Exception
+     * @throws Exception error
      */
     @Test
-    public void checkNodeState()
-            throws Exception {
+    public void checkNodeState() throws Exception {
         addServer(SERVERS.PORT_0);
 
         Layout l = new TestLayoutBuilder()

@@ -44,11 +44,6 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
         }
     }
 
-    @Override
-    public void prepareToBecomeStandby() {
-        corfuReplicationDiscoveryService.prepareToBecomeStandby();
-    }
-
     public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
         return corfuReplicationDiscoveryService.queryReplicationStatus();
     }

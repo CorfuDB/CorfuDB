@@ -49,9 +49,7 @@ public class AddNode extends WorkflowRequest {
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
         // Bootstrap a management server first.
         // If there are network or timeout exceptions, throw them.
-        CFUtils.getUninterruptibly(runtime.getManagementView().bootstrapManagementServer(nodeForWorkflow, layout),
-                TimeoutException.class,
-                NetworkException.class);
+        CFUtils.getUninterruptibly(runtime.getManagementView().bootstrapManagementServer(nodeForWorkflow, layout));
         // Send the add node request to the node's orchestrator.
         CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);
         log.info("sendRequest: requested to add {} on orchestrator {}:{}",

@@ -15,11 +15,6 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
 
     /**
      *
-     */
-    void prepareToBecomeStandby();
-
-    /**
-     *
      * @return
      */
     Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();

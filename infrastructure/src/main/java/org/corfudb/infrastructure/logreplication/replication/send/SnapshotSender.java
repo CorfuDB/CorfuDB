@@ -263,4 +263,8 @@ public class SnapshotSender {
     public void stop() {
         stopSnapshotSync = true;
     }
+
+    public void updateTopologyConfigId(long topologyConfigId) {
+        dataSenderBufferManager.updateTopologyConfigId(topologyConfigId);
+    }
 }

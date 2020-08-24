@@ -155,4 +155,8 @@ public class LogEntrySender {
         logEntryReader.reset(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
         dataSenderBufferManager.reset(lastAckedTimestamp);
     }
+
+    public void updateTopologyConfigId(long topologyConfigId) {
+        dataSenderBufferManager.updateTopologyConfigId(topologyConfigId);
+    }
 }
