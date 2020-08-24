@@ -27,5 +27,5 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
     /**
      * Enforce snapshotFullSync
      */
-    void forceSnapshotFullSync();
+    boolean forceSnapshotSync();
 }

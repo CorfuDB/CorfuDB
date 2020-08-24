@@ -640,7 +640,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
      * 8. Verify a full snapshot sync is completed and data is correctly replicated.
      */
     @Test
-    public void testEnforceFullSnapshotSync() throws Exception {
+    public void testEnforceSnapshotSync() throws Exception {
         // Write 10 entries to active map
         for (int i = 0; i < firstBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();

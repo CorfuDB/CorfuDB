@@ -62,6 +62,10 @@ public interface CorfuReplicationClusterManagerAdapter {
     /**
      * This API enforce a full snapshot sync on all standby clusters.
      * The command can only be executed on the active cluster not the standby clusters.
+     * It will block until the requests are processed or timeout.
+     *
+     * @return it returns true if the requests have been processed.
+     * It returns false if it is timeout or there is any error during the processing the requests.
      */
-    void forceSnapshotFullSync();
+    boolean forceSnapshotSync();
 }

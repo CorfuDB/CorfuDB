@@ -21,6 +21,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+import static org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryService.WAIT_COMMAND_TIMEOUT;
 
 /**
  * This class manages Log Replication for multiple remote (standby) clusters.
@@ -30,6 +34,7 @@ public class CorfuReplicationManager {
 
     // Keep map of remote cluster ID and the associated log replication runtime (an abstract
     // client to that cluster)
+    @Getter
     private Map<String, CorfuLogReplicationRuntime> runtimeToRemoteCluster = new HashMap<>();
 
     @Setter
@@ -212,7 +217,7 @@ public class CorfuReplicationManager {
     /**
      * Stop the current log replication event and start a full snapshot sync for all standby clusters
      */
-    public void enforceSnapshotFullSync() {
+    public void enforceSnapshotFullSync(DiscoveryServiceEvent event) {
         List<UUID> snapshotIds = new ArrayList<>();
         for (CorfuLogReplicationRuntime standbyRuntime : runtimeToRemoteCluster.values()) {
             standbyRuntime.getSourceManager().stopLogReplication();
@@ -221,21 +226,31 @@ public class CorfuReplicationManager {
             log.info("Enforce Start full snapshot sync for cluster {} with uuid {}", standbyRuntime.getRemoteClusterId(), snapshotUUID);
         }
 
-        // Block until the full snapshot sync has been started on all the standby clusters.
-        for (CorfuLogReplicationRuntime standbyRuntime : runtimeToRemoteCluster.values()) {
+        long startTime = java.lang.System.currentTimeMillis();
+        for (CorfuLogReplicationRuntime standbyRuntime : getRuntimeToRemoteCluster().values()) {
             UUID snapshotUUID = null;
             String clusterId = null;
 
             try {
-                snapshotUUID = standbyRuntime.getSourceManager().getLogReplicationFSM().getSnapshotFullSyncUUID().get();
-                clusterId = standbyRuntime.getRemoteClusterId();
+                if ( WAIT_COMMAND_TIMEOUT < java.lang.System.currentTimeMillis() - startTime) {
+                    return;
+                }
 
+                snapshotUUID = standbyRuntime.getSourceManager().getLogReplicationFSM().getSnapshotSyncUUID().get(WAIT_COMMAND_TIMEOUT, TimeUnit.SECONDS);
+                clusterId = standbyRuntime.getRemoteClusterId();
                 log.info("Start full snapshot sync for cluster {} with uuid {}", clusterId, snapshotUUID);
+            } catch (TimeoutException e) {
+                log.error("Failed to start a full snapshot sync for cluster {} due to a TimeoutException ", clusterId, e);
+                return;
             } catch (InterruptedException e) {
                 log.error("Failed to start a full snapshot sync for cluster {} due to an InterruptedException ", clusterId, e);
+                return;
             } catch (ExecutionException e) {
                 log.error("Failed to start a full snapshot sync for cluster {} due to an ExecutionException ", clusterId, e);
+                return;
             }
         }
+
+        event.getCf().complete(event.getEventUUID());
     }
 }

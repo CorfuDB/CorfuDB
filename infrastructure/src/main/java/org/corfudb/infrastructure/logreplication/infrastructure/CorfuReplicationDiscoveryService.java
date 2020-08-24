@@ -34,7 +34,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -48,6 +51,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Slf4j
 public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicationDiscoveryServiceAdapter {
+    // Time to wait the forced snapshot sync to start in milliseconds.
+    public static long WAIT_COMMAND_TIMEOUT = 1000;
 
     /**
      * Wait interval (in seconds) between consecutive fetch topology attempts to cap exponential back-off.
@@ -145,6 +150,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private LockClient lockClient;
 
+    private CompletableFuture<UUID> enforceFullSnapshotEventUUID;
+
     /**
      * Indicates the server has been started. A server is started once it is determined
      * that this node belongs to a cluster in the topology provided by ClusterManager.
@@ -222,8 +229,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 processUpgrade(event);
                 break;
 
-            case ENFORCE_SNAPSHOT_FULL_SYNC:
-                processEnforceSnapshotFullSync();
+            case ENFORCE_SNAPSHOT_SYNC:
+                processEnforceSnapshotSync(event);
                 break;
 
             default:
@@ -682,11 +689,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Enforce a snapshot full sync for all standbys if the current node is a leader node
      */
-    private void processEnforceSnapshotFullSync() {
+    private void processEnforceSnapshotSync(DiscoveryServiceEvent event) {
         if (replicationManager == null || isLeader.get() == false) {
             return;
         }
-        replicationManager.enforceSnapshotFullSync();
+
+        replicationManager.enforceSnapshotFullSync(event);
     }
 
     public synchronized void input(DiscoveryServiceEvent event) {
@@ -732,13 +740,27 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     @Override
-    public void forceSnapshotFullSync() {
+    public boolean forceSnapshotSync() {
         if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
-            log.error("This forceSnapshotFullSync command is not supported on standby cluster.");
-            return;
+            log.error("This forceSnapshotSync command is not supported on standby cluster.");
+            return false;
         }
 
-        input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_FULL_SYNC));
+        DiscoveryServiceEvent event = new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC, UUID.randomUUID());
+        input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC, UUID.randomUUID()));
+
+        // Block until the full snapshot sync has been started on all the standby clusters.
+        try {
+            event.getCf().get(WAIT_COMMAND_TIMEOUT, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            return false;
+        } catch (ExecutionException e) {
+            return false;
+        } catch (TimeoutException e) {
+            return false;
+        }
+
+        return true;
     }
 
     public void shutdown() {

@@ -185,10 +185,10 @@ public class LogReplicationFSM {
 
     /**
      * When a snapshot full sync request is enqueue in the FSM, it will reset the CF,
-     * When a snapshot full sync request is processed, the CF will
+     * When a snapshot full sync request is processed, the CF will be completed with the sync request's id.
      */
     @Getter
-    private CompletableFuture<UUID> snapshotFullSyncUUID = new CompletableFuture<>();
+    private CompletableFuture<UUID> snapshotSyncUUID = new CompletableFuture<>();
 
     /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
@@ -266,8 +266,8 @@ public class LogReplicationFSM {
         states.put(LogReplicationStateType.STOPPED, new StoppedState());
     }
 
-    private synchronized void updateSnapshotFullSyncUUID(UUID uuid) {
-            snapshotFullSyncUUID.complete(uuid);
+    public synchronized void updateSnapshotSyncUUID(UUID uuid) {
+            snapshotSyncUUID.complete(uuid);
     }
 
     /**
@@ -287,7 +287,7 @@ public class LogReplicationFSM {
                 log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventID());
             }
             if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_REQUEST) {
-                snapshotFullSyncUUID = new CompletableFuture<>();
+                snapshotSyncUUID = new CompletableFuture<>();
             }
             eventQueue.put(event);
         } catch (InterruptedException ex) {
@@ -339,9 +339,6 @@ public class LogReplicationFSM {
                     LogReplicationState newState = state.processEvent(event);
                     log.trace("Transition from {} to {}", state, newState);
                     transition(state, newState);
-                    if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_REQUEST) {
-                        updateSnapshotFullSyncUUID(event.getEventID());
-                    }
                     state = newState;
                     numTransitions.setValue(numTransitions.getValue() + 1);
                 } catch (IllegalTransitionException illegalState) {
