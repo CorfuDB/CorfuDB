@@ -184,13 +184,6 @@ public class LogReplicationFSM {
     private final LogReplicationAckReader ackReader;
 
     /**
-     * When a snapshot full sync request is enqueue in the FSM, it will reset the CF,
-     * When a snapshot full sync request is processed, the CF will be completed with the sync request's id.
-     */
-    @Getter
-    private CompletableFuture<UUID> snapshotSyncUUID = new CompletableFuture<>();
-
-    /**
      * Constructor for LogReplicationFSM, custom read processor for data transformation.
      *
      * @param runtime Corfu Runtime
@@ -266,10 +259,6 @@ public class LogReplicationFSM {
         states.put(LogReplicationStateType.STOPPED, new StoppedState());
     }
 
-    public synchronized void updateSnapshotSyncUUID(UUID uuid) {
-            snapshotSyncUUID.complete(uuid);
-    }
-
     /**
      * Input function of the FSM.
      *
@@ -285,9 +274,6 @@ public class LogReplicationFSM {
             }
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
                 log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventID());
-            }
-            if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_REQUEST) {
-                snapshotSyncUUID = new CompletableFuture<>();
             }
             eventQueue.put(event);
         } catch (InterruptedException ex) {

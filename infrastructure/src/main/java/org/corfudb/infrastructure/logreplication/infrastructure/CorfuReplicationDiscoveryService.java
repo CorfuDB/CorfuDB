@@ -154,8 +154,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private LockClient lockClient;
 
-    private CompletableFuture<UUID> enforceFullSnapshotEventUUID;
-
     /**
      * Indicates the server has been started. A server is started once it is determined
      * that this node belongs to a cluster in the topology provided by ClusterManager.
@@ -700,7 +698,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             return;
         }
 
-        replicationManager.enforceSnapshotFullSync(event);
+        replicationManager.enforceSnapshotSync(event);
     }
 
     public synchronized void input(DiscoveryServiceEvent event) {

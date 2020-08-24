@@ -217,38 +217,11 @@ public class CorfuReplicationManager {
     /**
      * Stop the current log replication event and start a full snapshot sync for all standby clusters
      */
-    public void enforceSnapshotFullSync(DiscoveryServiceEvent event) {
-        List<UUID> snapshotIds = new ArrayList<>();
+    public void enforceSnapshotSync(DiscoveryServiceEvent event) {
         for (CorfuLogReplicationRuntime standbyRuntime : runtimeToRemoteCluster.values()) {
             standbyRuntime.getSourceManager().stopLogReplication();
-            UUID snapshotUUID = standbyRuntime.getSourceManager().startSnapshotSync();
-            snapshotIds.add(snapshotUUID);
-            log.info("Enforce Start full snapshot sync for cluster {} with uuid {}", standbyRuntime.getRemoteClusterId(), snapshotUUID);
-        }
-
-        long startTime = java.lang.System.currentTimeMillis();
-        for (CorfuLogReplicationRuntime standbyRuntime : getRuntimeToRemoteCluster().values()) {
-            UUID snapshotUUID = null;
-            String clusterId = null;
-
-            try {
-                if ( WAIT_COMMAND_TIMEOUT < java.lang.System.currentTimeMillis() - startTime) {
-                    return;
-                }
-
-                snapshotUUID = standbyRuntime.getSourceManager().getLogReplicationFSM().getSnapshotSyncUUID().get(WAIT_COMMAND_TIMEOUT, TimeUnit.SECONDS);
-                clusterId = standbyRuntime.getRemoteClusterId();
-                log.info("Start full snapshot sync for cluster {} with uuid {}", clusterId, snapshotUUID);
-            } catch (TimeoutException e) {
-                log.error("Failed to start a full snapshot sync for cluster {} due to a TimeoutException ", clusterId, e);
-                return;
-            } catch (InterruptedException e) {
-                log.error("Failed to start a full snapshot sync for cluster {} due to an InterruptedException ", clusterId, e);
-                return;
-            } catch (ExecutionException e) {
-                log.error("Failed to start a full snapshot sync for cluster {} due to an ExecutionException ", clusterId, e);
-                return;
-            }
+            standbyRuntime.getSourceManager().startSnapshotSync();
+            log.info("Enforce Start full snapshot sync for cluster {} with uuid {}", standbyRuntime.getRemoteClusterId(), event.getEventUUID());
         }
 
         event.getCf().complete(event.getEventUUID());
