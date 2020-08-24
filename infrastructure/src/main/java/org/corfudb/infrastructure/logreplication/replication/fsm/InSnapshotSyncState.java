@@ -163,7 +163,6 @@ public class InSnapshotSyncState implements LogReplicationState {
              Start send of snapshot sync
              */
             transmitFuture = fsm.getLogReplicationFSMWorkers().submit(() -> snapshotSender.transmit(transitionEventId));
-            fsm.updateSnapshotSyncUUID(transitionEventId);
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
         }

@@ -628,7 +628,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
 
     /**
-     * This test verifies config change with one active and one invalid
+     * This test verifies enforceSnapshotSync API
      * <p>
      * 1. Init with corfu 9000 active and 9001 standby
      * 2. Write 10 entries to active map

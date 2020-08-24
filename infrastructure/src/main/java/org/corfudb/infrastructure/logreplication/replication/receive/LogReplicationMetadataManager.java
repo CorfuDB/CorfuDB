@@ -417,8 +417,8 @@ public class LogReplicationMetadataManager {
         return builder.toString();
     }
 
-    public static String getPersistedWriterMetadataTableName(String clusteId) {
-        return METADATA_TABLE_PREFIX_NAME + clusteId;
+    public static String getPersistedWriterMetadataTableName(String localClusterId) {
+        return METADATA_TABLE_PREFIX_NAME + localClusterId;
     }
 
     public long getLogHead() {
