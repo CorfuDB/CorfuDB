@@ -279,7 +279,7 @@ public class Utils {
             .max()
             .orElseThrow(NoSuchElementException::new);
 
-    log.debug("getLogTail: nodes selected {} global tail {}", segmentsHeadNodes, globalLogTail);
+    log.trace("getLogTail: nodes selected {} global tail {}", segmentsHeadNodes, globalLogTail);
     return globalLogTail;
   }
 

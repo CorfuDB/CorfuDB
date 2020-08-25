@@ -117,6 +117,7 @@ public class LogReplicationServer extends AbstractServer {
                     metadataMgr.getLastAppliedBaseSnapshotTimestamp(),
                     metadataMgr.getLastProcessedLogTimestamp());
             log.info("Send Negotiation response");
+            sinkManager.reset();
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE.payloadMsg(response));
         } else {
             log.warn("Dropping negotiation request as this node is not the leader.");
