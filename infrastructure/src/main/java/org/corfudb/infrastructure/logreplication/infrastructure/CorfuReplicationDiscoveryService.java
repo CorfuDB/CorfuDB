@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicationDiscoveryServiceAdapter {
     // Time to wait the forced snapshot sync to start in milliseconds.
-    public static long WAIT_COMMAND_TIMEOUT = 1000;
+    private static long WAIT_COMMAND_TIMEOUT = 1000;
 
     /**
      * Wait interval (in seconds) between consecutive fetch topology attempts to cap exponential back-off.
@@ -695,6 +695,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private void processEnforceSnapshotSync(DiscoveryServiceEvent event) {
         if (replicationManager == null || !isLeader.get()) {
+            log.warn("The current node is not the leader will skip doing the snapshot full sync");
             return;
         }
 
@@ -731,16 +732,21 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     @Override
     public boolean forceSnapshotSync() {
         if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
-            log.error("This forceSnapshotSync command is not supported on standby cluster.");
+            log.error("This forceSnapshotSync command is not supported on standby cluster {}.", localNodeDescriptor);
+            return false;
+        }
+
+        if (!isLeader.get()) {
+            log.warn("The current node {} is not the leader and will skip forceSnapshotSync command.", localNodeDescriptor);
             return false;
         }
 
         DiscoveryServiceEvent event = new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC, UUID.randomUUID());
-        input(new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC, UUID.randomUUID()));
+        input(event);
 
-        // Block until the full snapshot sync has been started on all the standby clusters.
+        // Block until the full snapshot sync events have been generated and queued at Standbys.
         try {
-            event.getCf().get(WAIT_COMMAND_TIMEOUT, TimeUnit.MILLISECONDS);
+            event.getSnapshotSyncEventCF().get(WAIT_COMMAND_TIMEOUT, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             log.error("Failed to forceSnapshotSync due to an InterruptedException ", e);
             return false;

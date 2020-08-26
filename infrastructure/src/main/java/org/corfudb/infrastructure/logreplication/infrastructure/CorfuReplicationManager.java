@@ -26,7 +26,6 @@ public class CorfuReplicationManager {
 
     // Keep map of remote cluster ID and the associated log replication runtime (an abstract
     // client to that cluster)
-    @Getter
     private Map<String, CorfuLogReplicationRuntime> runtimeToRemoteCluster = new HashMap<>();
 
     @Setter
@@ -210,12 +209,17 @@ public class CorfuReplicationManager {
      * Stop the current log replication event and start a full snapshot sync for all standby clusters
      */
     public void enforceSnapshotSync(DiscoveryServiceEvent event) {
-        for (CorfuLogReplicationRuntime standbyRuntime : runtimeToRemoteCluster.values()) {
-            standbyRuntime.getSourceManager().stopLogReplication();
-            standbyRuntime.getSourceManager().startSnapshotSync();
-            log.info("Enforce Start full snapshot sync for cluster {} with uuid {}", standbyRuntime.getRemoteClusterId(), event.getEventUUID());
+        if (runtimeToRemoteCluster.keySet().isEmpty()) {
+            log.warn("The enforceSnapshotSync command doesn't trigger any snapshotSync " +
+                    "as the current node {} has an empty standby list.", localNodeDescriptor);
+        } else {
+            for (CorfuLogReplicationRuntime standbyRuntime : runtimeToRemoteCluster.values()) {
+                standbyRuntime.getSourceManager().stopLogReplication();
+                standbyRuntime.getSourceManager().startSnapshotSync();
+                log.info("Enforce Start full snapshot sync for cluster {} with uuid {}", standbyRuntime.getRemoteClusterId(), event.getEventUUID());
+            }
         }
 
-        event.getCf().complete(event.getEventUUID());
+        event.getSnapshotSyncEventCF().complete(event.getEventUUID());
     }
 }

@@ -17,7 +17,7 @@ public class DiscoveryServiceEvent {
 
     // Used by enforcing snapshot sync event
     @Getter
-    CompletableFuture<UUID> cf;
+    CompletableFuture<UUID> snapshotSyncEventCF;
 
     @Getter
     TopologyConfigurationMsg topologyConfig = null;
@@ -33,7 +33,7 @@ public class DiscoveryServiceEvent {
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, UUID eventUUID) {
         this.type = type;
         this.eventUUID = eventUUID;
-        this.cf = new CompletableFuture<>();
+        this.snapshotSyncEventCF = new CompletableFuture<>();
     }
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {
