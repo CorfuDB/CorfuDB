@@ -10,6 +10,7 @@ enum ProtocolVersion {
 }
 
 enum MessageType {
+  // Base Message Types
   PING = 0;
   AUTHENTICATE = 1;
   RESTART = 2;
@@ -17,30 +18,39 @@ enum MessageType {
   SEAL = 4;
 
   // Layout Message Types
-  GET_LAYOUT = 5;
-  PREPARE_LAYOUT = 6;
-  PROPOSE_LAYOUT = 7;
-  COMMIT_LAYOUT = 8;
-  BOOTSTRAP_LAYOUT = 9;
-  COMMIT_TRANSACTION = 11;
+  GET_LAYOUT = 10;
+  PREPARE_LAYOUT = 11;
+  PROPOSE_LAYOUT = 12;
+  COMMIT_LAYOUT = 13;
+  BOOTSTRAP_LAYOUT = 14;
 
   // Sequencer Message Types
-  TOKEN = 10;
-  BOOTSTRAP_SEQUENCER = 12;
-  SEQUENCER_TRIM = 13;
-  SEQUENCER_METRICS = 14;
-  STREAMS_ADDRESS = 15;
+  TOKEN = 20;
+  BOOTSTRAP_SEQUENCER = 21;
+  SEQUENCER_TRIM = 22;
+  SEQUENCER_METRICS = 23;
+  STREAMS_ADDRESS = 24;
 
-  QUERY_STREAM = 16;
-  READ_LOG = 17;
-  QUERY_LOG_METADATA = 18;
-  TRIM_LOG = 19;
-  COMPACT_LOG = 20;
-  FLASH = 21;
-  QUERY_NODE = 22;
-  REPORT_FAILURE = 23;
-  HEAL_FAILURE = 24;
-  EXECUTE_WORKFLOW = 26;
+  // LogUnit Message Types
+  WRITE_LOG = 30;
+  READ_LOG = 31;
+  INSPECT_ADDRESSES = 32;
+  TRIM_LOG = 33;
+  TRIM_MARK = 34;
+  TAIL = 35;
+  COMPACT_LOG = 36;
+  FLUSH_CACHE = 37;
+  LOG_ADDRESS_SPACE = 38;
+  KNOWN_ADDRESS = 39;
+  COMMITTED_TAIL = 40;
+  UPDATE_COMMITTED_TAIL = 41;
+  RESET_LOG_UNIT = 42;
+
+ // Management Message Types
+  QUERY_NODE = 50;
+  REPORT_FAILURE = 51;
+  HEAL_FAILURE = 52;
+  EXECUTE_WORKFLOW = 53;
 }
 
 enum ERROR {
@@ -115,7 +125,7 @@ message SealRequest {
 message SealResponse {
 }
 
-// Retrieve layout.
+// Retrieve layout
 message GetLayoutRequest {
   int64 epoch = 1;
 }
@@ -124,7 +134,7 @@ message GetLayoutResponse {
   string layout = 1;
 }
 
-// Request in first phase of Paxos.
+// Request in first phase of Paxos
 message PrepareLayoutRequest {
   int64 epoch = 1;
   int64 rank = 2;
@@ -141,7 +151,7 @@ message PrepareLayoutResponse {
   string layout = 3;
 }
 
-// Request in second phase of Paxos.
+// Request in second phase of Paxos
 message ProposeLayoutRequest {
   int64 epoch = 1;
   int64 rank = 2;
@@ -159,7 +169,7 @@ message ProposeLayoutResponse {
 }
 
 // If the first two phases (prepare and propose) of Paxos have been accepted, the
-// proposer sends a Committed message to commit the proposed {@link Layout}.
+// proposer sends a Committed message to commit the proposed {@link Layout}
 message CommitLayoutRequest {
   bool forced = 1;
   int64 epoch = 2;
@@ -440,19 +450,11 @@ message StreamsAddressResponse {
   UUIDToStreamAddressMap addressMap = 2;
 }
 
-message CommitTransactionRequest {
+message WriteLogRequest {
 
 }
 
-message CommitTransactionResponse {
-
-}
-
-message QueryStreamRequest {
-
-}
-
-message QueryStreamResponse {
+message WriteLogResponse {
 
 }
 
@@ -464,11 +466,11 @@ message ReadLogResponse {
 
 }
 
-message QueryLogMetadataRequest {
+message InspectAddressesRequest {
 
 }
 
-message QueryLogMetadataResponse {
+message InspectAddressesResponse {
 
 }
 
@@ -480,6 +482,22 @@ message TrimLogResponse {
 
 }
 
+message TrimMarkRequest {
+
+}
+
+message TrimMarkResponse {
+
+}
+
+message TailRequest {
+
+}
+
+message TailResponse {
+
+}
+
 message CompactRequest {
 
 }
@@ -488,11 +506,51 @@ message CompactResponse {
 
 }
 
-message FlashRequest {
+message FlushCacheRequest {
 
 }
 
-message FlashResponse {
+message FlushCacheResponse {
+
+}
+
+message LogAddressSpaceRequest {
+
+}
+
+message LogAddressSpaceResponse {
+
+}
+
+message KnownAddressRequest {
+
+}
+
+message KnownAddressResponse {
+
+}
+
+message CommittedTailRequest {
+
+}
+
+message CommittedTailResponse {
+
+}
+
+message UpdateCommittedTailRequest {
+
+}
+
+message UpdateCommittedTailResponse {
+
+}
+
+message ResetLogUnitRequest {
+
+}
+
+message ResetLogUnitResponse {
 
 }
 
@@ -544,37 +602,47 @@ message Request {
   Header header = 1;
 
   oneof payload {
-    PingRequest pingRequest = 100;
-    AuthenticateRequest authenticateRequest = 101;
-    RestartRequest restartRequest = 102;
-    ResetRequest resetRequest = 103;
-    SealRequest sealRequest = 104;
+    // Base Requests
+    PingRequest pingRequest = 10;
+    AuthenticateRequest authenticateRequest = 11;
+    RestartRequest restartRequest = 12;
+    ResetRequest resetRequest = 13;
+    SealRequest sealRequest = 14;
 
     // Layout Requests
-    GetLayoutRequest getLayoutRequest = 105;
-    PrepareLayoutRequest prepareLayoutRequest = 106;
-    ProposeLayoutRequest proposeLayoutRequest = 107;
-    CommitLayoutRequest commitLayoutRequest = 108;
-    BootstrapLayoutRequest bootstrapLayoutRequest = 109;
+    GetLayoutRequest getLayoutRequest = 20;
+    PrepareLayoutRequest prepareLayoutRequest = 21;
+    ProposeLayoutRequest proposeLayoutRequest = 22;
+    CommitLayoutRequest commitLayoutRequest = 23;
+    BootstrapLayoutRequest bootstrapLayoutRequest = 24;
 
     // Sequencer Requests
-    TokenRequest tokenRequest = 110;
-    BootStrapSequencerRequest BootStrapSequencerRequest = 111;
-    SequencerTrimRequest sequencerTrimRequest = 112;
-    SequencerMetricsRequest sequencerMetricsRequest = 113;
-    StreamsAddressRequest streamsAddressRequest = 114;
+    TokenRequest tokenRequest = 30;
+    BootStrapSequencerRequest bootStrapSequencerRequest = 31;
+    SequencerTrimRequest sequencerTrimRequest = 32;
+    SequencerMetricsRequest sequencerMetricsRequest = 33;
+    StreamsAddressRequest streamsAddressRequest = 34;
 
-    CommitTransactionRequest commitTransactionRequest = 115;
-    QueryStreamRequest queryStreamRequest = 116;
-    ReadLogRequest ReadLogRequest = 117;
-    QueryLogMetadataRequest queryLogMetadataRequest = 118;
-    TrimLogRequest trimLogRequest = 119;
-    CompactRequest compactRequest = 120;
-    FlashRequest flashRequest = 121;
-    QueryNodeRequest queryNodeRequest = 122;
-    ReportFailureRequest reportFailureRequest = 123;
-    HealFailureRequest healFailureRequest = 124;
-    ExecuteWorkflowRequest executeWorkflowRequest = 125;
+    // LogUnit Requests
+    WriteLogRequest writeLogRequest = 40;
+    ReadLogRequest readLogRequest = 41;
+    InspectAddressesRequest inspectAddressesRequest = 42;
+    TrimLogRequest trimLogRequest = 43;
+    TrimMarkRequest trimMarkRequest = 44;
+    TailRequest tailRequest = 45;
+    CompactRequest compactRequest = 46;
+    FlushCacheRequest flushCacheRequest = 47;
+    LogAddressSpaceRequest logAddressSpaceRequest = 48;
+    KnownAddressRequest knownAddressRequest = 49;
+    CommittedTailRequest committedTailRequest = 50;
+    UpdateCommittedTailRequest updateCommittedTailRequest = 51;
+    ResetLogUnitRequest resetLogUnitRequest = 52;
+
+    // Management Requests
+    QueryNodeRequest queryNodeRequest = 60;
+    ReportFailureRequest reportFailureRequest = 61;
+    HealFailureRequest healFailureRequest = 62;
+    ExecuteWorkflowRequest executeWorkflowRequest = 63;
   }
 }
 
@@ -583,36 +651,46 @@ message Response {
   ServerError error = 2;
 
   oneof payload {
-    PingResponse pingResponse = 100;
-    AuthenticateResponse authenticateResponse = 101;
-    RestartResponse restartResponse = 102;
-    ResetResponse resetResponse = 103;
-    SealResponse sealResponse = 104;
+    // Base Responses
+    PingResponse pingResponse = 10;
+    AuthenticateResponse authenticateResponse = 11;
+    RestartResponse restartResponse = 12;
+    ResetResponse resetResponse = 13;
+    SealResponse sealResponse = 14;
 
     // Layout Responses
-    GetLayoutResponse getLayoutResponse = 105;
-    PrepareLayoutResponse prepareLayoutResponse = 106;
-    ProposeLayoutResponse proposeLayoutResponse = 107;
-    CommitLayoutResponse commitLayoutResponse = 108;
-    BootstrapLayoutResponse bootstrapLayoutResponse = 109;
+    GetLayoutResponse getLayoutResponse = 20;
+    PrepareLayoutResponse prepareLayoutResponse = 21;
+    ProposeLayoutResponse proposeLayoutResponse = 22;
+    CommitLayoutResponse commitLayoutResponse = 23;
+    BootstrapLayoutResponse bootstrapLayoutResponse = 24;
 
     // Sequencer Responses
-    TokenResponse tokenResponse = 110;
-    BootStrapSequencerResponse BootStrapSequencerResponse = 111;
-    SequencerTrimResponse sequencerTrimResponse = 112;
-    SequencerMetricsResponse sequencerMetricsResponse = 113;
-    StreamsAddressResponse streamsAddressResponse = 114;
+    TokenResponse tokenResponse = 30;
+    BootStrapSequencerResponse BootStrapSequencerResponse = 31;
+    SequencerTrimResponse sequencerTrimResponse = 32;
+    SequencerMetricsResponse sequencerMetricsResponse = 33;
+    StreamsAddressResponse streamsAddressResponse = 34;
 
-    CommitTransactionResponse commitTransactionResponse = 115;
-    QueryStreamResponse queryStreamResponse = 116;
-    ReadLogResponse readLogResponse = 117;
-    QueryLogMetadataResponse queryLogMetadataResponse = 118;
-    TrimLogResponse trimLogResponse = 119;
-    CompactResponse compactResponse = 120;
-    FlashResponse flashResponse = 121;
-    QueryNodeResponse queryNodeResponse = 122;
-    ReportFailureResponse reportFailureResponse = 123;
-    HealFailureResponse healFailureResponse = 124;
-    ExecuteWorkflowResponse executeWorkflowResponse = 125;
+    // LogUnit Responses
+    WriteLogResponse writeLogResponse = 40;
+    ReadLogResponse readLogResponse = 41;
+    InspectAddressesResponse inspectAddressesResponse = 42;
+    TrimLogResponse trimLogResponse = 43;
+    TrimMarkResponse trimMarkResponse = 44;
+    TailResponse tailResponse = 45;
+    CompactResponse compactResponse = 46;
+    FlushCacheResponse flushCacheResponse = 47;
+    LogAddressSpaceResponse logAddressSpaceResponse = 48;
+    KnownAddressResponse knownAddressResponse = 49;
+    CommittedTailResponse committedTailResponse = 50;
+    UpdateCommittedTailResponse updateCommittedTailResponse = 51;
+    ResetLogUnitResponse resetLogUnitResponse = 52;
+
+    // Management Responses
+    QueryNodeResponse queryNodeResponse = 60;
+    ReportFailureResponse reportFailureResponse = 61;
+    HealFailureResponse healFailureResponse = 62;
+    ExecuteWorkflowResponse executeWorkflowResponse = 63;
   }
 }

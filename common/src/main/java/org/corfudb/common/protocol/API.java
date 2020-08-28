@@ -696,80 +696,77 @@ public class API {
                 .build();
     }
 
+    //TODO(Zach): Improve this method
     public static boolean validateRequestPayloadType(Request request) {
         switch(request.getHeader().getType()) {
             case PING:
-                if (request.hasPingRequest()) return true;
-                break;
+                return request.hasPingRequest();
             case AUTHENTICATE:
-                if (request.hasAuthenticateRequest()) return true;
-                break;
+                return request.hasAuthenticateRequest();
             case RESTART:
-                if (request.hasRestartRequest()) return true;
-                break;
+                return request.hasRestartRequest();
             case RESET:
-                if (request.hasResetRequest()) return true;
-                break;
+                return request.hasResetRequest();
             case SEAL:
-                if (request.hasSealRequest()) return true;
-                break;
+                return request.hasSealRequest();
             case GET_LAYOUT:
-                if (request.hasGetLayoutRequest()) return true;
-                break;
+                return request.hasGetLayoutRequest();
             case PREPARE_LAYOUT:
-                if (request.hasPrepareLayoutRequest()) return true;
-                break;
+                return request.hasPrepareLayoutRequest();
             case PROPOSE_LAYOUT:
-                if (request.hasProposeLayoutRequest()) return true;
-                break;
+                return request.hasProposeLayoutRequest();
             case COMMIT_LAYOUT:
-                if (request.hasCommitLayoutRequest()) return true;
-                break;
+                return request.hasCommitLayoutRequest();
             case BOOTSTRAP_LAYOUT:
-                if (request.hasBootstrapLayoutRequest()) return true;
-                break;
+                return request.hasBootstrapLayoutRequest();
             case TOKEN:
-                if (request.hasTokenRequest()) return true;
-                break;
-            case COMMIT_TRANSACTION:
-                if (request.hasCommitTransactionRequest()) return true;
-                break;
-            case QUERY_STREAM:
-                if (request.hasQueryStreamRequest()) return true;
-                break;
+                return request.hasTokenRequest();
+            case BOOTSTRAP_SEQUENCER:
+                return request.hasBootStrapSequencerRequest();
+            case SEQUENCER_TRIM:
+                return request.hasSequencerTrimRequest();
+            case SEQUENCER_METRICS:
+                return request.hasSequencerMetricsRequest();
+            case STREAMS_ADDRESS:
+                return request.hasStreamsAddressRequest();
+            case WRITE_LOG:
+                return request.hasWriteLogRequest();
             case READ_LOG:
-                if (request.hasReadLogRequest()) return true;
-                break;
-            case QUERY_LOG_METADATA:
-                if (request.hasQueryLogMetadataRequest()) return true;
-                break;
+                return request.hasReadLogRequest();
+            case INSPECT_ADDRESSES:
+                return request.hasInspectAddressesRequest();
             case TRIM_LOG:
-                if (request.hasTrimLogRequest()) return true;
-                break;
+                return request.hasTrimLogRequest();
+            case TRIM_MARK:
+                return request.hasTrimMarkRequest();
+            case TAIL:
+                return request.hasTailRequest();
             case COMPACT_LOG:
-                if (request.hasCompactRequest()) return true;
-                break;
-            case FLASH:
-                if (request.hasFlashRequest()) return true;
-                break;
+                return request.hasCompactRequest();
+            case FLUSH_CACHE:
+                return request.hasFlushCacheRequest();
+            case LOG_ADDRESS_SPACE:
+                return request.hasLogAddressSpaceRequest();
+            case KNOWN_ADDRESS:
+                return request.hasKnownAddressRequest();
+            case COMMITTED_TAIL:
+                return request.hasCommittedTailRequest();
+            case UPDATE_COMMITTED_TAIL:
+                return request.hasUpdateCommittedTailRequest();
+            case RESET_LOG_UNIT:
+                return request.hasResetLogUnitRequest();
             case QUERY_NODE:
-                if (request.hasQueryNodeRequest()) return true;
-                break;
+                return request.hasQueryNodeRequest();
             case REPORT_FAILURE:
-                if (request.hasReportFailureRequest()) return true;
-                break;
+                return request.hasReportFailureRequest();
             case HEAL_FAILURE:
-                if (request.hasHealFailureRequest()) return true;
-                break;
+                return request.hasHealFailureRequest();
             case EXECUTE_WORKFLOW:
-                if (request.hasExecuteWorkflowRequest()) return true;
-                break;
+                return request.hasExecuteWorkflowRequest();
             default:
                 break;
         }
 
         return false;
     }
-
-
 }
