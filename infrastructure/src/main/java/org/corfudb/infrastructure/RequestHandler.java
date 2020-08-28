@@ -6,7 +6,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.MessageType;
 
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)

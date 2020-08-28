@@ -4,11 +4,11 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.protocol.API;
-import org.corfudb.common.protocol.proto.CorfuProtocol;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
+import org.corfudb.protocols.API;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -32,15 +32,16 @@ public class BaseServer extends AbstractServer {
 
     private final ExecutorService executor;
 
-    /** HandlerMethod for the base server. */
+    /** [RM] HandlerMethod for the base server. */
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
-    /** RequestHandlerMethods for the base server. */
-    private final RequestHandlerMethods handlerMethods = RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
-
-    @Override
-    public RequestHandlerMethods getHandlerMethods() { return handlerMethods; }
+    /**
+     * RequestHandlerMethods for the Base server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
@@ -172,7 +173,7 @@ public class BaseServer extends AbstractServer {
     @RequestHandler(type = CorfuProtocol.MessageType.SEAL)
     private synchronized void handleSeal(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
         try {
-            long epoch = req.getSealRequest().getEpoch();
+            final long epoch = req.getSealRequest().getEpoch();
             String remoteHostAddress;
             try {
                 remoteHostAddress = ((InetSocketAddress)ctx.channel().remoteAddress()).getAddress().getHostAddress();

@@ -5,7 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 import java.util.concurrent.atomic.LongAccumulator;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.protocol.API;
+import org.corfudb.protocols.API;
 
 /**
  * Created by mwei on 10/1/15.

@@ -2,11 +2,10 @@ package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.protocol.API;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
-import org.corfudb.infrastructure.RequestHandlerMethods;
+import org.corfudb.protocols.API;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 
@@ -114,7 +113,8 @@ public abstract class AbstractServer {
      */
     public final void handleRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
         if (getState() == ServerState.SHUTDOWN) {
-            log.warn("handleRequest: Server received {} but is already shutdown.", req.getHeader().getType().toString());
+            log.warn("handleRequest[{}]: Server received {} but is already shutdown.",
+                    req.getHeader().getRequestId(), req.getHeader().getType().toString());
             return;
         }
 
@@ -128,7 +128,7 @@ public abstract class AbstractServer {
 
     private Response getNotReadyError(Header requestHeader) {
         return API.getErrorResponseNoPayload(API.generateResponseHeader(requestHeader, false, true),
-                API.getNotReadyServerError("Server is not ready to handle request messages."));
+                API.getNotReadyServerError());
     }
 
     /**

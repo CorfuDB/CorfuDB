@@ -20,7 +20,7 @@ import jdk.internal.org.objectweb.asm.util.Printer;
 import jdk.internal.org.objectweb.asm.util.Textifier;
 import jdk.internal.org.objectweb.asm.util.TraceMethodVisitor;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;

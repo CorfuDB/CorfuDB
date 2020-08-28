@@ -5,6 +5,7 @@ import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Maps;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.IRequestRouter;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
@@ -12,6 +13,7 @@ import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RemoveNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RestoreRedundancyMergeSegmentsWorkflow;
+import org.corfudb.protocols.API;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
@@ -29,6 +31,9 @@ import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSeg
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.OrchestratorRequest;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -136,6 +141,43 @@ public class Orchestrator {
         }
     }
 
+    public void handle(@Nonnull CorfuProtocol.Request req,
+                       @Nonnull ChannelHandlerContext ctx,
+                       @Nonnull IRequestRouter r) {
+        OrchestratorRequest.ExecuteWorkflow workflowReq = req.getOrchestratorRequest().getExecuteWorkflow();
+        IWorkflow workflow;
+
+        switch(req.getOrchestratorRequest().getReqType()) {
+            case QUERY_WORKFLOW:
+                handleQuery(req, ctx, r);
+                break;
+            case ADD_NODE:
+                workflow = new AddNodeWorkflow(API.getJavaAddNodeRequest(workflowReq));
+                dispatch(workflow, req, ctx, r);
+                break;
+            case REMOVE_NODE:
+                workflow = new RemoveNodeWorkflow(API.getJavaRemoveNodeRequest(workflowReq));
+                dispatch(workflow, req, ctx, r);
+                break;
+            case FORCE_REMOVE_NODE:
+                workflow = new ForceRemoveWorkflow(API.getJavaForceRemoveNodeRequest(workflowReq));
+                dispatch(workflow, req, ctx, r);
+                break;
+            case HEAL_NODE:
+                workflow = new HealNodeWorkflow(API.getJavaHealNodeRequest(workflowReq));
+                dispatch(workflow, req, ctx, r);
+                break;
+            case RESTORE_REDUNDANCY_MERGE_SEGMENTS:
+                workflow = new RestoreRedundancyMergeSegmentsWorkflow(
+                        API.getJavaRestoreRedundancyMergeSegmentsRequest(workflowReq));
+                dispatch(workflow, req, ctx, r);
+                break;
+            default:
+                log.error("handle[{}]: Unknown Orchestrator request type {}",
+                        req.getHeader().getRequestId(), req.getOrchestratorRequest().getReqType());
+        }
+    }
+
     /**
      * Query a workflow id.
      * <p>
@@ -160,6 +202,20 @@ public class Orchestrator {
 
         r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
                 .payloadMsg(new OrchestratorResponse(resp)));
+    }
+
+    void handleQuery(CorfuProtocol.Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        final UUID workflowId = API.getJavaUUID(req.getOrchestratorRequest().getQueryWorkflow().getId());
+        boolean isActive = false;
+
+        if(activeWorkflows.containsKey(workflowId)) isActive = true;
+
+        log.trace("handleQuery[{}]: isActive={} for workflowId={}",
+                req.getHeader().getRequestId(), isActive, workflowId);
+
+        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+        CorfuProtocol.Response response = API.getQueryWorkflowResponse(responseHeader, isActive);
+        r.sendResponse(response, ctx);
     }
 
     /**
@@ -198,6 +254,29 @@ public class Orchestrator {
             r.sendResponse(ctx, msg, CorfuMsgType.ORCHESTRATOR_RESPONSE
                     .payloadMsg(resp));
         }
+    }
+
+    synchronized void dispatch(@Nonnull IWorkflow workflow,
+                               @Nonnull CorfuProtocol.Request req,
+                               @Nonnull ChannelHandlerContext ctx,
+                               @Nonnull IRequestRouter r) {
+        final String endpoint = req.getOrchestratorRequest().getExecuteWorkflow().getEndpoint();
+        final UUID id = activeWorkflows.inverse().get(endpoint);
+
+        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+        CorfuProtocol.Response response;
+
+        if(id != null) {
+            // A workflow is already executing for this endpoint, return existing workflow id.
+            response = API.getCreateWorkflowResponse(responseHeader, id);
+        } else {
+            // Create a new workflow for this endpoint and return a new workflow id.
+            activeWorkflows.put(workflow.getId(), endpoint);
+            executor.execute(() -> run(workflow, ACTION_RETRY));
+            response = API.getCreateWorkflowResponse(responseHeader, workflow.getId());
+        }
+
+        r.sendResponse(response, ctx);
     }
 
     /**

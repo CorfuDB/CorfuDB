@@ -1,17 +1,89 @@
-package org.corfudb.common.protocol;
+package org.corfudb.protocols;
 
+import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import lombok.NonNull;
-import org.corfudb.common.protocol.proto.CorfuProtocol;
-import org.corfudb.common.protocol.proto.CorfuProtocol.*;
+import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapLayoutRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapManagementResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapSequencerRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapSequencerResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.CommitLayoutRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.CommitLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.CommittedTailResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.FlushCacheResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ERROR;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.GetLayoutRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.GetLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.GetManagementLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.HealFailureResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Layout;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.MessageType;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.NodeConnectivity;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.OrchestratorRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.OrchestratorResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.PingRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.PingResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.PrepareLayoutRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.PrepareLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ProposeLayoutRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ProposeLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Priority;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ProtocolVersion;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.QueryNodeResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ReportFailureResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ResetRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ResetResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.RestartRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.RestartResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SealRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SealResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SequencerMetrics;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SequencerMetricsRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SequencerMetricsResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SequencerTrimRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SequencerTrimResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ServerError;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.StreamAddressRange;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.StreamsAddressRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.StreamsAddressResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Token;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenType;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TrimMarkResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TxResolutionInfo;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TxResolutionResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UpdateCommittedTailResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUIDToListOfBytesPair;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUIDToListOfBytesMap;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUIDToLongMap;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUIDToLongPair;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUIDToStreamAddressMap;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.WrongClusterPayload;
+
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
+
 import org.corfudb.common.util.Address;
+
+
 
 import java.util.UUID;
 import java.util.*;
+import java.util.stream.Collectors;
 
-import static org.corfudb.common.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType;
-import static org.corfudb.common.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType.*;
-import static org.corfudb.common.protocol.proto.CorfuProtocol.TokenRequest.newBuilder;
+import static org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType;
+import static org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType.*;
+import static org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenRequest.newBuilder;
 
 /**
  * Created by Maithem on 7/1/20.
@@ -25,9 +97,6 @@ public class API {
     public static final byte LEGACY_CORFU_MSG_MARK = 0x1;
     public static final byte PROTO_CORFU_MSG_MARK = 0x2;
 
-    //TODO(Zach): Move Layout (and dependencies) to common so that a Layout object can be passed.
-    // Meanwhile, use layout.asJSONString() and layout and Layout.fromJSONString().
-
     public static CorfuProtocol.UUID getUUID(UUID uuid) {
         return CorfuProtocol.UUID.newBuilder()
                 .setLsb(uuid.getLeastSignificantBits())
@@ -36,7 +105,7 @@ public class API {
     }
 
     public static UUID getJavaUUID(CorfuProtocol.UUID uuid) {
-        return new UUID(uuid.getLsb(),uuid.getMsb());
+        return new UUID(uuid.getLsb(), uuid.getMsb());
     }
 
     public static Header getHeader(long requestId, Priority priority, MessageType type, long epoch,
@@ -76,30 +145,26 @@ public class API {
     public static ServerError getNoServerError() {
         return ServerError.newBuilder()
                 .setCode(ERROR.OK)
-                .setMessage("")
                 .build();
     }
 
-    public static ServerError getWrongEpochServerError(String errorMsg, long serverEpoch) {
+    public static ServerError getWrongEpochServerError(long serverEpoch) {
         return ServerError.newBuilder()
                 .setCode(ERROR.WRONG_EPOCH)
-                .setMessage(errorMsg)
                 .setWrongEpochPayload(serverEpoch)
                 .build();
     }
 
-    public static ServerError getNotReadyServerError(String errorMsg) {
+    public static ServerError getNotReadyServerError() {
         return ServerError.newBuilder()
                 .setCode(ERROR.NOT_READY)
-                .setMessage(errorMsg)
                 .build();
     }
 
-    public static ServerError getWrongClusterServerError(String errorMsg, CorfuProtocol.UUID serverClusterId,
+    public static ServerError getWrongClusterServerError(CorfuProtocol.UUID serverClusterId,
                                                          CorfuProtocol.UUID clientClusterId) {
         return ServerError.newBuilder()
                 .setCode(ERROR.WRONG_CLUSTER)
-                .setMessage(errorMsg)
                 .setWrongClusterPayload(WrongClusterPayload.newBuilder()
                         .setServerClusterId(serverClusterId)
                         .setClientClusterId(clientClusterId)
@@ -107,17 +172,15 @@ public class API {
                 .build();
     }
 
-    public static ServerError getBootstrappedServerError(String errorMsg) {
+    public static ServerError getBootstrappedServerError() {
         return ServerError.newBuilder()
                 .setCode(ERROR.BOOTSTRAPPED)
-                .setMessage(errorMsg)
                 .build();
     }
 
-    public static ServerError getNotBootstrappedServerError(String errorMsg) {
+    public static ServerError getNotBootstrappedServerError() {
         return ServerError.newBuilder()
                 .setCode(ERROR.NOT_BOOTSTRAPPED)
-                .setMessage(errorMsg)
                 .build();
     }
 
@@ -541,10 +604,10 @@ public class API {
                 .build();
     }
 
-    public static Request getBootStrapSequencerRequest(Header header, long globalTail,
+    public static Request getBootstrapSequencerRequest(Header header, long globalTail,
             UUIDToStreamAddressMap streamAddressMap, long sequencerEpoch,
                                                        boolean bootstrapWithoutTailsUpdate) {
-        BootStrapSequencerRequest bootStrapSequencerRequest = BootStrapSequencerRequest.newBuilder()
+        BootstrapSequencerRequest bootstrapSequencerRequest = BootstrapSequencerRequest.newBuilder()
                 .setGlobalTail(globalTail)
                 .setStreamsAddressMap(streamAddressMap)
                 .setSequencerEpoch(globalTail)
@@ -552,16 +615,16 @@ public class API {
                 .build();
         return Request.newBuilder()
                 .setHeader(header)
-                .setBootStrapSequencerRequest(bootStrapSequencerRequest)
+                .setBootstrapSequencerRequest(bootstrapSequencerRequest)
                 .build();
     }
 
-    public static Response getBootStrapSequencerResponse(Header header) {
-        BootStrapSequencerResponse bootStrapSequencerResponse = BootStrapSequencerResponse.getDefaultInstance();
+    public static Response getBootstrapSequencerResponse(Header header) {
+        BootstrapSequencerResponse bootstrapSequencerResponse = BootstrapSequencerResponse.getDefaultInstance();
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(getNoServerError())
-                .setBootStrapSequencerResponse(bootStrapSequencerResponse)
+                .setBootstrapSequencerResponse(bootstrapSequencerResponse)
                 .build();
     }
 
@@ -582,18 +645,31 @@ public class API {
                 .build();
     }
 
-    public static Request getGetLayoutRequest(Header header, long epoch) {
-        GetLayoutRequest getLayoutRequest = GetLayoutRequest.newBuilder()
-                .setEpoch(epoch)
+    // Layout Messages API
+
+    public static Layout toProtobufLayout(org.corfudb.runtime.view.Layout layout) {
+        return Layout.newBuilder()
+                .setLayoutJSON(layout.asJSONString())
                 .build();
+
+    }
+
+    public static org.corfudb.runtime.view.Layout fromProtobufLayout(Layout protobufLayout) {
+        return org.corfudb.runtime.view.Layout.fromJSONString(protobufLayout.getLayoutJSON());
+    }
+
+    public static Request getGetLayoutRequest(Header header, long epoch) {
+        GetLayoutRequest getLayoutRequest = GetLayoutRequest.newBuilder().setEpoch(epoch).build();
         return Request.newBuilder()
                 .setHeader(header)
                 .setGetLayoutRequest(getLayoutRequest)
                 .build();
     }
 
-    public static Response getGetLayoutResponse(Header header, String layout) {
-        GetLayoutResponse getLayoutResponse = GetLayoutResponse.newBuilder().setLayout(layout).build();
+    public static Response getGetLayoutResponse(Header header, org.corfudb.runtime.view.Layout layout) {
+        GetLayoutResponse getLayoutResponse = GetLayoutResponse.newBuilder()
+                .setLayout(toProtobufLayout(layout))
+                .build();
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(getNoServerError())
@@ -612,11 +688,12 @@ public class API {
                 .build();
     }
 
-    public static Response getPrepareLayoutResponse(Header header, PrepareLayoutResponse.Type type, long rank, String layout) {
+    public static Response getPrepareLayoutResponse(Header header, PrepareLayoutResponse.Type type,
+                                                    long rank, org.corfudb.runtime.view.Layout layout) {
         PrepareLayoutResponse prepareLayoutResponse = PrepareLayoutResponse.newBuilder()
-                .setType(type)
+                .setRespType(type)
                 .setRank(rank)
-                .setLayout(layout)
+                .setLayout(toProtobufLayout(layout))
                 .build();
         return Response.newBuilder()
                 .setHeader(header)
@@ -625,11 +702,12 @@ public class API {
                 .build();
     }
 
-    public static Request getProposeLayoutRequest(Header header, long epoch, long rank, String layout) {
+    public static Request getProposeLayoutRequest(Header header, long epoch, long rank,
+                                                  org.corfudb.runtime.view.Layout layout) {
         ProposeLayoutRequest proposeLayoutRequest = ProposeLayoutRequest.newBuilder()
                 .setEpoch(epoch)
                 .setRank(rank)
-                .setLayout(layout)
+                .setLayout(toProtobufLayout(layout))
                 .build();
         return Request.newBuilder()
                 .setHeader(header)
@@ -638,10 +716,8 @@ public class API {
     }
 
     public static Response getProposeLayoutResponse(Header header, ProposeLayoutResponse.Type type, long rank) {
-        ProposeLayoutResponse proposeLayoutResponse = ProposeLayoutResponse.newBuilder()
-                .setType(type)
-                .setRank(rank)
-                .build();
+        ProposeLayoutResponse proposeLayoutResponse =
+                ProposeLayoutResponse.newBuilder().setRespType(type).setRank(rank).build();
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(getNoServerError())
@@ -649,11 +725,12 @@ public class API {
                 .build();
     }
 
-    public static Request getCommitLayoutRequest(Header header, boolean forced, long epoch, String layout) {
+    public static Request getCommitLayoutRequest(Header header, boolean forced, long epoch,
+                                                 org.corfudb.runtime.view.Layout layout) {
         CommitLayoutRequest commitLayoutRequest = CommitLayoutRequest.newBuilder()
                 .setForced(forced)
                 .setEpoch(epoch)
-                .setLayout(layout)
+                .setLayout(toProtobufLayout(layout))
                 .build();
         return Request.newBuilder()
                 .setHeader(header)
@@ -662,9 +739,8 @@ public class API {
     }
 
     public static Response getCommitLayoutResponse(Header header, CommitLayoutResponse.Type type) {
-        CommitLayoutResponse commitLayoutResponse = CommitLayoutResponse.newBuilder()
-                .setType(type)
-                .build();
+        CommitLayoutResponse commitLayoutResponse =
+                CommitLayoutResponse.newBuilder().setRespType(type).build();
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(getNoServerError())
@@ -672,8 +748,9 @@ public class API {
                 .build();
     }
 
-    public static Request getBootstrapLayoutRequest(Header header, String layout) {
-        BootstrapLayoutRequest bootstrapLayoutRequest = BootstrapLayoutRequest.newBuilder().setLayout(layout).build();
+    public static Request getBootstrapLayoutRequest(Header header, org.corfudb.runtime.view.Layout layout) {
+        BootstrapLayoutRequest bootstrapLayoutRequest =
+                BootstrapLayoutRequest.newBuilder().setLayout(toProtobufLayout(layout)).build();
         return Request.newBuilder()
                 .setHeader(header)
                 .setBootstrapLayoutRequest(bootstrapLayoutRequest)
@@ -681,13 +758,178 @@ public class API {
     }
 
     public static Response getBootstrapLayoutResponse(Header header, BootstrapLayoutResponse.Type type) {
-        BootstrapLayoutResponse bootstrapLayoutResponse = BootstrapLayoutResponse.newBuilder().setType(type).build();
+        BootstrapLayoutResponse bootstrapLayoutResponse =
+                BootstrapLayoutResponse.newBuilder().setRespType(type).build();
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(getNoServerError())
                 .setBootstrapLayoutResponse(bootstrapLayoutResponse)
                 .build();
     }
+
+    // Management Messages API
+
+    public static Response getBootstrapManagementResponse(Header header, BootstrapManagementResponse.Type type) {
+        BootstrapManagementResponse bootstrapManagementResponse =
+                BootstrapManagementResponse.newBuilder().setRespType(type).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setBootstrapManagementResponse(bootstrapManagementResponse)
+                .build();
+    }
+
+    public static Response getReportFailureResponse(Header header, ReportFailureResponse.Type type) {
+        ReportFailureResponse reportFailureResponse =
+                ReportFailureResponse.newBuilder().setRespType(type).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setReportFailureResponse(reportFailureResponse)
+                .build();
+    }
+
+    public static Response getHealFailureResponse(Header header, HealFailureResponse.Type type) {
+        HealFailureResponse healFailureResponse =
+                HealFailureResponse.newBuilder().setRespType(type).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setHealFailureResponse(healFailureResponse)
+                .build();
+    }
+
+    public static Response getGetManagementLayoutResponse(Header header, org.corfudb.runtime.view.Layout layout) {
+        GetManagementLayoutResponse getManagementLayoutResponse =
+                GetManagementLayoutResponse.newBuilder().setLayout(toProtobufLayout(layout)).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setGetManagementLayoutResponse(getManagementLayoutResponse)
+                .build();
+    }
+
+    public static NodeConnectivity toProtobufNodeConnectivity(
+            org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity nc) {
+        return NodeConnectivity.newBuilder()
+                .setEndpoint(nc.getEndpoint())
+                .setConnectivityType(nc.getType().name())
+                .setEpoch(nc.getEpoch())
+                .setConnectivityMap(CorfuProtocol.List.newBuilder()
+                        .addAllItems(nc.getConnectivity()
+                                .entrySet()
+                                .stream()
+                                .map(e -> Any.pack(NodeConnectivity.ConnectivityMapEntry
+                                        .newBuilder()
+                                        .setKey(e.getKey())
+                                        .setValue(e.getValue().name())
+                                        .build()))
+                                .collect(Collectors.toList()))
+                        .build())
+                .build();
+    }
+
+    public static Response getQueryNodeResponse(Header header, NodeState state) {
+        //TODO(Zach): setSequencerMetrics
+        QueryNodeResponse queryNodeResponse = QueryNodeResponse.newBuilder()
+                .setNodeConnectivity(toProtobufNodeConnectivity(state.getConnectivity()))
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setQueryNodeResponse(queryNodeResponse)
+                .build();
+    }
+
+    // Orchestrator Messages API
+
+    public static Response getQueryWorkflowResponse(Header header, boolean active) {
+        OrchestratorResponse orchestratorResponse = OrchestratorResponse.newBuilder()
+                .setQueryWorkflow(OrchestratorResponse.QueryWorkflow.newBuilder().setIsActive(active).build())
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setOrchestratorResponse(orchestratorResponse)
+                .build();
+    }
+
+    public static Response getCreateWorkflowResponse(Header header, UUID id) {
+        OrchestratorResponse orchestratorResponse = OrchestratorResponse.newBuilder()
+                .setCreateWorkflow(OrchestratorResponse.CreateWorkflow.newBuilder().setWorkflowId(getUUID(id)).build())
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setOrchestratorResponse(orchestratorResponse)
+                .build();
+    }
+
+    public static AddNodeRequest getJavaAddNodeRequest(OrchestratorRequest.ExecuteWorkflow workflowReq) {
+        return new AddNodeRequest(workflowReq.getEndpoint());
+    }
+
+    public static RemoveNodeRequest getJavaRemoveNodeRequest(OrchestratorRequest.ExecuteWorkflow workflowReq) {
+        return new RemoveNodeRequest(workflowReq.getEndpoint());
+    }
+
+    public static ForceRemoveNodeRequest getJavaForceRemoveNodeRequest(OrchestratorRequest.ExecuteWorkflow workflowReq) {
+        return new ForceRemoveNodeRequest(workflowReq.getEndpoint());
+    }
+
+    public static HealNodeRequest getJavaHealNodeRequest(OrchestratorRequest.ExecuteWorkflow workflowReq) {
+        return new HealNodeRequest(workflowReq.getEndpoint(),
+                workflowReq.getLayoutServer(),
+                workflowReq.getSequencerServer(),
+                workflowReq.getLogUnitServer(),
+                workflowReq.getStripeIndex());
+    }
+
+    public static RestoreRedundancyMergeSegmentsRequest getJavaRestoreRedundancyMergeSegmentsRequest(
+            OrchestratorRequest.ExecuteWorkflow workflowReq) {
+        return new RestoreRedundancyMergeSegmentsRequest(workflowReq.getEndpoint());
+    }
+
+    // LogUnit Messages RPCs
+
+    public static Response getTrimMarkResponse(Header header, long trimMark) {
+        TrimMarkResponse trimMarkResponse = TrimMarkResponse.newBuilder().setTrimMark(trimMark).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setTrimMarkResponse(trimMarkResponse)
+                .build();
+    }
+
+    public static Response getCommittedTailResponse(Header header, long committedTail) {
+        CommittedTailResponse committedTailResponse =
+                CommittedTailResponse.newBuilder().setCommittedTail(committedTail).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setCommittedTailResponse(committedTailResponse)
+                .build();
+    }
+
+    public static Response getUpdateCommittedTailResponse(Header header) {
+        UpdateCommittedTailResponse updateCommittedTailResponse = UpdateCommittedTailResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setUpdateCommittedTailResponse(updateCommittedTailResponse)
+                .build();
+    }
+
+    public static Response getFlushCacheResponse(Header header) {
+        FlushCacheResponse flushCacheResponse = FlushCacheResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setFlushCacheResponse(flushCacheResponse)
+                .build();
+    }
+
+    // Misc. API
 
     public static Response getErrorResponseNoPayload(Header header, ServerError error) {
         return Response.newBuilder()
@@ -696,80 +938,81 @@ public class API {
                 .build();
     }
 
+    //TODO(Zach): Improve this method
     public static boolean validateRequestPayloadType(Request request) {
         switch(request.getHeader().getType()) {
             case PING:
-                if (request.hasPingRequest()) return true;
-                break;
+                return request.hasPingRequest();
             case AUTHENTICATE:
-                if (request.hasAuthenticateRequest()) return true;
-                break;
+                return request.hasAuthenticateRequest();
             case RESTART:
-                if (request.hasRestartRequest()) return true;
-                break;
+                return request.hasRestartRequest();
             case RESET:
-                if (request.hasResetRequest()) return true;
-                break;
+                return request.hasResetRequest();
             case SEAL:
-                if (request.hasSealRequest()) return true;
-                break;
+                return request.hasSealRequest();
             case GET_LAYOUT:
-                if (request.hasGetLayoutRequest()) return true;
-                break;
+                return request.hasGetLayoutRequest();
             case PREPARE_LAYOUT:
-                if (request.hasPrepareLayoutRequest()) return true;
-                break;
+                return request.hasPrepareLayoutRequest();
             case PROPOSE_LAYOUT:
-                if (request.hasProposeLayoutRequest()) return true;
-                break;
+                return request.hasProposeLayoutRequest();
             case COMMIT_LAYOUT:
-                if (request.hasCommitLayoutRequest()) return true;
-                break;
+                return request.hasCommitLayoutRequest();
             case BOOTSTRAP_LAYOUT:
-                if (request.hasBootstrapLayoutRequest()) return true;
-                break;
+                return request.hasBootstrapLayoutRequest();
             case TOKEN:
-                if (request.hasTokenRequest()) return true;
-                break;
-            case COMMIT_TRANSACTION:
-                if (request.hasCommitTransactionRequest()) return true;
-                break;
-            case QUERY_STREAM:
-                if (request.hasQueryStreamRequest()) return true;
-                break;
+                return request.hasTokenRequest();
+            case BOOTSTRAP_SEQUENCER:
+                return request.hasBootstrapSequencerRequest();
+            case SEQUENCER_TRIM:
+                return request.hasSequencerTrimRequest();
+            case SEQUENCER_METRICS:
+                return request.hasSequencerMetricsRequest();
+            case STREAMS_ADDRESS:
+                return request.hasStreamsAddressRequest();
+            case WRITE_LOG:
+                return request.hasWriteLogRequest();
             case READ_LOG:
-                if (request.hasReadLogRequest()) return true;
-                break;
-            case QUERY_LOG_METADATA:
-                if (request.hasQueryLogMetadataRequest()) return true;
-                break;
+                return request.hasReadLogRequest();
+            case INSPECT_ADDRESSES:
+                return request.hasInspectAddressesRequest();
             case TRIM_LOG:
-                if (request.hasTrimLogRequest()) return true;
-                break;
+                return request.hasTrimLogRequest();
+            case TRIM_MARK:
+                return request.hasTrimMarkRequest();
+            case TAIL:
+                return request.hasTailRequest();
             case COMPACT_LOG:
-                if (request.hasCompactRequest()) return true;
-                break;
-            case FLASH:
-                if (request.hasFlashRequest()) return true;
-                break;
+                return request.hasCompactRequest();
+            case FLUSH_CACHE:
+                return request.hasFlushCacheRequest();
+            case LOG_ADDRESS_SPACE:
+                return request.hasLogAddressSpaceRequest();
+            case KNOWN_ADDRESS:
+                return request.hasKnownAddressRequest();
+            case COMMITTED_TAIL:
+                return request.hasCommittedTailRequest();
+            case UPDATE_COMMITTED_TAIL:
+                return request.hasUpdateCommittedTailRequest();
+            case RESET_LOG_UNIT:
+                return request.hasResetLogUnitRequest();
             case QUERY_NODE:
-                if (request.hasQueryNodeRequest()) return true;
-                break;
+                return request.hasQueryNodeRequest();
             case REPORT_FAILURE:
-                if (request.hasReportFailureRequest()) return true;
-                break;
+                return request.hasReportFailureRequest();
             case HEAL_FAILURE:
-                if (request.hasHealFailureRequest()) return true;
-                break;
-            case EXECUTE_WORKFLOW:
-                if (request.hasExecuteWorkflowRequest()) return true;
-                break;
+                return request.hasHealFailureRequest();
+            case ORCHESTRATOR:
+                return request.hasOrchestratorRequest();
+            case BOOTSTRAP_MANAGEMENT:
+                return request.hasBootstrapManagementRequest();
+            case GET_MANAGEMENT_LAYOUT:
+                return request.hasGetManagementLayoutRequest();
             default:
                 break;
         }
 
         return false;
     }
-
-
 }

@@ -12,11 +12,11 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
-import org.corfudb.common.protocol.API;
-import org.corfudb.common.protocol.proto.CorfuProtocol.MessageType;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Response;
-import org.corfudb.common.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.protocols.API;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.MessageType;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.runtime.view.Layout;
 
 import java.io.IOException;
@@ -106,6 +106,7 @@ public class NettyRequestRouter extends ChannelInboundHandlerAdapter implements 
         log.info("channelActive: Incoming connection established from: {}.", ctx.channel().remoteAddress());
         ctx.fireChannelActive(); // So that legacy handshake is initiated.
     }
+
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;
