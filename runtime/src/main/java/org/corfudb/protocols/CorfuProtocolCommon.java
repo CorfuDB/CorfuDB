@@ -1,36 +1,23 @@
 package org.corfudb.protocols;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.protobuf.ByteString;
+import java.util.Arrays;
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.proto.RpcCommon.LayoutMsg;
 import org.corfudb.runtime.proto.RpcCommon.SequencerMetricsMsg;
 import org.corfudb.runtime.proto.RpcCommon.SequencerMetricsMsg.SequencerStatus;
-import org.corfudb.runtime.proto.RpcCommon.StreamAddressRangeMsg;
-import org.corfudb.runtime.proto.RpcCommon.StreamAddressSpaceMsg;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
-import org.corfudb.runtime.proto.RpcCommon.UuidToStreamAddressSpacePairMsg;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
-
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * This class provides methods for creating and converting between the Protobuf
@@ -181,81 +168,5 @@ public class CorfuProtocolCommon {
                 throw new UnsupportedOperationException("SequencerMetrics message unrecognized: "
                         + "Status=" + msg.getSequencerStatus());
         }
-    }
-
-    /**
-     * Returns the Protobuf representation of a StreamAddressSpace object.
-     *
-     * @param addressSpace   the desired Java StreamAddressSpace object
-     * @return               an equivalent Protobuf StreamAddressSpace message
-     * @throws               SerializerException if unable to serialize the underlying roaring64NavigableMap
-     */
-    public static StreamAddressSpaceMsg getStreamAddressSpaceMsg(StreamAddressSpace addressSpace) {
-        StreamAddressSpaceMsg.Builder addressSpaceMsgBuilder = StreamAddressSpaceMsg.newBuilder();
-        addressSpaceMsgBuilder.setTrimMark(addressSpace.getTrimMark());
-
-        try (ByteString.Output bso = ByteString.newOutput()) {
-            try (DataOutputStream dos = new DataOutputStream(bso)) {
-                Roaring64NavigableMap rm = addressSpace.getAddressMap();
-                // Improve compression
-                rm.runOptimize();
-                rm.serialize(dos);
-                addressSpaceMsgBuilder.setAddressMap(bso.toByteString());
-            }
-        } catch (IOException ex) {
-            throw new SerializerException("Unexpected error while serializing roaring64NavigableMap", ex);
-        }
-
-        return addressSpaceMsgBuilder.build();
-    }
-
-    /**
-     * Returns a StreamAddressSpace object from its Protobuf representation.
-     *
-     * @param msg   the desired Protobuf StreamAddressSpace message
-     * @return      an equivalent Java StreamAddressSpace object
-     * @throws      SerializerException if unable to deserialize the underlying roaring64NavigableMap
-     */
-    public static StreamAddressSpace getStreamAddressSpace(StreamAddressSpaceMsg msg) {
-        Roaring64NavigableMap roaring64NavigableMap = new Roaring64NavigableMap();
-
-        try (DataInputStream dis = new DataInputStream(msg.getAddressMap().newInput())) {
-            roaring64NavigableMap.deserialize(dis);
-        } catch (IOException ex) {
-            throw new SerializerException("Unexpected error while deserializing roaring64NavigableMap", ex);
-        }
-
-        return new StreamAddressSpace(msg.getTrimMark(), roaring64NavigableMap);
-    }
-
-    /**
-     * Returns the Protobuf representation of a StreamAddressRange object.
-     *
-     * @param streamAddressRange   the desired Java StreamAddressRange object
-     * @return                     an equivalent Protobuf StreamAddressRange message
-     */
-    public static StreamAddressRangeMsg getStreamAddressRangeMsg(StreamAddressRange streamAddressRange) {
-        return StreamAddressRangeMsg.newBuilder()
-                .setStreamId(getUuidMsg(streamAddressRange.getStreamID()))
-                .setStart(streamAddressRange.getStart())
-                .setEnd(streamAddressRange.getEnd())
-                .build();
-    }
-
-    /**
-     * Returns a StreamAddressResponse object from its log tail and List
-     * of address map entries, each consisting of a UUID and a StreamAddressSpace,
-     * represented in Protobuf.
-     *
-     * @param tail   the log tail
-     * @param map    a list of address map entries represented in Protobuf
-     * @return       an equivalent StreamsAddressResponse object
-     */
-    public static StreamsAddressResponse getStreamsAddressResponse(long tail, List<UuidToStreamAddressSpacePairMsg> map) {
-        return new StreamsAddressResponse(tail, map.stream()
-                .collect(Collectors.<UuidToStreamAddressSpacePairMsg, UUID, StreamAddressSpace>toMap(
-                        entry -> getUUID(entry.getStreamUuid()),
-                        entry -> getStreamAddressSpace(entry.getAddressSpace()))
-                ));
     }
 }

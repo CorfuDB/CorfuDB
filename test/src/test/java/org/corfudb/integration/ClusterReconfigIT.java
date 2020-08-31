@@ -1154,10 +1154,10 @@ public class ClusterReconfigIT extends AbstractIT {
         assertThat(addressSpace.getTrimMark()).isEqualTo(numEntries);
         if (trim) {
             // Addresses were trimmed, cardinality of addresses should be 0
-            assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(0L);
+            assertThat(addressSpace.size()).isEqualTo(0L);
         } else {
             // Extra entry corresponds to entry added by checkpointer.
-            assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries+1);
+            assertThat(addressSpace.size()).isEqualTo(numEntries+1);
         }
 
         // Verify START_ADDRESS of checkpoint for stream
@@ -1166,7 +1166,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 .getAddressMap().get(checkpointStreamId);
 
         // Addresses should correspond to: start, continuation and end records. (total 3 records)
-        assertThat(checkpointAddressSpace.getAddressMap().getLongCardinality()).isEqualTo(numCheckpointRecordsDefault);
+        assertThat(checkpointAddressSpace.size()).isEqualTo(numCheckpointRecordsDefault);
         CheckpointEntry cpEntry = (CheckpointEntry) runtime2.getAddressSpaceView()
                 .read(checkpointAddressSpace.getHighestAddress())
                 .getPayload(runtime2);

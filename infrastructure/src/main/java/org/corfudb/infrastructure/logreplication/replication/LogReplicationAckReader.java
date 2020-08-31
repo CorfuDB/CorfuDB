@@ -1,6 +1,17 @@
 package org.corfudb.infrastructure.logreplication.replication;
 
+import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
+
+
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -12,17 +23,6 @@ import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
-
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 @Slf4j
 public class LogReplicationAckReader {
@@ -311,7 +311,7 @@ public class LogReplicationAckReader {
             // Count how many entries are present in the Tx Stream (this can include holes,
             // valid entries and invalid entries), but we count them all (equal weight).
             // An invalid entry, is a transactional entry with no streams to replicate (which will be ignored)
-            totalEntries = txStreamAddressSpace.getAddressMap().getLongCardinality();
+            totalEntries = txStreamAddressSpace.size();
         }
 
         log.trace("getTxStreamTotalEntries:: entries={} in range ({}, {}]", totalEntries, lowerBoundary, upperBoundary);
