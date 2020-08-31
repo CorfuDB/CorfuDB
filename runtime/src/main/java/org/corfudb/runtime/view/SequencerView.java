@@ -4,7 +4,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.Lists;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -111,7 +111,7 @@ public class SequencerView extends AbstractView {
      * @param streamsAddressesRange range of streams address space to request.
      * @return address space composed of the trim mark and collection of all addresses belonging to this stream.
      */
-    public StreamAddressSpace getStreamAddressSpace(StreamAddressRange streamsAddressesRange) {
+    public StreamBitmap getStreamAddressSpace(StreamAddressRange streamsAddressesRange) {
         return getStreamsAddressSpace(Arrays.asList(streamsAddressesRange)).get(streamsAddressesRange.getStreamID());
     }
 
@@ -121,7 +121,7 @@ public class SequencerView extends AbstractView {
      * @param streamsAddressesRange list of streams and ranges to be requested.
      * @return address space for each stream in the request.
      */
-    public Map<UUID, StreamAddressSpace> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
+    public Map<UUID, StreamBitmap> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
         try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {
             StreamsAddressResponse streamsAddressResponse = layoutHelper(e ->
                     CFUtils.getUninterruptibly(e.getPrimarySequencerClient()

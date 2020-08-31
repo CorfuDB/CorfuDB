@@ -34,7 +34,7 @@ import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
@@ -105,7 +105,7 @@ public class SequencerServer extends AbstractServer {
      * Per streams map and their corresponding address space (an address space is defined by the stream's addresses
      *  and its latest trim mark)
      */
-    private Map<UUID, StreamAddressSpace> streamsAddressMap = new HashMap<>();
+    private Map<UUID, StreamBitmap> streamsAddressMap = new HashMap<>();
 
     /**
      * A map to cache the name of timers to avoid creating timer names on each call.
@@ -342,8 +342,8 @@ public class SequencerServer extends AbstractServer {
             cache.invalidateUpTo(trimMark);
 
             // Remove trimmed addresses from each address map and set new trim mark
-            for(StreamAddressSpace streamAddressSpace : streamsAddressMap.values()) {
-                streamAddressSpace.trim(trimMark);
+            for(StreamBitmap streamBitmap : streamsAddressMap.values()) {
+                streamBitmap.trim(trimMark);
             }
         }
 
@@ -359,7 +359,7 @@ public class SequencerServer extends AbstractServer {
     public void resetServer(CorfuPayloadMsg<SequencerRecoveryMsg> msg,
                                          ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Reset sequencer server.");
-        final Map<UUID, StreamAddressSpace> addressSpaceMap = msg.getPayload().getStreamsAddressMap();
+        final Map<UUID, StreamBitmap> addressSpaceMap = msg.getPayload().getStreamsAddressMap();
         final long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
 
         // Boolean flag to denote whether this bootstrap message is just updating an existing
@@ -406,7 +406,7 @@ public class SequencerServer extends AbstractServer {
             streamTailToGlobalTailMap = new HashMap<>();
 
             // Set tail for every stream
-            for(Map.Entry<UUID, StreamAddressSpace> streamAddressSpace : addressSpaceMap.entrySet()) {
+            for(Map.Entry<UUID, StreamBitmap> streamAddressSpace : addressSpaceMap.entrySet()) {
                 Long streamTail = streamAddressSpace.getValue().getTail();
                 log.trace("On Sequencer reset, tail for stream {} set to {}", streamAddressSpace.getKey(), streamTail);
                 streamTailToGlobalTailMap.put(streamAddressSpace.getKey(), streamTail);
@@ -416,7 +416,7 @@ public class SequencerServer extends AbstractServer {
             this.streamsAddressMap = new HashMap<>();
             this.streamsAddressMap.putAll(addressSpaceMap);
 
-            for (Map.Entry<UUID, StreamAddressSpace> streamAddressSpace : this.streamsAddressMap.entrySet()) {
+            for (Map.Entry<UUID, StreamBitmap> streamAddressSpace : this.streamsAddressMap.entrySet()) {
                 log.info("Stream[{}] set to last trimmed address {} and {} addresses in the range [{}-{}], " +
                                 "on sequencer reset.",
                         Utils.toReadableId(streamAddressSpace.getKey()),
@@ -597,7 +597,7 @@ public class SequencerServer extends AbstractServer {
             // step 3. add allocated addresses to each stream's address map (to keep track of all updates to this stream)
             streamsAddressMap.compute(id, (streamId, addressMap) -> {
                 if (addressMap == null) {
-                    addressMap = new StreamAddressSpace();
+                    addressMap = new StreamBitmap();
                 }
 
                 for (long i = globalLogTail; i < newTail; i++) {
@@ -641,7 +641,7 @@ public class SequencerServer extends AbstractServer {
     private void handleStreamsAddressRequest(CorfuPayloadMsg<StreamsAddressRequest> msg,
                                              ChannelHandlerContext ctx, IServerRouter r) {
         StreamsAddressRequest req = msg.getPayload();
-        Map<UUID, StreamAddressSpace> streamsAddressMap;
+        Map<UUID, StreamBitmap> streamsAddressMap;
 
         switch (req.getReqType()) {
             case StreamsAddressRequest.STREAMS:
@@ -666,14 +666,14 @@ public class SequencerServer extends AbstractServer {
      * @param addressRanges list of requested a stream and ranges.
      * @return map of stream to address space.
      */
-    private Map<UUID, StreamAddressSpace> getStreamsAddresses(List<StreamAddressRange> addressRanges) {
-        Map<UUID, StreamAddressSpace> requestedAddressSpaces = new HashMap<>();
+    private Map<UUID, StreamBitmap> getStreamsAddresses(List<StreamAddressRange> addressRanges) {
+        Map<UUID, StreamBitmap> requestedAddressSpaces = new HashMap<>();
 
         for (StreamAddressRange range : addressRanges) {
             UUID streamId = range.getStreamID();
             // Get all addresses in the requested range
             if (streamsAddressMap.containsKey(streamId)) {
-                StreamAddressSpace streamSubRange = streamsAddressMap.get(streamId)
+                StreamBitmap streamSubRange = streamsAddressMap.get(streamId)
                         .getRange(range.getStart(), range.getEnd());
                 requestedAddressSpaces.put(streamId, streamSubRange);
             } else {

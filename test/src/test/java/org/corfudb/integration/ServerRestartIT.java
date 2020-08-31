@@ -39,7 +39,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 import org.junit.Before;
@@ -797,7 +797,7 @@ public class ServerRestartIT extends AbstractIT {
             runtimeRestart = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
 
             // Fetch Address Space for the given stream
-            StreamAddressSpace addressSpace = Utils.getLogAddressSpace(runtimeRestart
+            StreamBitmap addressSpace = Utils.getLogAddressSpace(runtimeRestart
                     .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID("test"));

@@ -7,7 +7,7 @@ import java.util.UUID;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 
 /**
  * Created by rmichoud on 6/20/17.
@@ -17,7 +17,7 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 public class SequencerRecoveryMsg implements ICorfuPayload<SequencerRecoveryMsg> {
 
     private final Long globalTail;
-    private final Map<UUID, StreamAddressSpace> streamsAddressMap;
+    private final Map<UUID, StreamBitmap> streamsAddressMap;
     private final Long sequencerEpoch;
 
     /**
@@ -29,7 +29,7 @@ public class SequencerRecoveryMsg implements ICorfuPayload<SequencerRecoveryMsg>
 
     public SequencerRecoveryMsg(ByteBuf buf) {
         globalTail = ICorfuPayload.fromBuffer(buf, Long.class);
-        streamsAddressMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, StreamAddressSpace.class);
+        streamsAddressMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, StreamBitmap.class);
         sequencerEpoch = ICorfuPayload.fromBuffer(buf, Long.class);
         bootstrapWithoutTailsUpdate = ICorfuPayload.fromBuffer(buf, Boolean.class);
     }

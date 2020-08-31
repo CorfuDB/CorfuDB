@@ -24,7 +24,7 @@ import org.corfudb.runtime.clients.LogUnitClient;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.util.Utils;
 import org.junit.Test;
 
@@ -115,7 +115,7 @@ public class UtilsTest {
   }
 
   private CompletableFuture<StreamsAddressResponse> getLogAddressSpaceResponse(
-          long globalTail, Map<UUID, StreamAddressSpace> streamTails, long epoch) {
+          long globalTail, Map<UUID, StreamBitmap> streamTails, long epoch) {
     CompletableFuture<StreamsAddressResponse> cf = new CompletableFuture<>();
     StreamsAddressResponse resp = new StreamsAddressResponse(globalTail, streamTails);
     resp.setEpoch(epoch);
@@ -248,8 +248,8 @@ public class UtilsTest {
             .isInstanceOf(WrongEpochException.class);
   }
 
-  private StreamAddressSpace getRandomStreamSpace(long max) {
-    StreamAddressSpace streamA = new StreamAddressSpace();
+  private StreamBitmap getRandomStreamSpace(long max) {
+    StreamBitmap streamA = new StreamBitmap();
     LongStream.range(0, max)
             .forEach(address -> streamA.add(((address & 0x1) == 1) ? 0 : address));
     return streamA;
@@ -264,7 +264,7 @@ public class UtilsTest {
     final long nodeAGlobalTail = 50;
     UUID s1Id = UUID.randomUUID();
     UUID s2Id = UUID.randomUUID();
-    Map<UUID, StreamAddressSpace> nodeALogAddressSpace =
+    Map<UUID, StreamBitmap> nodeALogAddressSpace =
             ImmutableMap.of(
                     s1Id, getRandomStreamSpace(nodeAGlobalTail - 1),
                     s2Id, getRandomStreamSpace(nodeAGlobalTail - 1));
@@ -298,7 +298,7 @@ public class UtilsTest {
     final long nodeAGlobalTail = 50;
     UUID s1Id = UUID.randomUUID();
     UUID s2Id = UUID.randomUUID();
-    Map<UUID, StreamAddressSpace> nodeALogAddressSpace =
+    Map<UUID, StreamBitmap> nodeALogAddressSpace =
             ImmutableMap.of(
                     s1Id, getRandomStreamSpace(nodeAGlobalTail - 1),
                     s2Id, getRandomStreamSpace(nodeAGlobalTail - 1));
@@ -306,13 +306,13 @@ public class UtilsTest {
     UUID s3Id = UUID.randomUUID();
     final long nodeBGlobalTail = 205;
 
-    StreamAddressSpace s2IdPartial = nodeALogAddressSpace.get(s2Id).copy();
+    StreamBitmap s2IdPartial = nodeALogAddressSpace.get(s2Id).copy();
     s2IdPartial.trim(30L);
     s2IdPartial.add(201L);
     s2IdPartial.add(202L);
     s2IdPartial.add(203L);
 
-    Map<UUID, StreamAddressSpace> nodeBLogAddressSpace =
+    Map<UUID, StreamBitmap> nodeBLogAddressSpace =
             ImmutableMap.of(s2Id, s2IdPartial, s3Id, getRandomStreamSpace(nodeAGlobalTail - 1));
 
     when(ctx.getLogUnitClient(nodeA).getLogAddressSpace())
@@ -326,7 +326,7 @@ public class UtilsTest {
 
     assertThat(resp.getLogTail()).isEqualTo(nodeBGlobalTail);
 
-    Map<UUID, StreamAddressSpace> expectedMergedTails =
+    Map<UUID, StreamBitmap> expectedMergedTails =
             ImmutableMap.of(
                     s1Id, nodeALogAddressSpace.get(s1Id),
                     s2Id, s2IdPartial,

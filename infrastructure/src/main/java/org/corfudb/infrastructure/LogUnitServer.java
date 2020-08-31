@@ -36,7 +36,7 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.util.Utils;
 
 import java.lang.invoke.MethodHandles;
@@ -485,7 +485,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @VisibleForTesting
-    StreamAddressSpace getStreamAddressSpace(UUID streamID) {
+    StreamBitmap getStreamAddressSpace(UUID streamID) {
         return streamLog.getStreamsAddressSpace().getAddressMap().get(streamID);
     }
 

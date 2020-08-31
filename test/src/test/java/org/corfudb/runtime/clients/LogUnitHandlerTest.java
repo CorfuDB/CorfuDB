@@ -55,7 +55,7 @@ import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -616,7 +616,7 @@ public class LogUnitHandlerTest extends AbstractClientTest {
         client.write(ldTwo).join();
 
         // Get Stream's Address Space
-        StreamAddressSpace addressSpace = client.getLogAddressSpace().join().getAddressMap().get(streamId);
+        StreamBitmap addressSpace = client.getLogAddressSpace().join().getAddressMap().get(streamId);
         assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.size()).isEqualTo(numEntries);
         assertThat(addressSpace.contains(addressOne));

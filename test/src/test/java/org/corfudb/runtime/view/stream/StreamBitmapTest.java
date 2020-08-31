@@ -7,12 +7,12 @@ import java.util.stream.LongStream;
 import org.corfudb.runtime.view.Address;
 import org.junit.Test;
 
-public class StreamAddressSpaceTest {
+public class StreamBitmapTest {
 
     @Test
     public void testStreamAddressSpaceMerge() {
 
-        StreamAddressSpace streamA = new StreamAddressSpace();
+        StreamBitmap streamA = new StreamBitmap();
 
         final int numStreamAEntries = 100;
         LongStream.range(0, numStreamAEntries).forEach(streamA::add);
@@ -22,7 +22,7 @@ public class StreamAddressSpaceTest {
 
         // need to take higher trim mark?
 
-        StreamAddressSpace streamB = new StreamAddressSpace();
+        StreamBitmap streamB = new StreamBitmap();
         final int numStreamBEntries = 130;
         LongStream.range(0, numStreamBEntries).forEach(streamB::add);
         final long streamBTrimMark = 40;
@@ -33,7 +33,7 @@ public class StreamAddressSpaceTest {
 
         // Merge steamB into streamA and verify that the highest trim mark is
         // adopted in streamA
-        StreamAddressSpace.merge(streamA, streamB);
+        StreamBitmap.merge(streamA, streamB);
 
         assertThat(streamA.getTrimMark()).isEqualTo(streamBTrimMark);
         assertThat(streamA.getTail()).isEqualTo(numStreamBEntries - 1);

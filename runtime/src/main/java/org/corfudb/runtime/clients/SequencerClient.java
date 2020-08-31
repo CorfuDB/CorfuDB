@@ -9,7 +9,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
@@ -88,7 +88,7 @@ public class SequencerClient extends AbstractClient {
      *                                    False otherwise.
      * @return A CompletableFuture which completes once the sequencer is reset.
      */
-    public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, StreamAddressSpace> streamAddressSpaceMap,
+    public CompletableFuture<Boolean> bootstrap(Long initialToken, Map<UUID, StreamBitmap> streamAddressSpaceMap,
                                                 Long readyStateEpoch,
                                                 boolean bootstrapWithoutTailsUpdate) {
         return sendMessageWithFuture(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(
@@ -106,7 +106,7 @@ public class SequencerClient extends AbstractClient {
      * @return A CompletableFuture which completes once the sequencer is reset.
      */
     public CompletableFuture<Boolean> bootstrap(Long initialToken,
-                                                Map<UUID, StreamAddressSpace> streamAddressSpaceMap,
+                                                Map<UUID, StreamBitmap> streamAddressSpaceMap,
                                                 Long readyStateEpoch) {
         return bootstrap(initialToken, streamAddressSpaceMap, readyStateEpoch, false);
     }

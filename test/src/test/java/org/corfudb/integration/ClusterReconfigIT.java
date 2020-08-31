@@ -48,7 +48,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.stream.IStreamView;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
@@ -1147,7 +1147,7 @@ public class ClusterReconfigIT extends AbstractIT {
                 .open();
 
         // Verify sequencer has correct address map for this stream (addresses and trim mark)
-        StreamAddressSpace addressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
+        StreamBitmap addressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
                 .getRuntimeLayout())
                 .getAddressMap().get(streamId);
 
@@ -1161,7 +1161,7 @@ public class ClusterReconfigIT extends AbstractIT {
         }
 
         // Verify START_ADDRESS of checkpoint for stream
-        StreamAddressSpace checkpointAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
+        StreamBitmap checkpointAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
                 .getRuntimeLayout())
                 .getAddressMap().get(checkpointStreamId);
 

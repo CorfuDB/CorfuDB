@@ -6,7 +6,7 @@ import java.util.UUID;
 import lombok.Data;
 import lombok.Setter;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 
 /**
  * Represents the response sent by the sequencer when streams address maps are requested
@@ -23,9 +23,9 @@ public class StreamsAddressResponse implements ICorfuPayload<StreamsAddressRespo
     @Setter
     private long epoch = Layout.INVALID_EPOCH;
 
-    private final Map<UUID, StreamAddressSpace> addressMap;
+    private final Map<UUID, StreamBitmap> addressMap;
 
-    public StreamsAddressResponse(long logTail, Map<UUID, StreamAddressSpace> streamsAddressesMap) {
+    public StreamsAddressResponse(long logTail, Map<UUID, StreamBitmap> streamsAddressesMap) {
         this.logTail = logTail;
         this.addressMap = streamsAddressesMap;
     }
@@ -38,7 +38,7 @@ public class StreamsAddressResponse implements ICorfuPayload<StreamsAddressRespo
     public StreamsAddressResponse(ByteBuf buf) {
         this.logTail = ICorfuPayload.fromBuffer(buf, Long.class);
         this.epoch = ICorfuPayload.fromBuffer(buf, Long.class);
-        this.addressMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, StreamAddressSpace.class);
+        this.addressMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, StreamBitmap.class);
     }
 
     @Override

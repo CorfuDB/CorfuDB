@@ -29,7 +29,7 @@ import org.corfudb.protocols.wireprotocol.IMetadata.DataRank;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.view.Layout;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.util.JsonUtils;
 
 /**
@@ -82,7 +82,7 @@ public interface ICorfuPayload<T> {
                     .put(StreamAddressRange.class, buffer ->
                             new StreamAddressRange(new UUID(buffer.readLong(), buffer.readLong()),
                                     buffer.readLong(), buffer.readLong()))
-                    .put(StreamAddressSpace.class, StreamAddressSpace::deserialize)
+                    .put(StreamBitmap.class, StreamBitmap::deserialize)
                     .put(LogReplicationEntryMetadata.class, buffer -> {
                         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata();
                         metadata.setTopologyConfigId(buffer.readLong());
@@ -368,9 +368,9 @@ public interface ICorfuPayload<T> {
             buffer.writeInt(((Codec.Type) payload).getId());
         } else if (payload instanceof PriorityLevel) {
             buffer.writeByte(((PriorityLevel) payload).asByte());
-        } else if (payload instanceof StreamAddressSpace) {
-            StreamAddressSpace streamAddressSpace = (StreamAddressSpace) payload;
-            streamAddressSpace.serialize(buffer);
+        } else if (payload instanceof StreamBitmap) {
+            StreamBitmap streamBitmap = (StreamBitmap) payload;
+            streamBitmap.serialize(buffer);
         } else if (payload instanceof StreamAddressRange) {
             StreamAddressRange streamRange = (StreamAddressRange) payload;
             buffer.writeLong(streamRange.getStreamID().getMostSignificantBits());

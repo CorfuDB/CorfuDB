@@ -28,7 +28,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Utils;
 import org.junit.Test;
@@ -773,7 +773,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             runtimes.add(runtimeRestart);
 
             // Fetch Address Space for the given stream S1
-            StreamAddressSpace addressSpaceA = Utils.getLogAddressSpace(runtimeRestart
+            StreamBitmap addressSpaceA = Utils.getLogAddressSpace(runtimeRestart
                     .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(stream1));
@@ -784,7 +784,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             assertThat(addressSpaceA.size()).isEqualTo(insertions);
 
             // Fetch Address Space for the given stream S2
-            StreamAddressSpace addressSpaceB =  Utils.getLogAddressSpace(runtimeRestart
+            StreamBitmap addressSpaceB =  Utils.getLogAddressSpace(runtimeRestart
                     .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(stream2));
@@ -898,7 +898,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("8");
 
             // Fetch Address Space for the given stream
-            StreamAddressSpace addressSpaceA = Utils.getLogAddressSpace(runtimeRestart
+            StreamBitmap addressSpaceA = Utils.getLogAddressSpace(runtimeRestart
                     .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(streamNameA));
@@ -989,7 +989,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             runtimes.add(rt2);
 
             // Fetch Address Space for the given stream
-            StreamAddressSpace addressSpaceB = Utils.getLogAddressSpace(rt2
+            StreamBitmap addressSpaceB = Utils.getLogAddressSpace(rt2
                     .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(streamNameB));

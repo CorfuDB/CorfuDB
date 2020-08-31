@@ -147,12 +147,12 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         // If startAddress is equal to stopAddress there is nothing to resolve.
         if (Address.isAddress(startAddress) && (startAddress > stopAddress)) {
 
-            StreamAddressSpace streamAddressSpace = getStreamAddressMap(startAddress, stopAddress, streamId);
+            StreamBitmap streamBitmap = getStreamAddressMap(startAddress, stopAddress, streamId);
 
             if (checkpoint) {
-                processCheckpoint(streamAddressSpace, filter, queue);
+                processCheckpoint(streamBitmap, filter, queue);
             } else {
-                moveToReadQueue(streamAddressSpace, queue, startAddress, stopAddress, maxGlobal);
+                moveToReadQueue(streamBitmap, queue, startAddress, stopAddress, maxGlobal);
             }
         }
 
@@ -160,7 +160,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         return !queue.isEmpty();
     }
 
-    private void moveToReadQueue(final StreamAddressSpace streamAddressSpace,
+    private void moveToReadQueue(final StreamBitmap streamBitmap,
                                   final NavigableSet<Long> queue,
                                   final long startAddress,
                                   final long stopAddress,
@@ -169,9 +169,9 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         // Transfer discovered addresses to queue. We must limit to maxGlobal,
         // as startAddress could be ahead of maxGlobal---in case it reflects
         // the tail of the stream.
-        queue.addAll(streamAddressSpace.getAddressesUpTo(maxGlobal));
+        queue.addAll(streamBitmap.getAddressesUpTo(maxGlobal));
 
-        final long trimMark = streamAddressSpace.getTrimMark();
+        final long trimMark = streamBitmap.getTrimMark();
 
         // No valid trim-mark has been defined,
         // thus we cannot run into trimmed address space.
@@ -206,7 +206,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         if (isCheckpointCapable() && !isTrimCoveredByCheckpointOrLocalView(trimMark)) {
             if (getReadOptions().isIgnoreTrim()) {
                 log.debug("getStreamAddressMap[{}]: Ignoring trimmed exception for address[{}].",
-                        this, streamAddressSpace.getTrimMark());
+                        this, streamBitmap.getTrimMark());
             } else {
                 String message = String.format("getStreamAddressMap[{%s}] [%d, %d] " +
                                 "stream has been trimmed at address %s and this space is " +
@@ -220,10 +220,10 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         }
     }
 
-    private void processCheckpoint(StreamAddressSpace streamAddressSpace, Function<ILogData, Boolean> filter,
+    private void processCheckpoint(StreamBitmap streamBitmap, Function<ILogData, Boolean> filter,
                                    NavigableSet<Long> queue) {
         SortedSet<Long> checkpointAddresses = new TreeSet<>(Collections.reverseOrder());
-        streamAddressSpace.forEach(checkpointAddresses::add);
+        streamBitmap.forEach(checkpointAddresses::add);
 
         // Checkpoint entries will be read in batches of a predefined size,
         // the reason not to read them all in a single call is that:
@@ -290,7 +290,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         }
     }
 
-    private StreamAddressSpace getStreamAddressMap(long startAddress, long stopAddress, UUID streamId) {
+    private StreamBitmap getStreamAddressMap(long startAddress, long stopAddress, UUID streamId) {
         // Case non-consecutive addresses
         if (startAddress - stopAddress > DIFF_CONSECUTIVE_ADDRESSES) {
             log.trace("getStreamAddressMap[{}] get addresses from {} to {}", this, startAddress, stopAddress);
@@ -299,7 +299,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             // if this address is already resolved locally do not request the stream map to the sequencer as new
             // updates are not required to be synced (this benefits single runtime writers).
             if(isAddressToBackpointerResolved(startAddress, streamId)) {
-                return new StreamAddressSpace(Address.NON_ADDRESS, startAddress);
+                return new StreamBitmap(Address.NON_ADDRESS, startAddress);
             }
 
             log.trace("getStreamAddressMap[{}]: request stream address space between {} and {}.",
@@ -310,7 +310,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
         // Start and stop address are consecutive addresses, no need to request the address map for this stream,
         // the only address to include is startAddress (stopAddress is already resolved - not included in the lookup).
-        return new StreamAddressSpace(Address.NON_ADDRESS, startAddress);
+        return new StreamBitmap(Address.NON_ADDRESS, startAddress);
     }
 
     private boolean isAddressToBackpointerResolved(long startAddress, UUID streamId) {

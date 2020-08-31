@@ -7,7 +7,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 
 import java.util.Map;
 import java.util.UUID;
@@ -144,7 +144,7 @@ public class LogReplicationAckReader {
         for (String stream : config.getStreamsToReplicate()) {
             UUID streamId = CorfuRuntime.getStreamID(stream);
             StreamAddressRange range = new StreamAddressRange(streamId, start, end);
-            StreamAddressSpace addressSpace = runtime.getSequencerView().getStreamAddressSpace(range);
+            StreamBitmap addressSpace = runtime.getSequencerView().getStreamAddressSpace(range);
             remainingEntriesToSend += addressSpace.size();
         }
         return remainingEntriesToSend;

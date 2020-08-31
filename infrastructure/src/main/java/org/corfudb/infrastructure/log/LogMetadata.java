@@ -11,7 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 
 /**
  * A container object that holds log tail offsets and the global
@@ -30,7 +30,7 @@ public class LogMetadata {
     private volatile long globalTail;
 
     @Getter
-    private final Map<UUID, StreamAddressSpace> streamsAddressSpaceMap;
+    private final Map<UUID, StreamBitmap> streamsAddressSpaceMap;
 
     @Getter
     private final Map<UUID, Long> streamTails;
@@ -89,7 +89,7 @@ public class LogMetadata {
                 // Note: stream trim mark is initialized to -6
                 // its value will be computed as checkpoints for this stream are found in the log.
                 // The presence of a checkpoint provides a valid trim mark for a stream.
-                return new StreamAddressSpace(Address.NON_EXIST, entryAddress);
+                return new StreamBitmap(Address.NON_EXIST, entryAddress);
             }
             addressSpace.add(entryAddress);
             return addressSpace;
@@ -132,11 +132,11 @@ public class LogMetadata {
                             // If this entry still does not exist, means no updates have been observed for
                             // this stream yet. We can initialize the trim mark to the last observed update by the
                             // checkpoint. If further entries are observed they will be added to the address space.
-                            return new StreamAddressSpace(lastUpdateToStream);
+                            return new StreamBitmap(lastUpdateToStream);
                         }
                         // We will hold the maximum of these observed updates as the stream trim mark (highest
                         // checkpointed address), as this guarantees data is available in a checkpoint (safe trim mark).
-                        addressSpace.setTrimMark(Long.max(addressSpace.getTrimMark(), lastUpdateToStream));
+                        addressSpace.trim(Long.max(addressSpace.getTrimMark(), lastUpdateToStream));
                         return addressSpace;
                     });
                 }
@@ -150,7 +150,7 @@ public class LogMetadata {
 
     public void prefixTrim(long address) {
         log.info("prefixTrim: trim stream address maps up to address {}", address);
-        for (Map.Entry<UUID, StreamAddressSpace> streamAddressMap : streamsAddressSpaceMap.entrySet()) {
+        for (Map.Entry<UUID, StreamBitmap> streamAddressMap : streamsAddressSpaceMap.entrySet()) {
             log.trace("prefixTrim: trim address space for stream {} up to trim mark {}",
                     streamAddressMap.getKey(), address);
             streamAddressMap.getValue().trim(address);

@@ -28,7 +28,7 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 
 /**
  * Created by crossbach on 5/22/15.
@@ -332,7 +332,7 @@ public class Utils {
     // coalesce the candidates to unique nodes only
     Set<String> segmentsHeadNodes = getChainHeadFromAllSegments(runtimeLayout.getLayout());
     AtomicLong globalTail = new AtomicLong(Address.NON_EXIST);
-    final Map<UUID, StreamAddressSpace> streamsAddressSpace = new HashMap<>();
+    final Map<UUID, StreamBitmap> streamsAddressSpace = new HashMap<>();
     List<CompletableFuture<StreamsAddressResponse>> cfs =
         segmentsHeadNodes.stream()
             .map(node -> runtimeLayout.getLogUnitClient(node).getLogAddressSpace())
@@ -347,7 +347,7 @@ public class Utils {
               // Find the global max global tail and stream tails across all responses
               globalTail.set(Long.max(resp.getLogTail(), globalTail.get()));
               resp.getAddressMap()
-                  .forEach((k, v) -> streamsAddressSpace.merge(k, v, StreamAddressSpace::merge));
+                  .forEach((k, v) -> streamsAddressSpace.merge(k, v, StreamBitmap::merge));
             });
 
     log.debug(

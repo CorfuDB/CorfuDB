@@ -36,7 +36,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -407,7 +407,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         future.join();
 
         // Retrieve address space from current log unit server (write path)
-        StreamAddressSpace addressSpace = s1.getStreamAddressSpace(streamID);
+        StreamBitmap addressSpace = s1.getStreamAddressSpace(streamID);
         assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
         assertThat(addressSpace.size()).isEqualTo(minAddress + 1);
 

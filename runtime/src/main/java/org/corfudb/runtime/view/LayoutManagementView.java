@@ -21,7 +21,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.QuorumUnreachableException;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
 
@@ -408,7 +408,7 @@ public class LayoutManagementView extends AbstractView {
                 }
 
                 long maxTokenRequested = -1L;
-                Map<UUID, StreamAddressSpace> streamsAddressSpace = Collections.emptyMap();
+                Map<UUID, StreamBitmap> streamsAddressSpace = Collections.emptyMap();
                 boolean bootstrapWithoutTailsUpdate = true;
 
                 // Reconfigure Primary Sequencer if required

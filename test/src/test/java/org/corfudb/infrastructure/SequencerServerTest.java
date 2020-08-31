@@ -17,7 +17,7 @@ import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.runtime.view.stream.StreamBitmap;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -218,15 +218,15 @@ public class SequencerServerTest extends AbstractServerTest {
         long globalTail = future.join().getToken().getSequence();
 
         // Construct new tails
-        Map<UUID, StreamAddressSpace> tailMap = new HashMap<>();
+        Map<UUID, StreamBitmap> tailMap = new HashMap<>();
         long newTailA = tailA + 2;
         long newTailB = tailB + 1;
         // This one should not be updated
         long newTailC = tailC - 1;
 
-        tailMap.put(streamA, new StreamAddressSpace(Address.NON_ADDRESS, newTailA));
-        tailMap.put(streamB, new StreamAddressSpace(Address.NON_ADDRESS, newTailB));
-        tailMap.put(streamC, new StreamAddressSpace(Address.NON_ADDRESS, newTailC));
+        tailMap.put(streamA, new StreamBitmap(Address.NON_ADDRESS, newTailA));
+        tailMap.put(streamB, new StreamBitmap(Address.NON_ADDRESS, newTailB));
+        tailMap.put(streamC, new StreamBitmap(Address.NON_ADDRESS, newTailC));
 
         // Modifying the sequencerEpoch to simulate sequencer reset.
         server.setSequencerEpoch(-1L);
@@ -284,7 +284,7 @@ public class SequencerServerTest extends AbstractServerTest {
                 Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)), newEpoch);
         assertThat(future1.join()).isEqualTo(false);
         future1 = sendRequestWithEpoch(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
-                num, Collections.singletonMap(streamA, new StreamAddressSpace(Address.NON_ADDRESS, num)), newEpoch, false)), newEpoch);
+                num, Collections.singletonMap(streamA, new StreamBitmap(Address.NON_ADDRESS, num)), newEpoch, false)), newEpoch);
         assertThat(future1.join()).isEqualTo(true);
 
         future = sendRequestWithEpoch(CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(0L, Collections.emptyList())), newEpoch);
