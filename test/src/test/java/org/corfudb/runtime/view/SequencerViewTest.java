@@ -1,16 +1,16 @@
 package org.corfudb.runtime.view;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+
+import java.util.UUID;
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.junit.Test;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
-
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by mwei on 12/23/15.
@@ -117,15 +117,15 @@ public class SequencerViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         // Request 3 tokens on the Sequencer.
         final int tokenCount = 3;
-        Roaring64NavigableMap expectedMap = new Roaring64NavigableMap();
-        for (int i = 0; i < tokenCount; i++) {
+        StreamAddressSpace expected = new StreamAddressSpace();
+        for (long i = 0; i < tokenCount; i++) {
             r.getSequencerView().next(streamA);
-            expectedMap.add(i);
+            expected.add(i);
         }
         // Request StreamAddressSpace should succeed.
         assertThat(r.getSequencerView().getStreamAddressSpace(
-                new StreamAddressRange(streamA,  tokenCount, Address.NON_ADDRESS)).getAddressMap())
-                .isEqualTo(expectedMap);
+                new StreamAddressRange(streamA,  tokenCount, Address.NON_ADDRESS)))
+                .isEqualTo(expected);
 
         // Increment the epoch.
         incrementClusterEpoch(controlRuntime);
@@ -136,7 +136,7 @@ public class SequencerViewTest extends AbstractViewTest {
         // Request StreamAddressSpace should fail with a WrongEpochException initially
         // This is then retried internally and returned with a valid response.
         assertThat(r.getSequencerView().getStreamAddressSpace(
-                new StreamAddressRange(streamA,  tokenCount, Address.NON_ADDRESS)).getAddressMap())
-                .isEqualTo(expectedMap);
+                new StreamAddressRange(streamA,  tokenCount, Address.NON_ADDRESS)))
+                .isEqualTo(expected);
     }
 }

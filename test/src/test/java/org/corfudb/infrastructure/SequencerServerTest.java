@@ -2,25 +2,24 @@ package org.corfudb.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.junit.Before;
 import org.junit.Test;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 /**
  * Created by mwei on 12/13/15.
@@ -225,9 +224,9 @@ public class SequencerServerTest extends AbstractServerTest {
         // This one should not be updated
         long newTailC = tailC - 1;
 
-        tailMap.put(streamA, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailA)));
-        tailMap.put(streamB, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailB)));
-        tailMap.put(streamC, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailC)));
+        tailMap.put(streamA, new StreamAddressSpace(Address.NON_ADDRESS, newTailA));
+        tailMap.put(streamB, new StreamAddressSpace(Address.NON_ADDRESS, newTailB));
+        tailMap.put(streamC, new StreamAddressSpace(Address.NON_ADDRESS, newTailC));
 
         // Modifying the sequencerEpoch to simulate sequencer reset.
         server.setSequencerEpoch(-1L);
@@ -285,8 +284,7 @@ public class SequencerServerTest extends AbstractServerTest {
                 Address.NON_EXIST, Collections.emptyMap(), newEpoch, true)), newEpoch);
         assertThat(future1.join()).isEqualTo(false);
         future1 = sendRequestWithEpoch(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(
-                num, Collections.singletonMap(streamA, new StreamAddressSpace(Address.NON_ADDRESS,
-                Roaring64NavigableMap.bitmapOf(num))), newEpoch, false)), newEpoch);
+                num, Collections.singletonMap(streamA, new StreamAddressSpace(Address.NON_ADDRESS, num)), newEpoch, false)), newEpoch);
         assertThat(future1.join()).isEqualTo(true);
 
         future = sendRequestWithEpoch(CorfuMsgType.TOKEN_REQ.payloadMsg(new TokenRequest(0L, Collections.emptyList())), newEpoch);

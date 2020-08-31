@@ -3,35 +3,6 @@ package org.corfudb.infrastructure;
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Builder;
-import lombok.Builder.Default;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
-import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics;
-import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
-import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
-import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TokenRequest;
-import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.TokenType;
-import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.Layout;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
-import org.corfudb.util.Utils;
-
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.HashMap;
@@ -41,6 +12,32 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import lombok.Builder;
+import lombok.Builder.Default;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
+import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
+import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenRequest;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
+import org.corfudb.protocols.wireprotocol.TokenType;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.CorfuComponent;
+import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.Utils;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -424,12 +421,13 @@ public class SequencerServer extends AbstractServer {
                                 "on sequencer reset.",
                         Utils.toReadableId(streamAddressSpace.getKey()),
                         streamAddressSpace.getValue().getTrimMark(),
-                        streamAddressSpace.getValue().getAddressMap().getLongCardinality(),
+                        streamAddressSpace.getValue().size(),
                         streamAddressSpace.getValue().getLowestAddress(),
                         streamAddressSpace.getValue().getHighestAddress());
                 if (log.isTraceEnabled()) {
-                    log.trace("Stream[{}] address map on sequencer reset: {}",
-                            Utils.toReadableId(streamAddressSpace.getKey()), streamAddressSpace.getValue().getAddressMap());
+                    //TODO(Maithem) fix this
+                    //log.trace("Stream[{}] address map on sequencer reset: {}",
+                      //      Utils.toReadableId(streamAddressSpace.getKey()), streamAddressSpace.getValue().getAddressMap());
                 }
             }
         }
@@ -599,11 +597,11 @@ public class SequencerServer extends AbstractServer {
             // step 3. add allocated addresses to each stream's address map (to keep track of all updates to this stream)
             streamsAddressMap.compute(id, (streamId, addressMap) -> {
                 if (addressMap == null) {
-                    addressMap = new StreamAddressSpace(Address.NON_ADDRESS, new Roaring64NavigableMap());
+                    addressMap = new StreamAddressSpace();
                 }
 
                 for (long i = globalLogTail; i < newTail; i++) {
-                    addressMap.addAddress(i);
+                    addressMap.add(i);
                 }
                 return addressMap;
             });
@@ -670,15 +668,14 @@ public class SequencerServer extends AbstractServer {
      */
     private Map<UUID, StreamAddressSpace> getStreamsAddresses(List<StreamAddressRange> addressRanges) {
         Map<UUID, StreamAddressSpace> requestedAddressSpaces = new HashMap<>();
-        Roaring64NavigableMap addressMap;
 
-        for (StreamAddressRange streamAddressRange : addressRanges) {
-            UUID streamId = streamAddressRange.getStreamID();
+        for (StreamAddressRange range : addressRanges) {
+            UUID streamId = range.getStreamID();
             // Get all addresses in the requested range
             if (streamsAddressMap.containsKey(streamId)) {
-                addressMap = streamsAddressMap.get(streamId).getAddressesInRange(streamAddressRange);
-                requestedAddressSpaces.put(streamId,
-                        new StreamAddressSpace(streamsAddressMap.get(streamId).getTrimMark(), addressMap));
+                StreamAddressSpace streamSubRange = streamsAddressMap.get(streamId)
+                        .getRange(range.getStart(), range.getEnd());
+                requestedAddressSpaces.put(streamId, streamSubRange);
             } else {
                 log.warn("handleStreamsAddressRequest: address space map is not present for stream {}. " +
                         "Verify this is a valid stream.", streamId);

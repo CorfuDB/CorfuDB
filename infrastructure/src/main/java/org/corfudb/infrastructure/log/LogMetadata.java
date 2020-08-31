@@ -1,19 +1,17 @@
 package org.corfudb.infrastructure.log;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import javax.annotation.concurrent.NotThreadSafe;
 import lombok.Getter;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.runtime.view.Address;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
-
-import javax.annotation.concurrent.NotThreadSafe;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
 /**
  * A container object that holds log tail offsets and the global
@@ -88,14 +86,12 @@ public class LogMetadata {
         // Update stream address space (used for sequencer recovery), add this entry as a valid address for this stream.
         streamsAddressSpaceMap.compute(streamId, (id, addressSpace) -> {
             if (addressSpace == null) {
-                Roaring64NavigableMap addressMap = new Roaring64NavigableMap();
-                addressMap.addLong(entryAddress);
                 // Note: stream trim mark is initialized to -6
                 // its value will be computed as checkpoints for this stream are found in the log.
                 // The presence of a checkpoint provides a valid trim mark for a stream.
-                return new StreamAddressSpace(Address.NON_EXIST, addressMap);
+                return new StreamAddressSpace(Address.NON_EXIST, entryAddress);
             }
-            addressSpace.addAddress(entryAddress);
+            addressSpace.add(entryAddress);
             return addressSpace;
         });
     }
@@ -136,7 +132,7 @@ public class LogMetadata {
                             // If this entry still does not exist, means no updates have been observed for
                             // this stream yet. We can initialize the trim mark to the last observed update by the
                             // checkpoint. If further entries are observed they will be added to the address space.
-                            return new StreamAddressSpace(lastUpdateToStream, new Roaring64NavigableMap());
+                            return new StreamAddressSpace(lastUpdateToStream);
                         }
                         // We will hold the maximum of these observed updates as the stream trim mark (highest
                         // checkpointed address), as this guarantees data is available in a checkpoint (safe trim mark).

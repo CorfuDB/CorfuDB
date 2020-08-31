@@ -145,7 +145,7 @@ public class LogReplicationAckReader {
             UUID streamId = CorfuRuntime.getStreamID(stream);
             StreamAddressRange range = new StreamAddressRange(streamId, start, end);
             StreamAddressSpace addressSpace = runtime.getSequencerView().getStreamAddressSpace(range);
-            remainingEntriesToSend += addressSpace.getAddressMap().getLongCardinality();
+            remainingEntriesToSend += addressSpace.size();
         }
         return remainingEntriesToSend;
     }
