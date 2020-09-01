@@ -27,6 +27,8 @@ import org.corfudb.utils.lock.LockClient;
 import org.corfudb.utils.lock.LockListener;
 import org.corfudb.utils.lock.states.HasLeaseState;
 import org.corfudb.utils.lock.states.LockState;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
@@ -34,10 +36,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -51,9 +50,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Slf4j
 public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicationDiscoveryServiceAdapter {
-    // Time to wait the forced snapshot sync to start in milliseconds.
-    private static long WAIT_COMMAND_TIMEOUT = 1000;
-
     /**
      * Wait interval (in seconds) between consecutive fetch topology attempts to cap exponential back-off.
      */
@@ -106,6 +102,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Defines the cluster to which this node belongs to.
      */
+    @Getter
     private ClusterDescriptor localClusterDescriptor;
 
     /**
@@ -116,6 +113,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Current node information
      */
+    @Getter
     private NodeDescriptor localNodeDescriptor;
 
     /**
@@ -148,6 +146,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private boolean shouldRun = true;
 
+    @Getter
     private volatile AtomicBoolean isLeader;
 
     private LogReplicationServer logReplicationServerHandler;
@@ -159,6 +158,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * that this node belongs to a cluster in the topology provided by ClusterManager.
      */
     private boolean serverStarted = false;
+
+    private LogReplicationEventListener logReplicationEventListener;
+
 
     /**
      * Constructor Discovery Service
@@ -309,6 +311,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         // Unblock server initialization & register to Log Replication Lock, to attempt lock / leadership acquisition
         serverCallback.complete(interClusterReplicationService);
 
+        logReplicationEventListener = new LogReplicationEventListener(this);
+        logReplicationEventListener.start();
         serverStarted = true;
     }
 
@@ -730,35 +734,21 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     @Override
-    public boolean forceSnapshotSync() {
+    public void forceSnapshotSync(String clusterId) {
         if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
-            log.error("This forceSnapshotSync command is not supported on standby cluster {}.", localNodeDescriptor);
-            return false;
+            String errorStr = "The forceSnapshotSync command is not supported on standby cluster: " + localNodeDescriptor;
+            log.error(errorStr);
+            throw new RuntimeException(errorStr);
         }
 
-        if (!isLeader.get()) {
-            log.warn("The current node {} is not the leader and will skip forceSnapshotSync command.", localNodeDescriptor);
-            return false;
-        }
+        log.info("Received the forceSnapshotSync command at node {} and will write to the replicationTable.", localNodeDescriptor);
 
-        DiscoveryServiceEvent event = new DiscoveryServiceEvent(DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC, UUID.randomUUID());
-        input(event);
-
-        // Block until the full snapshot sync events have been generated and queued at Standbys.
-        try {
-            event.getSnapshotSyncEventCF().get(WAIT_COMMAND_TIMEOUT, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            log.error("Failed to forceSnapshotSync due to an InterruptedException ", e);
-            return false;
-        } catch (ExecutionException e) {
-            log.error("Failed to forceSnapshotSync due to an ExecutionException ", e);
-            return false;
-        } catch (TimeoutException e) {
-            log.error("Failed to forceSnapshotSync due to a TimeoutException ", e);
-            return false;
-        }
-
-        return true;
+        /**
+         * write to the event to the event corfu table
+         */
+        ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(System.currentTimeMillis() + " "+ clusterId).build();
+        ReplicationEvent event = ReplicationEvent.newBuilder().setClusterId(clusterId).setType(LogReplicationMetadata.ReplicationEventType.FORCE_SNAPSHOT_SYNC).build();
+        getLogReplicationMetadataManager().updateLogReplicationEventTable(key, event);
     }
 
     public void shutdown() {

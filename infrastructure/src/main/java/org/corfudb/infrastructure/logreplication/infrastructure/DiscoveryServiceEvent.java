@@ -3,21 +3,11 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import lombok.Getter;
 import lombok.Setter;
 
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
-
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 public class DiscoveryServiceEvent {
     DiscoveryServiceEventType type;
-
-    // Used by enforcing snapshot sync event
-    @Getter
-    private UUID eventUUID;
-
-    // Used by enforcing snapshot sync event
-    @Getter
-    CompletableFuture<UUID> snapshotSyncEventCF;
 
     @Getter
     TopologyConfigurationMsg topologyConfig = null;
@@ -30,10 +20,9 @@ public class DiscoveryServiceEvent {
        this.type = type;
     }
 
-    public DiscoveryServiceEvent(DiscoveryServiceEventType type, UUID eventUUID) {
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId) {
         this.type = type;
-        this.eventUUID = eventUUID;
-        this.snapshotSyncEventCF = new CompletableFuture<>();
+        remoteClusterInfo = new ClusterDescriptor(clusterId, LogReplicationClusterInfo.ClusterRole.STANDBY);
     }
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {

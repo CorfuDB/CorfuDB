@@ -7,6 +7,7 @@ import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplication
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
+import java.lang.invoke.WrongMethodTypeException;
 import java.util.Map;
 
 /***
@@ -49,7 +50,7 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
     }
 
     @Override
-    public boolean forceSnapshotSync() {
-        return corfuReplicationDiscoveryService.forceSnapshotSync();
+    public void forceSnapshotSync(String clusterId) {
+        corfuReplicationDiscoveryService.forceSnapshotSync(clusterId);
     }
 }

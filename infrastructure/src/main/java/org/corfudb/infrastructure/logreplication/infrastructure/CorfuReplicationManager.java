@@ -38,6 +38,7 @@ public class CorfuReplicationManager {
 
     private final CorfuRuntime corfuRuntime;
 
+    @Getter
     private final LogReplicationMetadataManager metadataManager;
 
     private final String pluginFilePath;
@@ -209,17 +210,14 @@ public class CorfuReplicationManager {
      * Stop the current log replication event and start a full snapshot sync for all standby clusters
      */
     public void enforceSnapshotSync(DiscoveryServiceEvent event) {
-        if (runtimeToRemoteCluster.keySet().isEmpty()) {
-            log.warn("The enforceSnapshotSync command doesn't trigger any snapshotSync " +
-                    "as the current node {} has an empty standby list.", localNodeDescriptor);
+        CorfuLogReplicationRuntime standbyRuntime = runtimeToRemoteCluster.get(event.getRemoteClusterInfo().getClusterId());
+        if (standbyRuntime == null) {
+            log.warn("Failed to start enforceSnapshotSync for cluster {} as it is not on the standby list.",
+                    standbyRuntime.getRemoteClusterId());
         } else {
-            for (CorfuLogReplicationRuntime standbyRuntime : runtimeToRemoteCluster.values()) {
-                standbyRuntime.getSourceManager().stopLogReplication();
-                standbyRuntime.getSourceManager().startSnapshotSync();
-                log.info("Enforce Start full snapshot sync for cluster {} with uuid {}", standbyRuntime.getRemoteClusterId(), event.getEventUUID());
-            }
+            log.info("EnforceSnapshotSync for cluster {}", standbyRuntime.getRemoteClusterId());
+            standbyRuntime.getSourceManager().stopLogReplication();
+            standbyRuntime.getSourceManager().startSnapshotSync();
         }
-
-        event.getSnapshotSyncEventCF().complete(event.getEventUUID());
     }
 }

@@ -22,5 +22,5 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
     /**
      * Enforce snapshotFullSync
      */
-    boolean forceSnapshotSync();
+    void forceSnapshotSync(String clusterId);
 }

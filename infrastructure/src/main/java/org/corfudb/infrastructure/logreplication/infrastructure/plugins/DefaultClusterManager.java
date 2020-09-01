@@ -382,7 +382,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                     clusterManager.getClusterManagerCallback()
                             .applyNewTopologyConfig(clusterManager.generateDefaultValidConfig());
                 } else if(entry.getKey().equals(OP_ENFORCE_SNAPSHOT_FULL_SYNC)) {
-                    clusterManager.forceSnapshotSync();
+                    clusterManager.forceSnapshotSync(clusterManager.queryTopologyConfig(true).getClustersList().get(1).getId());
                 }
             }
         }
