@@ -752,6 +752,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     public void shutdown() {
+        if (logReplicationEventListener != null) {
+            logReplicationEventListener.stop();
+        }
+
         if (replicationManager != null) {
             replicationManager.stop();
         }

@@ -7,7 +7,6 @@ import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplication
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
-import java.lang.invoke.WrongMethodTypeException;
 import java.util.Map;
 
 /***

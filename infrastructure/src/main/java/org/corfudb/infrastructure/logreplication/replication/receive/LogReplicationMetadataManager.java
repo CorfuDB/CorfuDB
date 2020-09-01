@@ -477,6 +477,11 @@ public class LogReplicationMetadataManager {
         return query(null, LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID);
     }
 
+    /**
+     * Interface to write an event to the logReplicationEventTable.
+     * @param key
+     * @param event
+     */
     public void updateLogReplicationEventTable(ReplicationEventKey key, ReplicationEvent event) {
         log.info("UpdateReplicationEvent {} with event {}", REPLICATION_EVENT_TABLE_NAME, event);
         TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
@@ -484,10 +489,22 @@ public class LogReplicationMetadataManager {
         txBuilder.commit();
     }
 
+    /**
+     * Subscribe to the logReplicationEventTable
+     * @param listener
+     */
     public void subscribeReplicationEventTable(StreamListener listener) {
         log.info("LogReplication start listener for table {}", REPLICATION_EVENT_TABLE_NAME);
         corfuStore.subscribe(listener, NAMESPACE,
                 Collections.singletonList(new TableSchema(REPLICATION_EVENT_TABLE_NAME, ReplicationEventKey.class, ReplicationEvent.class, null)), null);
+    }
+
+    /**
+     * Unsubscribe the logReplicationEventTable
+     * @param listener
+     */
+    public void unsubscribeReplicationEventTable(StreamListener listener) {
+        corfuStore.unsubscribe(listener);
     }
 
     public enum LogReplicationMetadataType {

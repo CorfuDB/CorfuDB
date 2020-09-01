@@ -1,11 +1,8 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
 import org.corfudb.runtime.collections.StreamListener;
@@ -22,6 +19,10 @@ public class LogReplicationEventListener implements StreamListener {
 
     public void start() {
         discoveryService.getLogReplicationMetadataManager().subscribeReplicationEventTable(this);
+    }
+
+    public void stop() {
+        discoveryService.getLogReplicationMetadataManager().unsubscribeReplicationEventTable(this);
     }
 
     @Override
