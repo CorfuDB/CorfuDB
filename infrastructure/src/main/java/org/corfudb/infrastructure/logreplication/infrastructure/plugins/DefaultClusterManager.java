@@ -382,7 +382,16 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
                     clusterManager.getClusterManagerCallback()
                             .applyNewTopologyConfig(clusterManager.generateDefaultValidConfig());
                 } else if(entry.getKey().equals(OP_ENFORCE_SNAPSHOT_FULL_SYNC)) {
-                    clusterManager.forceSnapshotSync(clusterManager.queryTopologyConfig(true).getClustersList().get(1).getId());
+                    try {
+                        clusterManager.forceSnapshotSync(clusterManager.queryTopologyConfig(true).getClustersList().get(1).getId());
+                    } catch (RuntimeException e) {
+                        log.warn("Caught a RuntimeException ", e);
+                        ClusterRole role = clusterManager.getCorfuReplicationDiscoveryService().getLocalClusterRoleType();
+                        if (role != ClusterRole.STANDBY) {
+                            log.error("The current cluster role is {} and should not throw a RuntimeException for forceSnapshotSync call.", role);
+                            throw e;
+                        }
+                    }
                 }
             }
         }

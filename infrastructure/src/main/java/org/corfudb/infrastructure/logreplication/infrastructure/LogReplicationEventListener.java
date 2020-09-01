@@ -11,7 +11,7 @@ import java.util.List;
 
 @Slf4j
 public class LogReplicationEventListener implements StreamListener {
-    CorfuReplicationDiscoveryService discoveryService;
+    private CorfuReplicationDiscoveryService discoveryService;
 
     public  LogReplicationEventListener(CorfuReplicationDiscoveryService discoveryService) {
         this.discoveryService = discoveryService;

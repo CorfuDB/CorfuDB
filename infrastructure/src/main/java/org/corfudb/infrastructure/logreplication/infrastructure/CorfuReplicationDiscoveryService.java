@@ -751,6 +751,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         getLogReplicationMetadataManager().updateLogReplicationEventTable(key, event);
     }
 
+    @Override
+    public ClusterRole getLocalClusterRoleType() {
+        return localClusterDescriptor.getRole();
+    }
+
     public void shutdown() {
         if (logReplicationEventListener != null) {
             logReplicationEventListener.stop();
