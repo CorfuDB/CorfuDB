@@ -5,3 +5,5 @@ coverage:
   ignore:
     - "generator/src/main/java/**/*"
     - "samples/**/*"
+  status:
+    patch: off
