@@ -21,10 +21,9 @@ public interface StreamLog {
 
     /**
      * Append an entry to the stream log.
-     * @param address  address of append entry
      * @param entry    entry to append to the log
      */
-    void append(long address, LogData entry);
+    void append(LogData entry);
 
     /**
      * Append a range of consecutive entries ordered by their addresses.
@@ -110,9 +109,8 @@ public interface StreamLog {
     /**
      * Sync the stream log file to secondary storage.
      *
-     * @param force force data to secondary storage if true
      */
-    void sync(boolean force) throws IOException;
+    void flush() throws IOException;
 
     /**
      * Close the stream log.

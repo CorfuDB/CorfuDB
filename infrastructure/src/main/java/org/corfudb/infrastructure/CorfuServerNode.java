@@ -11,8 +11,19 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
+import io.netty.handler.flush.FlushConsolidationHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
@@ -22,17 +33,6 @@ import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyServer;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.Version;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Pattern;
 
 
 /**
@@ -251,6 +251,7 @@ public class CorfuServerNode implements AutoCloseable {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
 
+                ch.pipeline().addLast(new FlushConsolidationHandler(256, true));
                 // Security variables
                 final SslContext sslContext;
                 final String[] enabledTlsProtocols;

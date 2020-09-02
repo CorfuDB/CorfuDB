@@ -1,15 +1,15 @@
 package org.corfudb.infrastructure.log;
 
+import static org.junit.Assert.assertEquals;
+
+
+import java.util.HashMap;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-
-import java.util.HashMap;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
 
 @Slf4j
 public class StreamLogDataStoreTest {
@@ -26,19 +26,11 @@ public class StreamLogDataStoreTest {
         final long startingAddress = 444;
         final long committedTail = 555;
 
-        streamLogDs.updateTailSegment(tailSegment);
         streamLogDs.updateStartingAddress(startingAddress);
         streamLogDs.updateCommittedTail(committedTail);
 
-        assertEquals(tailSegment, streamLogDs.getTailSegment());
         assertEquals(startingAddress, streamLogDs.getStartingAddress());
         assertEquals(committedTail, streamLogDs.getCommittedTail());
-
-        // TailSegment should be monotonic.
-        streamLogDs.updateTailSegment(tailSegment - 1);
-        assertEquals(tailSegment, streamLogDs.getTailSegment());
-        streamLogDs.updateTailSegment(tailSegment + 1);
-        assertEquals(tailSegment + 1, streamLogDs.getTailSegment());
 
         // StartingAddress should be monotonic.
         streamLogDs.updateStartingAddress(startingAddress - 1);
@@ -58,9 +50,6 @@ public class StreamLogDataStoreTest {
         StreamLogDataStore streamLogDs = getStreamLogDataStore();
         streamLogDs.resetStartingAddress();
         assertEquals(ZERO_ADDRESS, streamLogDs.getStartingAddress());
-
-        streamLogDs.resetTailSegment();
-        assertEquals(ZERO_ADDRESS, streamLogDs.getTailSegment());
 
         streamLogDs.resetCommittedTail();
         assertEquals(NON_ADDRESS, streamLogDs.getCommittedTail());

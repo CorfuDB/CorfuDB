@@ -198,7 +198,7 @@ public class DataStore implements KvDataStore {
     }
 
     @Override
-    public synchronized <T> T get(KvRecord<T> key) {
+    public <T> T get(KvRecord<T> key) {
         String path = key.getFullKeyName();
         Object val = cache.get(path, k -> {
             if (!inMem) {

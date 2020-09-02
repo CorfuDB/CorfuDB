@@ -14,12 +14,15 @@ import io.netty.handler.codec.protobuf.ProtobufDecoder;
 import io.netty.handler.codec.protobuf.ProtobufEncoder;
 import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
 import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender;
+import io.netty.handler.flush.FlushConsolidationHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleStateHandler;
+import java.util.concurrent.ThreadFactory;
+import javax.annotation.Nonnull;
+import javax.net.ssl.SSLException;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.runtime.Messages.CorfuMessage;
@@ -29,10 +32,6 @@ import org.corfudb.security.sasl.SaslUtils;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.Sleep;
-
-import javax.annotation.Nonnull;
-import javax.net.ssl.SSLException;
-import java.util.concurrent.ThreadFactory;
 
 @Slf4j
 @ChannelHandler.Sharable
@@ -179,6 +178,7 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<CorfuMe
         return new ChannelInitializer() {
             @Override
             protected void initChannel(@Nonnull Channel ch) throws Exception {
+                ch.pipeline().addLast(new FlushConsolidationHandler(256, true));
                 ch.pipeline().addLast(new IdleStateHandler(parameters.getIdleConnectionTimeout(),
                         parameters.getKeepAlivePeriod(), 0));
                 if (parameters.isTlsEnabled()) {
