@@ -16,18 +16,12 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @Slf4j
 public class StreamLogDataStore {
-    private static final String TAIL_SEGMENT_PREFIX = "TAIL_SEGMENT";
-    private static final String TAIL_SEGMENT_KEY = "CURRENT";
 
     private static final String STARTING_ADDRESS_PREFIX = "STARTING_ADDRESS";
     private static final String STARTING_ADDRESS_KEY = "CURRENT";
 
     private static final String COMMITTED_TAIL_PREFIX = "COMMITTED_TAIL";
     private static final String COMMITTED_TAIL_KEY = "CURRENT";
-
-    private static final KvRecord<Long> TAIL_SEGMENT_RECORD = new KvRecord<>(
-            TAIL_SEGMENT_PREFIX, TAIL_SEGMENT_KEY, Long.class
-    );
 
     private static final KvRecord<Long> STARTING_ADDRESS_RECORD = new KvRecord<>(
             STARTING_ADDRESS_PREFIX, STARTING_ADDRESS_KEY, Long.class
@@ -48,11 +42,6 @@ public class StreamLogDataStore {
     private final AtomicLong startingAddress;
 
     /**
-     * Cached tail segment.
-     */
-    private final AtomicLong tailSegment;
-
-    /**
      * Cached committed log tail, up to which the log is consolidated.
      */
     private final AtomicLong committedTail;
@@ -60,36 +49,7 @@ public class StreamLogDataStore {
     public StreamLogDataStore(KvDataStore dataStore) {
         this.dataStore = dataStore;
         this.startingAddress = new AtomicLong(dataStore.get(STARTING_ADDRESS_RECORD, ZERO_ADDRESS));
-        this.tailSegment = new AtomicLong(dataStore.get(TAIL_SEGMENT_RECORD, ZERO_ADDRESS));
         this.committedTail = new AtomicLong(dataStore.get(COMMITTED_TAIL_RECORD, Address.NON_ADDRESS));
-    }
-
-    /**
-     * Return current cached tail segment or get the segment from the data store if not initialized
-     *
-     * @return tail segment
-     */
-    public long getTailSegment() {
-        return tailSegment.get();
-    }
-
-    /**
-     * Update current tail segment in the data store.
-     * <p>
-     * WARNING: this method is not thread safe, it is supposed to be called
-     * by operations executed in batch processor to achieve thread safety.
-     *
-     * @param newTailSegment updated tail segment
-     */
-    public void updateTailSegment(long newTailSegment) {
-        if (tailSegment.get() >= newTailSegment) {
-            log.trace("New tail segment {} less than or equals to the old one. Ignore", newTailSegment);
-            return;
-        }
-
-        log.debug("Update tail segment to: {}", newTailSegment);
-        dataStore.put(TAIL_SEGMENT_RECORD, newTailSegment);
-        tailSegment.set(newTailSegment);
     }
 
     /**
@@ -149,14 +109,6 @@ public class StreamLogDataStore {
         committedTail.set(newCommittedTail);
     }
 
-    /**
-     * Reset tail segment.
-     */
-    public void resetTailSegment() {
-        log.info("Reset tail segment. Current segment: {}", tailSegment.get());
-        dataStore.put(TAIL_SEGMENT_RECORD, ZERO_ADDRESS);
-        tailSegment.set(ZERO_ADDRESS);
-    }
 
     /**
      * Reset starting address.

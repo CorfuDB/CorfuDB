@@ -231,6 +231,11 @@
             <artifactId>protobuf-java</artifactId>
             <version>3.1.0</version>
         </dependency>
+        <dependency>
+            <groupId>org.lmdbjava</groupId>
+            <artifactId>lmdbjava</artifactId>
+            <version>0.8.1</version>
+        </dependency>
     </dependencies>
 
 </project>

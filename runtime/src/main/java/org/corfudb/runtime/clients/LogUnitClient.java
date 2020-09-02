@@ -2,27 +2,22 @@ package org.corfudb.runtime.clients;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-
 import lombok.Getter;
-
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.InspectAddressesRequest;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
-import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
+import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -74,20 +69,17 @@ public class LogUnitClient extends AbstractClient {
      * Asynchronously write to the logging unit.
      *
      * @param address        the address to write to.
-     * @param rank           the rank of this write (used for quorum replication).
      * @param writeObject    the object, pre-serialization, to write.
      * @param backpointerMap the map of backpointers to write.
      * @return a completable future which returns true on success.
      */
     public CompletableFuture<Boolean> write(long address,
-                                            IMetadata.DataRank rank,
                                             Object writeObject,
                                             Map<UUID, Long> backpointerMap) {
         Timer.Context context = getTimerContext("writeObject");
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
         WriteRequest wr = new WriteRequest(DataType.DATA, payload);
-        wr.setRank(rank);
         wr.setBackpointerMap(backpointerMap);
         wr.setGlobalAddress(address);
         CompletableFuture<Boolean> cf = sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));

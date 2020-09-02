@@ -26,7 +26,7 @@ import org.corfudb.runtime.view.Address;
  * Created by maithem on 7/21/16.
  */
 @Slf4j
-public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
+public class InMemoryStreamLog implements StreamLog {
 
     private Map<Long, LogData> logCache;
     private final Set<Long> trimmed;
@@ -58,13 +58,16 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public synchronized void append(long address, LogData entry) {
+    public synchronized void append(LogData entry) {
+        long address = entry.getGlobalAddress();
         if(isTrimmed(address)) {
             throw new OverwriteException(OverwriteCause.TRIM);
         }
 
         if (logCache.containsKey(address)) {
-            throwLogUnitExceptionsIfNecessary(address, entry);
+            OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
+            log.trace("throwLogUnitExceptionsIfNecessary: overwritten exception for address {}, cause: {}", address, overwriteCause);
+            throw new OverwriteException(overwriteCause);
         }
         logCache.put(address, entry);
         logMetadata.update(entry, false);
@@ -134,17 +137,6 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         return startingAddress;
     }
 
-    private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {
-        if (entry.getRank() == null) {
-            OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
-            log.trace("throwLogUnitExceptionsIfNecessary: overwritten exception for address {}, cause: {}", address, overwriteCause);
-            throw new OverwriteException(overwriteCause);
-        } else {
-            // the method below might throw DataOutrankedException or ValueAdoptedException
-            assertAppendPermittedUnsafe(address, entry);
-        }
-    }
-
     /**
      * Returns the known addresses in this Log Unit in the specified consecutive
      * range of addresses.
@@ -188,7 +180,7 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     }
 
     @Override
-    public void sync(boolean force){
+    public void flush(){
         //no-op
     }
 

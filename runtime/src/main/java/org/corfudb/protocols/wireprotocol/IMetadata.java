@@ -1,17 +1,12 @@
 package org.corfudb.protocols.wireprotocol;
 
-import com.esotericsoftware.kryo.NotNull;
-import com.google.common.reflect.TypeToken;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Value;
-import org.corfudb.common.compression.Codec;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.Layout;
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_ID;
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_START_LOG_ADDRESS;
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
+import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_TYPE;
 
-import javax.annotation.Nullable;
+
+import com.google.common.reflect.TypeToken;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -21,11 +16,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_ID;
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINTED_STREAM_START_LOG_ADDRESS;
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_ID;
-import static org.corfudb.protocols.wireprotocol.IMetadata.LogUnitMetadataType.CHECKPOINT_TYPE;
+import javax.annotation.Nullable;
+import org.corfudb.common.compression.Codec;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.Layout;
 
 /**
  * Created by mwei on 9/18/15.
@@ -53,34 +48,6 @@ public interface IMetadata {
      */
     default boolean containsStream(UUID stream) {
         return getBackpointerMap().containsKey(stream);
-    }
-
-    /**
-     * Get the rank of this append.
-     *
-     * @return The rank of this append.
-     */
-    @SuppressWarnings("unchecked")
-    @Nullable
-    default DataRank getRank() {
-        return (DataRank) getMetadataMap().getOrDefault(LogUnitMetadataType.RANK,
-                null);
-    }
-
-    /**
-     * Set the rank of this append.
-     *
-     * @param rank The rank of this append.
-     */
-    default void setRank(@Nullable DataRank rank) {
-        EnumMap<LogUnitMetadataType, Object> map = getMetadataMap();
-        if (rank != null) {
-            map.put(LogUnitMetadataType.RANK, rank);
-        } else {
-            if (map.containsKey(LogUnitMetadataType.RANK)) {
-                map.remove(LogUnitMetadataType.RANK);
-            }
-        }
     }
 
     @SuppressWarnings("unchecked")
@@ -230,9 +197,7 @@ public interface IMetadata {
         return getPayloadCodecType() != Codec.Type.NONE;
     }
 
-    @RequiredArgsConstructor
     enum LogUnitMetadataType implements ITypedEnum {
-        RANK(1, TypeToken.of(DataRank.class)),
         BACKPOINTER_MAP(3, new TypeToken<Map<UUID, Long>>() {}),
         GLOBAL_ADDRESS(4, TypeToken.of(Long.class)),
         CHECKPOINT_TYPE(6, TypeToken.of(CheckpointEntry.CheckpointEntryType.class)),
@@ -244,8 +209,12 @@ public interface IMetadata {
         EPOCH(12, TypeToken.of(Long.class)),
         PAYLOAD_CODEC(13, TypeToken.of(Codec.Type.class));
         final int type;
-        @Getter
         final TypeToken<?> componentType;
+
+        private LogUnitMetadataType(int type, TypeToken<?> componentType) {
+            this.type = type;
+            this.componentType = componentType;
+        }
 
         public byte asByte() {
             return (byte) type;
@@ -255,33 +224,9 @@ public interface IMetadata {
                 Arrays.<LogUnitMetadataType>stream(LogUnitMetadataType.values())
                         .collect(Collectors.toMap(LogUnitMetadataType::asByte,
                                 Function.identity()));
-    }
 
-    @Value
-    @AllArgsConstructor
-    class DataRank implements Comparable<DataRank> {
-        public long rank;
-        @NotNull
-        public UUID uuid;
-
-        public DataRank(long rank) {
-            this(rank, UUID.randomUUID());
-        }
-
-        public DataRank buildHigherRank() {
-            return new DataRank(rank + 1, uuid);
-        }
-
-        @Override
-        public int compareTo(DataRank o) {
-            int rankCompared = Long.compare(this.rank, o.rank);
-            if (rankCompared == 0) {
-                return uuid.compareTo(o.getUuid());
-            } else {
-                return rankCompared;
-            }
+        public TypeToken<?> getComponentType() {
+            return this.componentType;
         }
     }
-
-
 }
