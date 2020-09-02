@@ -237,6 +237,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
         log.info("Started with arguments: {}", opts);
 
+        createReplicationDirectory(opts);
         ServerContext serverContext = getServerContext(opts);
 
         // Register shutdown handler
@@ -331,6 +332,22 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
         root.setLevel(level);
+    }
+
+    /**
+     * Create the replication directory if it does not exist.
+     *
+     * @param opts Server options map.
+     */
+    static void createReplicationDirectory(Map<String, Object> opts) {
+        if ((Boolean) opts.get("--memory")) {
+            return;
+        }
+
+        File replicationDir = new File((String) opts.get("--log-path"));
+        if (!replicationDir.exists() && replicationDir.mkdirs()) {
+            log.info("Created new log replication directory at {}.", replicationDir);
+        }
     }
 
     /**
