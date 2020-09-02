@@ -1,8 +1,17 @@
 package org.corfudb.integration;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+
 import com.google.common.reflect.TypeToken;
+import java.nio.file.FileStore;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.time.Duration;
+import java.util.Map;
+import java.util.UUID;
 import org.apache.commons.io.FileUtils;
-import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -14,16 +23,6 @@ import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
-
-import java.nio.file.FileStore;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.time.Duration;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class LogSizeQuotaIT extends AbstractIT {
 
@@ -103,7 +102,7 @@ public class LogSizeQuotaIT extends AbstractIT {
         assertThat(txnAborted).isTrue();
 
         // bump up the sequencer counter to create multiple empty segments
-        final int emptySlots = StreamLogFiles.RECORDS_PER_LOG_FILE;
+        final int emptySlots = 10_000;
         for (int x = 0; x < emptySlots; x++) {
             rt.getSequencerView().next();
         }

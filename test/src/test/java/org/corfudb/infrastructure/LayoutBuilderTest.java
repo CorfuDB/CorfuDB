@@ -1,5 +1,14 @@
 package org.corfudb.infrastructure;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
@@ -7,15 +16,6 @@ import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.ReplicationMode;
 import org.corfudb.runtime.view.LayoutBuilder;
 import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by zlokhandwala on 10/26/16.
@@ -44,7 +44,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .addSequencer(SERVERS.PORT_1)
                 .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
-                .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
+                .setReplicationMode(ReplicationMode.CHAIN_REPLICATION)
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)
                 .addLogUnit(SERVERS.PORT_2)
@@ -110,7 +110,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .addSequencer(SERVERS.PORT_1)
                 .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
-                .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
+                .setReplicationMode(ReplicationMode.CHAIN_REPLICATION)
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_2)
                 .addLogUnit(SERVERS.PORT_3)
@@ -139,7 +139,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .addLayoutServer(SERVERS.PORT_3)
                 .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
-                .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
+                .setReplicationMode(ReplicationMode.CHAIN_REPLICATION)
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_2)
                 .addLogUnit(SERVERS.PORT_3)
@@ -202,7 +202,7 @@ public class LayoutBuilderTest extends AbstractCorfuTest {
                 .addSequencer(SERVERS.PORT_1)
                 .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
-                .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
+                .setReplicationMode(ReplicationMode.CHAIN_REPLICATION)
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)
                 .addLogUnit(SERVERS.PORT_2)

@@ -31,7 +31,6 @@ import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.replication.ChainReplicationProtocol;
 import org.corfudb.runtime.view.replication.IReplicationProtocol;
 import org.corfudb.runtime.view.replication.NeverHoleFillPolicy;
-import org.corfudb.runtime.view.replication.QuorumReplicationProtocol;
 import org.corfudb.runtime.view.replication.ReadWaitHoleFillPolicy;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
@@ -395,73 +394,6 @@ public class Layout {
                 return responsiveNodes.containsAll(layoutSegment.getAllLogServers())
                         ? ClusterStatus.STABLE : ClusterStatus.UNAVAILABLE;
             }
-        },
-        QUORUM_REPLICATION {
-            @Override
-            public void validateSegmentSeal(LayoutSegment layoutSegment,
-                                            Map<String, CompletableFuture<Boolean>>
-                                                    completableFutureMap)
-                    throws QuorumUnreachableException {
-                //TODO: Take care of log unit servers which were not sealed.
-                SealServersHelper.waitForQuorumSegmentSeal(layoutSegment, completableFutureMap);
-            }
-
-            @Override
-            public int getMinReplicationFactor(Layout layout, LayoutStripe stripe) {
-                return (stripe.getLogServers().size() / 2) + 1;
-            }
-
-            @Override
-            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-                return new ThreadSafeStreamView(r, streamId, options);
-            }
-
-            @Override
-            public IStreamView getUnsafeStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
-                if (r.getParameters().isFollowBackpointersEnabled()) {
-                    return new BackpointerStreamView(r, streamId, options);
-                } else {
-                    return new AddressMapStreamView(r, streamId, options);
-                }
-            }
-
-            @Override
-            public IReplicationProtocol getReplicationProtocol(CorfuRuntime r) {
-                if (r.getParameters().isHoleFillingDisabled()) {
-                    return new QuorumReplicationProtocol(new NeverHoleFillPolicy(100));
-                } else {
-                    return new QuorumReplicationProtocol(
-                            new ReadWaitHoleFillPolicy(r.getParameters().getHoleFillTimeout(),
-                                    r.getParameters().getHoleFillRetryThreshold()));
-                }
-            }
-
-            @Override
-            public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
-                                                            Set<String> responsiveNodes) {
-                ClusterStatus clusterStatus = ClusterStatus.STABLE;
-                // At least a quorum of nodes should be reachable in every stripe for the cluster
-                // to be STABLE.
-                for (LayoutStripe layoutStripe : layoutSegment.getStripes()) {
-                    List<String> responsiveLogServers
-                            = new ArrayList<>(layoutStripe.getLogServers());
-                    // Retain only the responsive servers.
-                    responsiveLogServers.retainAll(responsiveNodes);
-
-                    if (!responsiveLogServers.containsAll(layoutStripe.getLogServers())) {
-                        if (clusterStatus.equals(ClusterStatus.STABLE)) {
-                            clusterStatus = ClusterStatus.DEGRADED;
-                        }
-                        int quorumSize = (layoutStripe.getLogServers().size() / 2) + 1;
-                        if (responsiveLogServers.size() < quorumSize) {
-                            clusterStatus = ClusterStatus.UNAVAILABLE;
-                            break;
-                        }
-                    }
-                }
-                return clusterStatus;
-            }
-
         }, NO_REPLICATION {
             @Override
             public void validateSegmentSeal(LayoutSegment layoutSegment,

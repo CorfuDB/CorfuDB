@@ -180,7 +180,7 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     @Test
     public void successfulQuorumSeal() {
-        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.QUORUM_REPLICATION);
+        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
         Layout l = runtimeLayout.getLayout();
         l.setEpoch(l.getEpoch() + 1);
         try {
@@ -202,7 +202,7 @@ public class LayoutSealTest extends AbstractViewTest {
      */
     @Test
     public void failingQuorumSeal() {
-        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.QUORUM_REPLICATION);
+        RuntimeLayout runtimeLayout = getRuntimeLayout(Layout.ReplicationMode.CHAIN_REPLICATION);
         Layout l = runtimeLayout.getLayout();
 
         addClientRule(runtimeLayout.getRuntime(), SERVERS.ENDPOINT_3,

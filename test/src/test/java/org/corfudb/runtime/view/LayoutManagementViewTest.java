@@ -1,5 +1,10 @@
 package org.corfudb.runtime.view;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+
+import java.util.Arrays;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.runtime.CorfuRuntime;
@@ -7,11 +12,6 @@ import org.corfudb.runtime.exceptions.LayoutModificationException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout.ReplicationMode;
 import org.junit.Test;
-
-import java.util.Arrays;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Created by Maithem on 12/13/17.
@@ -37,7 +37,7 @@ public class LayoutManagementViewTest extends AbstractViewTest {
                 .addSequencer(SERVERS.PORT_1)
                 .addSequencer(SERVERS.PORT_2)
                 .buildSegment()
-                .setReplicationMode(ReplicationMode.QUORUM_REPLICATION)
+                .setReplicationMode(ReplicationMode.CHAIN_REPLICATION)
                 .buildStripe()
                 .addLogUnit(SERVERS.PORT_0)
                 .addLogUnit(SERVERS.PORT_1)
