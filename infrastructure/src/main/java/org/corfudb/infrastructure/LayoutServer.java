@@ -82,8 +82,12 @@ public class LayoutServer extends AbstractServer {
     private final HandlerMethods handler =
             HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
-    /** RequestHandlerMethods for the layout server. */
-    private final RequestHandlerMethods handlerMethods = RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
+    /**
+     * RequestHandlerMethods for the Layout server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @NonNull
     private final ExecutorService executor;

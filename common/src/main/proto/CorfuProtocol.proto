@@ -4,6 +4,9 @@ package org.corfudb.common;
 
 option java_package = "org.corfudb.common.protocol.proto";
 
+/**
+ * Common Definitions
+ **/
 
 enum ProtocolVersion {
   v0 = 0;
@@ -46,11 +49,13 @@ enum MessageType {
   UPDATE_COMMITTED_TAIL = 41;
   RESET_LOG_UNIT = 42;
 
- // Management Message Types
+  // Management Message Types
   QUERY_NODE = 50;
   REPORT_FAILURE = 51;
   HEAL_FAILURE = 52;
-  EXECUTE_WORKFLOW = 53;
+  ORCHESTRATOR = 53;
+  BOOTSTRAP_MANAGEMENT = 54;
+  GET_MANAGEMENT_LAYOUT = 55;
 }
 
 enum ERROR {
@@ -92,6 +97,10 @@ message ServerError {
   }
 }
 
+/**
+ * Base Definitions
+ **/
+
 message PingRequest {
 }
 
@@ -123,6 +132,15 @@ message SealRequest {
 }
 
 message SealResponse {
+}
+
+/**
+ * Layout Definitions
+ **/
+
+// Represent layout in Protobuf as JSON string
+message Layout {
+  string layoutJson = 1;
 }
 
 // Retrieve layout
@@ -198,6 +216,10 @@ message BootstrapLayoutResponse {
 
   Type type = 1;
 }
+
+/**
+ * Sequencer Definitions
+ **/
 
 message Token {
   int64 epoch = 1;
@@ -450,6 +472,10 @@ message StreamsAddressResponse {
   UUIDToStreamAddressMap addressMap = 2;
 }
 
+/**
+ * LogUnit Definitions
+ **/
+
 message WriteLogRequest {
 
 }
@@ -554,37 +580,160 @@ message ResetLogUnitResponse {
 
 }
 
-message QueryNodeRequest {
+/**
+ * Management Definitions
+ **/
 
+message NodeConnectivity {
+  enum NodeConnectivityType {
+    NOT_READY = 0;
+    CONNECTED = 1;
+    UNAVAILABLE = 2;
+  }
+
+  enum ConnectionStatus {
+    OK = 0;
+    FAILED = 1;
+  }
+
+
+  string endpoint = 1;
+  NodeConnectivityType connectivityType = 2;
+  map<string, ConnectionStatus> connectivityMap = 3;
+  int64 epoch = 4;
+}
+
+message QueryNodeRequest {
 }
 
 message QueryNodeResponse {
-
+  SequencerMetrics sequencerMetrics = 1;
+  NodeConnectivity nodeConnectivity = 2;
 }
 
 message ReportFailureRequest {
-
+  int64 detectorEpoch = 1;
+  repeated string failedNodes = 2;
 }
 
 message ReportFailureResponse {
+  enum Type {
+    ACK = 0;
+    NACK = 1;
+  }
 
+  Type respType = 1;
 }
 
 message HealFailureRequest {
-
+  int64 detectorEpoch = 1;
+  repeated string healedNodes = 2;
 }
 
 message HealFailureResponse {
+  enum Type {
+    ACK = 0;
+    NACK  = 1;
+  }
 
+  Type respType = 1;
 }
 
-message ExecuteWorkflowRequest {
-
+enum OrchestratorRequestType {
+  QUERY_WORKFLOW = 0;
+  ADD_NODE = 1;
+  REMOVE_NODE = 2;
+  HEAL_NODE = 3;
+  FORCE_REMOVE_NODE = 4;
+  RESTORE_REDUNDANCY_MERGE_SEGMENTS = 5;
 }
 
-message ExecuteWorkflowResponse {
-
+message QueryWorkflowRequest {
+  UUID id = 1;
 }
+
+message AddNodeWorkflowRequest {
+  string endpoint = 1;
+}
+
+message RemoveNodeWorkflowRequest {
+  string endpoint = 1;
+}
+
+message HealNodeWorkflowRequest {
+  string endpoint = 1;
+  int32  stripeIndex = 2;
+  bool layoutServer = 3;
+  bool sequencerServer = 4;
+  bool logUnitServer = 5;
+}
+
+message ForceRemoveNodeWorkflowRequest {
+  string endpoint = 1;
+}
+
+message RestoreRedundancyWorkflowRequest {
+  string endpoint = 1;
+}
+
+message OrchestratorRequest {
+  OrchestratorRequestType reqType = 1;
+
+  oneof payload {
+    QueryWorkflowRequest queryRequest = 10;
+    AddNodeWorkflowRequest addNodeRequest = 11;
+    RemoveNodeWorkflowRequest removeNodeRequest = 12;
+    HealNodeWorkflowRequest healNodeRequest = 13;
+    ForceRemoveNodeWorkflowRequest forceRemoveNodeRequest = 14;
+    RestoreRedundancyWorkflowRequest restoreRedundancyRequest = 15;
+  }
+}
+
+enum OrchestratorResponseType {
+    WORKFLOW_STATUS = 0;
+    WORKFLOW_CREATED = 1;
+}
+
+message QueryWorkflowResponse {
+  bool isActive = 1;
+}
+
+message CreateWorkflowResponse {
+  UUID workflowId = 1;
+}
+
+message OrchestratorResponse {
+  OrchestratorResponseType respType = 1;
+
+  oneof payload {
+    QueryWorkflowResponse queryResponse = 10;
+    CreateWorkflowResponse createWorkflowResponse = 11;
+  }
+}
+
+message BootstrapManagementRequest {
+  Layout layout = 1;
+}
+
+message BootstrapManagementResponse {
+  enum Type {
+    ACK = 0;
+    NACK = 1;
+  }
+
+  Type respType = 1;
+}
+
+message GetManagementLayoutRequest {
+}
+
+message GetManagementLayoutResponse {
+  Layout layout = 1;
+}
+
+/**
+ * Request & Response Definitions
+ **/
 
 message Header {
   ProtocolVersion version = 1;
@@ -642,7 +791,9 @@ message Request {
     QueryNodeRequest queryNodeRequest = 60;
     ReportFailureRequest reportFailureRequest = 61;
     HealFailureRequest healFailureRequest = 62;
-    ExecuteWorkflowRequest executeWorkflowRequest = 63;
+    OrchestratorRequest orchestratorRequest = 63;
+    BootstrapManagementRequest bootstrapManagementRequest = 64;
+    GetManagementLayoutRequest getManagementLayoutRequest = 65;
   }
 }
 
@@ -691,6 +842,8 @@ message Response {
     QueryNodeResponse queryNodeResponse = 60;
     ReportFailureResponse reportFailureResponse = 61;
     HealFailureResponse healFailureResponse = 62;
-    ExecuteWorkflowResponse executeWorkflowResponse = 63;
+    OrchestratorResponse orchestratorResponse = 63;
+    BootstrapManagementResponse bootstrapManagementResponse = 64;
+    GetManagementLayoutResponse getManagementLayoutResponse = 65;
   }
 }

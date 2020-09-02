@@ -36,11 +36,12 @@ public class BaseServer extends AbstractServer {
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
-    /** RequestHandlerMethods for the base server. */
-    private final RequestHandlerMethods handlerMethods = RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
-
-    @Override
-    public RequestHandlerMethods getHandlerMethods() { return handlerMethods; }
+    /**
+     * RequestHandlerMethods for the Base server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {

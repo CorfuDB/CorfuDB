@@ -761,8 +761,12 @@ public class API {
                 return request.hasReportFailureRequest();
             case HEAL_FAILURE:
                 return request.hasHealFailureRequest();
-            case EXECUTE_WORKFLOW:
-                return request.hasExecuteWorkflowRequest();
+            case ORCHESTRATOR:
+                return request.hasOrchestratorRequest();
+            case BOOTSTRAP_MANAGEMENT:
+                return request.hasBootstrapManagementRequest();
+            case GET_MANAGEMENT_LAYOUT:
+                return request.hasGetManagementLayoutRequest();
             default:
                 break;
         }
