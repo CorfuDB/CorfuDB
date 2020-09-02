@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
+import lombok.Synchronized;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.LogReplicationServer;
@@ -159,8 +160,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private boolean serverStarted = false;
 
+    /**
+     * This is the listener to the replication event table shared by the nodes in the cluster.
+     * When a non-leader node is called to do the enforcedSnapshotSync, it will write the event to
+     * the shared event-table and the leader node will be notified to do the work.
+     */
     private LogReplicationEventListener logReplicationEventListener;
-
 
     /**
      * Constructor Discovery Service
@@ -215,7 +220,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Process discovery event
      */
-    public void processEvent(DiscoveryServiceEvent event) {
+    public synchronized void processEvent(DiscoveryServiceEvent event) {
         switch (event.type) {
             case ACQUIRE_LOCK:
                 processLockAcquire();
@@ -736,12 +741,12 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     @Override
     public void forceSnapshotSync(String clusterId) {
         if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
-            String errorStr = "The forceSnapshotSync command is not supported on standby cluster: " + localNodeDescriptor;
+            String errorStr = "The forceSnapshotSync command is not supported on standby cluster.";
             log.error(errorStr);
             throw new RuntimeException(errorStr);
         }
 
-        log.info("Received the forceSnapshotSync command at node {} and will write to the replicationTable.", localNodeDescriptor);
+        log.info("Received the forceSnapshotSync command.");
 
         /**
          * write to the event to the event corfu table

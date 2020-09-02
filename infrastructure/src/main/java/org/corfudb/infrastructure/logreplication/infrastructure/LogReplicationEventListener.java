@@ -10,7 +10,7 @@ import org.corfudb.runtime.collections.StreamListener;
 import java.util.List;
 
 @Slf4j
-public class LogReplicationEventListener implements StreamListener {
+public final class LogReplicationEventListener implements StreamListener {
     private CorfuReplicationDiscoveryService discoveryService;
 
     public  LogReplicationEventListener(CorfuReplicationDiscoveryService discoveryService) {
@@ -30,29 +30,30 @@ public class LogReplicationEventListener implements StreamListener {
         /**
          * If the current node is not a leader, ignore the notifications.
          */
-        if (!discoveryService.getIsLeader().get()) {
-            log.info("The onNext call with {} will be skipped as the current node {}  in the cluster {} is not the leader.",
+        synchronized (discoveryService) {
+            if (!discoveryService.getIsLeader().get()) {
+                log.info("The onNext call  with {} will be skipped as the current node as it is not the leader.", results);
+                return;
+            }
+
+            log.info("LogReplicationEventListener onNext {} will be processed at node {} in the cluster {}",
                     results, discoveryService.getLocalNodeDescriptor(), discoveryService.getLocalClusterDescriptor());
-            return;
-        }
 
-        log.info("LogReplicationEventListener onNext {} will be processed at node {} in the cluster {}",
-                results, discoveryService.getLocalNodeDescriptor(), discoveryService.getLocalClusterDescriptor());
-
-        /**
-         * If the current node is the leader, it generates a discovery event and put it into the discovery service event queue.
-         */
-        for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
-            for (CorfuStreamEntry entry : entryList) {
-                ReplicationEvent event = (ReplicationEvent) entry.getPayload();
-                log.info("ReplicationEventListener at node {} put an event {} to its local discoveryServiceQueue", discoveryService.getLocalNodeDescriptor(), event);
-                discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC, event.getClusterId()));
+            /**
+             * If the current node is the leader, it generates a discovery event and put it into the discovery service event queue.
+             */
+            for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
+                for (CorfuStreamEntry entry : entryList) {
+                    ReplicationEvent event = (ReplicationEvent) entry.getPayload();
+                    log.info("ReplicationEventListener put an event {} to its local discoveryServiceQueue", event);
+                    discoveryService.input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.ENFORCE_SNAPSHOT_SYNC, event.getClusterId()));
+                }
             }
         }
     }
 
     @Override
     public void onError(Throwable throwable) {
-        log.error("onError for CorfuReplicationDiscoveryServeiceLisener");
+        log.error("onError with a throwable {}", throwable);
     }
 }

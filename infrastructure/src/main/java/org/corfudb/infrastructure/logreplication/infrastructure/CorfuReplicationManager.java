@@ -38,7 +38,6 @@ public class CorfuReplicationManager {
 
     private final CorfuRuntime corfuRuntime;
 
-    @Getter
     private final LogReplicationMetadataManager metadataManager;
 
     private final String pluginFilePath;
@@ -213,7 +212,7 @@ public class CorfuReplicationManager {
         CorfuLogReplicationRuntime standbyRuntime = runtimeToRemoteCluster.get(event.getRemoteClusterInfo().getClusterId());
         if (standbyRuntime == null) {
             log.warn("Failed to start enforceSnapshotSync for cluster {} as it is not on the standby list.",
-                    standbyRuntime.getRemoteClusterId());
+                    event.getRemoteClusterInfo());
         } else {
             log.info("EnforceSnapshotSync for cluster {}", standbyRuntime.getRemoteClusterId());
             standbyRuntime.getSourceManager().stopLogReplication();
