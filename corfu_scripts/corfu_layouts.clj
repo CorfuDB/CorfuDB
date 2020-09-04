@@ -2,6 +2,7 @@
 (in-ns 'org.corfudb.shell) ; so our IDE knows what NS we are using
 
 (import org.docopt.Docopt) ; parse some cmdline opts
+(import java.util.UUID)
 (require 'clojure.pprint)
 (require 'clojure.java.shell)
 (def usage "corfu_layouts, work with the Corfu layout view.
@@ -44,9 +45,8 @@ Options:
            (.. (get-layout-view) (updateLayout layout layout-rank))
            -1)
          (catch org.corfudb.runtime.exceptions.OutrankedException e
-                (inc layout-rank))))
-   )))
-  )
+                (inc layout-rank))))))))
+
 (defn print-layout [] (pprint-json (.. (.. (get-layout-view) (getLayout)) (asJSONString))))
 (defn edit-layout [] (let [layout (.. (get-layout-view) (getLayout))
                            temp-file (java.io.File/createTempFile "corfu" ".tmp")]
@@ -82,21 +82,16 @@ Options:
                                          (doseq [server (into [] (remove (set (.getLayoutServers layout)) (.getLayoutServers new-layout)))]
                                                 (do
                                                     (try
-                                                      (.get (.bootstrapLayout (get-layout-client (get-router server localcmd) 0) new-layout))
+                                                      (.get (.bootstrapLayout (get-layout-client (get-router server localcmd) 0 (.UUID (fromString "00000000-0000-0000-0000-000000000000"))) new-layout))
                                                       (catch Exception e
                                                         (println server ":" (.getMessage e))
                                                         (throw e)))
                                                     ))
                                          (install-layout new-layout)
-                                         (println "New layout installed!")
-                                         )
-                                   )
-                                )
-                            )
+                                         (println "New layout installed!")))))
                        ))))
 
 ; determine whether to read or write
 (cond (.. localcmd (get "query")) (print-layout)
   (.. localcmd (get "edit")) (edit-layout)
-  :else (println "Unknown arguments.")
-  )
+  :else (println "Unknown arguments."))

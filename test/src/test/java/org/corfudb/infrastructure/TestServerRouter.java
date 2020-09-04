@@ -1,21 +1,20 @@
 package org.corfudb.infrastructure;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.clients.TestChannelContext;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.view.Layout;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -31,7 +30,7 @@ public class TestServerRouter implements IServerRouter {
     public Map<CorfuMsgType, AbstractServer> handlerMap;
 
     @Getter
-    public List<AbstractServer> servers;
+    public ArrayList<AbstractServer> servers;
 
     public List<TestRule> rules;
 
@@ -39,6 +38,10 @@ public class TestServerRouter implements IServerRouter {
 
     @Getter
     long serverEpoch;
+
+    @Setter
+    @Getter
+    ServerContext serverContext;
 
     @Getter
     int port = 0;
@@ -75,11 +78,6 @@ public class TestServerRouter implements IServerRouter {
         }
     }
 
-    /**
-     * Register a server to route messages to
-     *
-     * @param server The server to route messages to
-     */
     @Override
     public void addServer(AbstractServer server) {
         servers.add(server);
@@ -90,24 +88,9 @@ public class TestServerRouter implements IServerRouter {
         });
     }
 
-    /**
-     * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
-     * the server is in the wrong epoch. Ignored if the message type is reset (which
-     * is valid in any epoch).
-     *
-     * @param msg The incoming message to validate.
-     * @param ctx The context of the channel handler.
-     * @return True, if the epoch is correct, but false otherwise.
-     */
-    public boolean validateEpoch(CorfuMsg msg, ChannelHandlerContext ctx) {
-        if (!msg.getMsgType().ignoreEpoch && msg.getEpoch() != serverEpoch) {
-            sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH,
-                    getServerEpoch()));
-            log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
-                    msg.getEpoch(), serverEpoch, msg);
-            return false;
-        }
-        return true;
+    @Override
+    public List<AbstractServer> getServers() {
+        return servers;
     }
 
     public void sendServerMessage(CorfuMsg msg) {
@@ -116,7 +99,7 @@ public class TestServerRouter implements IServerRouter {
 
     public void sendServerMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
         AbstractServer as = handlerMap.get(msg.getMsgType());
-        if (validateEpoch(msg, ctx)) {
+        if (messageIsValid(msg, ctx)) {
             if (as != null) {
                 // refactor and move threading to handler
                 as.handleMessage(msg, ctx, this);
@@ -132,5 +115,13 @@ public class TestServerRouter implements IServerRouter {
     public void setServerEpoch(long serverEpoch) {
         this.serverEpoch = serverEpoch;
         getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
+    }
+
+    @Override
+    public Optional<Layout> getCurrentLayout() {
+        if(getServerContext() == null) {
+            throw new IllegalStateException("ServerContext should be set.");
+        }
+        return Optional.ofNullable(getServerContext().getCurrentLayout());
     }
 }

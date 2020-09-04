@@ -9,6 +9,7 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -27,6 +28,7 @@ public class FailureDetectorTest {
         failureDetector.setNetworkStretcher(ns);
 
         long epoch = 1;
+        UUID clusterId = UUID.fromString("00000000-0000-0000-0000-000000000000");
         ImmutableSet<String> allServers = ImmutableSet.of("a", "b", "c");
         Map<String, IClientRouter> routerMap = new HashMap<>();
         SequencerMetrics metrics = SequencerMetrics.READY;
@@ -34,7 +36,7 @@ public class FailureDetectorTest {
 
         long start = System.currentTimeMillis();
         PollReport report = failureDetector.pollRound(
-                epoch, allServers, routerMap, metrics, responsiveServers
+                epoch, clusterId, allServers, routerMap, metrics, responsiveServers
         );
         Duration time = Duration.ofMillis(System.currentTimeMillis() - start);
         assertThat(time).isGreaterThan(Duration.ofMillis(450));

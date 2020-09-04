@@ -25,8 +25,8 @@ import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
  */
 public class SequencerClient extends AbstractClient {
 
-    public SequencerClient(IClientRouter router, long epoch) {
-        super(router, epoch);
+    public SequencerClient(IClientRouter router, long epoch, UUID clusterID) {
+        super(router, epoch, clusterID);
     }
 
     /**

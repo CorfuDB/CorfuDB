@@ -135,7 +135,7 @@ public class ChainReplicationViewTest extends AbstractViewTest {
 
         //configure the layout accordingly
         CorfuRuntime r = getRuntime().connect();
-        r.getParameters().setCodecType(Codec.Type.NONE.toString());
+        r.getParameters().setCodecType(Codec.Type.NONE);
 
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();

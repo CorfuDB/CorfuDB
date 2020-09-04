@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package org.corfudb.utils.lock;
+option java_package = "org.corfudb.utils.lock";
+import "common_types.proto";
+
+// lock identifier
+message LockId {
+    string lock_group = 1;
+    string lock_name = 2;
+}
+// metadata associated with the lock
+message LockData {
+    LockId lock_id = 1;
+    // current lease owner
+    Uuid lease_owner_id = 2;
+    // how many times the lease has been acquired by a different client
+    int32 lease_acquisition_number = 3;
+    // how many times the lease has been renewed since the last acquisition
+    int32 lease_renewal_number = 4;
+}
+

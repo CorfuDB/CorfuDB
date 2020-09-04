@@ -2,6 +2,7 @@
 (in-ns 'org.corfudb.shell) ; so our IDE knows what NS we are using
 
 (import org.docopt.Docopt) ; parse some cmdline opts
+(import java.util.UUID)
 (require 'clojure.pprint)
 (require 'clojure.java.shell)
 (def usage "corfu_layout.
@@ -24,7 +25,7 @@ Options:
 
 (defn print-query [endpoint] (do
                                (println (format "Query %s:" endpoint))
-                               (let [q (.. (get-layout-client (get-router server localcmd) 0) (getLayout))]
+                               (let [q (.. (get-layout-client (get-router server localcmd) 0 (.UUID (fromString "00000000-0000-0000-0000-000000000000"))) (getLayout))]
                                  (println (.. (.. q (get)) (toString)))
                                )))
 

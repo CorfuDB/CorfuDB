@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
+import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.Sleep;
@@ -88,7 +89,6 @@ public abstract class AbstractView {
                 log.error("getLayoutUninterruptibly: Encountered error. Aborting layoutHelper", ex);
                 throw (Error) ex.getCause();
             }
-
             if (ex.getCause() instanceof RuntimeException) {
                 log.error("getLayoutUninterruptibly: Encountered unchecked exception. "
                         + "Aborting layoutHelper", ex);
@@ -148,7 +148,12 @@ public abstract class AbstractView {
                             + "invalidate view", we.getCorrectEpoch());
                 } else if (re instanceof NetworkException) {
                     log.warn("layoutHelper: System seems unavailable", re);
-                } else {
+                } else if (re instanceof WrongClusterException) {
+                    log.warn("layoutHelper: Cluster reconfiguration or incorrect cluster", re);
+                    log.info("layoutHelper: Invoking the systemDownHandler.");
+                    runtime.getParameters().getSystemDownHandler().run();
+                    throw re;
+                }else {
                     throw re;
                 }
                 if (rethrowAllExceptions) {

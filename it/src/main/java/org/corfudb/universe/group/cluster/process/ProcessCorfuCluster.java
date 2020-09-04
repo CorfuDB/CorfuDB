@@ -10,6 +10,7 @@ import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.universe.group.cluster.AbstractCorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuCluster;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.node.server.CorfuServerParams;
@@ -29,8 +30,9 @@ public class ProcessCorfuCluster extends AbstractCorfuCluster<CorfuServerParams,
 
     @Builder
     protected ProcessCorfuCluster(
-            CorfuClusterParams<CorfuServerParams> corfuClusterParams, UniverseParams universeParams) {
-        super(corfuClusterParams, universeParams);
+            CorfuClusterParams<CorfuServerParams> corfuClusterParams, UniverseParams universeParams,
+            LoggingParams loggingParams) {
+        super(corfuClusterParams, universeParams, loggingParams);
 
         init();
     }

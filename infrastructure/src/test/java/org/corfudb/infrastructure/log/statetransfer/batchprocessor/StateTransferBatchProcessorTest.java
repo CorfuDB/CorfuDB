@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.log.statetransfer.batchprocessor;
 
 
-import com.google.common.collect.ImmutableList;
 import org.corfudb.infrastructure.log.statetransfer.DataTest;
 import org.corfudb.infrastructure.log.statetransfer.batch.ReadBatch;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
@@ -9,14 +8,19 @@ import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatch
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.clients.LogUnitClient;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.AddressSpaceView;
+import org.corfudb.util.NodeLocator;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
@@ -32,7 +36,7 @@ class StateTransferBatchProcessorTest extends DataTest {
 
     @Test
     public void writeRecordsSuccess() {
-        // Write successfully, a response should be sent to the caller.
+        // Write successfully immediately, a response should be sent to the caller.
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
         List<LogData> stubList = createStubList(addresses);
         LogUnitClient logUnitClient = mock(LogUnitClient.class);
@@ -45,19 +49,19 @@ class StateTransferBatchProcessorTest extends DataTest {
                 .addressSpaceView(addressSpaceView)
                 .build();
         TransferBatchResponse res = batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(),
-                logUnitClient, 1, Duration.ofMillis(500));
+                logUnitClient, 1, Duration.ofMillis(50));
         assertThat(res.getStatus() == SUCCEEDED).isTrue();
         assertThat(res.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
     }
 
     @Test
-    public void writeRecordsFailure() {
-        // Write and fail immediately, exception should be propagated to the caller.
+    public void writeRecordsIllegalArgumentException() {
+        // Write and fail immediately with illegal argument exception.
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
         List<LogData> stubList = createStubList(addresses);
         LogUnitClient logUnitClient = mock(LogUnitClient.class);
         AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
-        doThrow(new OverwriteException(SAME_DATA)).when(logUnitClient).writeRange(stubList);
+        doThrow(new IllegalArgumentException("Illegal argument")).when(logUnitClient).writeRange(stubList);
         doReturn(CompletableFuture.completedFuture(new KnownAddressResponse(new HashSet<>())))
                 .when(logUnitClient)
                 .requestKnownAddresses(0L, 9L);
@@ -67,18 +71,37 @@ class StateTransferBatchProcessorTest extends DataTest {
                 .addressSpaceView(addressSpaceView)
                 .build();
         assertThatThrownBy(() -> batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(),
-                logUnitClient, 1, Duration.ofMillis(100)))
-                .isInstanceOf(IllegalStateException.class)
-                .hasRootCauseInstanceOf(OverwriteException.class);
-
+                logUnitClient, 1, Duration.ofMillis(50)))
+                .isInstanceOf(RetryExhaustedException.class)
+                .hasRootCauseInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    public void writeRecordsRetry() {
-        // Try writing 10 records, write only 5 of them, catch the exception.
+    public void writeRecordsWrongEpochException() {
+        // Write and fail immediately with wrong epoch exception.
+        List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
+        List<LogData> stubList = createStubList(addresses);
+        LogUnitClient logUnitClient = mock(LogUnitClient.class);
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
+        doThrow(new WrongEpochException(0L)).when(logUnitClient).writeRange(stubList);
+        doReturn(CompletableFuture.completedFuture(new KnownAddressResponse(new HashSet<>())))
+                .when(logUnitClient)
+                .requestKnownAddresses(0L, 9L);
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .logUnitClient(logUnitClient)
+                .addressSpaceView(addressSpaceView)
+                .build();
+        assertThatThrownBy(() -> batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(),
+                logUnitClient, 1, Duration.ofMillis(50)))
+                .isInstanceOf(RetryExhaustedException.class)
+                .hasRootCauseInstanceOf(WrongEpochException.class);
+    }
+
+    @Test
+    public void writeRecordsOverwriteRetry() {
+        // Try writing 10 records, write only 5 of them, catch the overwrite exception.
         // Then retry writing the rest and succeed.
-        // At the end return a transfer batch response with status SUCCEEDED and the correct
-        // initial addresses.
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
         List<LogData> stubList = createStubList(addresses);
         List<LogData> knownStubList = stubList.stream()
@@ -106,25 +129,29 @@ class StateTransferBatchProcessorTest extends DataTest {
 
         TransferBatchResponse resp =
                 batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(),
-                        logUnitClient, 2, Duration.ofMillis(100));
+                        logUnitClient, 2, Duration.ofMillis(50));
         // Should succeed and carry the initial addresses after the retry
         assertThat(resp.getStatus()).isEqualTo(SUCCEEDED);
         assertThat(resp.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
     }
 
     @Test
-    public void writeRecordsRetryEmpty() {
-        // Try writing 10 records, write all of them, but catch the exception.
+    public void writeRecordsTimeoutRetry() {
+        // Try writing 10 records, but fail with a timeout exception.
         // Retry and succeed.
         List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
-        List<LogData> stubList = createStubList(addresses);
+        List<LogData> allAddressesStub = createStubList(addresses);
+
+        List<Long> written = addresses.stream().filter(x -> x < 5).collect(Collectors.toList());
+        List<LogData> secondBatchStub = allAddressesStub.stream().filter(x -> x.getGlobalAddress() >= 5).collect(Collectors.toList());
         LogUnitClient logUnitClient = mock(LogUnitClient.class);
         CompletableFuture<Boolean> failedFuture = new CompletableFuture<>();
-        failedFuture.completeExceptionally(new IllegalStateException("Illegal state"));
+        failedFuture.completeExceptionally(new TimeoutException());
 
-        doReturn(failedFuture).when(logUnitClient).writeRange(stubList);
-        doReturn(CompletableFuture.completedFuture(true)).when(logUnitClient).writeRange(ImmutableList.of());
-        doReturn(CompletableFuture.completedFuture(new KnownAddressResponse(new HashSet<>(addresses))))
+        doReturn(failedFuture).when(logUnitClient).writeRange(allAddressesStub);
+        doReturn(CompletableFuture.completedFuture(true)).when(logUnitClient).writeRange(secondBatchStub);
+
+        doReturn(CompletableFuture.completedFuture(new KnownAddressResponse(new HashSet<>(written))))
                 .when(logUnitClient)
                 .requestKnownAddresses(0L, 9L);
 
@@ -135,10 +162,75 @@ class StateTransferBatchProcessorTest extends DataTest {
                 .addressSpaceView(addressSpaceView)
                 .build();
         TransferBatchResponse resp =
-                batchProcessor.writeRecords(ReadBatch.builder().data(stubList).build(),
-                        logUnitClient, 2, Duration.ofMillis(100));
+                batchProcessor.writeRecords(ReadBatch.builder().data(allAddressesStub).build(),
+                        logUnitClient, 2, Duration.ofMillis(50));
         assertThat(resp.getStatus()).isEqualTo(SUCCEEDED);
         assertThat(resp.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
+
+    }
+
+    @Test
+    public void writeRecordsNetworkExceptionRetry() {
+        // Try writing 10 records, but fail with a network exception.
+        // Retry and succeed.
+        List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
+        List<LogData> allAddressesStub = createStubList(addresses);
+
+        List<Long> written = addresses.stream().filter(x -> x < 5).collect(Collectors.toList());
+        List<LogData> secondBatchStub = allAddressesStub.stream().filter(x -> x.getGlobalAddress() >= 5).collect(Collectors.toList());
+        LogUnitClient logUnitClient = mock(LogUnitClient.class);
+        CompletableFuture<Boolean> failedFuture = new CompletableFuture<>();
+        failedFuture.completeExceptionally(new NetworkException("Error", NodeLocator.parseString("127.0.0.1:9000")));
+
+        doReturn(failedFuture).when(logUnitClient).writeRange(allAddressesStub);
+        doReturn(CompletableFuture.completedFuture(true)).when(logUnitClient).writeRange(secondBatchStub);
+
+        doReturn(CompletableFuture.completedFuture(new KnownAddressResponse(new HashSet<>(written))))
+                .when(logUnitClient)
+                .requestKnownAddresses(0L, 9L);
+
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .logUnitClient(logUnitClient)
+                .addressSpaceView(addressSpaceView)
+                .build();
+        TransferBatchResponse resp =
+                batchProcessor.writeRecords(ReadBatch.builder().data(allAddressesStub).build(),
+                        logUnitClient, 2, Duration.ofMillis(50));
+        assertThat(resp.getStatus()).isEqualTo(SUCCEEDED);
+        assertThat(resp.getTransferBatchRequest().getAddresses()).isEqualTo(addresses);
+
+    }
+
+    @Test
+    public void writeRecordsRetriesExhausted() {
+        // Try writing 10 records, but fail every retry with a network exception.
+        // At the end an exception is thrown, wrapped in the retry exhausted exception.
+
+        List<Long> addresses = LongStream.range(0L, 10L).boxed().collect(Collectors.toList());
+        List<LogData> allAddressesStub = createStubList(addresses);
+
+        LogUnitClient logUnitClient = mock(LogUnitClient.class);
+        CompletableFuture<Boolean> failedFuture = new CompletableFuture<>();
+        failedFuture.completeExceptionally(new TimeoutException("Timeout"));
+
+        doReturn(failedFuture).when(logUnitClient).writeRange(allAddressesStub);
+
+        doReturn(CompletableFuture.completedFuture(new KnownAddressResponse(new HashSet<>())))
+                .when(logUnitClient)
+                .requestKnownAddresses(0L, 9L);
+
+        AddressSpaceView addressSpaceView = mock(AddressSpaceView.class);
+        ProtocolBatchProcessor batchProcessor = ProtocolBatchProcessor
+                .builder()
+                .logUnitClient(logUnitClient)
+                .addressSpaceView(addressSpaceView)
+                .build();
+        assertThatThrownBy(() -> batchProcessor.writeRecords(ReadBatch.builder().data(allAddressesStub).build(),
+                logUnitClient, 3, Duration.ofMillis(50)))
+                .isInstanceOf(RetryExhaustedException.class)
+                .hasRootCauseInstanceOf(TimeoutException.class);
 
     }
 }

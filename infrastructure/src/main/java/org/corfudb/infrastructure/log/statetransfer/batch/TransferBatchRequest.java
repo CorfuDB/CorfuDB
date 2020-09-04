@@ -13,14 +13,14 @@ import java.util.Optional;
 
 /**
  * A request to transfer a batch of addresses from a particular destination node
- * (if {@link #destination} is present) or via a replication protocol otherwise,
+ * (if {@link #destinationNodes} is present) or via a replication protocol otherwise,
  * and store the corresponding log data to the local stream log.
  */
 @AllArgsConstructor
 @Getter
 @ToString
 @EqualsAndHashCode
-@Builder
+@Builder(toBuilder = true)
 public class TransferBatchRequest {
     /**
      * A batch of addresses, small enough to get transferred within one rpc call.
@@ -28,9 +28,10 @@ public class TransferBatchRequest {
     @Default
     private final List<Long> addresses = ImmutableList.of();
     /**
-     * A destination endpoint. This field is optional because the log data
-     * can be read using the cluster consistency protocol rather than from a specific destination.
+     * Potential destination endpoints. This field is optional because the log data
+     * can be read using the cluster consistency protocol rather than from a specific destination
+     * if the part of the log we want to transfer is inconsistent.
      */
     @Default
-    private final Optional<String> destination = Optional.empty();
+    private final Optional<ImmutableList<String>> destinationNodes = Optional.empty();
 }

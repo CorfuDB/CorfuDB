@@ -18,12 +18,15 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
+import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -240,6 +243,8 @@ public abstract class AbstractTransactionalContext implements
                                                              SMREntry updateEntry,
                                                              Object[] conflictObject);
 
+    public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
+
     /**
      * Add a given transaction to this transactional context, merging
      * the read and write sets.
@@ -247,6 +252,17 @@ public abstract class AbstractTransactionalContext implements
      * @param tc The transactional context to merge.
      */
     public abstract void addTransaction(AbstractTransactionalContext tc);
+
+    /**
+     * Add an object that needs extra processing right before commit happens
+     *
+     * @param preCommitListener The context of the object that needs extra processing
+     *                         along with its lambda.
+     */
+    public abstract void addPreCommitListener(PreCommitListener preCommitListener);
+
+    @Getter
+    private List<PreCommitListener> preCommitListeners = new ArrayList<>();
 
     /**
      * Commit the transaction to the log.
@@ -334,6 +350,10 @@ public abstract class AbstractTransactionalContext implements
     long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
             conflictObjects) {
         return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
+    }
+
+    void addToWriteSet(UUID streamId, SMREntry updateEntry) {
+        getWriteSetInfo().add(streamId, updateEntry);
     }
 
     void mergeWriteSetInto(WriteSetInfo other) {

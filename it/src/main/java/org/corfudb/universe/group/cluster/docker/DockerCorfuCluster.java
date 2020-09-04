@@ -32,17 +32,15 @@ public class DockerCorfuCluster extends AbstractCorfuCluster<CorfuServerParams, 
 
     @NonNull
     private final DockerClient docker;
-    @NonNull
-    private final LoggingParams loggingParams;
+
     @NonNull
     private final DockerManager dockerManager;
 
     @Builder
     public DockerCorfuCluster(DockerClient docker, CorfuClusterParams<CorfuServerParams> params,
                               UniverseParams universeParams, LoggingParams loggingParams) {
-        super(params, universeParams);
+        super(params, universeParams, loggingParams);
         this.docker = docker;
-        this.loggingParams = loggingParams;
         this.dockerManager = DockerManager.builder().docker(docker).build();
 
         init();

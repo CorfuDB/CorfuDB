@@ -45,6 +45,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 .setPort(SERVERS.PORT_0)
                 .build();
         server = new ManagementServer(serverContext);
+        serverRouter.setServerContext(serverContext);
         MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         return new ImmutableSet.Builder<AbstractServer>()
                 .add(server)
@@ -60,7 +61,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
     @Override
     Set<IClient> getClientsForTest() {
         ManagementHandler managementHandler = new ManagementHandler();
-        client = new ManagementClient(router, 0L);
+        client = new ManagementClient(router, 0L, UUID.fromString("00000000-0000-0000-0000-000000000000"));
         return new ImmutableSet.Builder<IClient>()
                 .add(new BaseHandler())
                 .add(managementHandler)

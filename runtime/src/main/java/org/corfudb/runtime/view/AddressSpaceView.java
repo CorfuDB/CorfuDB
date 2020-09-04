@@ -6,17 +6,33 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.RemovalNotification;
+import com.google.common.collect.ContiguousSet;
+import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import io.netty.handler.timeout.TimeoutException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.NavigableSet;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -36,23 +52,6 @@ import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.NavigableSet;
-import java.util.Set;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
 
 /**
  * A view of the address space implemented by Corfu.
@@ -64,7 +63,6 @@ public class AddressSpaceView extends AbstractView {
 
     private final static long CACHE_KEY_SIZE = MetricsUtils.sizeOf.deepSizeOf(0L);
     private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
-    private final static boolean NO_THROW = false;
 
     /**
      * A cache for read results.
@@ -431,7 +429,8 @@ public class AddressSpaceView extends AbstractView {
                 throw new TrimmedException(trimmedAddresses);
             }
 
-            log.warn("read: ignoring trimmed addresses {}", trimmedAddresses);
+            // During streaming this message can flood logs, so modify log level with care.
+            log.debug("read: ignoring trimmed addresses {}", trimmedAddresses);
         }
 
 
@@ -470,61 +469,74 @@ public class AddressSpaceView extends AbstractView {
 
     /**
      * Get the first address in the address space.
+     *
+     * @return a token with epoch and first address
      */
     public Token getTrimMark() {
-        return layoutHelper(
-                e -> {
-                    long trimMark = e.getLayout().segments.stream()
-                            .flatMap(seg -> seg.getStripes().stream())
-                            .flatMap(stripe -> stripe.getLogServers().stream())
-                            .map(e::getLogUnitClient)
-                            .map(LogUnitClient::getTrimMark)
-                            .map(future -> {
-                                // This doesn't look nice, but its required to trigger
-                                // the retry mechanism in AbstractView. Also, getUninterruptibly
-                                // can't be used here because it throws a UnrecoverableCorfuInterruptedError
-                                try {
-                                    return future.join();
-                                } catch (CompletionException ex) {
-                                    Throwable cause = ex.getCause();
-                                    if (cause instanceof RuntimeException) {
-                                        throw (RuntimeException) cause;
-                                    } else {
-                                        throw new RuntimeException(cause);
-                                    }
-                                }
-                            })
-                            .max(Comparator.naturalOrder()).get();
-                    return new Token(e.getLayout().getEpoch(), trimMark);
-                });
+        return getTrimMark(true);
+    }
+
+    /**
+     * Get the first address in the address space.
+     *
+     * @param retry whether to do retry on certain failures
+     * @return a token with epoch and first address
+     */
+    public Token getTrimMark(boolean retry) {
+        return layoutHelper(Utils::getTrimMark, !retry);
     }
 
     /**
      * Get the log's tail, i.e., last address in the address space.
      */
     public Long getLogTail() {
-        return layoutHelper(
-                e -> Utils.getLogTail(e.getLayout(), runtime));
+        return layoutHelper(Utils::getLogTail);
     }
 
     /**
      * Get all tails, includes: log tail and stream tails.
      */
     public TailsResponse getAllTails() {
-        return layoutHelper(
-                e -> Utils.getAllTails(e.getLayout(), runtime));
+        return layoutHelper(Utils::getAllTails);
     }
 
     /**
-     * Get log address space, which includes:
-     * 1. Addresses belonging to each stream.
-     * 2. Log Tail.
+     * Get the maximum committed log tail from all log units.
      *
-     * @return
+     * @return the maximum committed log tail
      */
-    public StreamsAddressResponse getLogAddressSpace() {
-        return layoutHelper(
-                e -> Utils.getLogAddressSpace(e.getLayout(), runtime));
+    public long getCommittedTail() {
+        return layoutHelper(Utils::getCommittedTail, true);
+    }
+
+    /**
+     * Commit the addresses in the range by first inspecting the addresses
+     * and if data does not exist in log, hole fill the address. This is
+     * used by management agent for log consolidation.
+     *
+     * @param start start of address range, inclusive
+     * @param end   end of address range, inclusive
+     */
+    public void commit(long start, long end) {
+        if (start > end) {
+            log.trace("commit: range [{}, {}] start > end, skip.", start, end);
+            return;
+        }
+
+        ContiguousSet<Long> range = ContiguousSet.create(
+                Range.closed(start, end), DiscreteDomain.longs());
+
+        // Commit the addresses and update all log unit servers with the
+        // new committed tail, which is the end of range. Exceptions are
+        // handled at the upper layer.
+        layoutHelper(e -> {
+            e.getLayout()
+                    .getReplicationMode(start)
+                    .getReplicationProtocol(runtime)
+                    .commitAll(e, range);
+            Utils.updateCommittedTail(e, end);
+            return null;
+        }, true);
     }
 
     /**
@@ -535,11 +547,26 @@ public class AddressSpaceView extends AbstractView {
      * which means that they may return either the original
      * data, or a trimmed exception.</p>
      *
-     * @param address log address
+     * @param address a token with address to trim
      */
     public void prefixTrim(final Token address) {
+        prefixTrim(address, true);
+    }
+
+    /**
+     * Prefix trim the address space.
+     *
+     * <p>At the end of a prefix trim, all addresses equal to or
+     * less than the address given will be marked for trimming,
+     * which means that they may return either the original
+     * data, or a trimmed exception.</p>
+     *
+     * @param address a token with address to trim
+     * @param retry   whether to do retry on certain failures
+     */
+    public void prefixTrim(final Token address, boolean retry) {
         log.info("PrefixTrim[{}]", address);
-        final int numRetries = 3;
+        final int numRetries = retry ? 3 : 1;
 
         for (int x = 0; x < numRetries; x++) {
             try {
@@ -554,30 +581,29 @@ public class AddressSpaceView extends AbstractView {
                 runtime.getSequencerView().trimCache(address.getSequence());
 
                 layoutHelper(e -> {
-                    e.getLayout().getPrefixSegments(address.getSequence()).stream()
-                            .flatMap(seg -> seg.getStripes().stream())
-                            .flatMap(stripe -> stripe.getLogServers().stream())
-                            .map(e::getLogUnitClient)
-                            .map(client -> client.prefixTrim(address))
-                            .forEach(cf -> {
-                                CFUtils.getUninterruptibly(cf,
-                                        NetworkException.class, TimeoutException.class,
-                                        WrongEpochException.class);
-                            });
+                    Utils.prefixTrim(e, address);
                     return null;
                 }, true);
+
                 break;
-            } catch (NetworkException | TimeoutException e) {
-                log.warn("prefixTrim: encountered a network error on try {}", x, e);
-                Duration retryRate = runtime.getParameters().getConnectionRetryRate();
-                Sleep.sleepUninterruptibly(retryRate);
-            } catch (WrongEpochException wee) {
-                long serverEpoch = wee.getCorrectEpoch();
-                long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
-                log.warn("prefixTrim[{}]: wrongEpochException, runtime is in epoch {}, while server is in epoch {}. "
-                                + "Invalidate layout for this client and retry, attempt: {}/{}",
-                        address, runtimeEpoch, serverEpoch, x + 1, numRetries);
-                runtime.invalidateLayout();
+            } catch (RuntimeException e) {
+                // NetworkException is RuntimeException, CFUtils casts it into a RuntimeException.
+                // TimeoutException is a checked exception, CFUtils wraps it in a RuntimeException.
+                if (e instanceof NetworkException || e.getCause() instanceof TimeoutException) {
+                    log.warn("prefixTrim[{}]: encountered a network error on attempt {}/{}",
+                            address, x + 1, numRetries, e);
+                    Duration retryRate = runtime.getParameters().getConnectionRetryRate();
+                    Sleep.sleepUninterruptibly(retryRate);
+                } else if (e instanceof WrongEpochException) {
+                    long serverEpoch = ((WrongEpochException) e).getCorrectEpoch();
+                    long runtimeEpoch = runtime.getLayoutView().getLayout().getEpoch();
+                    log.warn("prefixTrim[{}]: WrongEpochException, runtime is in epoch {}, while server " +
+                                    "is in epoch {}. Invalidate layout for this client and retry, attempt: {}/{}",
+                            address, runtimeEpoch, serverEpoch, x + 1, numRetries);
+                    runtime.invalidateLayout();
+                } else {
+                    throw e;
+                }
             }
         }
     }
@@ -667,7 +693,7 @@ public class AddressSpaceView extends AbstractView {
      */
     private List<Long> filterTrimmedAddresses(Map<Long, ILogData> allData) {
         return allData.entrySet().stream()
-                .filter(entry -> !isLogDataValid(entry.getKey(), entry.getValue(), NO_THROW))
+                .filter(entry -> !isLogDataValid(entry.getKey(), entry.getValue(), false))
                 .map(Entry::getKey).collect(Collectors.toList());
     }
 
@@ -688,7 +714,7 @@ public class AddressSpaceView extends AbstractView {
 
         if (logData.isTrimmed()) {
             if (throwException) {
-                throw new TrimmedException(String.format("Trimmed address %s", address));
+                throw new TrimmedException(address);
             }
             return false;
         }

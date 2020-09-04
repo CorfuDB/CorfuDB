@@ -36,6 +36,11 @@ public class CorfuMsg {
     UUID clientID;
 
     /**
+     * The unique id of the cluster the request is made to.
+     */
+    UUID clusterID;
+
+    /**
      * The request id of this request/response.
      */
     @SuppressWarnings({"checkstyle:abbreviationaswordinname", "checkstyle:membername"})
@@ -89,6 +94,7 @@ public class CorfuMsg {
                     + "Marker = " + marker + " but expected 0xC0FC0FC0");
         }
         UUID clientId = new UUID(buffer.readLong(), buffer.readLong());
+        UUID clusterId = new UUID(buffer.readLong(), buffer.readLong());
         long requestId = buffer.readLong();
         long epoch = buffer.readLong();
         PriorityLevel priority = PriorityLevel.typeMap.get(buffer.readByte());
@@ -96,6 +102,7 @@ public class CorfuMsg {
         CorfuMsg msg = message.getConstructor().construct();
 
         msg.clientID = clientId;
+        msg.clusterID = clusterId;
         msg.requestID = requestId;
         msg.epoch = epoch;
         msg.priorityLevel = priority;
@@ -119,6 +126,15 @@ public class CorfuMsg {
             buffer.writeLong(clientID.getMostSignificantBits());
             buffer.writeLong(clientID.getLeastSignificantBits());
         }
+        if (clusterID == null) {
+            buffer.writeLong(0L);
+            buffer.writeLong(0L);
+        }
+        else {
+            buffer.writeLong(clusterID.getMostSignificantBits());
+            buffer.writeLong(clusterID.getLeastSignificantBits());
+        }
+
         buffer.writeLong(requestID);
         buffer.writeLong(epoch);
         buffer.writeByte(priorityLevel.asByte());
@@ -138,6 +154,7 @@ public class CorfuMsg {
      */
     public void copyBaseFields(CorfuMsg msg) {
         this.clientID = msg.clientID;
+        this.clusterID = msg.clusterID;
         this.epoch = msg.epoch;
         this.requestID = msg.requestID;
         this.priorityLevel = msg.priorityLevel;

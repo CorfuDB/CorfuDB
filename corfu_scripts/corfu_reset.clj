@@ -1,6 +1,6 @@
 ; Reset the endpoint given as the first argument
 (in-ns 'org.corfudb.shell) ; so our IDE knows what NS we are using
-
+(import java.util.UUID)
 (import org.docopt.Docopt) ; parse some cmdline opts
 (require 'clojure.pprint)
 (require 'clojure.java.shell)
@@ -23,7 +23,7 @@ Options:
 (def localcmd (.. (new Docopt usage) (parse *args)))
 
 (defn print-reset [endpoint] (do (println (str "Reset " endpoint ":"))
-                                 (if (.. (.. (get-base-client (get-router server localcmd) 0) (reset)) (get))
+                                 (if (.. (.. (get-base-client (get-router server localcmd) 0 (.UUID (.fromString "00000000-0000-0000-0000-000000000000"))) (reset)) (get))
                                      (println "ACK")
                                      (println "NACK")
                                      )

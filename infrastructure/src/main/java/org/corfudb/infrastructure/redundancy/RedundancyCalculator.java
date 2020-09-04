@@ -6,20 +6,22 @@ import com.google.common.collect.Sets;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
+import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegment;
+import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentRange;
+import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
 import org.corfudb.runtime.view.Layout.LayoutStripe;
 import org.corfudb.runtime.view.LayoutBuilder;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.IntPredicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.RESTORED;
+import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.RESTORED;
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
 /**
@@ -168,7 +170,7 @@ public class RedundancyCalculator {
     }
 
     /**
-     * Given a layout, and global trim mark creates an initial list
+     * Given a layout, and a global trim mark, creates an initial list
      * of non-empty and bounded transfer segments.
      *
      * @param layout   A current layout.
@@ -192,7 +194,6 @@ public class RedundancyCalculator {
                         TransferSegmentStatus restored = TransferSegmentStatus
                                 .builder()
                                 .segmentState(RESTORED)
-                                .totalTransferred(segmentEnd - segmentStart + 1L)
                                 .build();
 
                         return TransferSegment
@@ -200,12 +201,12 @@ public class RedundancyCalculator {
                                 .startAddress(segmentStart)
                                 .endAddress(segmentEnd)
                                 .status(restored)
+                                .logUnitServers(ImmutableList.copyOf(segment.getAllLogServers()))
                                 .build();
                     } else {
                         TransferSegmentStatus notTransferred = TransferSegmentStatus
                                 .builder()
                                 .segmentState(NOT_TRANSFERRED)
-                                .totalTransferred(0L)
                                 .build();
 
                         return TransferSegment
@@ -213,10 +214,30 @@ public class RedundancyCalculator {
                                 .startAddress(segmentStart)
                                 .endAddress(segmentEnd)
                                 .status(notTransferred)
+                                .logUnitServers(ImmutableList.copyOf(segment.getAllLogServers()))
                                 .build();
                     }
 
                 })
                 .collect(ImmutableList.toImmutableList());
     }
+
+    /**
+     * Creates the list of transfer segment ranges
+     * given the transfer segment list and the committed tail.
+     * The ranges are consumed by the state transfer manager
+     * in order to execute the state transfer.
+     *
+     * @param transferSegmentList A list of transfer segments.
+     * @param committedTail       An optional committed tail, retrieved earlier.
+     * @return A list of transfer segment ranges.
+     */
+    public ImmutableList<TransferSegmentRange> prepareTransferWorkload(
+            ImmutableList<TransferSegment> transferSegmentList,
+            Optional<Long> committedTail) {
+        return transferSegmentList.stream()
+                .map(segment -> segment.toTransferSegmentRange(committedTail))
+                .collect(ImmutableList.toImmutableList());
+    }
+
 }

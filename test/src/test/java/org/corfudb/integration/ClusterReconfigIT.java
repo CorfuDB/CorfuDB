@@ -1,10 +1,30 @@
 package org.corfudb.integration;
 
+import static junit.framework.TestCase.fail;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
-
 import com.google.common.reflect.TypeToken;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Optional;
+import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -32,36 +52,17 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.Utils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.io.IOException;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
-
-import static junit.framework.TestCase.fail;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class ClusterReconfigIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
     private final int basePort = 9000;
     private final int retries = 10;
+    private final String testStream = "test";
 
     @Before
     public void loadProperties() {
@@ -130,29 +131,6 @@ public class ClusterReconfigIT extends AbstractIT {
         assertThat(epochVerifier.test(refreshedLayout.getEpoch())).isTrue();
     }
 
-    /**
-     * Creates a message of specified size in bytes.
-     *
-     * @param msgSize
-     * @return
-     */
-    private static String createStringOfSize(int msgSize) {
-        StringBuilder sb = new StringBuilder(msgSize);
-        for (int i = 0; i < msgSize; i++) {
-            sb.append('a');
-        }
-        return sb.toString();
-    }
-
-    private Process runPersistentServer(String address, int port, boolean singleNode) throws IOException {
-        return new CorfuServerRunner()
-                .setHost(address)
-                .setPort(port)
-                .setLogPath(getCorfuServerLogPath(address, port))
-                .setSingle(singleNode)
-                .runServer();
-    }
-
     private Thread startDaemonWriter(CorfuRuntime corfuRuntime, Random r, CorfuTable table,
                                      String data, AtomicBoolean stopFlag) {
         Thread t = new Thread(() -> {
@@ -177,8 +155,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
     /**
      * A cluster of one node is started - 9000.
-     * Then a block of data of 15,000 entries is written to the node.
-     * This is to ensure we have at least 1.5 data log files.
+     * Then a block of data of 1,000 entries is written to the node.
      * A daemon thread is instantiated to randomly put data while add node is executed.
      * 2 nodes - 9001 and 9002 are added to the cluster.
      * Finally the addition of the 2 nodes in the layout is verified.
@@ -203,7 +180,7 @@ public class ClusterReconfigIT extends AbstractIT {
         CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("test")
+                .setStreamName(testStream)
                 .open();
 
         final String data = createStringOfSize(1_000);
@@ -252,8 +229,8 @@ public class ClusterReconfigIT extends AbstractIT {
         Map<Long, LogData> map_1 = getAllNonEmptyData(corfuRuntime, "localhost:9001", lastAddress);
         Map<Long, LogData> map_2 = getAllNonEmptyData(corfuRuntime, "localhost:9002", lastAddress);
 
-        assertThat(map_1.entrySet()).containsOnlyElementsOf(map_0.entrySet());
-        assertThat(map_2.entrySet()).containsOnlyElementsOf(map_0.entrySet());
+        assertThat(map_1.entrySet()).containsExactlyElementsOf(map_0.entrySet());
+        assertThat(map_2.entrySet()).containsExactlyElementsOf(map_0.entrySet());
     }
 
     /**
@@ -269,7 +246,7 @@ public class ClusterReconfigIT extends AbstractIT {
                                                   String endpoint, long end) throws Exception {
         ReadResponse readResponse = corfuRuntime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient(endpoint)
-                .readAll(getRangeAddressAsList(0L, end))
+                .read(getRangeAddressAsList(0L, end), false)
                 .get();
         return readResponse.getAddresses().entrySet()
                 .stream()
@@ -373,12 +350,11 @@ public class ClusterReconfigIT extends AbstractIT {
 
         runtime = createDefaultRuntime();
         Layout layout = incrementClusterEpoch(runtime);
-        RebootUtil.restart(SERVER_0, runtime.getParameters(), retries, PARAMETERS.TIMEOUT_LONG);
-
+        RebootUtil.restart(SERVER_0, runtime.getParameters(), retries, PARAMETERS.TIMEOUT_LONG, Optional.of(layout.getClusterId()));
         waitForEpochChange(epoch -> epoch >= layout.getEpoch() + 1, runtime);
 
         runtime = createDefaultRuntime();
-        RebootUtil.reset(SERVER_0, runtime.getParameters(), retries, PARAMETERS.TIMEOUT_LONG);
+        RebootUtil.reset(SERVER_0, runtime.getParameters(), retries, PARAMETERS.TIMEOUT_LONG, Optional.of(layout.getClusterId()));
         runtime = createDefaultRuntime();
 
         waitForEpochChange(epoch -> epoch == 0, runtime);
@@ -415,7 +391,7 @@ public class ClusterReconfigIT extends AbstractIT {
         CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("test")
+                .setStreamName(testStream)
                 .open();
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
@@ -547,9 +523,9 @@ public class ClusterReconfigIT extends AbstractIT {
                 CorfuRuntime.CorfuRuntimeParameters.builder().build());
         router.addClient(new LayoutHandler()).addClient(new BaseHandler());
         retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
-                new LayoutClient(router, layout.getEpoch()).bootstrapLayout(layout)));
+                new LayoutClient(router, layout.getEpoch(), layout.getClusterId()).bootstrapLayout(layout)));
         retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
-                new ManagementClient(router, layout.getEpoch()).bootstrapManagement(layout)));
+                new ManagementClient(router, layout.getEpoch(), layout.getClusterId()).bootstrapManagement(layout)));
 
         BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT);
 
@@ -579,7 +555,7 @@ public class ClusterReconfigIT extends AbstractIT {
         Layout wrongLayout = new Layout(layout);
         wrongLayout.getLayoutServers().add("localhost:9005");
         retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
-                new LayoutClient(router, layout.getEpoch()).bootstrapLayout(wrongLayout)));
+                new LayoutClient(router, layout.getEpoch(), layout.getClusterId()).bootstrapLayout(wrongLayout)));
 
         assertThatThrownBy(() -> BootstrapUtil.bootstrap(layout, retries, PARAMETERS.TIMEOUT_SHORT))
                 .hasCauseInstanceOf(AlreadyBootstrappedException.class);
@@ -608,7 +584,8 @@ public class ClusterReconfigIT extends AbstractIT {
                 .addClient(new ManagementHandler())
                 .addClient(new BaseHandler());
         Layout wrongLayout = new Layout(layout);
-        final ManagementClient managementClient = new ManagementClient(router, layout.getEpoch());
+        final ManagementClient managementClient =
+                new ManagementClient(router, layout.getEpoch(), layout.getClusterId());
         wrongLayout.getLayoutServers().add("localhost:9005");
         retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
                 managementClient.bootstrapManagement(wrongLayout)));
@@ -652,7 +629,7 @@ public class ClusterReconfigIT extends AbstractIT {
         CorfuTable<String, String> table = runtime.getObjectsView()
                 .build()
                 .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
-                .setStreamName("test")
+                .setStreamName(testStream)
                 .open();
         final String data = createStringOfSize(1_000);
         Random r = getRandomNumberGenerator();
@@ -729,7 +706,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         // Create map and set up daemon writer thread.
         CorfuRuntimeParameters corfuRuntimeParameters = CorfuRuntimeParameters.builder()
-                .layoutServer(NodeLocator.parseString("localhost:9000"))
+                .layoutServers(Arrays.asList(NodeLocator.parseString("localhost:9000")))
                 .cacheDisabled(true)
                 .systemDownHandlerTriggerLimit(1)
                 // Register the system down handler to throw a RuntimeException.
@@ -832,7 +809,7 @@ public class ClusterReconfigIT extends AbstractIT {
         int verificationCounter = 0;
         for (LogData logData : runtime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient("localhost:9002")
-                .readAll(getRangeAddressAsList(startAddress, endAddress))
+                .read(getRangeAddressAsList(startAddress, endAddress), false)
                 .get().getAddresses().values()) {
             assertThat(logData.getPayload(runtime))
                     .isEqualTo(Integer.toString(verificationCounter++).getBytes());
@@ -912,7 +889,7 @@ public class ClusterReconfigIT extends AbstractIT {
         int verificationCounter = 0;
         for (LogData logData : runtime.getLayoutView().getRuntimeLayout()
                 .getLogUnitClient("localhost:9002")
-                .readAll(getRangeAddressAsList(startAddress, endAddress)).get()
+                .read(getRangeAddressAsList(startAddress, endAddress), false).get()
                 .getAddresses().values()) {
             assertThat(logData.getPayload(runtime))
                     .isEqualTo(Integer.toString(verificationCounter++).getBytes());
@@ -944,7 +921,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         final int systemDownHandlerLimit = 10;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
-                .layoutServer(NodeLocator.parseString(DEFAULT_ENDPOINT))
+                .layoutServers(Arrays.asList(NodeLocator.parseString(DEFAULT_ENDPOINT)))
                 .systemDownHandlerTriggerLimit(systemDownHandlerLimit)
                 // Register the system down handler to throw a RuntimeException.
                 .systemDownHandler(() -> {
@@ -1038,7 +1015,7 @@ public class ClusterReconfigIT extends AbstractIT {
 
         final int systemDownHandlerLimit = 10;
         runtime = CorfuRuntime.fromParameters(CorfuRuntimeParameters.builder()
-                .layoutServer(NodeLocator.parseString(DEFAULT_ENDPOINT))
+                .layoutServers(Arrays.asList(NodeLocator.parseString(DEFAULT_ENDPOINT)))
                 .systemDownHandler(() -> {
                     throw new RuntimeException();
                 })
@@ -1170,8 +1147,8 @@ public class ClusterReconfigIT extends AbstractIT {
                 .open();
 
         // Verify sequencer has correct address map for this stream (addresses and trim mark)
-        StreamAddressSpace addressSpace = runtime2.getAddressSpaceView()
-                .getLogAddressSpace()
+        StreamAddressSpace addressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
+                .getRuntimeLayout())
                 .getAddressMap().get(streamId);
 
         assertThat(addressSpace.getTrimMark()).isEqualTo(numEntries);
@@ -1184,8 +1161,8 @@ public class ClusterReconfigIT extends AbstractIT {
         }
 
         // Verify START_ADDRESS of checkpoint for stream
-        StreamAddressSpace checkpointAddressSpace = runtime2.getAddressSpaceView()
-                .getLogAddressSpace()
+        StreamAddressSpace checkpointAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
+                .getRuntimeLayout())
                 .getAddressMap().get(checkpointStreamId);
 
         // Addresses should correspond to: start, continuation and end records. (total 3 records)

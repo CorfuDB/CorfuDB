@@ -505,6 +505,12 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             this.serverRouter.addServer(layoutServer);
             this.serverRouter.addServer(logUnitServer);
             this.serverRouter.addServer(managementServer);
+            serverContext.setServerRouter(this.serverRouter);
+            this.serverRouter.setServerContext(this.serverContext);
+            if(serverContext.isSingleNodeSetup() && serverContext.getCurrentLayout() != null){
+                serverContext.setServerEpoch(serverContext.getCurrentLayout().getEpoch(),
+                        this.serverRouter);
+            }
         }
 
         TestServer(int port) {

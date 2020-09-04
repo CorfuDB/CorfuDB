@@ -2,9 +2,23 @@ package org.corfudb.runtime.view;
 
 import static java.util.Objects.requireNonNull;
 
+
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -23,18 +37,6 @@ import org.corfudb.runtime.view.stream.AddressMapStreamView;
 import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.runtime.view.stream.ThreadSafeStreamView;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 /**
  * This class represents the layout of a Corfu instance.
@@ -87,6 +89,12 @@ public class Layout {
      * Is used to fetch layout(epoch agnostic request) by the corfuRuntime.
      */
     public static final long INVALID_EPOCH = -1L;
+
+    /**
+     * Invalid cluster id.
+     * It is used to fetch layout by the corfu runtime.
+     */
+    public static final UUID INVALID_CLUSTER_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
     /** The unique Id for the Corfu cluster represented by this layout.
      *  Should remain consistent for the lifetime of the layout. May be
@@ -170,9 +178,10 @@ public class Layout {
         Set<String> activeServers = new HashSet<>();
         activeServers.addAll(layoutServers);
         activeServers.addAll(sequencers);
-        segments.forEach(x ->
-                x.getStripes().forEach(y ->
-                        activeServers.addAll(y.getLogServers())));
+        segments.forEach(segment -> segment
+                .getStripes()
+                .forEach(stripe -> activeServers.addAll(stripe.getLogServers()))
+        );
         activeServers.removeAll(unresponsiveServers);
         return activeServers;
     }
@@ -190,6 +199,30 @@ public class Layout {
     }
 
     /**
+     * Get all the unique log unit server endpoints in the layout.
+     *
+     * @return a set of all log unit server endpoints
+     */
+    public Set<String> getAllLogServers() {
+        return segments.stream()
+                .flatMap(seg -> seg.getAllLogServers().stream())
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Get all the fully redundant log unit servers, i.e.
+     * log units that are present in all layout segments.
+     *
+     * @return a set of fully redundant log unit servers
+     */
+    public Set<String> getFullyRedundantLogServers() {
+        return segments.stream()
+                .map(LayoutSegment::getAllLogServers)
+                .reduce(Sets::intersection)
+                .orElseGet(Collections::emptySet);
+    }
+
+    /**
      * Returns the primary sequencer.
      *
      * @return The primary sequencer.
@@ -198,7 +231,8 @@ public class Layout {
         return sequencers.get(0);
     }
 
-    /** Return a list of segments which contain global
+    /**
+     * Return a list of segments which contain global
      * addresses less than or equal to the given address
      * (known as the prefix).
      *
@@ -251,21 +285,8 @@ public class Layout {
      * Return latest segment.
      * @return the latest segment.
      */
-    public LayoutSegment getLatestSegment() {
+    public LayoutSegment getLastSegment() {
         return this.getSegments().get(this.getSegments().size() - 1);
-    }
-
-    /**
-     * Get the last node in the last segment.
-     *
-     * @return Returns the last node in the last segment.
-     */
-    public String getLastAddedNodeInLastSegment() {
-
-        // Fetching the latest segment. Note: This is the unbounded segment with ongoing writes.
-        // Returning the last node in the first stripe for determinism.
-        List<String> firstStripeLogServers = getLatestSegment().getFirstStripe().getLogServers();
-        return firstStripeLogServers.get(firstStripeLogServers.size() - 1);
     }
 
     /**
@@ -369,10 +390,10 @@ public class Layout {
             }
 
             @Override
-            public ClusterStatus getClusterHealthForSegment(LayoutSegment layoutSegment,
-                                                            Set<String> responsiveNodes) {
-                return !responsiveNodes.containsAll(layoutSegment.getAllLogServers())
-                        ? ClusterStatus.UNAVAILABLE : ClusterStatus.STABLE;
+            public ClusterStatus getClusterHealthForSegment(
+                    LayoutSegment layoutSegment, Set<String> responsiveNodes) {
+                return responsiveNodes.containsAll(layoutSegment.getAllLogServers())
+                        ? ClusterStatus.STABLE : ClusterStatus.UNAVAILABLE;
             }
         },
         QUORUM_REPLICATION {
@@ -575,7 +596,7 @@ public class Layout {
          * @return Set of log unit servers.
          */
         public Set<String> getAllLogServers() {
-            return this.getStripes().stream()
+            return stripes.stream()
                     .flatMap(layoutStripe -> layoutStripe.getLogServers().stream())
                     .collect(Collectors.toSet());
         }

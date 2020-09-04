@@ -1,7 +1,5 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import lombok.Setter;
@@ -10,8 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.junit.After;
@@ -35,6 +35,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 /**
  * Integration tests.
  * Created by zlokhandwala on 4/28/17.
@@ -43,16 +45,24 @@ import java.util.function.Supplier;
 public class AbstractIT extends AbstractCorfuTest {
     static final String DEFAULT_HOST = "localhost";
     static final int DEFAULT_PORT = 9000;
+
+    static final int DEFAULT_LOG_REPLICATION_PORT = 9020;
+
     static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
 
     static final String CORFU_PROJECT_DIR = new File("..").getAbsolutePath() + File.separator;
     static final String CORFU_LOG_PATH = PARAMETERS.TEST_TEMP_DIR;
 
     private static final String KILL_COMMAND = "pkill -9 -P ";
-    private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep CorfuServer|awk '{print $1}'| xargs kill -9";
+    private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -9";
 
     private static final int SHUTDOWN_RETRIES = 10;
     private static final long SHUTDOWN_RETRY_WAIT = 500;
+
+    // Config the msg size for log replication data
+    // sent from active cluster to the standby cluster.
+    // We set it as 128KB to make multiple messages during the tests.
+    private static final int MSG_SIZE = 131072;
 
     public CorfuRuntime runtime;
 
@@ -136,18 +146,18 @@ public class AbstractIT extends AbstractCorfuTest {
                 builder.command("sh", "-c", KILL_COMMAND + pid.longValue());
                 Process p = builder.start();
                 p.waitFor();
-             }
+            }
 
-             if (retries == 0) {
-                 return false;
-             }
+            if (retries == 0) {
+                return false;
+            }
 
-             if (corfuServerProcess.isAlive()) {
-                 retries--;
-                 Thread.sleep(SHUTDOWN_RETRY_WAIT);
-             } else {
-                 return true;
-             }
+            if (corfuServerProcess.isAlive()) {
+                retries--;
+                Thread.sleep(SHUTDOWN_RETRY_WAIT);
+            } else {
+                return true;
+            }
         }
     }
 
@@ -269,6 +279,20 @@ public class AbstractIT extends AbstractCorfuTest {
         return pid;
     }
 
+    /**
+     * Creates a message of specified size in bytes.
+     *
+     * @param msgSize
+     * @return
+     */
+    public static String createStringOfSize(int msgSize) {
+        StringBuilder sb = new StringBuilder(msgSize);
+        for (int i = 0; i < msgSize; i++) {
+            sb.append('a');
+        }
+        return sb.toString();
+    }
+
     public static CorfuRuntime createDefaultRuntime() {
         return createRuntime(DEFAULT_ENDPOINT);
     }
@@ -281,12 +305,47 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
+    public static Process runReplicationServer(int port) throws IOException {
+        return new CorfuReplicationServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(port)
+                .runServer();
+    }
+
+    public static Process runReplicationServer(int port, String pluginConfigFilePath) throws IOException {
+        return new CorfuReplicationServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(port)
+                .setPluginConfigFilePath(pluginConfigFilePath)
+                .setMsg_size(MSG_SIZE)
+                .runServer();
+    }
+
+    public static Process runReplicationServer(int port, String pluginConfigFilePath, int lockLeaseDuration) throws IOException {
+        return new CorfuReplicationServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(port)
+                .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
+                .setPluginConfigFilePath(pluginConfigFilePath)
+                .setMsg_size(MSG_SIZE)
+                .runServer();
+    }
+
     public static Process runDefaultServer() throws IOException {
         return new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(DEFAULT_PORT)
                 .setSingle(true)
                 .setLogPath(getCorfuServerLogPath(DEFAULT_HOST, DEFAULT_PORT))
+                .runServer();
+    }
+
+    public static Process runPersistentServer(String address, int port, boolean singleNode) throws IOException {
+        return new CorfuServerRunner()
+                .setHost(address)
+                .setPort(port)
+                .setLogPath(getCorfuServerLogPath(address, port))
+                .setSingle(singleNode)
                 .runServer();
     }
 
@@ -361,6 +420,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
         private boolean single = true;
         private boolean tlsEnabled = false;
+        private boolean noAutoCommit = true;
         private String keyStore = null;
         private String keyStorePassword = null;
         private String logLevel = "INFO";
@@ -370,7 +430,6 @@ public class AbstractIT extends AbstractCorfuTest {
         private String trustStorePassword = null;
         private String compressionCodec = null;
 
-
         /**
          * Create a command line string according to the properties set for a Corfu Server
          * Instance
@@ -379,13 +438,19 @@ public class AbstractIT extends AbstractCorfuTest {
         public String getOptionsString() {
             StringBuilder command = new StringBuilder();
             command.append("-a ").append(host);
+
             if (logPath != null) {
                 command.append(" -l ").append(logPath);
             } else {
                 command.append(" -m");
             }
+
             if (single) {
                 command.append(" -s");
+            }
+
+            if (noAutoCommit) {
+                command.append(" -A");
             }
 
             if (logSizeLimitPercentage != null) {
@@ -433,6 +498,102 @@ public class AbstractIT extends AbstractCorfuTest {
             StreamGobbler streamGobbler = new StreamGobbler(corfuServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuServerProcess;
+        }
+    }
+
+    /**
+     * This is a helper class for setting up the properties of a CorfuLogReplicationServer and
+     * creating an instance of a Corfu Log Replication Server accordingly.
+     */
+    @Getter
+    @Setter
+    @Accessors(chain = true)
+    public static class CorfuReplicationServerRunner {
+
+        private String host = DEFAULT_HOST;
+        private int port = DEFAULT_LOG_REPLICATION_PORT;
+
+        private boolean tlsEnabled = false;
+        private String keyStore = null;
+        private String keyStorePassword = null;
+        private String logLevel = "INFO";
+        private String trustStore = null;
+        private String trustStorePassword = null;
+        private String compressionCodec = null;
+        private String pluginConfigFilePath = null;
+        private String logPath = null;
+        private int msg_size = 0;
+        private Integer lockLeaseDuration;
+
+        /**
+         * Create a command line string according to the properties set for a Corfu Server
+         * Instance
+         * @return command line including options that captures the properties of Corfu Server instance
+         */
+        public String getOptionsString() {
+            StringBuilder command = new StringBuilder();
+            command.append("-a ").append(host);
+
+            if (msg_size != 0) {
+                command.append(" --max-data-message-size=").append(msg_size);
+            }
+
+            if (logPath != null) {
+                command.append(" -l ").append(logPath);
+            } else {
+                command.append(" -m");
+            }
+
+            if (tlsEnabled) {
+                command.append(" -e");
+                if (keyStore != null) {
+                    command.append(" -u ").append(keyStore);
+                }
+                if (keyStorePassword != null) {
+                    command.append(" -f ").append(keyStorePassword);
+                }
+                if (trustStore != null) {
+                    command.append(" -r ").append(trustStore);
+                }
+                if (trustStorePassword != null) {
+                    command.append(" -w ").append(trustStorePassword);
+                }
+            }
+
+            if(pluginConfigFilePath != null) {
+                command.append(" --plugin=").append(pluginConfigFilePath);
+            }
+
+            if (lockLeaseDuration != null) {
+                command.append(" --lock-lease=").append(lockLeaseDuration);
+            }
+
+            command.append(" -d ").append(logLevel).append(" ")
+                    .append(port);
+            return command.toString();
+        }
+
+        /**
+         * Creates a server with the options set according to the properties of this Corfu server instance
+         *
+         * @return a {@link Process} running a Corfu server as it is setup through the properties of
+         *         the instance on which this method is called.
+         * @throws IOException
+         */
+        public Process runServer() throws IOException {
+            final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
+
+            File logPath = new File(getCorfuServerLogPath(host, port));
+            if (!logPath.exists()) {
+                logPath.mkdir();
+            }
+            ProcessBuilder builder = new ProcessBuilder();
+            builder.command("sh", "-c", "bin/corfu_replication_server " + getOptionsString());
+            builder.directory(new File(CORFU_PROJECT_DIR));
+            Process corfuReplicationServerProcess = builder.start();
+            StreamGobbler streamGobbler = new StreamGobbler(corfuReplicationServerProcess.getInputStream(), serverConsoleLogPath);
+            Executors.newSingleThreadExecutor().submit(streamGobbler);
+            return corfuReplicationServerProcess;
         }
     }
 }

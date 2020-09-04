@@ -9,7 +9,6 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Address;
@@ -135,11 +134,10 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             // Update the pointer.
             updatePointer(entry);
 
-            // Process the next entry, checking if the context has changed.
-            // If the context has changed, we read again, since this entry
-            // does not contain any data, and we need to follow the new
-            // context.
-            if (processEntryForContext(entry)) {
+            // We added hole to StreamView layer, in order to enable VLO sync to a hole
+            // and in this way, we can avoid unnecessary sync that call sequencer every time.
+            // It can expose a hole to sv consumer, so check if entry is a hole.
+            if (entry.isHole()) {
                 return nextUpTo(maxGlobal);
             }
         }
@@ -176,9 +174,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
 
         // Check if the last entry updates the context.
         if (doesEntryUpdateContext(entries.get(entries.size() - 1))) {
-            // The entry which updates the context must be the last one, so
-            // process it
-            processEntryForContext(entries.get(entries.size() - 1));
 
             // Remove the entry which updates the context
             entries.remove(entries.size() - 1);
@@ -284,7 +279,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      */
     private void updatePointer(final ILogData data) {
         // Update the global pointer, if it is non-checkpoint data.
-        if (data.getType() == DataType.DATA && !data.hasCheckpointMetadata()) {
+        if ((data.isData() || data.isHole()) && !data.hasCheckpointMetadata()) {
             // Note: here we only set the global pointer and do not validate its position with respect to the trim mark,
             // as the pointer is expected to be moving step by step (for instance when syncing a stream up to maxGlobal)
             // The validation is deferred to these methods which call it in advance based on the expected final position

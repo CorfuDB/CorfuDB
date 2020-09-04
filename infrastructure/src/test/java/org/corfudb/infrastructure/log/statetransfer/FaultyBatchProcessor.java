@@ -42,7 +42,7 @@ public class FaultyBatchProcessor implements StateTransferBatchProcessor {
     @Override
     public CompletableFuture<TransferBatchResponse> transfer(TransferBatchRequest transferBatchRequest) {
         CompletableFuture<TransferBatchResponse> exec;
-        if (totalProcessed.getAndIncrement() % batchFailureOrder == 0) {
+        if (totalProcessed.incrementAndGet() % batchFailureOrder == 0) {
             exec = CompletableFuture.completedFuture(TransferBatchResponse.builder().status(FAILED).build());
         } else {
             exec = CompletableFuture
@@ -52,7 +52,6 @@ public class FaultyBatchProcessor implements StateTransferBatchProcessor {
                             .build()
                     );
         }
-        return CFUtils.runFutureAfter(() -> exec, ec, delay.map(d -> (long)
-                (random.nextFloat() * d)).orElse(0L), TimeUnit.MILLISECONDS);
+        return CFUtils.runFutureAfter(() -> exec, ec, delay.orElse(0L), TimeUnit.MILLISECONDS);
     }
 }

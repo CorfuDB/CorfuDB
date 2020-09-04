@@ -2,8 +2,12 @@ package org.corfudb.infrastructure.redundancy;
 
 import com.google.common.collect.ImmutableList;
 import org.corfudb.infrastructure.LayoutBasedTestHelper;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegment;
-import org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus;
+import org.corfudb.infrastructure.log.statetransfer.segment.StateTransferType;
+import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegment;
+import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentRange;
+import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentRangeSingle;
+import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentRangeSplit;
+import org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus;
 import org.corfudb.infrastructure.log.statetransfer.TransferSegmentCreator;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
@@ -14,11 +18,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
-import static org.corfudb.infrastructure.log.statetransfer.StateTransferManager.TransferSegmentStatus.SegmentState.RESTORED;
+import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
+import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.RESTORED;
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 import static org.corfudb.runtime.view.Layout.LayoutStripe;
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
@@ -34,9 +39,9 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
         ImmutableList<LayoutBasedTestHelper.MockedSegment> expected = ImmutableList.of(
                 new MockedSegment(0L, 1L,
-                        createStatus(NOT_TRANSFERRED, 0L, Optional.empty())),
+                        createStatus(NOT_TRANSFERRED, Optional.empty())),
                 new MockedSegment(2L, 3L,
-                        createStatus(NOT_TRANSFERRED, 0L, Optional.empty())));
+                        createStatus(NOT_TRANSFERRED, Optional.empty())));
 
         ImmutableList<TransferSegment> result = redundancyCalculator
                 .createStateList(layout, -1L);
@@ -47,9 +52,9 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
         expected = ImmutableList.of(
                 new MockedSegment(0L, 1L,
-                        createStatus(NOT_TRANSFERRED, 0L, Optional.empty())),
+                        createStatus(NOT_TRANSFERRED, Optional.empty())),
                 new MockedSegment(2L, 3L,
-                        createStatus(RESTORED, 2L, Optional.empty())));
+                        createStatus(RESTORED, Optional.empty())));
 
         result = redundancyCalculator.createStateList(layout, -1L);
 
@@ -69,7 +74,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
         ImmutableList<MockedSegment> expected =
                 ImmutableList.of(
                         new MockedSegment(3L, 3L,
-                                createStatus(NOT_TRANSFERRED, 0L, Optional.empty())));
+                                createStatus(NOT_TRANSFERRED, Optional.empty())));
 
 
         List<TransferSegment> result = redundancyCalculator.createStateList(layout, 3L);
@@ -80,7 +85,7 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
         expected = ImmutableList.of(
                 new MockedSegment(3L, 3L,
-                        createStatus(RESTORED, 1L, Optional.empty())));
+                        createStatus(RESTORED, Optional.empty())));
 
         result = redundancyCalculator.createStateList(layout, 3L);
 
@@ -167,11 +172,11 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
 
         MockedSegment presentSegment = new MockedSegment(0L,
                 20L,
-                TransferSegmentStatus.builder().segmentState(RESTORED).totalTransferred(21L).build());
+                TransferSegmentStatus.builder().segmentState(RESTORED).build());
 
 
         MockedSegment nonPresentSegment = new MockedSegment(21L,
-                50L, TransferSegmentStatus.builder().segmentState(NOT_TRANSFERRED).totalTransferred(0L).build());
+                50L, TransferSegmentStatus.builder().segmentState(NOT_TRANSFERRED).build());
 
         Assert.assertTrue(transformListToMock(transferSegments).containsAll(Arrays.asList(presentSegment,
                 nonPresentSegment)));
@@ -335,6 +340,220 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                         .build()).isInstanceOf(IllegalStateException.class);
 
 
+    }
+
+    private ImmutableList<TransferSegment> getTestSegments() {
+        TransferSegment firstSegment = TransferSegment
+                .builder()
+                .logUnitServers(ImmutableList.of("A", "B", "C"))
+                .startAddress(150L)
+                .endAddress(300L)
+                .status(TransferSegmentStatus.builder().segmentState(RESTORED).build())
+                .build();
+        TransferSegment secondSegment = TransferSegment
+                .builder()
+                .logUnitServers(ImmutableList.of("A", "C"))
+                .startAddress(301L)
+                .endAddress(500L)
+                .status(TransferSegmentStatus.builder().build())
+                .build();
+        return ImmutableList.of(firstSegment, secondSegment);
+    }
+
+    private boolean singleRangeIsCorrect(TransferSegmentRangeSingle range,
+                                         Predicate<Long> startAddressTest,
+                                         Predicate<Long> endAddressTest,
+                                         Predicate<Optional<ImmutableList<String>>> availableServersTest,
+                                         Predicate<StateTransferType> transferTypeTest,
+                                         Predicate<TransferSegmentStatus> segmentStatusTest) {
+        return startAddressTest.test(range.getStartAddress()) &&
+                endAddressTest.test(range.getEndAddress()) &&
+                availableServersTest.test(range.getAvailableServers()) &&
+                transferTypeTest.test(range.getTypeOfTransfer()) &&
+                segmentStatusTest.test(range.getStatus());
+    }
+
+    @Test
+    public void testPrepareTransferWorkloadNoCommittedTail() {
+        ImmutableList<TransferSegment> testSegments = getTestSegments();
+        RedundancyCalculator calc = new RedundancyCalculator("test");
+        // CT is not present.
+        // Every segment is a non-committed single range.
+        Optional<Long> tail = Optional.empty();
+        ImmutableList<TransferSegmentRange> transferSegmentRanges =
+                calc.prepareTransferWorkload(testSegments, tail);
+        assertThat(transferSegmentRanges.size()).isEqualTo(2);
+        for (int i = 0; i < transferSegmentRanges.size(); i++) {
+            TransferSegmentRangeSingle transferSegmentRange = (TransferSegmentRangeSingle) transferSegmentRanges.get(i);
+            final long startAddress = testSegments.get(i).getStartAddress();
+            final long endAddress = testSegments.get(i).getEndAddress();
+            final StateTransferType type = StateTransferType.PROTOCOL_READ;
+            final TransferSegmentStatus status = testSegments.get(i).getStatus();
+
+            assertThat(singleRangeIsCorrect(transferSegmentRange,
+                    sa -> sa == startAddress,
+                    ea -> ea == endAddress,
+                    lus -> !lus.isPresent(),
+                    t -> t == type,
+                    s -> s.equals(status))).isTrue();
+        }
+    }
+
+    @Test
+    public void testPrepareTransferWorkloadCommittedTailBeforeStartAddress() {
+        ImmutableList<TransferSegment> testSegments = getTestSegments();
+        // Range starts at 150L but CT is at 149L.
+        // Every segment is a non-committed range and none are split.
+        Optional<Long> tail = Optional.of(149L);
+        RedundancyCalculator calc = new RedundancyCalculator("test");
+        ImmutableList<TransferSegmentRange> transferSegmentRanges =
+                calc.prepareTransferWorkload(testSegments, tail);
+        for (int i = 0; i < transferSegmentRanges.size(); i++) {
+            TransferSegmentRangeSingle transferSegmentRange = (TransferSegmentRangeSingle) transferSegmentRanges.get(i);
+            final long startAddress = testSegments.get(i).getStartAddress();
+            final long endAddress = testSegments.get(i).getEndAddress();
+            final StateTransferType type = StateTransferType.PROTOCOL_READ;
+            final TransferSegmentStatus status = testSegments.get(i).getStatus();
+
+            assertThat(singleRangeIsCorrect(transferSegmentRange,
+                    sa -> sa == startAddress,
+                    ea -> ea == endAddress,
+                    lus -> !lus.isPresent(),
+                    t -> t == type,
+                    s -> s.equals(status))).isTrue();
+        }
+    }
+
+    @Test
+    public void testPrepareTransferWorkloadCommittedTailEqualsStartAddress() {
+        ImmutableList<TransferSegment> testSegments = getTestSegments();
+        // Range starts at 150L and CT starts at 150L ->
+        // only one address is committed and first segment is split into two ranges.
+        Optional<Long> tail = Optional.of(150L);
+        RedundancyCalculator calc = new RedundancyCalculator("test");
+        ImmutableList<TransferSegmentRange> transferSegmentRanges =
+                calc.prepareTransferWorkload(testSegments, tail);
+        assertThat(transferSegmentRanges.size()).isEqualTo(2);
+        TransferSegmentRangeSplit splitRange1 = (TransferSegmentRangeSplit) transferSegmentRanges.get(0);
+        // Check first range.
+        assertThat(singleRangeIsCorrect(
+                splitRange1.getSplitSegments().first,
+                sa -> sa == 150L,
+                ea -> ea == 150L,
+                lus -> lus.get().equals(testSegments.get(0).getLogUnitServers()),
+                t -> t == StateTransferType.CONSISTENT_READ,
+                s -> s.equals(testSegments.get(0).getStatus()))).isTrue();
+        // Check second range.
+        assertThat(singleRangeIsCorrect(
+                splitRange1.getSplitSegments().second,
+                sa -> sa == 151L,
+                ea -> ea == 300L,
+                lus -> !lus.isPresent(),
+                t -> t == StateTransferType.PROTOCOL_READ,
+                s -> s.equals(testSegments.get(0).getStatus()))).isTrue();
+
+        // Check last range.
+        TransferSegmentRangeSingle range2 = (TransferSegmentRangeSingle) transferSegmentRanges.get(1);
+        assertThat(singleRangeIsCorrect(
+                range2,
+                sa -> sa == testSegments.get(1).getStartAddress(),
+                ea -> ea == testSegments.get(1).getEndAddress(),
+                lus -> !lus.isPresent(),
+                t -> t == StateTransferType.PROTOCOL_READ,
+                s -> s.equals(testSegments.get(1).getStatus()))).isTrue();
+    }
+
+    @Test
+    public void testPrepareTransferWorkloadCommittedTailAfterEndAddress() {
+        ImmutableList<TransferSegment> testSegments = getTestSegments();
+        // Ranges end at 500L and CT starts at 501L.
+        // Every segment is a committed range and none are split.
+        Optional<Long> tail = Optional.of(501L);
+        RedundancyCalculator calc = new RedundancyCalculator("test");
+        ImmutableList<TransferSegmentRange> transferSegmentRanges =
+                calc.prepareTransferWorkload(testSegments, tail);
+        assertThat(transferSegmentRanges.size()).isEqualTo(2);
+        for (int i = 0; i < transferSegmentRanges.size(); i++) {
+            TransferSegmentRangeSingle transferSegmentRange = (TransferSegmentRangeSingle) transferSegmentRanges.get(i);
+            final long startAddress = testSegments.get(i).getStartAddress();
+            final long endAddress = testSegments.get(i).getEndAddress();
+            final StateTransferType type = StateTransferType.CONSISTENT_READ;
+            final TransferSegmentStatus status = testSegments.get(i).getStatus();
+            final ImmutableList<String> logUnitServers = testSegments.get(i).getLogUnitServers();
+            assertThat(singleRangeIsCorrect(transferSegmentRange,
+                    sa -> sa == startAddress,
+                    ea -> ea == endAddress,
+                    lus -> lus.get().equals(logUnitServers),
+                    t -> t == type,
+                    s -> s.equals(status))).isTrue();
+        }
+    }
+
+    @Test
+    public void testPrepareTransferWorkloadCommittedTailEqualEndAddress() {
+        ImmutableList<TransferSegment> testSegments = getTestSegments();
+        // Ranges end at 500L and CT starts at 500L.
+        // Every segment is a committed range and none are split.
+        Optional<Long> tail = Optional.of(500L);
+        RedundancyCalculator calc = new RedundancyCalculator("test");
+        ImmutableList<TransferSegmentRange> transferSegmentRanges =
+                calc.prepareTransferWorkload(testSegments, tail);
+        assertThat(transferSegmentRanges.size()).isEqualTo(2);
+        for (int i = 0; i < transferSegmentRanges.size(); i++) {
+            TransferSegmentRangeSingle transferSegmentRange = (TransferSegmentRangeSingle) transferSegmentRanges.get(i);
+            final long startAddress = testSegments.get(i).getStartAddress();
+            final long endAddress = testSegments.get(i).getEndAddress();
+            final StateTransferType type = StateTransferType.CONSISTENT_READ;
+            final TransferSegmentStatus status = testSegments.get(i).getStatus();
+            final ImmutableList<String> logUnitServers = testSegments.get(i).getLogUnitServers();
+            assertThat(singleRangeIsCorrect(transferSegmentRange,
+                    sa -> sa == startAddress,
+                    ea -> ea == endAddress,
+                    lus -> lus.get().equals(logUnitServers),
+                    t -> t == type,
+                    s -> s.equals(status))).isTrue();
+        }
+    }
+
+    @Test
+    public void testPrepareTransferWorkloadCommittedTailSplitsSegment() {
+        ImmutableList<TransferSegment> testSegments = getTestSegments();
+        // Ranges end at 500L and CT starts at 400L.
+        // (150, 300), (301, 500) ->
+        // (150, 300, CONSISTENT_READ), (301, 400, CONSISTENT_READ), (401, 500, PROTOCOL_READ).
+        Optional<Long> tail = Optional.of(400L);
+        RedundancyCalculator calc = new RedundancyCalculator("test");
+        ImmutableList<TransferSegmentRange> transferSegmentRanges =
+                calc.prepareTransferWorkload(testSegments, tail);
+        assertThat(transferSegmentRanges.size()).isEqualTo(2);
+        TransferSegmentRangeSingle range1 = (TransferSegmentRangeSingle) transferSegmentRanges.get(0);
+        // Check first range.
+        assertThat(singleRangeIsCorrect(
+                range1,
+                sa -> sa == 150L,
+                ea -> ea == 300L,
+                lus -> lus.get().equals(testSegments.get(0).getLogUnitServers()),
+                t -> t == StateTransferType.CONSISTENT_READ,
+                s -> s.equals(testSegments.get(0).getStatus()))).isTrue();
+        // Check second range.
+        TransferSegmentRangeSplit splitRange2 = (TransferSegmentRangeSplit) transferSegmentRanges.get(1);
+
+        assertThat(singleRangeIsCorrect(
+                splitRange2.getSplitSegments().first,
+                sa -> sa == testSegments.get(1).getStartAddress(),
+                ea -> ea == 400L,
+                lus -> lus.get().equals(testSegments.get(1).getLogUnitServers()),
+                t -> t == StateTransferType.CONSISTENT_READ,
+                s -> s.equals(testSegments.get(1).getStatus()))).isTrue();
+
+        // Check last range.
+        assertThat(singleRangeIsCorrect(
+                splitRange2.getSplitSegments().second,
+                sa -> sa == 401L,
+                ea -> ea == testSegments.get(1).getEndAddress(),
+                lus -> !lus.isPresent(),
+                t -> t == StateTransferType.PROTOCOL_READ,
+                s -> s.equals(testSegments.get(1).getStatus()))).isTrue();
     }
 
 }

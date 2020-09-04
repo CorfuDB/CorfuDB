@@ -1,7 +1,5 @@
 package org.corfudb.universe.group.cluster;
 
-import static lombok.Builder.Default;
-
 import com.google.common.collect.ImmutableSortedMap;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +18,8 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+
+import static lombok.Builder.Default;
 
 @Slf4j
 public abstract class AbstractSupportCluster extends

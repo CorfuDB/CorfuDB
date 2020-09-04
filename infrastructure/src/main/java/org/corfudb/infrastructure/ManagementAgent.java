@@ -17,7 +17,8 @@ import java.util.concurrent.TimeUnit;
 import static org.corfudb.infrastructure.RecoveryHandler.runRecoveryReconfiguration;
 
 /**
- * Instantiates and performs failure detection and handling asynchronously.
+ * Instantiates and performs failure detection and handling asynchronously,
+ * as well as the auto commit service.
  *
  * <p>Failure Detector:
  * Executes detection policy to detect failed and healed nodes.
@@ -32,11 +33,9 @@ public class ManagementAgent {
 
     private final ServerContext serverContext;
 
-
     /**
      * Interval in checking presence of management layout to start management agent tasks.
      */
-    @Getter
     private static final Duration CHECK_BOOTSTRAP_INTERVAL = Duration.ofSeconds(1);
 
     /**
@@ -45,9 +44,23 @@ public class ManagementAgent {
     private static final Duration RECOVERY_RETRY_INTERVAL = Duration.ofSeconds(1);
 
     /**
+     * Locally collected server metrics polling interval.
+     */
+    private static final Duration METRICS_POLL_INTERVAL = Duration.ofSeconds(3);
+
+    /**
+     * Interval in executing the failure detection policy.
+     */
+    private static final Duration POLICY_EXECUTE_INTERVAL = Duration.ofSeconds(1);
+
+    /**
+     * Interval of executing the AutoCommitService.
+     */
+    private static final Duration AUTO_COMMIT_INTERVAL = Duration.ofSeconds(15);
+
+    /**
      * To dispatch initialization tasks for recovery and sequencer bootstrap.
      */
-    @Getter
     private final Thread initializationTaskThread;
 
     private boolean recovered = false;
@@ -56,28 +69,24 @@ public class ManagementAgent {
 
     private volatile boolean shutdown = false;
 
-    //  Locally collected server metrics polling interval.
-    private static final Duration METRICS_POLL_INTERVAL = Duration.ofSeconds(3);
-
     /**
-     * MonitoringService to poll local server metrics:
+     * LocalMonitoringService to poll local server metrics:
      * Sequencer ready/not ready state.
      */
     @Getter(AccessLevel.PROTECTED)
     private final LocalMonitoringService localMonitoringService;
 
     /**
-     * Interval in executing the failure detection policy.
-     * In milliseconds.
-     */
-    @Getter
-    private static final Duration POLICY_EXECUTE_INTERVAL = Duration.ofSeconds(1);
-
-    /**
-     * MonitoringService to detect faults and generate a cluster connectivity graph.
+     * RemoteMonitoringService to detect faults and generate a cluster connectivity graph.
      */
     @Getter
     private final RemoteMonitoringService remoteMonitoringService;
+
+    /**
+     * AutoCommitService to periodically commit the unwritten addresses.
+     */
+    @Getter
+    private final AutoCommitService autoCommitService;
 
     /**
      * Checks and restores if a layout is present in the local datastore to recover from.
@@ -86,7 +95,7 @@ public class ManagementAgent {
      * @param runtimeSingletonResource Singleton resource to fetch runtime.
      * @param serverContext            Server Context.
      */
-    public ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
+    ManagementAgent(@NonNull SingletonResource<CorfuRuntime> runtimeSingletonResource,
                     @NonNull ServerContext serverContext,
                     @NonNull ClusterStateContext clusterContext,
                     @NonNull FailureDetector failureDetector,
@@ -122,6 +131,8 @@ public class ManagementAgent {
                 failureDetector,
                 localMonitoringService
         );
+
+        this.autoCommitService = new AutoCommitService(serverContext, runtimeSingletonResource);
 
         // Creating the initialization task thread.
         // This thread pool is utilized to dispatch one time recovery and sequencer bootstrap tasks.
@@ -161,11 +172,11 @@ public class ManagementAgent {
         long recoveryAttempts = 0;
         while (!shutdown && !recovered) {
             try {
-                boolean recoveredSuccesfully = runRecoveryReconfiguration(
+                boolean recoveredSuccessfully = runRecoveryReconfiguration(
                         serverContext.copyManagementLayout(), getCorfuRuntime()
                 );
 
-                if (recoveredSuccesfully) {
+                if (recoveredSuccessfully) {
                     // If recovery succeeds, reconfiguration was successful.
                     // Save the latest management layout.
                     serverContext.saveManagementLayout(getCorfuRuntime().getLayoutView().getLayout());
@@ -187,10 +198,15 @@ public class ManagementAgent {
             }
         }
 
-        // Start monitoring services that deals with failure and healing detection.
+        // Start management services that deals with failure & healing detection and auto commit.
         if (!shutdown) {
             localMonitoringService.start(METRICS_POLL_INTERVAL);
             remoteMonitoringService.start(POLICY_EXECUTE_INTERVAL);
+            if (!serverContext.getServerConfig(Boolean.class, "--no-auto-commit")) {
+                autoCommitService.start(AUTO_COMMIT_INTERVAL);
+            } else {
+                log.info("Auto commit service disabled.");
+            }
         }
     }
 
@@ -220,6 +236,7 @@ public class ManagementAgent {
 
         remoteMonitoringService.shutdown();
         localMonitoringService.shutdown();
+        autoCommitService.shutdown();
 
         log.info("Management Agent shutting down.");
     }

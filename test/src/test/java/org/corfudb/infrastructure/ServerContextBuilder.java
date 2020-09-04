@@ -18,6 +18,7 @@ public class ServerContextBuilder {
     String logPath = null;
     boolean noVerify = false;
     boolean noSync = false;
+    boolean noAutoCommit = true;
 
     boolean tlsEnabled = false;
     boolean tlsMutualAuthEnabled = false;
@@ -44,7 +45,7 @@ public class ServerContextBuilder {
     String prefix = "";
     String retention = "1000";
 
-    String clusterId = "auto";
+    String clusterId = "00000000-0000-0000-0000-000000000000";
     boolean isTest = true;
 
     public ServerContextBuilder() {
@@ -71,6 +72,7 @@ public class ServerContextBuilder {
          builder
                  .put("--no-verify", noVerify)
                  .put("--no-sync", noSync)
+                 .put("--no-auto-commit", true)
                  .put("--address", address)
                  .put("--cache-heap-ratio", cacheSizeHeapRatio)
                  .put("--enable-tls", tlsEnabled)

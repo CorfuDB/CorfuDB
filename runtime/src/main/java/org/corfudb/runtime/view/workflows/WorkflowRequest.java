@@ -119,6 +119,18 @@ public abstract class WorkflowRequest {
         throw new TimeoutException();
     }
 
+    /*
+     * private method to handle exceptions while sendRequest()
+     */
+    private void handleException(RuntimeException runtimeException) {
+        final Throwable cause = runtimeException.getCause();
+        if (cause instanceof TimeoutException || runtimeException instanceof NetworkException) {
+            log.warn("WorkflowRequest: Error while running {} with cause:", this, runtimeException);
+        } else {
+            throw runtimeException;
+        }
+    }
+
     /**
      * Starts executing the workflow request.
      *
@@ -130,19 +142,20 @@ public abstract class WorkflowRequest {
      * verified.
      */
     public void invoke() {
-        for (int x = 0; x < retry; x++) {
+        for (int retryIteration = 0; retryIteration < retry; retryIteration++) {
             try {
                 Optional<ManagementClient> orchestrator = getOrchestrator();
                 if(orchestrator.isPresent()){
                     UUID workflowId = sendRequest(orchestrator.get());
                     waitForWorkflow(workflowId, orchestrator.get(), timeout, pollPeriod);
                 }
-                else{
-                    throw new IllegalStateException("Orchestrator can not be selected");
+                else {
+                    log.warn("Orchestrator can not be selected");
                 }
-
-            } catch (NetworkException | TimeoutException | IllegalStateException e) {
-                log.warn("WorkflowRequest: Error while running {} on attempt {}, cause {}", this, x, e);
+            } catch (TimeoutException e) {
+                log.warn("WorkflowRequest: Error while running {} on attempt {}, cause:", this, retryIteration, e);
+            } catch (RuntimeException e) {
+                handleException(e);
             }
 
             for (int y = 0; y < runtime.getParameters().getInvalidateRetry(); y++) {
@@ -153,7 +166,7 @@ public abstract class WorkflowRequest {
                     return;
                 }
             }
-            log.warn("WorkflowRequest: Retrying {} on attempt {}", this, x);
+            log.warn("WorkflowRequest: Retrying {} on attempt {}", this, retryIteration);
         }
 
         throw new WorkflowResultUnknownException();

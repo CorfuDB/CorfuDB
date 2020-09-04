@@ -1,34 +1,45 @@
 package org.corfudb.runtime.view.replication;
 
+import com.google.common.collect.ContiguousSet;
+import com.google.common.collect.DiscreteDomain;
+import com.google.common.collect.Range;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.view.RuntimeLayout;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.RuntimeLayout;
 import org.junit.Test;
 
+import java.util.Collections;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.fail;
 
-/** Test the chain replication protocol.
- *
+/**
+ * Test the chain replication protocol.
+ * <p>
  * Created by mwei on 4/11/17.
  */
 public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTest {
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     IReplicationProtocol getProtocol() {
-        return new
-                ChainReplicationProtocol(new
-                AlwaysHoleFillPolicy());
+        return new ChainReplicationProtocol(new AlwaysHoleFillPolicy());
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     */
     @Override
     void setupNodes() {
         addServer(SERVERS.PORT_0);
@@ -49,7 +60,8 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
                 .build());
     }
 
-    /** Check to see that a writer correctly
+    /**
+     * Check to see that a writer correctly
      * completes a failed write from another client.
      */
     @Test
@@ -77,12 +89,12 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         ILogData readResult = runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0)
                 .read(0).get().getAddresses().get(0L);
 
-        assertThat(readResult.getPayload(r))
-            .isEqualTo("incomplete".getBytes());
+        assertThat(readResult.getPayload(r)).isEqualTo("incomplete".getBytes());
     }
 
 
-    /** Check to see that a read correctly
+    /**
+     * Check to see that a read correctly
      * completes a failed write from another client.
      */
     @Test
@@ -159,5 +171,83 @@ public class ChainReplicationProtocolTest extends AbstractReplicationProtocolTes
         logData = runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_2).read(0L).get()
                 .getAddresses().get(0L);
         assertThat(logData.getData()).isNullOrEmpty();
+    }
+
+    /**
+     * Verify that chain replication view can commit the holes addresses.
+     */
+    @Test
+    public void canInspectAndCommitEmptyAddresses() throws Exception {
+        addServer(SERVERS.PORT_0);
+        addServer(SERVERS.PORT_1);
+        addServer(SERVERS.PORT_2);
+
+        final long firstSegmentEnd = 50L;
+        bootstrapAllServers(new TestLayoutBuilder()
+                .addLayoutServer(SERVERS.PORT_0)
+                .addSequencer(SERVERS.PORT_0)
+                .buildSegment()
+                .setEnd(firstSegmentEnd)
+                .setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addToSegment()
+                .addToLayout()
+                .buildSegment()
+                .setStart(firstSegmentEnd)
+                .setReplicationMode(Layout.ReplicationMode.CHAIN_REPLICATION)
+                .buildStripe()
+                .addLogUnit(SERVERS.PORT_0)
+                .addLogUnit(SERVERS.PORT_1)
+                .addLogUnit(SERVERS.PORT_2)
+                .addToSegment()
+                .addToLayout()
+                .build());
+
+        final CorfuRuntime rt = getDefaultRuntime();
+        Layout layout = new Layout(rt.getLayoutView().getLayout());
+        RuntimeLayout runtimeLayout = rt.getLayoutView().getRuntimeLayout();
+        final IReplicationProtocol rp = getProtocol();
+
+        // One hole in first segment, the other in the second segment.
+        final long partialWriteAddr = 25L;
+        final long holeAddr = 75L;
+        final long lastAddr = 100L;
+        byte[] testPayload = "hello word".getBytes();
+
+        for (long addr = 0L; addr < lastAddr; addr++) {
+            LogData ld = getLogData(addr, testPayload);
+            if (addr == partialWriteAddr) {
+                runtimeLayout.getLogUnitClient(SERVERS.ENDPOINT_0).write(ld).get();
+            } else if (addr != holeAddr) {
+                rp.write(runtimeLayout, ld);
+            }
+        }
+
+        for (long addr = 0L; addr < lastAddr; addr++) {
+            if (addr == partialWriteAddr || addr == holeAddr) {
+                assertThat(rp.peek(runtimeLayout, addr)).isNull();
+            } else {
+                assertThat((byte[]) rp.peek(runtimeLayout, addr).getPayload(rt)).isEqualTo(testPayload);
+            }
+        }
+
+        rp.commitAll(runtimeLayout, ContiguousSet.create(
+                Range.closedOpen(0L, lastAddr), DiscreteDomain.longs()));
+
+        for (long addr = 0L; addr < lastAddr; addr++) {
+            if (addr == holeAddr) {
+                assertThat(rp.peek(runtimeLayout, addr)).isEqualTo(LogData.getHole(holeAddr));
+            } else {
+                assertThat((byte[]) rp.peek(runtimeLayout, addr).getPayload(rt)).isEqualTo(testPayload);
+            }
+        }
+
+        // If client attempt to inspect any address before the trim mark, a TrimmedException should
+        // be thrown to inform the client to retry auto commit from a larger address.
+        rt.getAddressSpaceView().prefixTrim(Token.of(layout.getEpoch(), lastAddr - 1));
+        assertThatThrownBy(() -> rp.commitAll(runtimeLayout, Collections.singletonList(lastAddr - 1)))
+                .isInstanceOf(TrimmedException.class);
     }
 }

@@ -5,8 +5,8 @@ import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.MultipleReadRequest;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
+import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -30,13 +30,30 @@ public class LogUnitCacheTest extends AbstractServerTest {
     private static final double MAX_HEAP_RATIO = 0.9;
 
     @Override
-    public AbstractServer getDefaultServer() {
+    public LogUnitServer getDefaultServer() {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
 
-        return new LogUnitServer(new ServerContextBuilder()
+        ServerContext sc = new ServerContextBuilder()
                 .setLogPath(serviceDir)
+                .setSingle(true)
                 .setMemory(false)
-                .build());
+                .build();
+
+        sc.installSingleNodeLayoutIfAbsent();
+        sc.setServerRouter(router);
+        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
+
+        LogUnitServer s1 = new LogUnitServer(sc);
+
+        setServer(s1);
+        setContext(sc);
+        return s1;
+    }
+
+    @Override
+    public void setServer(AbstractServer server) {
+        router.reset();
+        router.addServer(server);
     }
 
     /**
@@ -48,7 +65,7 @@ public class LogUnitCacheTest extends AbstractServerTest {
         final long start = 0L;
         final long end = start + size;
 
-        LogUnitServer logUnitServer = (LogUnitServer) getDefaultServer();
+        LogUnitServer logUnitServer = getDefaultServer();
         setServer(logUnitServer);
 
         List<Long> addresses = LongStream.range(start, end).boxed().collect(Collectors.toList());
@@ -66,16 +83,16 @@ public class LogUnitCacheTest extends AbstractServerTest {
         sendRequest(CorfuMsgType.RANGE_WRITE.payloadMsg(new RangeWriteMsg(payloads))).join();
 
         // Non-cacheable reads should not affect the data cache on server.
-        CompletableFuture<ReadResponse> future = sendRequest(CorfuMsgType.MULTIPLE_READ_REQUEST
-                .payloadMsg(new MultipleReadRequest(addresses, false)));
+        CompletableFuture<ReadResponse> future = sendRequest(CorfuMsgType.READ_REQUEST
+                .payloadMsg(new ReadRequest(addresses, false)));
 
 
         checkReadResponse(future.join(), size);
         assertThat(logUnitServer.getDataCache().getSize()).isEqualTo(0);
 
         // Cacheable reads should update the data cache on server.
-        future = sendRequest(CorfuMsgType.MULTIPLE_READ_REQUEST
-                .payloadMsg(new MultipleReadRequest(addresses, true)));
+        future = sendRequest(CorfuMsgType.READ_REQUEST
+                .payloadMsg(new ReadRequest(addresses, true)));
 
         checkReadResponse(future.join(), size);
         assertThat(logUnitServer.getDataCache().getSize()).isEqualTo(size);

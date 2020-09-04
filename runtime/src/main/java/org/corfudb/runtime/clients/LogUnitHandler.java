@@ -3,6 +3,7 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
+import java.util.UUID;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -10,6 +11,7 @@ import lombok.Setter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
@@ -35,8 +37,8 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     IClientRouter router;
 
     @Override
-    public LogUnitClient getClient(long epoch) {
-        return new LogUnitClient(router, epoch);
+    public LogUnitClient getClient(long epoch, UUID clusterID) {
+        return new LogUnitClient(router, epoch, clusterID);
     }
 
     /**
@@ -186,6 +188,19 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     }
 
     /**
+     * Handle a INSPECT_ADDRESSES_RESPONSE message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     */
+    @ClientHandler(type = CorfuMsgType.INSPECT_ADDRESSES_RESPONSE)
+    private static Object handleInspectAddressResponse(CorfuPayloadMsg<InspectAddressesResponse> msg,
+                                                       ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    /**
      * Handle a TAIL_RESPONSE message.
      *
      * @param msg Incoming Message
@@ -198,9 +213,30 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
         return msg.getPayload();
     }
 
+    /**
+     * Handle a LOG_ADDRESS_SPACE_RESPONSE message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     */
     @ClientHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE)
     private static Object handleStreamsAddressResponse(CorfuPayloadMsg<TailsResponse> msg,
                                              ChannelHandlerContext ctx, IClientRouter r) {
+        return msg.getPayload();
+    }
+
+    /**
+     * Handle a COMMITTED_TAIL_RESPONSE message.
+     *
+     * @param msg Incoming Message
+     * @param ctx Context
+     * @param r   Router
+     */
+    @ClientHandler(type = CorfuMsgType.COMMITTED_TAIL_RESPONSE)
+    private static Object handleCommittedTailResponse(CorfuPayloadMsg<Long> msg,
+                                                      ChannelHandlerContext ctx,
+                                                      IClientRouter r) {
         return msg.getPayload();
     }
 

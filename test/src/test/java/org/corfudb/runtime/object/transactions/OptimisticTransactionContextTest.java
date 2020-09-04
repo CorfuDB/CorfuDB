@@ -3,6 +3,8 @@ package org.corfudb.runtime.object.transactions;
 import com.google.common.reflect.TypeToken;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -13,6 +15,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ICorfuHashable;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Assert;
@@ -36,6 +39,60 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         OptimisticTXBegin();
     }
 
+    @Test
+    public void testSpanningTransaction() {
+        UUID stream1Id = CorfuRuntime.getStreamID("stream1");
+        IStreamView sv = getDefaultRuntime().getStreamsView().get(stream1Id);
+
+        Map<String, String> map = getDefaultRuntime().getObjectsView()
+                .build()
+                .setStreamName("stream2")
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .open();
+
+        assertThat(sv.remaining()).isEmpty();
+        assertThat(map).isEmpty();
+
+        SMREntry smrEntry1 = new SMREntry("method", new Object[]{"arg1"}, Serializers.PRIMITIVE);
+        SMREntry smrEntry2 = new SMREntry("method2", new Object[]{"arg1"}, Serializers.PRIMITIVE);
+
+
+        getDefaultRuntime().getObjectsView().TXBegin();
+        map.put("k1", "v1");
+        TransactionalContext.getCurrentContext().logUpdate(stream1Id, smrEntry1);
+        getDefaultRuntime().getObjectsView().TXAbort();
+
+        assertThat(sv.remaining()).isEmpty();
+        assertThat(map).isEmpty();
+
+        getDefaultRuntime().getObjectsView().TXBegin();
+        map.put("k1", "v1");
+        TransactionalContext.getCurrentContext().logUpdate(stream1Id, smrEntry1);
+        getDefaultRuntime().getObjectsView().TXEnd();
+
+        MultiObjectSMREntry expected = new MultiObjectSMREntry();
+        expected.addTo(stream1Id, smrEntry1);
+        MultiObjectSMREntry committedMultiSMR = (MultiObjectSMREntry) sv.remaining().iterator().next().getPayload(null);
+        committedMultiSMR.getSMRUpdates(stream1Id);
+
+        assertThat(committedMultiSMR.getSMRUpdates(stream1Id)).containsExactly(smrEntry1);
+        assertThat(map).hasSize(1);
+
+        t(1, this::OptimisticTXBegin);
+        t(2, this::OptimisticTXBegin);
+        t(1, () -> map.put("k2", "v2"));
+        t(2, () -> map.put("k2", "v3"));
+        t(2, () -> TransactionalContext.getCurrentContext().logUpdate(stream1Id, smrEntry2));
+        t(1, this::TXEnd);
+        t(2, this::TXEnd)
+                .assertThrows()
+                .isInstanceOf(TransactionAbortedException.class);
+
+        assertThat(map).hasSize(2);
+        assertThat(map).containsOnlyKeys("k1", "k2");
+        assertThat(map).containsValues("v1", "v2");
+        assertThat(sv.remaining()).isEmpty();
+    }
 
     /**
      * Checks that the fine-grained conflict set is correctly produced

@@ -32,6 +32,7 @@ import org.corfudb.util.serializer.Serializers;
 import org.junit.jupiter.api.Assertions;
 import org.rocksdb.Env;
 import org.rocksdb.Options;
+import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.SstFileManager;
 
@@ -62,10 +63,9 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
     private final static int STRING_MIN = 5;
     private final static int STRING_MAX = 10;
 
-
     public DiskBackedCorfuClientTest() {
         AbstractViewTest.initEventGroup();
-        super.resetTests();
+        resetTests();
     }
 
     @Override
@@ -145,6 +145,12 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
             getDefaultRuntime().getObjectsView().TXEnd();
         }
 
+    }
+
+    @Override
+    public void resetTests() {
+        RocksDB.loadLibrary();
+        super.resetTests();
     }
 
     /**

@@ -15,6 +15,8 @@ import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.junit.Before;
 
+import java.util.AbstractMap;
+import java.util.AbstractMap.SimpleEntry;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -50,6 +52,10 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         router.addServer(server);
     }
 
+    public void setContext(ServerContext sc) {
+        router.setServerContext(sc);
+    }
+
     public abstract AbstractServer getDefaultServer();
 
     public <T> CompletableFuture<T> sendRequest(UUID clientId, CorfuMsg msg) {
@@ -67,6 +73,33 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         clientRouter.setClientID(testClientId);
         return clientRouter.sendMessageAndGetCompletable(msg);
     }
+
+    public <T> CompletableFuture<T> sendRequestWithEpoch(CorfuMsg msg, long epoch) {
+        msg.setClientID(testClientId)
+                .setRequestID(requestCounter.getAndIncrement())
+                .setEpoch(epoch);
+        clientRouter.setClientID(testClientId);
+        return clientRouter.sendMessageAndGetCompletable(msg);
+    }
+
+    public <T> CompletableFuture<T> sendRequestWithClusterId(CorfuMsg msg, UUID clusterId) {
+        msg.setClientID(testClientId)
+                .setRequestID(requestCounter.getAndIncrement())
+                .setClusterID(clusterId)
+                .setEpoch(0L);
+        clientRouter.setClientID(testClientId);
+        return clientRouter.sendMessageAndGetCompletable(msg);
+    }
+
+    public <T> CompletableFuture<T> sendRequestWithClusterId(UUID clientId, CorfuMsg msg, UUID clusterId) {
+        msg.setClientID(clientId)
+                .setRequestID(requestCounter.getAndIncrement())
+                .setClusterID(clusterId)
+                .setEpoch(0L);
+        clientRouter.setClientID(clientId);
+        return clientRouter.sendMessageAndGetCompletable(msg);
+    }
+
 
     public TestClientRouter getClientRouter() {
         TestClientRouter tcn = new TestClientRouter(router);

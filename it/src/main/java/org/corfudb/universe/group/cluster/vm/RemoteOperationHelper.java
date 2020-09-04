@@ -35,6 +35,8 @@ public class RemoteOperationHelper {
      */
     public void copyFile(Path localFile, Path remoteDir) {
         Scp scp = new Scp();
+        scp.setProject(PROJECT);
+        scp.setTrust(true);
 
         scp.setLocalFile(localFile.toString());
 
@@ -44,9 +46,30 @@ public class RemoteOperationHelper {
         );
         scp.setTodir(remoteDirUrl);
 
+        log.info("Copying {} to {} on {}", localFile, remoteDir, ipAddress);
+        scp.execute();
+    }
+
+    /**
+     * Download a file from a remote computer to the local computer
+     *
+     * @param localPath local path
+     * @param remotePath remote path
+     */
+    public void downloadFile(Path localPath, Path remotePath) {
+        Scp scp = new Scp();
         scp.setProject(PROJECT);
         scp.setTrust(true);
-        log.info("Copying {} to {} on {}", localFile, remoteDir, ipAddress);
+
+        String remoteFileUrl = String.format(
+                "%s:%s@%s:%s",
+                credentials.getUsername(), credentials.getPassword(), ipAddress, remotePath
+        );
+
+        scp.setRemoteFile(remoteFileUrl);
+        scp.setLocalTofile(localPath.toString());
+
+        log.info("Downloading {} to {} from {} to local host", remotePath, localPath, ipAddress);
         scp.execute();
     }
 

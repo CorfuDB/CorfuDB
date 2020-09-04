@@ -58,7 +58,8 @@ import java.util.stream.Collectors;
  * Created by zlokhandwala on 11/2/18.
  */
 @Slf4j
-public class RemoteMonitoringService implements MonitoringService {
+public class RemoteMonitoringService implements ManagementService {
+
     private static final CompletableFuture<DetectorTask> DETECTOR_TASK_NOT_COMPLETED
             = CompletableFuture.completedFuture(DetectorTask.NOT_COMPLETED);
 
@@ -164,7 +165,7 @@ public class RemoteMonitoringService implements MonitoringService {
         this.detectionTasksScheduler = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder()
                         .setDaemon(true)
-                        .setNameFormat(serverContext.getThreadPrefix() + "ManagementService")
+                        .setNameFormat(serverContext.getThreadPrefix() + "RemoteMonitoringService")
                         .build());
 
         // Creating the detection worker thread pool.
@@ -610,7 +611,7 @@ public class RemoteMonitoringService implements MonitoringService {
         }
 
         // Launch task to bootstrap the primary sequencer.
-        log.info("Attempting to bootstrap the primary sequencer. ClusterState {}", clusterState);
+        log.trace("Attempting to bootstrap the primary sequencer. ClusterState {}", clusterState);
         // We do not care about the result of the trigger.
         // If it fails, we detect this again and retry in the next polling cycle.
         return getCorfuRuntime()
@@ -832,7 +833,7 @@ public class RemoteMonitoringService implements MonitoringService {
         // Shutting the fault detector.
         detectionTasksScheduler.shutdownNow();
         failureDetectorWorker.shutdownNow();
-        log.info("Fault Detection MonitoringService shutting down.");
+        log.info("Fault detection service shutting down.");
     }
 
     public enum DetectorTask {

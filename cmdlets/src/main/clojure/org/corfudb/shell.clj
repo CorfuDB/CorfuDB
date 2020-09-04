@@ -150,11 +150,11 @@ The variable *r holds the last runtime obtrained, and *o holds the last router o
 (defn get-stream ([stream] (.. (.. *r (getStreamsView)) (get stream))))
 
 ; Functions that get clients
-(defn get-base-client ([router epoch] (new BaseClient router epoch)))
-(defn get-layout-client ([router epoch] (new LayoutClient router epoch)))
-(defn get-sequencer-client ([router epoch] (new SequencerClient router epoch)))
-(defn get-logunit-client ([router epoch] (new LogUnitClient router epoch)))
-(defn get-management-client ([router epoch] (new ManagementClient router epoch)))
+(defn get-base-client ([router epoch cluster-id] (new BaseClient router epoch cluster-id)))
+(defn get-layout-client ([router epoch cluster-id] (new LayoutClient router epoch cluster-id)))
+(defn get-sequencer-client ([router epoch cluster-id] (new SequencerClient router epoch cluster-id)))
+(defn get-logunit-client ([router epoch cluster-id] (new LogUnitClient router epoch cluster-id)))
+(defn get-management-client ([router epoch cluster-id] (new ManagementClient router epoch cluster-id)))
 
 ; Helper functions
 (defn uuid-from-string "Takes a string and parses it to UUID if it is not a UUID"

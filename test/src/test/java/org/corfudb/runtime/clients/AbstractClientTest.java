@@ -38,8 +38,8 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
     public void resetTest() {
         serverRouter = new TestServerRouter();
         router = new TestClientRouter(serverRouter);
-        getServersForTest().stream().forEach(serverRouter::addServer);
-        getClientsForTest().stream().forEach(router::addClient);
+        getServersForTest().forEach(serverRouter::addServer);
+        getClientsForTest().forEach(router::addClient);
     }
 
     @After

@@ -28,8 +28,10 @@ message TableDescriptors {
 // Metadata.
 message TableMetadata {
     TableName table_name = 1;
+
     // True if the CorfuStore is disk based and False if it can be contained in memory.
     bool disk_based = 2;
+
     // True if these streams are to be cached, False otherwise.
     bool cache = 3;
 }

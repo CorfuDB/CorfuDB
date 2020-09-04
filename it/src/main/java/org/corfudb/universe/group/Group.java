@@ -1,7 +1,5 @@
 package org.corfudb.universe.group;
 
-import static org.corfudb.universe.node.Node.NodeParams;
-
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
@@ -10,6 +8,8 @@ import org.corfudb.universe.node.Node;
 import org.corfudb.universe.universe.Universe;
 
 import java.time.Duration;
+
+import static org.corfudb.universe.node.Node.NodeParams;
 
 /**
  * This provides an abstraction for a group of {@link Node}s that come together to provide a logical service.

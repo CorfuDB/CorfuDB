@@ -1,24 +1,33 @@
 package org.corfudb.browser;
 
+import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 
+import java.nio.file.Paths;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
-import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.collections.CorfuRecord;
+import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
+import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.object.ICorfuVersionPolicy;
+import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
+import org.rocksdb.Options;
 
 /**
  * This is the CorfuStore Browser Tool which prints data in a given namespace and table.
@@ -28,6 +37,7 @@ import org.corfudb.util.serializer.Serializers;
 @Slf4j
 public class CorfuStoreBrowser {
     private final CorfuRuntime runtime;
+    private final String diskPath;
 
     /**
      * Creates a CorfuBrowser which connects a runtime to the server.
@@ -35,6 +45,18 @@ public class CorfuStoreBrowser {
      */
     public CorfuStoreBrowser(CorfuRuntime runtime) {
         this.runtime = runtime;
+        this.diskPath = null;
+    }
+
+    /**
+     * Creates a CorfuBrowser which connects a runtime to the server.
+     * @param runtime CorfuRuntime which has connected to the server
+     * @param diskPath path to temp disk directory for loading large tables
+     *                 that won't fit into memory
+     */
+    public CorfuStoreBrowser(CorfuRuntime runtime, String diskPath) {
+        this.runtime = runtime;
+        this.diskPath = diskPath;
     }
 
     /**
@@ -69,19 +91,28 @@ public class CorfuStoreBrowser {
         String namespace, String tableName) {
         log.info("Namespace: {}", namespace);
         log.info("TableName: {}", tableName);
-        ISerializer dynamicProtobufSerializer =
-            new DynamicProtobufSerializer(runtime);
-        Serializers.registerSerializer(dynamicProtobufSerializer);
 
-        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> corfuTable =
-            runtime.getObjectsView().build()
-            .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {
-            })
-            .setStreamName(
-                TableRegistry.getFullyQualifiedTableName(namespace, tableName))
-            .setSerializer(dynamicProtobufSerializer)
-            .open();
-        return corfuTable;
+        ISerializer dynamicProtobufSerializer =
+                new DynamicProtobufSerializer(runtime);
+        Serializers.registerSerializer(dynamicProtobufSerializer);
+        String fullTableName = TableRegistry.getFullyQualifiedTableName(namespace, tableName);
+        SMRObject.Builder<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>> corfuTableBuilder =
+        runtime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<CorfuDynamicKey, CorfuDynamicRecord>>() {})
+                .setStreamName(fullTableName)
+                .setSerializer(dynamicProtobufSerializer);
+
+        if (diskPath != null) {
+            final Options options = new Options().setCreateIfMissing(true);
+            final Supplier<StreamingMap<CorfuDynamicKey, CorfuDynamicRecord>> mapSupplier = () ->
+                    new PersistedStreamingMap<>(
+                            Paths.get(diskPath),
+                            options,
+                            dynamicProtobufSerializer, runtime);
+            corfuTableBuilder.setArguments(mapSupplier, ICorfuVersionPolicy.MONOTONIC);
+        }
+
+        return corfuTableBuilder.open();
     }
 
     /**
@@ -93,37 +124,21 @@ public class CorfuStoreBrowser {
     public int printTable(String namespace, String tablename) {
         verifyNamespaceAndTablename(namespace, tablename);
         StringBuilder builder;
-        // RegistryTable is a special system table that need not be opened
-        // using the DynamicProtobuf Serializer in `getTable` method.
-        // So dumping its contents should be handled differently.
-        if (namespace.equals(TableRegistry.CORFU_SYSTEM_NAMESPACE) &&
-                tablename.equals(TableRegistry.REGISTRY_TABLE_NAME)) {
-            CorfuTable<TableName,
-                    CorfuRecord<TableDescriptors, Message>> registryTable =
-                    runtime.getTableRegistry().getRegistryTable();
-            int size = registryTable.size();
-            log.info("======Printing Table {} in namespace {} with {} entries======",
-                    tablename, namespace, size);
-            for (Map.Entry<TableName, CorfuRecord<TableDescriptors, Message>> entry:
-            registryTable.entrySet()) {
-                builder = new StringBuilder("\nTableName:\n" + entry.getKey())
-                        .append("\nTableDescriptors:\n" + entry.getValue().getPayload())
-                        .append("\nTableMetadata:\n" + entry.getValue().getMetadata())
-                        .append("\n====================\n");
-                log.info(builder.toString());
-            }
-            return size;
-        }
 
         CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table = getTable(namespace, tablename);
         int size = table.size();
-        for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry :
-            table.entrySet()) {
-            builder = new StringBuilder("\nKey:\n" + entry.getKey().getKey())
-                .append("\nPayload:\n" + entry.getValue().getPayload())
-                .append("\nMetadata:\n" + entry.getValue().getMetadata())
-                .append("\n====================\n");
-            log.info(builder.toString());
+        final int batchSize = 50;
+        Stream<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> entryStream = table.entryStream();
+        final Iterable<List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>>> partitions =
+                Iterables.partition(entryStream::iterator, batchSize);
+        for (List<Map.Entry<CorfuDynamicKey, CorfuDynamicRecord>> partition : partitions) {
+            for (Map.Entry<CorfuDynamicKey, CorfuDynamicRecord> entry : partition) {
+                builder = new StringBuilder("\nKey:\n" + entry.getKey().getKey())
+                        .append("\nPayload:\n").append(entry.getValue().getPayload())
+                        .append("\nMetadata:\n").append(entry.getValue().getMetadata())
+                        .append("\n====================\n");
+                log.info(builder.toString());
+            }
         }
         return size;
     }
@@ -186,5 +201,48 @@ public class CorfuStoreBrowser {
         log.info("Table cleared successfully");
         log.info("\n======================\n");
         return tableSize;
+    }
+
+    /**
+     * Loads the table with random data
+     * @param namespace - the namespace where the table belongs
+     * @param tablename - table name without the namespace
+     * @param numItems - total number of items to load
+     * @param batchSize - number of items in each transaction
+     * @return - number of entries in the table
+     */
+    public int loadTable(String namespace, String tablename, int numItems, int batchSize) {
+        verifyNamespaceAndTablename(namespace, tablename);
+        CorfuStore store = new CorfuStore(runtime);
+        try {
+            TableOptions.TableOptionsBuilder<Object, Object> optionsBuilder = TableOptions.builder();
+            if (diskPath != null) {
+                optionsBuilder.persistentDataPath(Paths.get(diskPath));
+            }
+            store.openTable(namespace, tablename,
+                    TableName.getDefaultInstance().getClass(),
+                    TableName.getDefaultInstance().getClass(),
+                    TableName.getDefaultInstance().getClass(),
+                    optionsBuilder.build());
+
+            TableName dummyVal = TableName.newBuilder().setNamespace(namespace).setTableName(tablename).build();
+            log.info("Loading {} items in {} batchSized transactions into {}${}",
+                    numItems, batchSize, namespace, tablename);
+            int itemsRemaining = numItems;
+            while (itemsRemaining > 0) {
+                log.info("loadTable: Items left {}", itemsRemaining);
+                TxBuilder tx = store.tx(namespace);
+                for (int j = batchSize; j > 0 && itemsRemaining > 0; j--, itemsRemaining--) {
+                    TableName dummyKey = TableName.newBuilder()
+                            .setNamespace(Integer.toString(itemsRemaining))
+                            .setTableName(Integer.toString(j)).build();
+                    tx.update(tablename, dummyKey, dummyVal, dummyVal);
+                }
+                tx.commit();
+            }
+        } catch (Exception e) {
+            log.error("loadTable: {} {} {} {} failed.", namespace, tablename, numItems, batchSize, e);
+        }
+        return (int)(Math.ceil((double)numItems/batchSize));
     }
 }

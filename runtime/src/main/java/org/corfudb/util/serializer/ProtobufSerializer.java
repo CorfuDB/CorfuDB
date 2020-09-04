@@ -86,6 +86,14 @@ public class ProtobufSerializer implements ISerializer {
             bbis.readFully(data);
             Record record = Record.parseFrom(data);
             Any payload = record.getPayload();
+            if (!classMap.containsKey(payload.getTypeUrl())) {
+                log.error("Deserialization error: Encountered a log update for this class "+payload.getTypeUrl()
+                        +" but its corresponding class type cannot be found in in-memory type map. Dumping map..\n");
+                for (String entry: classMap.keySet()) {
+                    log.error(entry + "=>" + classMap.get(entry));
+                }
+                throw new SerializerException(payload.getTypeUrl()+" not in map!");
+            }
             Message value = payload.unpack(classMap.get(payload.getTypeUrl()));
 
             if (type.equals(MessageType.KEY)) {

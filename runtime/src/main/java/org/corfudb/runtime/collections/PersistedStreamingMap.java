@@ -9,6 +9,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.serializer.ISerializer;
 import org.rocksdb.CompactionOptionsUniversal;
 import org.rocksdb.CompressionType;
+import org.rocksdb.Holder;
 import org.rocksdb.Options;
 import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
@@ -170,7 +171,7 @@ public class PersistedStreamingMap<K, V> implements ContextAwareMap<K, V> {
         // Only increment the count if the value is not present. In other words,
         // increment the count if this is an update operation.
         final boolean keyExists = rocksDb.keyMayExist(keyPayload.array(),
-                keyPayload.arrayOffset(), keyPayload.readableBytes(), new StringBuilder());
+                keyPayload.arrayOffset(), keyPayload.readableBytes(), new Holder<>());
         if (!keyExists) {
             dataSetSize.incrementAndGet();
         }

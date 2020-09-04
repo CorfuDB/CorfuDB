@@ -1,14 +1,11 @@
 package org.corfudb.universe.node.client;
 
-import static org.corfudb.runtime.CorfuRuntime.fromParameters;
-
 import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.reflect.TypeToken;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.Layout;
@@ -18,8 +15,9 @@ import org.corfudb.util.NodeLocator;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static org.corfudb.runtime.CorfuRuntime.fromParameters;
 
 /**
  * Provides Corfu client (utility class) used in the local machine

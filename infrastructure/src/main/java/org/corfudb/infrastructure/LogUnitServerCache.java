@@ -10,6 +10,8 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 
+import static org.corfudb.util.MetricsUtils.sizeOf;
+
 /**
  * LogUnit server cache.
  * <p>
@@ -24,13 +26,29 @@ public class LogUnitServerCache {
     private final LoadingCache<Long, ILogData> dataCache;
     private final StreamLog streamLog;
 
+    //Size of key in the cache.  8 bytes as its a long
+    private final int KEY_SIZE = 8;
+
+    //Empirical threshold of number of streams in a logdata beyond which server performance may be slow
+    private final int MAX_STREAM_THRESHOLD = 20;
+
     public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
         this.streamLog = streamLog;
         this.dataCache = Caffeine.newBuilder()
-                .<Long, ILogData>weigher((addr, logData) -> logData.getSizeEstimate())
+                .<Long, ILogData>weigher((addr, logData) -> getLogDataTotalSize(logData))
                 .maximumWeight(config.getMaxCacheSize())
                 .removalListener(this::handleEviction)
                 .build(this::handleRetrieval);
+    }
+
+    private int getLogDataTotalSize(ILogData logData) {
+        if (logData.getStreams().size() > MAX_STREAM_THRESHOLD) {
+            log.warn("Number of streams in this data is higher that threshold {}." +
+                "This may impact the server performance", MAX_STREAM_THRESHOLD);
+        }
+        return logData.getSizeEstimate() +
+            (int)(sizeOf.deepSizeOf(logData.getMetadataMap())) +
+            KEY_SIZE;
     }
 
     /**

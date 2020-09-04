@@ -8,6 +8,7 @@ import org.corfudb.util.CFUtils;
 import org.junit.Test;
 
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Created by mwei on 7/27/16.
@@ -26,7 +27,7 @@ public class BaseHandlerTest extends AbstractClientTest {
     @Override
     Set<IClient> getClientsForTest() {
         BaseHandler baseHandler = new BaseHandler();
-        client = new BaseClient(router, 0L);
+        client = new BaseClient(router, 0L, UUID.fromString("00000000-0000-0000-0000-000000000000"));
         return new ImmutableSet.Builder<IClient>()
                 .add(baseHandler)
                 .build();

@@ -1,0 +1,48 @@
+{
+  "layoutServers": [
+    "localhost:9000"
+  ],
+  "sequencers": [
+    "localhost:9000"
+  ],
+  "segments": [
+    {
+      "replicationMode": "CHAIN_REPLICATION",
+      "start": 0,
+      "end": 100,
+      "stripes": [
+        {
+          "logServers": [
+            "localhost:9001"
+          ]
+        }
+      ]
+    },
+    {
+      "replicationMode": "CHAIN_REPLICATION",
+      "start": 100,
+      "end": 200,
+      "stripes": [
+        {
+          "logServers": [
+            "localhost:9000"
+          ]
+        }
+      ]
+    },
+    {
+      "replicationMode": "CHAIN_REPLICATION",
+      "start": 200,
+      "end": -1,
+      "stripes": [
+        {
+          "logServers": [
+            "localhost:9002",
+            "localhost:9003"
+          ]
+        }
+      ]
+    }
+  ],
+  "epoch": 0
+}

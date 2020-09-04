@@ -1,6 +1,5 @@
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.corfudb</groupId>
@@ -11,19 +10,18 @@
         <module>infrastructure</module>
         <module>runtime</module>
         <module>common</module>
-        <module>format</module>
         <module>cmdlets</module>
         <module>corfudb-tools</module>
-        <module>test</module>
+        <module>generator</module>
+        <module>coverage</module>
         <module>annotationProcessor</module>
         <module>annotations</module>
         <module>samples</module>
         <module>debian</module>
-        <module>generator</module>
+        <module>test</module>
         <module>it</module>
-        <module>coverage</module>
+        <module>utils</module>
     </modules>
-
 
     <packaging>pom</packaging>
     <name>corfu</name>
@@ -37,7 +35,7 @@
 
     <properties>
         <maven.deploy.skip>false</maven.deploy.skip>
-        <revision>0.3.0-SNAPSHOT</revision>
+        <revision>0.3.1-SNAPSHOT</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <logback.classic.version>1.2.3</logback.classic.version>
@@ -140,7 +138,13 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.14.0</version>
+            <version>3.8.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.marschall</groupId>
+            <artifactId>junit-lambda</artifactId>
+            <version>0.2.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -151,12 +155,12 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>1.7.30</version>
+            <version>1.7.25</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.10</version>
+            <version>1.18.12</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -172,7 +176,7 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId> <!-- Use 'netty-all' for 4.0 or above -->
-            <version>4.1.43.Final</version>
+            <version>4.1.50.Final</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
@@ -413,7 +417,7 @@
                         <format>html</format>
                         <format>xml</format>
                     </formats>
-                    <check />
+                    <check/>
                 </configuration>
             </plugin>
             <!-- Add a license to all files using mvn license:format -->

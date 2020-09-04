@@ -1,7 +1,5 @@
 package org.corfudb.universe.node.server.docker;
 
-import static com.spotify.docker.client.DockerClient.LogsParam;
-
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.DockerClient.ListImagesParam;
 import com.spotify.docker.client.LogStream;
@@ -29,7 +27,6 @@ import org.corfudb.universe.util.IpAddress;
 import org.corfudb.universe.util.IpTablesUtil;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -42,6 +39,8 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+
+import static com.spotify.docker.client.DockerClient.LogsParam;
 
 /**
  * Implements a docker instance representing a {@link CorfuServer}.
@@ -57,8 +56,6 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     private final DockerManager dockerManager;
 
     @NonNull
-    private final LoggingParams loggingParams;
-    @NonNull
     private final CorfuClusterParams<CorfuServerParams> clusterParams;
     private final AtomicReference<IpAddress> ipAddress = new AtomicReference<>();
     private final AtomicBoolean destroyed = new AtomicBoolean();
@@ -68,9 +65,8 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
             DockerClient docker, CorfuServerParams params, UniverseParams universeParams,
             CorfuClusterParams<CorfuServerParams> clusterParams, LoggingParams loggingParams,
             DockerManager dockerManager) {
-        super(params, universeParams);
+        super(params, universeParams, loggingParams);
         this.docker = docker;
-        this.loggingParams = loggingParams;
         this.clusterParams = clusterParams;
         this.dockerManager = dockerManager;
     }
@@ -358,14 +354,12 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                 .build();
 
         // Compose command line for starting Corfu
-        String cmdLine = new StringBuilder()
-                .append("mkdir -p " + params.getStreamLogDir())
-                .append(" && ")
-                .append("java -cp *.jar ")
-                .append(org.corfudb.infrastructure.CorfuServer.class.getCanonicalName())
-                .append(" ")
-                .append(getCommandLineParams())
-                .toString();
+        String cmdLine = String.format("mkdir -p %s", params.getStreamLogDir()) +
+                " && " +
+                "java -cp *.jar " +
+                org.corfudb.infrastructure.CorfuServer.class.getCanonicalName() +
+                " " +
+                getCommandLineParams();
 
         return ContainerConfig.builder()
                 .hostConfig(hostConfig)
@@ -379,15 +373,21 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
     /**
      * Collect logs from container and write to the log directory
      */
-    private void collectLogs() {
+    @Override
+    public void collectLogs() {
         if (!loggingParams.isEnabled()) {
             log.debug("Logging is disabled");
             return;
         }
 
-        File serverLogDir = loggingParams.getServerLogDir().toFile();
-        if (!serverLogDir.exists() && serverLogDir.mkdirs()) {
-            log.info("Created new corfu log directory at {}.", serverLogDir);
+        Path corfuLogDir = params
+                .getUniverseDirectory()
+                .resolve("logs")
+                .resolve(loggingParams.getRelativeServerLogDir());
+
+        File logDirFile = corfuLogDir.toFile();
+        if (!logDirFile.exists() && logDirFile.mkdirs()) {
+            log.info("Created new corfu log directory at {}.", corfuLogDir);
         }
 
         log.debug("Collect logs for: {}", params.getName());
@@ -399,9 +399,12 @@ public class DockerCorfuServer extends AbstractCorfuServer<CorfuServerParams, Un
                 log.warn("Empty logs from container: {}", params.getName());
             }
 
-            Path filePathObj = loggingParams.getServerLogDir().resolve(params.getName() + ".log");
-            Files.write(filePathObj, logs.getBytes(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (InterruptedException | DockerException | IOException e) {
+            Files.write(
+                    corfuLogDir.resolve(params.getName() + ".log"),
+                    logs.getBytes(),
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, StandardOpenOption.SYNC
+            );
+        } catch (Exception e) {
             log.error("Can't collect logs from container: {}", params.getName(), e);
         }
     }

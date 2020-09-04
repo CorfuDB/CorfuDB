@@ -231,7 +231,7 @@ public class Orchestrator {
             long workflowStart = System.currentTimeMillis();
             for (Action action : workflow.getActions()) {
 
-                log.debug("run: Started action {} for workflow {}", action.getName(), workflow.getId());
+                log.info("run: Started action {} for workflow {}", action.getName(), workflow.getId());
                 long actionStart = System.currentTimeMillis();
                 action.execute(rt, actionRetry);
                 long actionEnd = System.currentTimeMillis();

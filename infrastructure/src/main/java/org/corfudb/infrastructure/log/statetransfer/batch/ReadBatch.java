@@ -19,7 +19,7 @@ import static lombok.EqualsAndHashCode.Exclude;
  * A result of a read that contains:
  * - {@link #data} - a piece of data read from the cluster (or from a specific node).
  * - {@link #failedAddresses} - a list of addresses, for which the data was not read.
- * - {@link #destination } - an optional destination server where the corresponding data is present,
+ * - {@link #destinationNode } - an optional destination server where the corresponding data is present,
  * if not read via a replication protocol.
  * - {@link #status} - a status describing a result of a read -- success or failure.
  */
@@ -44,11 +44,10 @@ public class ReadBatch {
     @Default
     private final List<Long> failedAddresses = ImmutableList.of();
     /**
-     * A destination endpoint. This field is optional because the log data
-     * can be read using the cluster consistency protocol rather than from a specific destination.
+     * An optional destination node used to read the data from.
      */
     @Default
-    private final Optional<String> destination = Optional.empty();
+    private final Optional<String> destinationNode = Optional.empty();
 
     /**
      * A status of success or failure after read was performed.
@@ -62,15 +61,6 @@ public class ReadBatch {
     @Default
     @Exclude
     private final Optional<ReadBatchException> causeOfFailure = Optional.empty();
-
-    /**
-     * Creates a transferBatchRequest from {@link #failedAddresses} and {@link #destination}.
-     *
-     * @return An instance of transferBatchRequest.
-     */
-    public TransferBatchRequest createRequest() {
-        return new TransferBatchRequest(failedAddresses, destination);
-    }
 
     /**
      * Get addresses of the successfully read records.

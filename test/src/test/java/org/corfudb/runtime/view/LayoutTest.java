@@ -1,16 +1,18 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Sets;
 import groovy.util.logging.Slf4j;
 import org.junit.Test;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import java.io.IOException;
 import java.lang.reflect.Field;
-import static java.lang.reflect.Modifier.TRANSIENT;
-
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Collections;
+
+import static java.lang.reflect.Modifier.TRANSIENT;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 
 /**
@@ -20,18 +22,15 @@ import java.nio.file.Paths;
 public class LayoutTest {
 
     /* Helper */
-    private String getResourceJSONFileAsString(String fileName)
-            throws IOException{
-
+    private String getResourceJSONFileAsString(String fileName) throws IOException {
         return new String(Files.readAllBytes(Paths.get("src/test/resources/JSONLayouts", fileName)));
     }
 
-    @Test(expected = NullPointerException.class)
-    public void shouldNotDeserializeEmptyLayout()
-            throws Exception {
-
+    @Test
+    public void shouldNotDeserializeEmptyLayout() throws Exception {
         String JSONEmptyLayout = getResourceJSONFileAsString("EmptyLayout.json");
-        Layout shouldYieldException = Layout.fromJSONString(JSONEmptyLayout);
+        assertThatThrownBy(() -> Layout.fromJSONString(JSONEmptyLayout))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -43,19 +42,18 @@ public class LayoutTest {
         assertThat(layout.getActiveLayoutServers()).containsExactly("localhost:9000", "localhost:9002");
     }
 
-    @Test(expected = NullPointerException.class)
-    public void shouldNotDeserializeMissingRequiredFieldLayout()
-            throws Exception{
-
-        String JSONMissingRequiredFieldLayout =  getResourceJSONFileAsString("MissingRequiredFieldLayout.json");
-        Layout shouldYieldException = Layout.fromJSONString(JSONMissingRequiredFieldLayout);
+    @Test
+    public void shouldNotDeserializeMissingRequiredFieldLayout() throws Exception {
+        String JSONMissingRequiredFieldLayout = getResourceJSONFileAsString("MissingRequiredFieldLayout.json");
+        assertThatThrownBy(() -> Layout.fromJSONString(JSONMissingRequiredFieldLayout))
+                .isInstanceOf(NullPointerException.class);
     }
 
-    @Test(expected = NullPointerException.class)
-    public void shouldNotDeserializeMissingRequiredFieldInnerLayout()
-            throws Exception {
+    @Test
+    public void shouldNotDeserializeMissingRequiredFieldInnerLayout() throws Exception {
         String JSONMissingRequiredFieldInnerLayout = getResourceJSONFileAsString("MissingRequiredFieldInStripes.json");
-        Layout shouldYieldException = Layout.fromJSONString(JSONMissingRequiredFieldInnerLayout);
+        assertThatThrownBy(() -> Layout.fromJSONString(JSONMissingRequiredFieldInnerLayout))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -77,10 +75,27 @@ public class LayoutTest {
         }
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void shouldInvalidateNotValidLayout() throws Exception {
         String JSONEmptySequencerListLayout = getResourceJSONFileAsString("EmptyListOfSequencers.json");
-        Layout shouldYieldException = Layout.fromJSONString(JSONEmptySequencerListLayout);
+        assertThatThrownBy(() -> Layout.fromJSONString(JSONEmptySequencerListLayout))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    public void testLayoutGetAllLogServers() throws Exception {
+        String JSONEmptySequencerListLayout = getResourceJSONFileAsString("MultiSegmentLayout1.json");
+        assertThat(Layout.fromJSONString(JSONEmptySequencerListLayout).getAllLogServers())
+                .isEqualTo(Sets.newHashSet(
+                        "localhost:9000", "localhost:9001",
+                        "localhost:9002", "localhost:9003"
+        ));
+    }
+
+    @Test
+    public void testLayoutGetFullyRedundantLogServers() throws Exception {
+        String JSONEmptySequencerListLayout = getResourceJSONFileAsString("MultiSegmentLayout2.json");
+        assertThat(Layout.fromJSONString(JSONEmptySequencerListLayout).getFullyRedundantLogServers())
+                .isEqualTo(Collections.singleton("localhost:9000"));
+    }
 }

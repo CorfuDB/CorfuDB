@@ -10,7 +10,7 @@ import java.util.UUID;
  * Log data entries represent data stored in the actual log,
  * with convenience methods for software to retrieve the
  * stored information.
- *
+ * <p>
  * Created by mwei on 8/17/16.
  */
 public interface ILogData extends IMetadata, Comparable<ILogData> {
@@ -25,9 +25,8 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     }
 
     /**
-     * This class provides a serialization handle, which
-     * manages the lifetime of the serialized copy of this
-     * entry.
+     * This class provides a serialization handle, which manages
+     * the lifetime of the serialized copy of this entry.
      */
     class SerializationHandle implements AutoCloseable {
 
@@ -40,7 +39,7 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
          * Explicitly request the serialized form of this log data
          * which only exists for the lifetime of this handle.
          *
-         * @return The serialized form of this handle.
+         * @return the serialized form of this handle
          */
         public ILogData getSerialized() {
             return data;
@@ -50,11 +49,12 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
          * Create a new serialized handle with a reference
          * to the log data.
          *
-         * @param data The log data to manage.
+         * @param data     the log data to manage
+         * @param metadata whether metadata needs to be serialized
          */
-        public SerializationHandle(ILogData data) {
+        public SerializationHandle(ILogData data, boolean metadata) {
             this.data = data;
-            data.acquireBuffer();
+            data.acquireBuffer(metadata);
         }
 
         /**
@@ -66,13 +66,28 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
         }
     }
 
+    /**
+     * Get the serialization handle of this entry that manages
+     * the lifetime of the serialized copy.
+     *
+     * @param metadata whether metadata needs to be serialized
+     * @return a serialization handle of this entry
+     */
+    default SerializationHandle getSerializedForm(boolean metadata) {
+        return new SerializationHandle(this, metadata);
+    }
+
+    /**
+     * Release the serialization buffer.
+     */
     void releaseBuffer();
 
-    void acquireBuffer();
-
-    default SerializationHandle getSerializedForm() {
-        return new SerializationHandle(this);
-    }
+    /**
+     * Acquire the serialization buffer.
+     *
+     * @param metadata whether metadata needs to be serialized
+     */
+    void acquireBuffer(boolean metadata);
 
     /**
      * Return the payload as a log entry.
@@ -137,20 +152,8 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
     /**
      * Return true if this LogData contains data
      */
-    default boolean isData() { return  getType() == DataType.DATA; }
-
-    /**
-     * Return the serialized size of an object
-     *
-     * @param obj the entry's payload object
-     * @return size of serialized buffer
-     */
-    static int getSerializedSize(Object obj, String codecType) {
-        ILogData ld = new LogData(DataType.DATA, obj, codecType);
-        ld.acquireBuffer();
-        int size = ld.getSizeEstimate();
-        ld.releaseBuffer();
-        return size;
+    default boolean isData() {
+        return getType() == DataType.DATA;
     }
 
     default void setId(UUID clientId) {

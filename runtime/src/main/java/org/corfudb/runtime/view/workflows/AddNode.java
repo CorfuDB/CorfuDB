@@ -6,7 +6,9 @@ import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.ManagementClient;
+import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.CFUtils;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
@@ -44,9 +46,10 @@ public class AddNode extends WorkflowRequest {
 
     @Override
     protected UUID sendRequest(@NonNull ManagementClient managementClient) throws TimeoutException {
-        // Bootstrap a management server first.
         Layout layout = new Layout(runtime.getLayoutView().getLayout());
-        runtime.getManagementView().bootstrapManagementServer(nodeForWorkflow, layout).join();
+        // Bootstrap a management server first.
+        // If there are network or timeout exceptions, throw them.
+        CFUtils.getUninterruptibly(runtime.getManagementView().bootstrapManagementServer(nodeForWorkflow, layout));
         // Send the add node request to the node's orchestrator.
         CreateWorkflowResponse resp = managementClient.addNodeRequest(nodeForWorkflow);
         log.info("sendRequest: requested to add {} on orchestrator {}:{}",

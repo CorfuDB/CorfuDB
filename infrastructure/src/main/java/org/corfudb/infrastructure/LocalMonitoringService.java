@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Created by zlokhandwala on 11/2/18.
  */
 @Slf4j
-class LocalMonitoringService implements MonitoringService {
+class LocalMonitoringService implements ManagementService {
     private static final CompletableFuture<SequencerMetrics> UNKNOWN = CompletableFuture
             .completedFuture(SequencerMetrics.UNKNOWN);
 

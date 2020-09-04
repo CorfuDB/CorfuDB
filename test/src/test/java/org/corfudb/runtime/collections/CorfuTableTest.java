@@ -8,17 +8,26 @@ import java.util.Collection;
 import java.util.ConcurrentModificationException;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.assertj.core.api.Assertions;
 import org.assertj.core.data.MapEntry;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.object.CorfuCompileProxy;
+import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.junit.Test;
 
 public class CorfuTableTest extends AbstractViewTest {
+
+    private static final int ITERATIONS = 20;
 
     Collection<String> project(Collection<Map.Entry<String, String>> entries) {
         return entries.stream().map(entry -> entry.getValue()).collect(Collectors.toCollection(ArrayList::new));
@@ -244,5 +253,73 @@ public class CorfuTableTest extends AbstractViewTest {
 
         final Stream<Map.Entry<Integer, Integer>> result = map.entryStream();
         result.forEach(e -> map.put(new Random().nextInt(), 0));
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "checkstyle:magicnumber"})
+    public void canHandleHoleInTail() {
+        UUID streamID = UUID.randomUUID();
+
+        CorfuTable<String, String> corfuTable = getDefaultRuntime()
+                .getObjectsView()
+                .build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamID(streamID)
+                .open();
+
+        corfuTable.put("k1", "dog fox cat");
+        corfuTable.put("k2", "dog bat");
+        corfuTable.put("k3", "fox");
+
+        // create a hole
+        TokenResponse tokenResponse =  getDefaultRuntime()
+                .getSequencerView()
+                .next(streamID);
+
+        Token token = tokenResponse.getToken();
+
+        getDefaultRuntime().getAddressSpaceView()
+                .write(tokenResponse, LogData.getHole(token));
+
+        assertThat(getDefaultRuntime().getAddressSpaceView()
+                .read(token.getSequence()).isHole()).isTrue();
+
+        for (int i = 0; i < ITERATIONS; i++) {
+            getDefaultRuntime().getObjectsView().TXBuild()
+                    .type(TransactionType.SNAPSHOT)
+                    .snapshot(token)
+                    .build()
+                    .begin();
+
+            corfuTable.scanAndFilter(item -> true);
+            getDefaultRuntime().getObjectsView().TXEnd();
+        }
+
+        assertThat(((CorfuCompileProxy) ((ICorfuSMR) corfuTable).
+                getCorfuSMRProxy()).getUnderlyingObject().getSmrStream().pos()).isEqualTo(3);
+    }
+
+    /**
+     * Ensure that if the values of the table contains any duplicates,
+     * APIs that tries to retrieve all values can correctly return all
+     * values including duplicates.
+     */
+    @Test
+    public void duplicateValues() {
+        CorfuTable<String, String>
+                corfuTable = getDefaultRuntime().getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        corfuTable.put("k1", "aa");
+        corfuTable.put("k2", "cc");
+        corfuTable.put("k3", "aa");
+        corfuTable.put("k4", "bb");
+
+        assertThat(corfuTable.values()).containsExactlyInAnyOrder("aa", "aa", "bb", "cc");
+        assertThat(corfuTable.entrySet()).containsExactlyInAnyOrder(
+                MapEntry.entry("k1", "aa"), MapEntry.entry("k3", "aa"),
+                MapEntry.entry("k4", "bb"), MapEntry.entry("k2", "cc"));
     }
 }

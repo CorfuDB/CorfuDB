@@ -1,6 +1,5 @@
 package org.corfudb.universe.group.cluster;
 
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.universe.group.Group.GroupParams;
 import org.corfudb.universe.node.Node;

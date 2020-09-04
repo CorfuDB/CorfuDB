@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ClassUtils;
 import org.corfudb.universe.group.Group;
 import org.corfudb.universe.group.Group.GroupParams;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.Node.NodeParams;
 
 import java.util.UUID;
@@ -21,12 +22,17 @@ public abstract class AbstractUniverse<N extends NodeParams, P extends UniverseP
     @NonNull
     protected final P universeParams;
     @Getter
+    @NonNull
     protected final UUID universeId;
+
+    @NonNull
+    protected final LoggingParams loggingParams;
 
     protected final ConcurrentMap<String, Group> groups = new ConcurrentHashMap<>();
 
-    protected AbstractUniverse(P universeParams) {
+    protected AbstractUniverse(P universeParams, LoggingParams loggingParams) {
         this.universeParams = universeParams;
+        this.loggingParams = loggingParams;
         this.universeId = UUID.randomUUID();
 
         if (universeParams.isCleanUpEnabled()) {

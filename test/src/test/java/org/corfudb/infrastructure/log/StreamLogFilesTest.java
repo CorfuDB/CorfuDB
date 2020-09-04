@@ -12,6 +12,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -21,17 +23,18 @@ import java.util.Set;
 import org.apache.commons.io.FileUtils;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
-import org.corfudb.format.Types;
-import org.corfudb.format.Types.Metadata;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.log.StreamLogFiles.Checksum;
+import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.test.LsofSpec;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
 
@@ -48,9 +51,53 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
     private ServerContext getContext() {
         String path = getDirPath();
         return new ServerContextBuilder()
-            .setLogPath(path)
-            .setMemory(false)
-            .build();
+                .setLogPath(path)
+                .setMemory(false)
+                .build();
+    }
+
+    /**
+     * Reproduces the issue, with an exception happens during segment handle creation.
+     * The test checks that there are no any open file channels due to exception.
+     *
+     * @throws Exception spec exception
+     */
+    @Test
+    public void testProtectionFromDataLossInCaseOfExceptionDuringDataLoad() throws Exception {
+        String logDir = com.google.common.io.Files.createTempDir().getAbsolutePath();
+        Path logPath = Paths.get(logDir, "log", "0.log");
+
+        ServerContext context = new ServerContextBuilder()
+                .setLogPath(logDir)
+                .setMemory(false)
+                .build();
+
+        StreamLogFiles log = new StreamLogFiles(context, false);
+        ByteBuf b = Unpooled.buffer();
+        byte[] streamEntry = "Payload".getBytes();
+        Serializers.CORFU.serialize(streamEntry, b);
+        long address0 = 0;
+        log.append(address0, new LogData(DataType.DATA, b));
+
+        final int OVERWRITE_BYTES = 4;
+
+        try (RandomAccessFile logFile = new RandomAccessFile(logPath.toFile(), "rw")) {
+            logFile.seek(1);
+            logFile.writeInt(OVERWRITE_BYTES);
+        }
+
+        log.closeSegmentHandlers(0);
+        try {
+            log.read(address0);
+            throw new IllegalStateException("Must not get here");
+        } catch (DataCorruptionException ex) {
+            //ignore
+        }
+
+        LsofSpec lsOfSpec = new LsofSpec();
+        lsOfSpec.check(logPath);
+
+        log.close();
     }
     
     @Test
@@ -68,10 +115,9 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // An overwrite exception should occur, since we are writing the
         // same entry.
         final StreamLog newLog = new StreamLogFiles(getContext(), true);
-        assertThatThrownBy(() -> {
-            newLog.append(address0, new LogData(DataType.DATA, b));
-        })
+        assertThatThrownBy(() -> newLog.append(address0, new LogData(DataType.DATA, b)))
                 .isInstanceOf(OverwriteException.class);
+
         assertThat(log.read(address0).getPayload(null)).isEqualTo(streamEntry);
     }
 
@@ -426,7 +472,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         // Write to multiple segments
         final int segments = 3;
         long lastAddress = segments * StreamLogFiles.RECORDS_PER_LOG_FILE;
-        for (long x = 0; x <= lastAddress; x++){
+        for (long x = 0; x <= lastAddress; x++) {
             writeToLog(log, x);
             assertThat(log.getLogTail()).isEqualTo(x);
         }
@@ -594,7 +640,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         dir.mkdir();
         RandomAccessFile logFile = new RandomAccessFile(logFilePath, "rw");
 
-        Types.LogHeader header = Types.LogHeader.newBuilder()
+        LogHeader header = LogHeader.newBuilder()
                 .setVersion(StreamLogFiles.VERSION)
                 .setVerifyChecksum(false)
                 .build();
@@ -621,7 +667,7 @@ public class StreamLogFilesTest extends AbstractCorfuTest {
         dir.mkdir();
         RandomAccessFile logFile = new RandomAccessFile(logFilePath, "rw");
 
-        Types.LogHeader header = Types.LogHeader.newBuilder()
+        LogHeader header = LogHeader.newBuilder()
                 .setVersion(StreamLogFiles.VERSION)
                 .setVerifyChecksum(false)
                 .build();

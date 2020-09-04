@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -11,17 +9,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-
 import javax.annotation.Nonnull;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
@@ -185,11 +181,14 @@ public class BatchProcessor implements AutoCloseable {
                                         break;
                                 }
 
+                                tails.setEpoch(sealEpoch);
                                 currOp.setResultValue(tails);
                                 break;
                             case LOG_ADDRESS_SPACE_QUERY:
                                 // Retrieve the address space for every stream in the log.
-                                currOp.setResultValue(streamLog.getStreamsAddressSpace());
+                                StreamsAddressResponse resp = streamLog.getStreamsAddressSpace();
+                                resp.setEpoch(sealEpoch);
+                                currOp.setResultValue(resp);
                                 break;
                             default:
                                 log.warn("Unknown BatchWriterOperation {}", currOp);

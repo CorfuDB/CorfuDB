@@ -3,6 +3,7 @@ package org.corfudb.util.serializer;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.SerializerException;
 
@@ -19,6 +20,8 @@ public class Serializers {
     public static final ISerializer JAVA = new JavaSerializer((byte) 1);
     public static final ISerializer JSON = new JsonSerializer((byte) 2);
     public static final ISerializer PRIMITIVE = new PrimitiveSerializer((byte) 3);
+    public static final ISerializer QUEUE_SERIALIZER = new CorfuQueueSerializer((byte) 4);
+
 
     /**
      * @return the recommended default serializer used for converting objects into write format.
@@ -35,6 +38,7 @@ public class Serializers {
         serializersMap.put(JAVA.getType(), JAVA);
         serializersMap.put(JSON.getType(), JSON);
         serializersMap.put(PRIMITIVE.getType(), PRIMITIVE);
+        serializersMap.put(QUEUE_SERIALIZER.getType(), QUEUE_SERIALIZER);
     }
 
     private static final Map<Byte, ISerializer> customSerializers = new HashMap<>();
@@ -70,5 +74,17 @@ public class Serializers {
                     SYSTEM_SERIALIZERS_COUNT);
             throw new RuntimeException(msg);
         }
+    }
+
+    /**
+     * Clear custom serializers.
+     */
+    public static synchronized void clearCustomSerializers() {
+        customSerializers.clear();
+    }
+
+    @VisibleForTesting
+    public static synchronized void removeSerializer(ISerializer serializer) {
+        customSerializers.remove(serializer.getType());
     }
 }

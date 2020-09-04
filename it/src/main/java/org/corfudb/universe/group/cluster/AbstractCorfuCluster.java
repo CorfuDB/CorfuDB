@@ -2,10 +2,12 @@ package org.corfudb.universe.group.cluster;
 
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters.CorfuRuntimeParametersBuilder;
 import org.corfudb.universe.group.Group;
+import org.corfudb.universe.logging.LoggingParams;
 import org.corfudb.universe.node.Node;
 import org.corfudb.universe.node.client.LocalCorfuClient;
 import org.corfudb.universe.node.server.CorfuServer;
@@ -14,7 +16,6 @@ import org.corfudb.universe.universe.UniverseException;
 import org.corfudb.universe.universe.UniverseParams;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -27,8 +28,13 @@ public abstract class AbstractCorfuCluster<P extends CorfuServerParams, U extend
 
     private final ConcurrentNavigableMap<String, CorfuServer> nodes = new ConcurrentSkipListMap<>();
 
-    public AbstractCorfuCluster(CorfuClusterParams<P> params, U universeParams) {
+    @NonNull
+    protected final LoggingParams loggingParams;
+
+    public AbstractCorfuCluster(CorfuClusterParams<P> params, U universeParams,
+                                LoggingParams loggingParams) {
         super(params, universeParams);
+        this.loggingParams = loggingParams;
     }
 
     protected void init() {

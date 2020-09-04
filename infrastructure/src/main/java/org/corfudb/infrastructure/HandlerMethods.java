@@ -91,6 +91,18 @@ public class HandlerMethods {
         }
     }
 
+    /** Handle an incoming CorfuMsg for any generic transport layer (not only Netty).
+     *
+     * @param message   The message to handle.
+     * @param r         The server router.
+     * @return          True, if the message was handled.
+     *                  False otherwise.
+     */
+    @SuppressWarnings("unchecked")
+    public void handle(CorfuMsg message, IServerRouter r) {
+       handle(message, null, r);
+    }
+
     /** Generate handlers for a particular server.
      *
      * @param caller    The context that is being used. Call MethodHandles.lookup() to obtain.
