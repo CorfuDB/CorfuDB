@@ -19,11 +19,13 @@ import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.ServerThreadFactory.ExceptionHandler;
+import net.openhft.affinity.AffinityStrategies;
+import net.openhft.affinity.AffinityThreadFactory;
 import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
@@ -113,10 +115,11 @@ public class LogUnitServer extends AbstractServer {
     public LogUnitServer(ServerContext serverContext) {
         this.serverContext = serverContext;
         this.config = LogUnitServerConfig.parse(serverContext.getServerConfig());
+        ThreadFactory threadFactory = new AffinityThreadFactory("LogUnit-%d",
+                AffinityStrategies.SAME_CORE);
         executor = Executors.newFixedThreadPool(
-                serverContext.getLogunitThreadCount(),
-                new ServerThreadFactory("LogUnit-", new ExceptionHandler())
-        );
+                serverContext.getLogunitThreadCount(),threadFactory);
+
 
         if (config.isMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "

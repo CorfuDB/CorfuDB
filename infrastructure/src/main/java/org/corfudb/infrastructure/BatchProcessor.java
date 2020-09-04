@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -11,6 +10,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import lombok.extern.slf4j.Slf4j;
+import net.openhft.affinity.AffinityStrategies;
+import net.openhft.affinity.AffinityThreadFactory;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -41,12 +42,9 @@ public class BatchProcessor implements AutoCloseable {
 
   private final BlockingQueue<BatchWriterOperation> operationsQueue;
 
-  private ExecutorService processorService =
-      Executors.newSingleThreadExecutor(
-          new ThreadFactoryBuilder()
-              .setDaemon(false)
-              .setNameFormat("LogUnit-BatchProcessor-%d")
-              .build());
+  private ExecutorService processorService = Executors
+          .newSingleThreadExecutor(new AffinityThreadFactory("LogUnit-BatchProcessor-%d",
+                  AffinityStrategies.SAME_SOCKET));
 
   /**
    * The sealEpoch is the epoch up to which all operations have been sealed. Any

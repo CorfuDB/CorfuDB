@@ -29,6 +29,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import net.openhft.affinity.AffinityStrategies;
+import net.openhft.affinity.AffinityThreadFactory;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
@@ -662,15 +664,17 @@ public class ServerContext implements AutoCloseable {
      * @return A worker group.
      */
     private @Nonnull EventLoopGroup getNewWorkerGroup() {
-        final ThreadFactory threadFactory = new ThreadFactoryBuilder()
-                .setNameFormat(getThreadPrefix() + "worker-%d")
-                .build();
 
         final int requestedThreads =
                 Integer.parseInt(getServerConfig(String.class, "--Threads"));
         final int numThreads = requestedThreads == 0
                 ? Runtime.getRuntime().availableProcessors() * 2
                 : requestedThreads;
+
+        ThreadFactory threadFactory = new AffinityThreadFactory(getThreadPrefix() + "worker-%d",
+                AffinityStrategies.SAME_SOCKET);
+
+
         EventLoopGroup group = getChannelImplementation().getGenerator()
             .generate(numThreads, threadFactory);
 
