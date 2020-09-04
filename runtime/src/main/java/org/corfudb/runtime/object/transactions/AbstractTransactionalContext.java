@@ -213,6 +213,10 @@ public abstract class AbstractTransactionalContext implements
                 vlo.syncObjectUnsafe(snapshotTimestamp.getSequence());
                 break;
             } catch (TrimmedException te) {
+                log.info("syncWithRetryUnsafe: Encountered trimmed address space " +
+                                "for snapshot {} of stream {} with pointer={} on attempt {}",
+                        snapshotTimestamp.getSequence(), vlo.getID(), vlo.getVersionUnsafe(), x);
+
                 // If a trim is encountered, we must reset the object
                 vlo.resetUnsafe();
                 if (!te.isRetriable()
