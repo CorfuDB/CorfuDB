@@ -72,6 +72,9 @@ public class LogEntrySender {
      * @param logEntrySyncEventId
      */
     public void send(UUID logEntrySyncEventId) {
+
+        log.trace("Send Log Entry Sync, id={}", logEntrySyncEventId);
+
         taskActive = true;
 
         try {

@@ -28,7 +28,7 @@ public class LogReplicationEventMetadata {
     /*
      * Represents the last base snapshot timestamp.
      */
-    private long lastBaseSnapshot;
+    private long lastTransferredBaseSnapshot;
 
     /**
      * Empty Metadata
@@ -68,7 +68,7 @@ public class LogReplicationEventMetadata {
      */
     public LogReplicationEventMetadata(UUID requestId, long syncTimestamp, long baseSnapshot) {
         this(requestId, syncTimestamp);
-        this.lastBaseSnapshot = baseSnapshot;
+        this.lastTransferredBaseSnapshot = baseSnapshot;
     }
 
     public UUID getRequestId() {
@@ -79,8 +79,8 @@ public class LogReplicationEventMetadata {
         return this.lastLogEntrySyncedTimestamp;
     }
 
-    public long getLastBaseSnapshot() {
-        return this.lastBaseSnapshot;
+    public long getLastTransferredBaseSnapshot() {
+        return this.lastTransferredBaseSnapshot;
     }
 }
 

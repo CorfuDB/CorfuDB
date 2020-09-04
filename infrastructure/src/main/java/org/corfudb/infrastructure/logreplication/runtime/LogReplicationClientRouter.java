@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent.LogReplicationRuntimeEventType;
 import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverterUtils;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -142,7 +143,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         client.getHandledTypes().stream()
                 .forEach(x -> {
                     handlerMap.put(x, client);
-                    log.info("Registered {} to handle messages of type {}", client, x);
+                    log.info("Registered client to handle messages of type {}", x);
                 });
 
         // Register this type
@@ -190,7 +191,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                         endpoint = runtimeFSM.getRemoteLeader().get();
                     } else {
                         log.error("Leader not found to remote cluster {}", remoteClusterId);
-                        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
                         throw new ChannelAdapterException(
                                 String.format("Leader not found to remote cluster %s", remoteClusterDescriptor.getClusterId()));
                     }
@@ -203,7 +204,7 @@ public class LogReplicationClientRouter implements IClientRouter {
 
             } catch (NetworkException ne) {
                 log.error("Caught Network Exception while trying to send message to remote leader {}", endpoint);
-                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
+                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
                         endpoint));
                 throw ne;
             } catch (Exception e) {
@@ -252,7 +253,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             log.trace("Sent one-way message: {}", message);
         } else {
             log.error("Leader not found to remote cluster {}, dropping {}", remoteClusterId, message.getMsgType());
-            runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+            runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
         }
     }
 
@@ -331,7 +332,7 @@ public class LogReplicationClientRouter implements IClientRouter {
 
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (corfuMsg.getMsgType() == CorfuMsgType.LOG_REPLICATION_LEADERSHIP_LOSS) {
-                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
+                runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
                 return;
             }
 
@@ -396,7 +397,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     private boolean isValidMessage(CorfuMsg message) {
         return message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_ENTRY) ||
-                message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST) ||
+                message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_METADATA_REQUEST) ||
                 message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP);
     }
 
@@ -407,7 +408,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public synchronized void onConnectionUp(String endpoint) {
         log.info("Connection established to remote endpoint {}", endpoint);
-        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_UP, endpoint));
+        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_UP, endpoint));
     }
 
     /**
@@ -417,7 +418,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public synchronized void onConnectionDown(String endpoint) {
         log.info("Connection lost to remote endpoint {} on cluster {}", endpoint, remoteClusterId);
-        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
+        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
                 endpoint));
         // Attempt to reconnect to this endpoint
         channelAdapter.connectAsync(endpoint);
@@ -427,7 +428,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      * Channel Adapter On Error Callback
      */
     public synchronized void onError(Throwable t) {
-        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.ERROR, t));
+        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ERROR, t));
     }
 
     public Optional<String> getRemoteLeaderEndpoint() {

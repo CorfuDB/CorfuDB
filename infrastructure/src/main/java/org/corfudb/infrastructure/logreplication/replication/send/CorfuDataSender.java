@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClient;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import java.util.List;
@@ -39,6 +40,11 @@ public class CorfuDataSender implements DataSender {
         }
 
         return lastSentMessage;
+    }
+
+    @Override
+    public CompletableFuture<LogReplicationMetadataResponse> sendMetadataRequest() {
+        return client.sendMetadataRequest();
     }
 
     @Override

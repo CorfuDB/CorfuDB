@@ -317,15 +317,14 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
         long topologyConfigId = msgQ.get(0).getMetadata().getTopologyConfigId();
         long snapshot = msgQ.get(0).getMetadata().getSnapshotTimestamp();
-        logReplicationMetadataManager.setSrcBaseSnapshotStart(topologyConfigId, snapshot);
+        logReplicationMetadataManager.setBaseSnapshotStart(topologyConfigId, snapshot);
         writer.reset(topologyConfigId, snapshot);
 
         for (LogReplicationEntry msg : msgQ) {
             writer.apply(msg);
         }
 
-        Long seq = writer.getLogReplicationMetadataManager().getLastSnapSeqNum() + 1;
-        writer.applyShadowStreams(seq);
+        writer.applyShadowStreams();
     }
 
     public static void readLogEntryMsgs(List<LogReplicationEntry> msgQ, Set<String> streams, CorfuRuntime rt) throws TrimmedException {

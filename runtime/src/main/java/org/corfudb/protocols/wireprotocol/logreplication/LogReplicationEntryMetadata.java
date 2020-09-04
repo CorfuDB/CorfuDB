@@ -109,6 +109,8 @@ public class LogReplicationEntryMetadata {
                 return MessageType.SNAPSHOT_REPLICATED;
             case LOG_ENTRY_REPLICATED:
                 return MessageType.LOG_ENTRY_REPLICATED;
+            case SNAPSHOT_TRANSFER_COMPLETE:
+                return MessageType.SNAPSHOT_TRANSFER_COMPLETE;
             default:
                 log.error("Found unknown log entry message type {}", type);
                 return null;

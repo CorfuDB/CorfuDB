@@ -75,7 +75,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
         log.debug("onEntry :: Verifying Remote Leader, transition from {}", from.getType());
-        log.debug("Submitted tasks to worker :: size={} activeCount={} taskCount={}", worker.getQueue().size(),
+        log.trace("Submitted tasks to worker :: size={} activeCount={} taskCount={}", worker.getQueue().size(),
                 worker.getActiveCount(), worker.getTaskCount());
         // Verify Leadership on connected nodes (ignore those for which leadership is pending)
         this.worker.submit(this::verifyLeadership);
