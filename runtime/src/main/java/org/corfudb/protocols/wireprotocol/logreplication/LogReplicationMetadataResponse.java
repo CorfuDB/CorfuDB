@@ -6,16 +6,16 @@ import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.runtime.Messages;
 
 @Data
-public class LogReplicationNegotiationResponse implements ICorfuPayload<LogReplicationNegotiationResponse> {
+public class LogReplicationMetadataResponse implements ICorfuPayload<LogReplicationMetadataResponse> {
 
-    private long topologyConfigId;
-    private String version;
-    private long snapshotStart;
-    private long snapshotTransferred;
-    private long snapshotApplied;
-    private long lastLogProcessed;
+    private final long topologyConfigId;
+    private final String version;
+    private final long snapshotStart;
+    private final long snapshotTransferred;
+    private final long snapshotApplied;
+    private final long lastLogProcessed;
 
-    public LogReplicationNegotiationResponse(ByteBuf buf) {
+    public LogReplicationMetadataResponse(ByteBuf buf) {
         topologyConfigId = ICorfuPayload.fromBuffer(buf, Long.class);
         version = ICorfuPayload.fromBuffer(buf, String.class);
         snapshotStart = ICorfuPayload.fromBuffer(buf, Long.class);
@@ -24,17 +24,18 @@ public class LogReplicationNegotiationResponse implements ICorfuPayload<LogRepli
         lastLogProcessed = ICorfuPayload.fromBuffer(buf, Long.class);
     }
 
-    public LogReplicationNegotiationResponse(long topologyConfigId, String version, long snapshotStart, long lastTransferDone, long snapshotAppliedDone, long lastLogProcessed) {
+    public LogReplicationMetadataResponse(long topologyConfigId, String version, long snapshotStartTimestamp,
+                                          long snapshotTransferTimestamp, long snapshotAppliedTimestamp, long lastLogProcessed) {
         this.topologyConfigId = topologyConfigId;
         this.version = version;
-        this.snapshotStart = snapshotStart;
-        this.snapshotTransferred = lastTransferDone;
-        this.snapshotApplied = snapshotAppliedDone;
+        this.snapshotStart = snapshotStartTimestamp;
+        this.snapshotTransferred = snapshotTransferTimestamp;
+        this.snapshotApplied = snapshotAppliedTimestamp;
         this.lastLogProcessed = lastLogProcessed;
     }
 
-    public static LogReplicationNegotiationResponse fromProto(Messages.LogReplicationNegotiationResponse proto) {
-        return new LogReplicationNegotiationResponse(proto.getSiteConfigID(),
+    public static LogReplicationMetadataResponse fromProto(Messages.LogReplicationMetadataResponse proto) {
+        return new LogReplicationMetadataResponse(proto.getSiteConfigID(),
                 proto.getVersion(),
                 proto.getSnapshotStart(),
                 proto.getSnapshotTransferred(),

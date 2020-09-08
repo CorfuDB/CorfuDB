@@ -75,7 +75,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
 
-        log.info("On Streams Log Entry Reader start, streams to replicate total={}, stream_names={}. stream_ids={}", streamUUIDs.size(), streams, streamUUIDs);
+        log.debug("Streams to replicate total={}, stream_names={}, stream_ids={}", streamUUIDs.size(), streams, streamUUIDs);
 
         //create an opaque stream for transaction stream
         txOpaqueStream = new TxOpaqueStream(rt);
@@ -192,7 +192,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 lastOpaqueEntry = txOpaqueStream.next();
             }
 
-            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEnry size {}",
+            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
                     currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null ? 0 : currentEntrySize);
 
             if (opaqueEntryList.isEmpty()) {

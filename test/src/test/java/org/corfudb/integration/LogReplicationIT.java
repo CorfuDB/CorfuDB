@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 
-
 import com.google.common.reflect.TypeToken;
 import java.io.IOException;
 import java.util.Arrays;
@@ -16,11 +15,9 @@ import java.util.Observable;
 import java.util.Observer;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeoutException;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +35,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -45,7 +43,6 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-import org.junit.jupiter.api.Assertions;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -92,10 +89,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // Number of messages per batch
     static private final int BATCH_SIZE = 4;
 
-    // each snapshot entry is 33 bytes
-    // log entry size is 66 bytes or more according to how many streams in one transactions
-    static private final int MSG_SIZE = 524288;
-
     static private final int SMALL_MSG_SIZE = 200;
 
     static private TestConfig testConfig = new TestConfig();
@@ -134,6 +127,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // An observable value on the number of received ACKs (source side)
     private ObservableAckMsg ackMessages;
 
+    // An observable value on the metadata response (received by the source)
+    private ObservableValue<LogReplicationMetadataResponse> metadataResponseObservable;
+
     // An observable value on the number of errors received on Log Entry Sync (source side)
     private ObservableValue errorsLogEntrySync;
 
@@ -151,10 +147,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     // Set per test according to the expected number of errors in a test
     private int expectedErrors = 1;
 
-    // Set per test according to the expected number ti
+    // Set per test according to the expected number
     private int expectedSinkReceivedMessages = 0;
 
-    private MessageType expectedAckMsgType = MessageType.SNAPSHOT_END;
+    private MessageType expectedAckMsgType = MessageType.SNAPSHOT_TRANSFER_COMPLETE;
 
     /* ********* Semaphore to block until expected values are reached ********** */
 
@@ -163,6 +159,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     // A semaphore that allows to block until the observed value reaches the expected value
     private final Semaphore blockUntilExpectedAckType = new Semaphore(1, true);
+
+    // A semaphore that allows to block until observed metadata response indicates completeness
+    private final Semaphore blockUntilExpectedMetadataResponse = new Semaphore(1, true);
 
     private final Semaphore blockUntilExpectedAckTs = new Semaphore(1, true);
 
@@ -310,7 +309,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         }
 
         if (cntDelete > 0) {
-            log.debug("\ndelete cnt " + cntDelete);
+            log.debug("delete cnt {}", cntDelete);
         }
     }
 
@@ -381,56 +380,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      */
     @Test
     public void testSnapshotAndLogEntrySyncThroughManager() throws Exception {
-
-        // Setup two separate Corfu Servers: source (primary) and destination (standby)
-        setupEnv();
-
-        // Open streams in source Corfu
-        openStreams(srcCorfuTables, srcDataRuntime, NUM_STREAMS);
-
-        // Write data into Source Tables
-        generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS);
-
-        // Verify data just written against in-memory copy
-        log.debug("\n****** Verify Source Data");
-        verifyData(srcCorfuTables, srcDataForVerification);
-
-        // Before initiating log replication, verify these tables have no actual data in the destination node.
-        openStreams(dstCorfuTables, dstDataRuntime, NUM_STREAMS);
-        log.debug("\n****** Verify No Data in Destination Site");
-        verifyNoData(dstCorfuTables);
-        expectedAckTimestamp = Long.MAX_VALUE;
-        // Start Snapshot Sync (through Source Manager)
-        startSnapshotSync(srcCorfuTables.keySet());
-
-        log.debug("\n>>>>> END Snapshot Sync");
-
-        // Verify Data on Destination site
-        log.debug("\n****** Verify Data on Destination");
-        verifyData(dstCorfuTables, srcDataForVerification);
-
-        // Reset expected messages for number of ACKs expected (log entry sync batches + 1 from snapshot sync)
-        expectedAckMessages = (NUM_KEYS) + 1;
-
-        blockUntilExpectedAckTs.acquire();
-        expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail() + NUM_KEYS;
-        // Write Extra Data (for incremental / log entry sync)
-        generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS*2);
-        log.debug("\n****** Verify Source Data for log entry (incremental updates) till tail " + expectedAckTimestamp);
-        verifyData(srcCorfuTables, srcDataForVerification);
-
-        log.debug("\n***** Start Log Entry Replication");
-
-        // Block until the log entry sync completes == expected number of ACKs are received
-        log.debug("\n****** Wait until log entry sync completes and ACKs are received");
-        blockUntilExpectedAckTs.acquire();
-
-        // Verify Data at Destination
-        log.debug("\n****** Verify Destination Data for log entry (incremental updates)");
-        verifyData(dstCorfuTables, srcDataForVerification);
-
-        verifyPersistedSnapshotMetadata();
-        verifyPersistedLogEntryMetadata();
+        testSnapshotSyncAndLogEntrySync(0, false);
     }
 
     /**
@@ -459,8 +409,10 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Verify Data on Destination site
         log.debug("****** Verify Data on Destination");
+
         // Because t2 should not have been replicated remove from expected list
         srcDataForVerification.get(t2).clear();
+
         verifyData(dstCorfuTables, srcDataForVerification);
 
         cleanEnv();
@@ -821,7 +773,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Verify Destination
         verifyData(dstCorfuTables, srcDataForVerification);
         expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
-        assertThat(expectedAckTimestamp).isEqualTo(logReplicationMetadataManager.getLastProcessedLogTimestamp());
+        assertThat(expectedAckTimestamp).isEqualTo(logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
         verifyPersistedSnapshotMetadata();
         verifyPersistedLogEntryMetadata();
 
@@ -889,8 +841,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckTimestamp = -1;
         testConfig.setWaitOn(WAIT.ON_ACK_TS);
 
-        expectedAckMsgType = MessageType.SNAPSHOT_END;
-
         LogReplicationSourceManager sourceManager = startSnapshotSync(srcCorfuTables.keySet(),
                 new HashSet<>(Arrays.asList(WAIT.ON_ACK, WAIT.ON_ACK_TS, WAIT.ON_ERROR, WAIT.ON_SINK_RECEIVE)));
 
@@ -901,7 +851,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         log.debug("\n****** Wait until an Trimmed Error happens");
         blockUntilExpectedValueReached.acquire();
-        log.debug("\n****** Got an expected Error");
+        log.debug("\n****** Got an expected error");
 
         // Be sure log was trimmed
         while (srcDataRuntime.getAddressSpaceView().getTrimMark().getSequence()
@@ -967,8 +917,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Setup Environment: two corfu servers (source & destination)
         setupEnv();
 
-        log.trace("Have setutEnv Done");
-
         // Open One Stream
         openStreams(srcCorfuTables, srcDataRuntime, 1);
         openStreams(dstCorfuTables, dstDataRuntime, 1);
@@ -983,7 +931,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         LogReplicationFSM fsm = startLogEntrySync(srcCorfuTables.keySet(), WAIT.ON_SINK_RECEIVE, false);
 
-        log.debug("****** Trim log, will trigger a full snapshot sync");
+        log.debug("****** Trim log, will trigger a snapshot sync");
 
         Token toke = ckStreamsAndTrim(srcDataRuntime, srcCorfuTables);
 
@@ -1038,6 +986,80 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         cleanEnv();
     }
 
+    /**
+     * Test the case where a Snapshot Sync apply phase takes several cycles to complete.
+     * We need to ensure the Sender re-schedules verification of snapshot sync status and
+     * once completed moves onto Log Entry Sync.
+     */
+    @Test
+    public void testSnapshotSyncLongDurationApply() throws Exception {
+        final int numCyclesToDelayApply = 3;
+        testSnapshotSyncAndLogEntrySync(numCyclesToDelayApply, false);
+    }
+
+    /**
+     * Test the case where a Snapshot Sync apply metadata response is delayed causing TimeoutExceptions.
+     * Verify we are able to recover.
+     */
+    @Test
+    public void testSnapshotSyncDelayedApplyResponse() throws Exception {
+        testSnapshotSyncAndLogEntrySync(0, true);
+    }
+
+    private void testSnapshotSyncAndLogEntrySync(int numCyclesToDelayApply, boolean delayResponse) throws Exception {
+        // Setup two separate Corfu Servers: source (active) and destination (standby)
+        setupEnv();
+
+        // Open streams in source Corfu
+        openStreams(srcCorfuTables, srcDataRuntime, NUM_STREAMS);
+
+        // Write data into Source Tables
+        generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS, srcDataRuntime, NUM_KEYS);
+
+        // Verify data just written against in-memory copy
+        log.debug("****** Verify Source Data");
+        verifyData(srcCorfuTables, srcDataForVerification);
+
+        // Before initiating log replication, verify these tables have no actual data in the destination.
+        openStreams(dstCorfuTables, dstDataRuntime, NUM_STREAMS);
+        log.debug("****** Verify No Data in Destination");
+        verifyNoData(dstCorfuTables);
+
+        expectedAckTimestamp = Long.MAX_VALUE;
+        testConfig.setDelayedApplyCycles(numCyclesToDelayApply);
+        testConfig.setTimeoutMetadataResponse(delayResponse);
+
+        // Start Snapshot Sync (through Source Manager)
+        Set<WAIT> conditions = new HashSet<>();
+        conditions.add(WAIT.ON_METADATA_RESPONSE); // Condition to wait for snapshot sync
+        conditions.add(WAIT.ON_ACK_TS); // Condition to wait for log entry sync
+        startSnapshotSync(srcCorfuTables.keySet(), conditions);
+
+        log.debug("****** Snapshot Sync COMPLETE");
+
+        testConfig.setWaitOn(WAIT.ON_ACK_TS);
+
+        // Verify Data on Destination site
+        log.debug("****** Verify Data on Destination");
+        verifyData(dstCorfuTables, srcDataForVerification);
+
+        blockUntilExpectedAckTs.acquire();
+        expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail() + NUM_KEYS;
+
+        // Write Extra Data (for incremental / log entry sync)
+        generateTXData(srcCorfuTables, srcDataForVerification, NUM_KEYS_LARGE, srcDataRuntime, NUM_KEYS*2);
+
+        // Block until the log entry sync completes == expected number of ACKs are received
+        log.debug("****** Wait until log entry sync completes and ACKs are received");
+        blockUntilExpectedAckTs.acquire();
+
+        // Verify Data at Destination
+        log.debug("****** Verify Destination Data for log entry (incremental updates)");
+        verifyData(dstCorfuTables, srcDataForVerification);
+
+        verifyPersistedSnapshotMetadata();
+        verifyPersistedLogEntryMetadata();
+    }
 
     /* ********************** AUXILIARY METHODS ********************** */
 
@@ -1094,7 +1116,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     /**
      * It will start to continue pump data to src or dst according to the config.
      */
-    void startTx() {
+    private void startTx() {
         ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(2);
         if (testConfig.writingSrc) {
             expectedAckMessages += NUM_KEYS_LARGE;
@@ -1103,7 +1125,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private LogReplicationSourceManager startSnapshotSync(Set<String> tablesToReplicate) throws Exception {
-        return startSnapshotSync(tablesToReplicate, WAIT.ON_ACK);
+        return startSnapshotSync(tablesToReplicate, WAIT.ON_METADATA_RESPONSE);
     }
 
     private LogReplicationSourceManager startSnapshotSync(Set<String> tablesToReplicate, WAIT waitCondition) throws Exception {
@@ -1112,26 +1134,27 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private LogReplicationSourceManager startSnapshotSync(Set<String> tablesToReplicate, Set<WAIT> waitConditions) throws Exception {
 
-        // Observe ACKs on LogReplicationSourceManager, to assess when snapshot sync is completed
-        // We only expect one message, related to the snapshot sync complete
-        expectedAckMsgType = MessageType.SNAPSHOT_END;
-        blockUntilExpectedAckType.acquire();
+        // Observe metadata responses coming from receiver, until it indicates snapshot sync apply has completed
+        blockUntilExpectedMetadataResponse.acquire();
 
         LogReplicationSourceManager logReplicationSourceManager = setupSourceManagerAndObservedValues(tablesToReplicate,
                 waitConditions);
 
         // Start Snapshot Sync
-        log.debug("\n****** Start Snapshot Sync");
+        log.debug("****** Start Snapshot Sync");
         logReplicationSourceManager.startSnapshotSync();
 
         // Block until the wait condition is met (triggered)
-        log.debug("\n****** Wait until wait condition is met " + waitConditions);
+        log.debug("****** Wait until wait condition is met {}", waitConditions);
 
         if (waitConditions.contains(WAIT.ON_ERROR)) {
-            log.debug("\n****** blockUnitileExpectedValueReached " + expectedErrors);
+            log.debug("****** blockUntilExpectedValueReached {}", expectedErrors);
             blockUntilExpectedValueReached.acquire();
+        } else if (waitConditions.contains(WAIT.ON_METADATA_RESPONSE)) {
+            log.debug("****** Block until metadata response indicating snapshot sync apply is completed is received.");
+            blockUntilExpectedMetadataResponse.acquire();
         } else {
-            log.debug("\n****** blockUnitilExpectedAckType " + expectedAckMsgType);
+            log.debug("****** blockUntilExpectedAckType {}", expectedAckMsgType);
             blockUntilExpectedAckType.acquire();
         }
 
@@ -1170,7 +1193,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Start Log Entry Sync
         log.debug("****** Start Log Entry Sync with src tail " + srcDataRuntime.getAddressSpaceView().getLogTail()
                 + " dst tail " + dstDataRuntime.getAddressSpaceView().getLogTail());
-        logReplicationSourceManager.startReplication(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START,
+        logReplicationSourceManager.startReplication(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
                 new LogReplicationEventMetadata(UUID.randomUUID(), -1, -1)));
 
         // Start TX's in parallel, while log entry sync is running
@@ -1182,7 +1205,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckTimestamp = srcDataRuntime.getAddressSpaceView().getLogTail();
 
         // Block until the expected ACK Timestamp is reached
-        log.debug("\n****** Wait until the wait condition is met");
+        log.debug("****** Wait until the wait condition is met");
         if (waitConditions.contains(WAIT.ON_ERROR) || waitConditions.contains(WAIT.ON_TIMEOUT_ERROR)) {
             blockUntilExpectedValueReached.acquire();
         } else if (waitConditions.contains(WAIT.ON_ACK)) {
@@ -1193,20 +1216,13 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
-                                                                            WAIT waitCondition) throws InterruptedException {
-        Set<WAIT> conditions = new HashSet<>();
-        conditions.add(waitCondition);
-        return setupSourceManagerAndObservedValues(tablesToReplicate, conditions);
-    }
-
-    private LogReplicationSourceManager setupSourceManagerAndObservedValues(Set<String> tablesToReplicate,
                                                                             Set<WAIT> waitConditions) throws InterruptedException {
 
         LogReplicationConfig config = new LogReplicationConfig(tablesToReplicate, BATCH_SIZE, SMALL_MSG_SIZE);
 
         // Data Sender
-        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig.getDropMessageLevel(), logReplicationMetadataManager,
-                nettyConfig);
+        sourceDataSender = new SourceForwardingDataSender(DESTINATION_ENDPOINT, config, testConfig,
+                logReplicationMetadataManager, nettyConfig);
 
         // Source Manager
         LogReplicationSourceManager logReplicationSourceManager = new LogReplicationSourceManager(
@@ -1234,12 +1250,9 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     errorsLogEntrySync = sourceDataSender.getErrors();
                     errorsLogEntrySync.addObserver(this);
                     break;
-                case ON_DATA_CONTROL_CALL: // Wait on Data Control Calls on Source
-                    // TODO (Anny) replace for new logic as In require snapshot sync state is removed
-                    break;
-                case ON_RESCHEDULE_SNAPSHOT_SYNC: // Wait on calls to reschedule snapshot sync request on Source
-                    // TODO (Anny) replace for new logic as In require snapshot sync state is removed
-                    break;
+                case ON_METADATA_RESPONSE:
+                    metadataResponseObservable = sourceDataSender.getMetadataResponses();
+                    metadataResponseObservable.addObserver(this);
                 case ON_SINK_RECEIVE: // Wait on Received Messages on Sink (Destination)
                     sinkReceivedMessages = sourceDataSender.getSinkManager().getRxMessageCount();
                     sinkReceivedMessages.addObserver(this);
@@ -1279,9 +1292,20 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         if (o.equals(ackMessages)) {
             verifyExpectedAckMessage((ObservableAckMsg)o);
         } else if (o.equals(errorsLogEntrySync)) {
-            verifyExpectedValue(expectedErrors, errorsLogEntrySync.getValue());
+            verifyExpectedValue(expectedErrors, (int)errorsLogEntrySync.getValue());
         } else if (o.equals(sinkReceivedMessages)) {
-            verifyExpectedValue(expectedSinkReceivedMessages, sinkReceivedMessages.getValue());
+            verifyExpectedValue(expectedSinkReceivedMessages, (int)sinkReceivedMessages.getValue());
+        } else if (o.equals(metadataResponseObservable)) {
+            verifyMetadataResponse(metadataResponseObservable.getValue());
+        }
+    }
+
+    private void verifyMetadataResponse(LogReplicationMetadataResponse response) {
+        if (response.getSnapshotTransferred() == response.getSnapshotApplied()) {
+            log.debug("Metadata response indicates snapshot sync apply has completed");
+            blockUntilExpectedMetadataResponse.release();
+        } else {
+            log.debug("Metadata response indicates snapshot sync apply is still in progress");
         }
     }
 
@@ -1298,7 +1322,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // If expected a ackTs, release semaphore / unblock the wait
         if (observableAckMsg.getDataMessage() != null) {
             LogReplicationEntry logReplicationEntry = observableAckMsg.getDataMessage();
-            //System.out.print("\nackMsg " + logReplicationEntry.getMetadata());
+
             switch (testConfig.waitOn) {
                 case ON_ACK:
                     verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
@@ -1307,6 +1331,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                     if (expectedAckMsgType == logReplicationEntry.getMetadata().getMessageMetadataType()) {
                         blockUntilExpectedAckType.release();
                     }
+
+                    log.debug("expectedAckTs={}, logEntryTs={}", expectedAckTimestamp, logReplicationEntry.getMetadata().timestamp);
 
                     if (expectedAckTimestamp == logReplicationEntry.getMetadata().timestamp) {
                         blockUntilExpectedAckTs.release();
@@ -1319,15 +1345,15 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     }
 
     private void verifyPersistedSnapshotMetadata() {
-        long lastSnapStart = logReplicationMetadataManager.getLastSnapStartTimestamp();
-        long lastSnapDone = logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp();
+        long lastSnapStart = logReplicationMetadataManager.getLastStartedSnapshotTimestamp();
+        long lastSnapDone = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
 
         log.debug("\nlastSnapStart " + lastSnapStart + " lastSnapDone " + lastSnapDone);
         assertThat(lastSnapStart == lastSnapDone).isTrue();
     }
 
     private void verifyPersistedLogEntryMetadata() {
-        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogTimestamp();
+        long lastLogProcessed = logReplicationMetadataManager.getLastProcessedLogEntryTimestamp();
 
         log.debug("\nlastLogProcessed " + lastLogProcessed + " expectedTimestamp " + expectedAckTimestamp);
         assertThat(expectedAckTimestamp == lastLogProcessed).isTrue();
@@ -1338,24 +1364,28 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         ON_ACK_TS,
         ON_ERROR,
         ON_TIMEOUT_ERROR,
-        ON_DATA_CONTROL_CALL,
         ON_RESCHEDULE_SNAPSHOT_SYNC,
         ON_SINK_RECEIVE,
-        //ON_SNAPSHOT_END,
+        ON_METADATA_RESPONSE,
         NONE
     }
 
     @Data
     public static class TestConfig {
         private int dropMessageLevel = 0;
+        private int delayedApplyCycles = 0; // Represents the number of cycles for which snapshot sync apply queries
+                                            // reply that it has still not completed.
         private boolean trim = false;
         private boolean writingSrc = false;
         private boolean writingDst = false;
         private boolean deleteOP = false;
         private WAIT waitOn = WAIT.ON_ACK;
+        private boolean timeoutMetadataResponse = false;
         
         public TestConfig clear() {
             dropMessageLevel = 0;
+            delayedApplyCycles = 0;
+            timeoutMetadataResponse = false;
             trim = false;
             writingSrc = false;
             writingDst = false;

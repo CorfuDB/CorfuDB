@@ -7,7 +7,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 import org.corfudb.runtime.clients.AbstractClient;
 import org.corfudb.runtime.clients.IClientRouter;
 
@@ -39,9 +39,9 @@ public class LogReplicationClient extends AbstractClient {
         setRouter(router);
     }
 
-    public CompletableFuture<LogReplicationNegotiationResponse> sendNegotiationRequest() {
+    public CompletableFuture<LogReplicationMetadataResponse> sendMetadataRequest() {
         return getRouter().sendMessageAndGetCompletable(
-                    new CorfuMsg(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST).setEpoch(0));
+                    new CorfuMsg(CorfuMsgType.LOG_REPLICATION_METADATA_REQUEST).setEpoch(0));
     }
 
     public CompletableFuture<LogReplicationEntry> sendLogEntry(LogReplicationEntry logReplicationEntry) {

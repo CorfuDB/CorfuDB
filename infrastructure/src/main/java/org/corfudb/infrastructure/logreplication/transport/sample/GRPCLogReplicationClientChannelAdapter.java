@@ -108,8 +108,8 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
             case LOG_REPLICATION_QUERY_LEADERSHIP:
                 queryLeadership(endpoint, msg);
                 break;
-            case LOG_REPLICATION_NEGOTIATION_REQUEST:
-                negotiate(endpoint, msg);
+            case LOG_REPLICATION_METADATA_REQUEST:
+                requestMetadata(endpoint, msg);
                 break;
             default:
                 break;
@@ -130,7 +130,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         }
     }
 
-    private void negotiate(String endpoint, CorfuMessage msg) {
+    private void requestMetadata(String endpoint, CorfuMessage msg) {
         try {
             if(blockingStubMap.containsKey(endpoint)) {
                 CorfuMessage response = blockingStubMap.get(endpoint).withWaitForReady().negotiate(msg);
@@ -139,7 +139,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 log.warn("Stub not found for remote endpoint {}. Dropping message of type {}", endpoint, msg.getType());
             }
         } catch (Exception e) {
-            log.error("Caught exception while sending message to query leadership status id {}", msg.getRequestID(), e);
+            log.error("Caught exception while sending message to query metadata id={}", msg.getRequestID(), e);
             getRouter().completeExceptionally(msg.getRequestID(), e);
         }
     }

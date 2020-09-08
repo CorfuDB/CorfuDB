@@ -56,7 +56,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private OpaqueEntry lastEntry = null;
 
     @Getter
-    private ObservableValue observeBiggerMsg = new ObservableValue(0);
+    private ObservableValue<Integer> observeBiggerMsg = new ObservableValue(0);
 
     @Setter
     private long topologyConfigId;
@@ -68,8 +68,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
-        streams = config.getStreamsToReplicate();
-        log.debug("The maxDataSizePerMsg {} ", maxDataSizePerMsg);
+        this.streams = config.getStreamsToReplicate();
     }
 
     /**

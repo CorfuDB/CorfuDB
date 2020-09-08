@@ -72,7 +72,7 @@ public class LogReplicationAbstractIT extends AbstractIT {
 
     public void testEndToEndSnapshotAndLogEntrySync() throws Exception {
         try {
-            log.debug("\nSetup active and standby Corfu's");
+            log.debug("Setup active and standby Corfu's");
             setupActiveAndStandbyCorfu();
 
             log.debug("Open map on active and standby");
