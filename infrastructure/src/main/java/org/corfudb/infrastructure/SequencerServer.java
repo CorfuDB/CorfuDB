@@ -10,8 +10,8 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.common.protocol.API;
-import org.corfudb.common.protocol.proto.CorfuProtocol;
+import org.corfudb.protocols.API;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
@@ -37,7 +37,6 @@ import org.corfudb.util.Utils;
 
 import java.io.*;
 import java.lang.invoke.MethodHandles;
-import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -47,9 +46,9 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static org.corfudb.common.protocol.API.*;
-import static org.corfudb.common.protocol.API.getTxResolutionResponse;
-import static org.corfudb.common.protocol.proto.CorfuProtocol.*;
+import static org.corfudb.protocols.API.*;
+import static org.corfudb.protocols.API.getTxResolutionResponse;
+import static org.corfudb.runtime.protocol.proto.CorfuProtocol.*;
 
 /**
  * This server implements the sequencer functionality of Corfu.

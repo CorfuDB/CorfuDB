@@ -1,17 +1,17 @@
-package org.corfudb.common.protocol;
+package org.corfudb.protocols;
 
 import com.google.protobuf.ByteString;
 import lombok.NonNull;
-import org.corfudb.common.protocol.proto.CorfuProtocol;
-import org.corfudb.common.protocol.proto.CorfuProtocol.*;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.*;
 import org.corfudb.common.util.Address;
 
 import java.util.UUID;
 import java.util.*;
 
-import static org.corfudb.common.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType;
-import static org.corfudb.common.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType.*;
-import static org.corfudb.common.protocol.proto.CorfuProtocol.TokenRequest.newBuilder;
+import static org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType;
+import static org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType.*;
+import static org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenRequest.newBuilder;
 
 /**
  * Created by Maithem on 7/1/20.
