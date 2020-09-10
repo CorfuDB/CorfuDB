@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -70,6 +71,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     private LogReplicationConfig config;
 
     private long baseSnapshotTimestamp = Address.NON_ADDRESS - 1;
+    private UUID lastSnapshotSyncId = null;
 
     /*
      * Current topologyConfigId, used to drop out of date messages.
@@ -323,25 +325,23 @@ public class LogReplicationSinkManager implements DataReceiver {
     private boolean isValidSnapshotStart(LogReplicationEntry entry) {
         long topologyConfigId = entry.getMetadata().getTopologyConfigId();
         long messageBaseSnapshot = entry.getMetadata().getSnapshotTimestamp();
+        UUID messageSnapshotId = entry.getMetadata().getSyncRequestId();
 
         log.debug("Received snapshot sync start marker with request id {} on base snapshot timestamp {}",
                 entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
 
-        /*
-         * It is out of date message due to resend, drop it.
-         */
-        if (messageBaseSnapshot <= baseSnapshotTimestamp) {
-            // Invalid message and drop it.
+        // Drop out of date messages, that have been resent
+        // If no further writes have come into the log, the baseSnapshotTimestamp could be the same,
+        // for this reason we should also compare based on the snapshot sync identifier
+        if (messageBaseSnapshot <= baseSnapshotTimestamp && messageSnapshotId != null && messageSnapshotId.equals(lastSnapshotSyncId)) {
             log.warn("Sink Manager, state={} while received message={}. " +
                             "Dropping message with smaller snapshot timestamp than current {}",
                     rxState, entry.getMetadata(), baseSnapshotTimestamp);
             return false;
         }
 
-        /*
-         * Fails to set the baseSnapshot at the metadata store, it could be a out of date message,
-         * or the current node is out of sync, ignore it.
-         */
+         // Fails to set the baseSnapshot at the metadata store, it could be a out of date message,
+         // or the current node is out of sync, ignore it.
         if (!logReplicationMetadataManager.setBaseSnapshotStart(topologyConfigId, messageBaseSnapshot)) {
             log.warn("Sink Manager in state {} and received message {}. " +
                             "Dropping Message due to failure to update the metadata store {}",
@@ -349,6 +349,7 @@ public class LogReplicationSinkManager implements DataReceiver {
             return false;
         }
 
+        lastSnapshotSyncId = messageSnapshotId;
         return true;
     }
 

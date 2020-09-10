@@ -37,6 +37,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private final static int firstBatch = 10;
     private final static int secondBatch = 15;
     private final static int thirdBatch = 20;
+    private final static int fourthBatch = 25;
     private final static int largeBatch = 50;
 
     private final static int activeClusterCorfuPort = 9000;
@@ -202,6 +203,33 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         TimeUnit.SECONDS.sleep(mediumInterval);
         assertThat(mapActive.size()).isEqualTo(thirdBatch);
         assertThat(mapStandby.size()).isEqualTo(thirdBatch);
+
+        // Second Role Switch
+        corfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
+                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_SWITCH,
+                        DefaultClusterManager.OP_SWITCH, DefaultClusterManager.OP_SWITCH)
+                .commit();
+        assertThat(configTable.count()).isOne();
+
+        // Write 5 more entries to mapStandby
+        for (int i = thirdBatch; i < fourthBatch; i++) {
+            activeRuntime.getObjectsView().TXBegin();
+            mapActive.put(String.valueOf(i), i);
+            activeRuntime.getObjectsView().TXEnd();
+        }
+        assertThat(mapActive.size()).isEqualTo(fourthBatch);
+
+        // Wait until data is fully replicated again
+        waitForReplication(size -> size == fourthBatch, mapStandby, fourthBatch);
+        log.info("Data is fully replicated again after role switch, both maps have size {}. " +
+                        "Current active corfu[{}] log tail is {}, standby corfu[{}] log tail is {}",
+                fourthBatch, activeClusterCorfuPort, activeRuntime.getAddressSpaceView().getLogTail(),
+                standbyClusterCorfuPort, standbyRuntime.getAddressSpaceView().getLogTail());
+
+        // Double check after 10 seconds
+        TimeUnit.SECONDS.sleep(mediumInterval);
+        assertThat(mapActive.size()).isEqualTo(fourthBatch);
+        assertThat(mapStandby.size()).isEqualTo(fourthBatch);
     }
 
     /**

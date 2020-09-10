@@ -25,4 +25,6 @@ public interface LogEntryReader {
     void setTopologyConfigId(long topologyConfigId);
 
     boolean hasMessageExceededSize();
+
+    StreamsLogEntryReader.StreamIteratorMetadata getCurrentProcessedEntryMetadata();
 }
