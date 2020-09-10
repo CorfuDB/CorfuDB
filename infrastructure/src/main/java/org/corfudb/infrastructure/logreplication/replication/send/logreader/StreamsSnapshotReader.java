@@ -157,7 +157,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 }
             }
         } catch (TrimmedException e) {
-            log.error("Catch an TrimmedException exception ", e);
+            log.error("Caught a TrimmedException", e);
             throw e;
         }
 

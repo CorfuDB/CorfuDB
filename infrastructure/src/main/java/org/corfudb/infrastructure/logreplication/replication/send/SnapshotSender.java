@@ -237,8 +237,7 @@ public class SnapshotSender {
 
         log.error("SNAPSHOT SYNC is being CANCELED, due to {}", error.getDescription());
 
-        // Enqueue cancel event, this will cause a transition to the require snapshot sync request, which
-        // will notify application through the data control about this request.
+        // Enqueue cancel event, this will cause re-entrance to snapshot sync to start a new cycle
         fsm.input(new LogReplicationEvent(LogReplicationEventType.SYNC_CANCEL,
                 new LogReplicationEventMetadata(snapshotSyncEventId)));
     }
