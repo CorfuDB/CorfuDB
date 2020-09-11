@@ -11,7 +11,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationLeadershipLoss;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
@@ -100,27 +100,26 @@ public class LogReplicationServer extends AbstractServer {
         }
     }
 
-    @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST)
-    private void handleLogReplicationNegotiationRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.info("Log Replication Negotiation Request received by Server.");
+    @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_METADATA_REQUEST)
+    private void handleMetadataRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
+        log.info("Log Replication Metadata Request received by Server.");
 
         if (isLeader(msg, r)) {
             LogReplicationMetadataManager metadataMgr = sinkManager.getLogReplicationMetadataManager();
 
-            // TODO (Xiaoqin Ma): That's 6 independent DB calls per one LOG_REPLICATION_NEGOTIATION_REQUEST.
+            // TODO (Xiaoqin Ma): That's 6 independent DB calls per one request.
             //  Can we do just one? Also, It does not look like we handle failures if one of them fails, for example.
-            LogReplicationNegotiationResponse response = new LogReplicationNegotiationResponse(
+            LogReplicationMetadataResponse response = new LogReplicationMetadataResponse(
                     metadataMgr.getTopologyConfigId(),
                     metadataMgr.getVersion(),
-                    metadataMgr.getLastSnapStartTimestamp(),
-                    metadataMgr.getLastSnapTransferDoneTimestamp(),
-                    metadataMgr.getLastAppliedBaseSnapshotTimestamp(),
-                    metadataMgr.getLastProcessedLogTimestamp());
-            log.info("Send Negotiation response");
-            sinkManager.reset();
-            r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_NEGOTIATION_RESPONSE.payloadMsg(response));
+                    metadataMgr.getLastStartedSnapshotTimestamp(),
+                    metadataMgr.getLastTransferredSnapshotTimestamp(),
+                    metadataMgr.getLastAppliedSnapshotTimestamp(),
+                    metadataMgr.getLastProcessedLogEntryTimestamp());
+            log.info("Send Metadata response :: {}", response);
+            r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_METADATA_RESPONSE.payloadMsg(response));
         } else {
-            log.warn("Dropping negotiation request as this node is not the leader.");
+            log.warn("Dropping metadata request as this node is not the leader.");
         }
     }
 

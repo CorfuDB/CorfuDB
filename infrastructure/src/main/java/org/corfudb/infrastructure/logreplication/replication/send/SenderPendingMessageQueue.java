@@ -24,12 +24,12 @@ public class SenderPendingMessageQueue {
      * The list of pending entries.
      */
     @Getter
-    private List<LogReplicationPendingEntry> list;
+    private List<LogReplicationPendingEntry> pendingEntries;
 
 
     public SenderPendingMessageQueue(int maxSize) {
         this.maxSize = maxSize;
-        list = new ArrayList<>();
+        this.pendingEntries = new ArrayList<>();
     }
 
     /**
@@ -37,19 +37,19 @@ public class SenderPendingMessageQueue {
      * @return
      */
     public int getSize() {
-        return list.size();
+        return pendingEntries.size();
     }
 
     public boolean isEmpty() {
-        return list.isEmpty();
+        return pendingEntries.isEmpty();
     }
 
     public boolean isFull() {
-        return (list.size() >= maxSize);
+        return pendingEntries.size() >= maxSize;
     }
 
     public void clear() {
-        list = new ArrayList<>();
+        pendingEntries = new ArrayList<>();
     }
 
     /**
@@ -57,12 +57,12 @@ public class SenderPendingMessageQueue {
      * @param ts
      */
     void evictAccordingToTimestamp(long ts) {
-        log.trace("Evict all messages whose timestamp is smaller or equal to " + ts);
+        log.trace("Evict all messages whose timestamp is smaller or equal to {}", ts);
 
         //As the entries are in the order of timestamp value, we can just remove the first each time
         //until the condition is not met anymore.
-        while(!list.isEmpty() && list.get(0).getData().getMetadata().getTimestamp() <= ts) {
-            list.remove(0);
+        while(!pendingEntries.isEmpty() && pendingEntries.get(0).getData().getMetadata().getTimestamp() <= ts) {
+            pendingEntries.remove(0);
         }
     }
 
@@ -71,12 +71,12 @@ public class SenderPendingMessageQueue {
      * @param seqNum
      */
     void evictAccordingToSeqNum(long seqNum) {
-        log.trace("Evict all messages whose snapshotSeqNum is smaller or equal to " + seqNum);
+        log.trace("Evict all messages whose snapshotSeqNum is smaller or equal to {}", seqNum);
 
         //As the entries are in the order of timestamp value, we can just remove the first each time
         //until the condition is not met anymore.
-        while(!list.isEmpty() && list.get(0).getData().getMetadata().getSnapshotSyncSeqNum() <= seqNum) {
-            list.remove(0);
+        while(!pendingEntries.isEmpty() && pendingEntries.get(0).getData().getMetadata().getSnapshotSyncSeqNum() <= seqNum) {
+            pendingEntries.remove(0);
         }
     }
 
@@ -87,6 +87,6 @@ public class SenderPendingMessageQueue {
      */
     void append(LogReplicationEntry data) {
         LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data);
-        list.add(entry);
+        pendingEntries.add(entry);
     }
 }

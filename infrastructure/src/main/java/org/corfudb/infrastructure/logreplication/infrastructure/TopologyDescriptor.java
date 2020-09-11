@@ -168,13 +168,13 @@ public class TopologyDescriptor {
             }
         }
 
-        log.trace("Endpoint {} does not belong to any cluster defined in {}", endpoint, clusters);
+        log.warn("Endpoint {} does not belong to any cluster defined in {}", endpoint, clusters);
         return null;
     }
 
     @Override
     public String toString() {
-        return String.format("Topology[%s] :: Active Cluster=%s :: Standby Clusters=%s :: Invalid Clusters=%s",
+        return String.format("Topology[id=%s] :: Active Cluster=%s :: Standby Clusters=%s :: Invalid Clusters=%s",
                 topologyConfigId, activeClusters, standbyClusters, invalidClusters);
     }
 }

@@ -22,6 +22,7 @@ import java.util.stream.IntStream;
 
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.RESTORED;
+import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.TRANSFERRED;
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 
 /**
@@ -218,6 +219,38 @@ public class RedundancyCalculator {
                                 .build();
                     }
 
+                })
+                .collect(ImmutableList.toImmutableList());
+    }
+
+    /**
+     * Get all the layout segments that were trimmed and that do not contain a current server, and
+     * return them as TRANSFERRED segments. Since these segments were trimmed, they
+     * contain zero transferable addresses, and hence are not eligible for state transfer.
+     * However, since they also do not contain a current server, they should be considered
+     * TRANSFERRED, eligible for the layout redundancy restoration.
+     *
+     * @param layout   A current layout.
+     * @param trimMark A current global trim mark.
+     * @return A list of transfer segments.
+     */
+    public ImmutableList<TransferSegment> getTrimmedNotRestoredSegments(Layout layout, long trimMark) {
+        return layout.getSegments()
+                .stream()
+                .filter(segment -> segment.getEnd() <= trimMark && !segmentContainsServer(segment, getServer()))
+                .map(segment -> {
+                    TransferSegmentStatus transferred = TransferSegmentStatus
+                            .builder()
+                            .segmentState(TRANSFERRED)
+                            .build();
+
+                    return TransferSegment
+                            .builder()
+                            .startAddress(segment.getStart())
+                            .endAddress(segment.getEnd() - 1L)
+                            .status(transferred)
+                            .logUnitServers(ImmutableList.copyOf(segment.getAllLogServers()))
+                            .build();
                 })
                 .collect(ImmutableList.toImmutableList());
     }

@@ -10,13 +10,14 @@ public enum MessageType {
     SNAPSHOT_START(3, LogReplicationEntryType.SNAPSHOT_START),
     LOG_ENTRY_REPLICATED(4, LogReplicationEntryType.LOG_ENTRY_REPLICATED),
     SNAPSHOT_REPLICATED(5, LogReplicationEntryType.SNAPSHOT_REPLICATED),
-    SNAPSHOT_END(6, LogReplicationEntryType.SNAPSHOT_END);
+    SNAPSHOT_END(6, LogReplicationEntryType.SNAPSHOT_END),
+    SNAPSHOT_TRANSFER_COMPLETE(7, LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE);
 
     @Getter
-    int val;
+    private int val;
 
     @Getter
-    LogReplicationEntryType protoType;
+    private LogReplicationEntryType protoType;
 
     MessageType(int newVal, LogReplicationEntryType type) {
         val  = newVal;
@@ -38,7 +39,7 @@ public enum MessageType {
                 return messageType;
             }
         }
-        throw new IllegalArgumentException("wrong value " + type);
+        throw new IllegalArgumentException("Wrong value " + type);
     }
 
 

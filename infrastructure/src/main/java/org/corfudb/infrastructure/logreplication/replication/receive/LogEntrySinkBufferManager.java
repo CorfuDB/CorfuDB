@@ -51,7 +51,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      * @return ackMessage's metadata.
      */
     @Override
-    public LogReplicationEntryMetadata makeAckMessage(LogReplicationEntry entry) {
+    public LogReplicationEntryMetadata generateAckMetadata(LogReplicationEntry entry) {
         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());
         metadata.setMessageMetadataType(LOG_ENTRY_REPLICATED);
         metadata.setTimestamp(lastProcessedSeq);
@@ -77,7 +77,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
 
     public void processBuffer() {
         /**
-         *  For each message in the  buffer, if its timestamp is smaller than last processed log entry's timestamp,
+         *  For each message in the buffer, if its timestamp is smaller than last processed log entry's timestamp,
          *  skip processing and remove it from buffer.
          *  If its preTs and currentTs is overlapping with the last processed log entry's timestamp, process it.
          */

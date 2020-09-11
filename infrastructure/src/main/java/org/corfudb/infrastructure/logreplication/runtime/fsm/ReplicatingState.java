@@ -56,8 +56,6 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 // Some node got connected, update connected endpoints
                 fsm.updateConnectedEndpoints(event.getEndpoint());
                 return null;
-            case NEGOTIATION_COMPLETE:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case LOCAL_LEADER_LOSS:
                 return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             default: {
@@ -72,17 +70,15 @@ public class ReplicatingState implements LogReplicationRuntimeState {
         switch (replicationEvent.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
                 UUID snapshotSyncRequestId = replicationSourceManager.startSnapshotSync();
-                log.info("Start Snapshot Sync[{}]", snapshotSyncRequestId);
+                log.trace("Start Snapshot Sync[{}]", snapshotSyncRequestId);
                 break;
-            case SNAPSHOT_WAIT_COMPLETE:
-                // TODO :: Phase II
-                log.warn("Should Start Snapshot Sync Phase II,but for now just restart full snapshot sync");
-                UUID snapshotSyncId = replicationSourceManager.startSnapshotSync();
-                log.info("Start Snapshot Sync[{}]", snapshotSyncId);
+            case SNAPSHOT_TRANSFER_COMPLETE:
+                replicationSourceManager.resumeSnapshotSync(replicationEvent.getMetadata());
+                log.trace("Wait Snapshot Sync to complete, request={}", replicationEvent.getMetadata().getRequestId());
                 break;
-            case REPLICATION_START:
-                log.info("Start Log Entry Sync Replication");
+            case LOG_ENTRY_SYNC_REQUEST:
                 replicationSourceManager.startReplication(replicationEvent);
+                log.trace("Start Log Entry Sync Replication");
                 break;
             default:
                 log.info("Invalid Negotiation result. Re-trigger discovery.");

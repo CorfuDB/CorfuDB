@@ -18,12 +18,14 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Predicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.NOT_TRANSFERRED;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.RESTORED;
+import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.TRANSFERRED;
 import static org.corfudb.runtime.view.Address.NON_ADDRESS;
 import static org.corfudb.runtime.view.Layout.LayoutStripe;
 import static org.corfudb.runtime.view.Layout.ReplicationMode.CHAIN_REPLICATION;
@@ -554,6 +556,49 @@ public class RedundancyCalculatorTest extends LayoutBasedTestHelper implements T
                 lus -> !lus.isPresent(),
                 t -> t == StateTransferType.PROTOCOL_READ,
                 s -> s.equals(testSegments.get(1).getStatus()))).isTrue();
+    }
+
+    @Test
+    public void testGetTrimmedNotRestoredSegments() {
+        Layout.ReplicationMode replicationMode = CHAIN_REPLICATION;
+        LayoutStripe layoutStripe1 = new LayoutStripe(ImmutableList.of("A"));
+        LayoutSegment segment1 = new LayoutSegment(replicationMode, 0L, 100L,
+                ImmutableList.of(layoutStripe1));
+        LayoutStripe layoutStripe2 = new LayoutStripe(ImmutableList.of("B", "C"));
+        LayoutSegment segment2 = new LayoutSegment(replicationMode, 100L, 150L,
+                ImmutableList.of(layoutStripe2));
+        List<String> allServers = ImmutableList.of("A", "B", "C");
+        Layout layout = new Layout(allServers, allServers,
+                ImmutableList.of(segment1, segment2), ImmutableList.of(), 1L,
+                UUID.randomUUID());
+        long trimMark = 101L;
+
+        ImmutableList<TransferSegment> trimmedNotRestoredSegmentsForA =
+                new RedundancyCalculator("A")
+                        .getTrimmedNotRestoredSegments(layout, trimMark);
+
+        assertThat(trimmedNotRestoredSegmentsForA).isEmpty();
+
+        ImmutableList<TransferSegment> trimmedNotRestoredSegmentsForB =
+                new RedundancyCalculator("B")
+                .getTrimmedNotRestoredSegments(layout, trimMark);
+
+        ImmutableList<TransferSegment> trimmedNotRestoredSegmentsForC =
+                new RedundancyCalculator("C")
+                        .getTrimmedNotRestoredSegments(layout, trimMark);
+
+        TransferSegmentStatus transferredStatus =
+                TransferSegmentStatus.builder().segmentState(TRANSFERRED).build();
+
+        ImmutableList<TransferSegment> expectedList = ImmutableList.of(TransferSegment.builder()
+                .startAddress(0L)
+                .endAddress(99L)
+                .logUnitServers(ImmutableList.copyOf(segment1.getAllLogServers()))
+                .status(transferredStatus).build());
+
+        assertThat(trimmedNotRestoredSegmentsForB).isEqualTo(expectedList);
+
+        assertThat(trimmedNotRestoredSegmentsForC).isEqualTo(expectedList);
     }
 
 }

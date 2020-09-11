@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication;
 
 import lombok.Data;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Set;
@@ -11,6 +12,7 @@ import java.util.Set;
  */
 @Slf4j
 @Data
+@ToString
 public class LogReplicationConfig {
 
     // Log Replication message timeout time in milliseconds.

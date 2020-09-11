@@ -9,23 +9,23 @@ import java.util.Observable;
  *
  * This is used to block and control tests.
  */
-public class ObservableValue extends Observable
+public class ObservableValue<T> extends Observable
 {
-    private int n;
+    private T n;
 
-    public ObservableValue(int n)
+    public ObservableValue(T n)
     {
         this.n = n;
     }
 
-    public void setValue(int n)
+    public void setValue(T n)
     {
         this.n = n;
         setChanged();
         notifyObservers();
     }
 
-    public int getValue()
+    public T getValue()
     {
         return n;
     }

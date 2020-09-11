@@ -72,6 +72,9 @@ public class LogEntrySender {
      * @param logEntrySyncEventId
      */
     public void send(UUID logEntrySyncEventId) {
+
+        log.trace("Send Log Entry Sync, id={}", logEntrySyncEventId);
+
         taskActive = true;
 
         try {
@@ -128,9 +131,6 @@ public class LogEntrySender {
             }
         }
 
-        /*
-         * Generate a LOG_ENTRY_SYNC_CONTINUE event and put it into the state machine.
-         */
         logReplicationFSM.input(new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE,
                 new LogReplicationEventMetadata(logEntrySyncEventId)));
     }

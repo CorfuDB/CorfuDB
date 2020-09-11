@@ -75,7 +75,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     // Flag indicating if we should observer a snapshot sync, this is to interrupt it at any given stage
     private boolean observeSnapshotSync = false;
     private int limitSnapshotMessages = 0;
-    private ObservableValue snapshotMessageCounterObservable;
+    private ObservableValue<Integer> snapshotMessageCounterObservable;
 
     private LogReplicationFSM fsm;
     private CorfuRuntime runtime;
@@ -122,16 +122,25 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Transition #1: Replication Stop (without any replication having started)
         transition(LogReplicationEventType.REPLICATION_STOP, LogReplicationStateType.INITIALIZED);
 
-        // Transition #2: Replication Start
-        transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+        // Transition #2: Log Entry Sync Start
+        transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         // Transition #3: Snapshot Sync Request
         UUID snapshotSyncId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
-        // Transition #4: Snapshot Sync Complete
-        transition(LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncId, false);
+        // Transition #4: Snapshot Sync Continue
+        transition(LogReplicationEventType.SNAPSHOT_SYNC_CONTINUE, LogReplicationStateType.IN_SNAPSHOT_SYNC, snapshotSyncId, true);
 
-        // Transition #5: Stop Replication
+        // Transition #5: Snapshot Sync Transfer Complete
+        transition(LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, snapshotSyncId, false);
+
+        // Transition #6: Snapshot Sync Apply still in progress
+        transition(LogReplicationEventType.SNAPSHOT_APPLY_IN_PROGRESS, LogReplicationStateType.WAIT_SNAPSHOT_APPLY, false);
+
+        // Transition #7: Snapshot Sync Apply Complete
+        transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncId, true);
+
+        // Transition #8: Stop Replication
         // Next transition might not be to INITIALIZED, as IN_LOG_ENTRY_SYNC state might have enqueued
         // a continuation before the stop is enqueued.
         transition(LogReplicationEventType.REPLICATION_STOP, LogReplicationStateType.INITIALIZED, true);
@@ -156,7 +165,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
 
         // Transition #1: Snapshot Sync Request
-        transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+        transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         // A SYNC_CANCEL due to a trimmed exception, is an internal event generated during read in the log entry or
         // snapshot sync state, to ensure it is triggered during the state, and not before the task is
@@ -237,17 +246,21 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
 
         // Transition #1: Snapshot Sync Request
-        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
+        UUID snapshotSyncRequestId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
         Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
-        while(!fsm.getState().getType().equals(LogReplicationStateType.IN_LOG_ENTRY_SYNC)) {
+        while(!fsm.getState().getType().equals(LogReplicationStateType.WAIT_SNAPSHOT_APPLY)) {
             transitionAvailable.acquire();
         }
 
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
+
+        transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncRequestId, true);
         assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
 
         for (int i = 0; i < NUM_ENTRIES; i++) {
@@ -294,12 +307,14 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Initial acquire of semaphore, the transition method will block until a transition occurs
         transitionAvailable.acquire();
 
+        log.debug("**** Transition to Snapshot Sync");
         // Transition #1: Snapshot Sync Request
         transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC);
 
         // We observe the number of transmitted messages and force a REPLICATION_STOP, when 2 messages have been sent
         // so we verify the state moves to INITIALIZED again.
         transitionAvailable.acquire();
+        log.debug("**** Stop Replication");
         fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
 
         transitionAvailable.acquire();
@@ -317,18 +332,23 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         observeSnapshotSync = false;
 
         // Transition #2: This time the snapshot sync completes
-        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
+        UUID snapshotSyncId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
-        while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
+        while (fsm.getState().getType() != LogReplicationStateType.WAIT_SNAPSHOT_APPLY) {
             // Block until FSM moves back to in log entry (delta) sync state
             transitionAvailable.acquire();
         }
 
-        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
 
         Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
 
         assertThat(listenerQueue.size()).isEqualTo(NUM_ENTRIES);
+
+        log.debug("**** Snapshot Sync Complete");
+        transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncId, true);
+
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         for (int i=0; i<NUM_ENTRIES; i++) {
             assertThat(listenerQueue.poll().getPayload())
@@ -355,23 +375,26 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         transitionAvailable.acquire();
 
         // Transition #1: Replication Start
-        // transition(LogReplicationEventType.REPLICATION_START, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+        // transition(LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST, LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         // Transition #2: Snapshot Sync Request
-        transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
+        UUID snapshotSyncRequestId = transition(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST,
+                LogReplicationStateType.IN_SNAPSHOT_SYNC, true);
 
         // Block until the snapshot sync completes and next transition occurs.
         // The transition should happen to IN_LOG_ENTRY_SYNC state.
         log.debug("**** Wait for snapshot sync to complete");
 
         // Block until the snapshot sync completes and next transition occurs.
-        while (fsm.getState().getType() != LogReplicationStateType.IN_LOG_ENTRY_SYNC) {
-            log.trace("stateType {} expected type {}", fsm.getState().getType(), LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+        while (fsm.getState().getType() != LogReplicationStateType.WAIT_SNAPSHOT_APPLY) {
+            log.trace("Current state={}, expected={}", fsm.getState().getType(), LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
         }
 
-        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
 
-        Queue<LogReplicationEntry> listenerQueue = ((TestDataSender) dataSender).getEntryQueue();
+        transition(LogReplicationEventType.SNAPSHOT_APPLY_COMPLETE, LogReplicationStateType.IN_LOG_ENTRY_SYNC, snapshotSyncRequestId, true);
+
+        assertThat(fsm.getState().getType()).isEqualTo(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
 
         // Transactional puts into the stream (incremental updates)
         writeTxIncrementalUpdates();
@@ -506,7 +529,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                             UUID eventId, boolean waitUntilExpected)
             throws InterruptedException {
 
-        log.debug("Insert event: " + eventType);
+        log.debug("Insert event {}", eventType);
 
         LogReplicationEvent event;
 

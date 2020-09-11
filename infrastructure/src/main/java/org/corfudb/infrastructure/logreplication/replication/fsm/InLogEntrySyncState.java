@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 
 import java.util.UUID;
@@ -74,6 +75,15 @@ public class InLogEntrySyncState implements LogReplicationState {
             case REPLICATION_SHUTDOWN:
                 cancelLogEntrySync("replication terminated.");
                 return fsm.getStates().get(LogReplicationStateType.STOPPED);
+            case LOG_ENTRY_SYNC_REPLICATED:
+                // Verify the replicated entry corresponds to the current log entry sync cycle (and not a previous/old one)
+                if (transitionEventId.equals(event.getMetadata().getRequestId())) {
+                    log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
+                    fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
+                }
+                // Do not return a new state as there is no actual transition, the IllegalTransitionException
+                // will allow us to avoid any transition from this state given the event.
+                break;
             case LOG_ENTRY_SYNC_CONTINUE:
                 // Snapshot sync is broken into multiple tasks, where each task sends a batch of messages
                 // corresponding to this snapshot sync. This is done to accommodate the case
@@ -88,10 +98,11 @@ public class InLogEntrySyncState implements LogReplicationState {
                 }
             default: {
                 log.warn("Unexpected log replication event {} when in log entry sync state.", event.getType());
+                break;
             }
-
-            throw new IllegalTransitionException(event.getType(), getType());
         }
+
+        throw new IllegalTransitionException(event.getType(), getType());
     }
 
     /**
@@ -122,8 +133,11 @@ public class InLogEntrySyncState implements LogReplicationState {
             // Reset before start sending log entry data, only when we're coming
             // from snapshot sync or initialized state, this way we will seek the stream up to the base snapshot
             // address and send incremental updates from this point onwards.
-            if (from.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC
+            if (from.getType() == LogReplicationStateType.WAIT_SNAPSHOT_APPLY
                     || from.getType() == LogReplicationStateType.INITIALIZED) {
+                // Set LogEntryAckReader to Log Entry Sync state, to compute remaining entries based
+                // on the tx stream, regardless of ACKs or updates being processed for the tx stream
+                fsm.getAckReader().setSyncType(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
                 logEntrySender.reset(fsm.getBaseSnapshot(), fsm.getAckedTimestamp());
             }
 

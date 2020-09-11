@@ -11,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
@@ -61,12 +62,17 @@ public class StreamsLogEntryReader implements LogEntryReader {
     @VisibleForTesting
     private OpaqueEntry lastOpaqueEntry = null;
 
+    private boolean lastOpaqueEntryValid = true;
+
     private boolean messageExceededSize = false;
+
+    private StreamIteratorMetadata currentProcessedEntryMetadata;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
+        this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
 
         Set<String> streams = config.getStreamsToReplicate();
 
@@ -75,7 +81,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
             streamUUIDs.add(CorfuRuntime.getStreamID(s));
         }
 
-        log.info("On Streams Log Entry Reader start, streams to replicate total={}, stream_names={}. stream_ids={}", streamUUIDs.size(), streams, streamUUIDs);
+        log.debug("Streams to replicate total={}, stream_names={}, stream_ids={}", streamUUIDs.size(), streams, streamUUIDs);
 
         //create an opaque stream for transaction stream
         txOpaqueStream = new TxOpaqueStream(rt);
@@ -165,7 +171,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
         try {
             while (currentMsgSize < maxDataSizePerMsg) {
                 if (lastOpaqueEntry != null) {
-                    if (isValidTransactionEntry(lastOpaqueEntry)) {
+
+                    if (lastOpaqueEntryValid) {
 
                         lastOpaqueEntry = filterTransactionEntry(lastOpaqueEntry);
 
@@ -190,9 +197,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 }
 
                 lastOpaqueEntry = txOpaqueStream.next();
+                lastOpaqueEntryValid = isValidTransactionEntry(lastOpaqueEntry);
+                currentProcessedEntryMetadata = new StreamIteratorMetadata(txOpaqueStream.txStream.pos(), lastOpaqueEntryValid);
             }
 
-            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEnry size {}",
+            log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
                     currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null ? 0 : currentEntrySize);
 
             if (opaqueEntryList.isEmpty()) {
@@ -226,6 +235,11 @@ public class StreamsLogEntryReader implements LogEntryReader {
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         messageExceededSize = false;
         setGlobalBaseSnapshot(lastSentBaseSnapshotTimestamp, lastAckedTimestamp);
+    }
+
+    @Override
+    public StreamIteratorMetadata getCurrentProcessedEntryMetadata() {
+        return currentProcessedEntryMetadata;
     }
 
     /**
@@ -291,6 +305,20 @@ public class StreamsLogEntryReader implements LogEntryReader {
             txStream.seek(firstAddress);
             streamUpTo();
         }
+    }
+
+    public static class StreamIteratorMetadata {
+        private long timestamp;
+        private boolean streamsToReplicatePresent;
+
+        public StreamIteratorMetadata(long timestamp, boolean streamsToReplicatePresent) {
+            this.timestamp = timestamp;
+            this.streamsToReplicatePresent = streamsToReplicatePresent;
+        }
+
+        public long getTimestamp() { return timestamp; }
+
+        public boolean isStreamsToReplicatePresent() { return streamsToReplicatePresent; }
     }
 
     @Override

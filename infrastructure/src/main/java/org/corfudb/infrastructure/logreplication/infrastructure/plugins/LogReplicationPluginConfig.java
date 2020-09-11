@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import lombok.Getter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
@@ -21,6 +22,7 @@ import java.util.Properties;
  *                          required for the duration of a snapshot sync.
  */
 @Slf4j
+@ToString
 public class LogReplicationPluginConfig {
 
     // Transport Plugin
@@ -99,7 +101,7 @@ public class LogReplicationPluginConfig {
             this.topologyManagerAdapterName = DEFAULT_CLUSTER_MANAGER_CLASSNAME;
         }
 
-        log.debug("Log Replication Plugins :: {} ", this);
+        log.debug("{} ", this);
     }
 
     private static String getParentDir() {
