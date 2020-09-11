@@ -1451,11 +1451,11 @@ public class StateTransferTest extends AbstractViewTest {
             Token trimMark2 = Token.of(l1.getEpoch(), 150);
 
             rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0)
-                    .prefixTrim(trimMark0);
+                    .prefixTrim(trimMark0).join();
             rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_1)
-                    .prefixTrim(trimMark1);
+                    .prefixTrim(trimMark1).join();
             rt.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_2)
-                    .prefixTrim(trimMark2);
+                    .prefixTrim(trimMark2).join();
 
             autoCommitService.runAutoCommit();
 
@@ -1489,6 +1489,97 @@ public class StateTransferTest extends AbstractViewTest {
                 assertThat(read2.getType()).isEqualTo(read3.getType());
                 assertThat(Arrays.equals(read1.getData(), read2.getData())).isTrue();
                 assertThat(Arrays.equals(read2.getData(), read3.getData())).isTrue();
+            }
+        }
+    }
+
+    /**
+     * Setup:
+     * Layout is A: [0, 100] A, B: [100, -1]. Trim mark: 101.
+     * Make sure that the merge of segments occurs (state transfer does not loop forever),
+     * and the final layout contains only one segment.
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void restoreRedundancyTrimMarkIsMovedAfterSplit() throws Exception {
+        CorfuRuntime rt = null;
+
+        try (AutoClosableTempDirs dirs = new AutoClosableTempDirs(2)) {
+            List<File> tempDirs = dirs.getTempDirs();
+            ServerContext sc0 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_0))
+                    .setPort(SERVERS.PORT_0)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(0).getAbsolutePath())
+                    .build();
+
+            ServerContext sc1 = new ServerContextBuilder()
+                    .setSingle(false)
+                    .setServerRouter(new TestServerRouter(SERVERS.PORT_1))
+                    .setPort(SERVERS.PORT_1)
+                    .setMemory(false)
+                    .setCacheSizeHeapRatio("0.0")
+                    .setLogPath(tempDirs.get(1).getAbsolutePath())
+                    .build();
+
+            // Add three servers
+            addServer(SERVERS.PORT_0, sc0);
+            addServer(SERVERS.PORT_1, sc1);
+
+            final long firstSegmentEnd = 100L;
+
+            Layout l1 = new TestLayoutBuilder()
+                    .setEpoch(1L)
+                    .addLayoutServer(SERVERS.PORT_0)
+                    .addLayoutServer(SERVERS.PORT_1)
+                    .addSequencer(SERVERS.PORT_0)
+                    .addSequencer(SERVERS.PORT_1)
+                    .buildSegment()
+                    .setStart(0L)
+                    .setEnd(firstSegmentEnd)
+                    .buildStripe()
+                    .addLogUnit(SERVERS.PORT_0)
+                    .addToSegment()
+                    .addToLayout()
+                    .buildSegment()
+                    .setStart(firstSegmentEnd)
+                    .setEnd(-1L)
+                    .buildStripe()
+                    .addLogUnit(SERVERS.PORT_0)
+                    .addLogUnit(SERVERS.PORT_1)
+                    .addToSegment()
+                    .addToLayout()
+                    .build();
+
+            bootstrapAllServers(l1);
+            rt = getRuntime(l1).connect();
+
+            final int tail = 150;
+
+            write(rt, tail, new HashSet<>(), new HashSet<>());
+
+            long logTail = rt.getAddressSpaceView().getLogTail();
+
+            assertThat(logTail).isEqualTo(tail - 1);
+
+            final long trimMark = 100;
+
+            rt.getAddressSpaceView().prefixTrim(Token.of(l1.epoch, trimMark));
+
+            long realTrimMark = rt.getAddressSpaceView().getTrimMark().getSequence();
+
+            assertThat(realTrimMark).isEqualTo(trimMark + 1L);
+
+            setAggressiveTimeouts(rt.getLayoutView().getLayout(), rt);
+
+            waitForLayoutChange(layout -> layout.segments.size() == 1,
+                    rt);
+        }
+        finally {
+            if (rt != null) {
+                rt.shutdown();
             }
         }
     }
