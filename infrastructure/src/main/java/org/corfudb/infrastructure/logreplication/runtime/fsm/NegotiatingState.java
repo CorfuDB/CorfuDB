@@ -9,11 +9,11 @@ import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRunt
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -32,13 +32,13 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private Optional<String> leaderEndpoint;
 
-    private ExecutorService worker;
+    private ThreadPoolExecutor worker;
 
     private LogReplicationClientRouter router;
 
     private LogReplicationMetadataManager metadataManager;
 
-    public NegotiatingState(CorfuLogReplicationRuntime fsm, ExecutorService worker, LogReplicationClientRouter router,
+    public NegotiatingState(CorfuLogReplicationRuntime fsm, ThreadPoolExecutor worker, LogReplicationClientRouter router,
                             LogReplicationMetadataManager metadataManager) {
         this.fsm = fsm;
         this.metadataManager = metadataManager;
@@ -93,17 +93,22 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     @Override
     public void onEntry(LogReplicationRuntimeState from) {
-        // Start Negotiation
+        log.debug("OnEntry :: negotiating state from {}", from.getType());
+        log.trace("Submitted tasks to worker :: size={} activeCount={} taskCount={}", worker.getQueue().size(),
+                worker.getActiveCount(), worker.getTaskCount());
         worker.submit(this::negotiate);
     }
 
     private void negotiate() {
+
+        log.debug("Enter :: negotiate");
+
         try {
             if(fsm.getRemoteLeader().isPresent()) {
                 String remoteLeader = fsm.getRemoteLeader().get();
-                CompletableFuture<LogReplicationNegotiationResponse> cf = router.sendMessageAndGetCompletable(
-                        new CorfuMsg(CorfuMsgType.LOG_REPLICATION_NEGOTIATION_REQUEST).setEpoch(0), remoteLeader);
-                LogReplicationNegotiationResponse response = cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+                CompletableFuture<LogReplicationMetadataResponse> cf = router.sendMessageAndGetCompletable(
+                        new CorfuMsg(CorfuMsgType.LOG_REPLICATION_METADATA_REQUEST).setEpoch(0), remoteLeader);
+                LogReplicationMetadataResponse response = cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
                 // Process Negotiation Response, and determine if we start replication and which type type to start
                 // (snapshot or log entry sync). This will be carried along the negotiation_complete event.
@@ -122,6 +127,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         } catch (Exception e) {
             log.error("Unexpected exception during negotiation, retry.", e);
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_FAILED));
+        } finally {
+            log.debug("Exit :: negotiate");
         }
     }
 
@@ -142,7 +149,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
      * @return
      * @throws LogReplicationNegotiationException
      */
-    private void processNegotiationResponse(LogReplicationNegotiationResponse negotiationResponse)
+    private void processNegotiationResponse(LogReplicationMetadataResponse negotiationResponse)
             throws LogReplicationNegotiationException {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
@@ -219,7 +226,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         }
 
         /*
-         * If it is in the snapshot full sync phase II:
+         * If it is in the snapshot full sync transfer phase (Phase II):
          * the data has been transferred to the standby site and the the standby site is applying data from shadow streams
          * to the real streams.
          * It doesn't need to transfer the data again, just send a SNAPSHOT_COMPLETE message to the standby site.
@@ -238,8 +245,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                             "snapshotTransferred={}, snapshotApply={}", negotiationResponse.getSnapshotStart(),
                     negotiationResponse.getSnapshotTransferred(), negotiationResponse.getSnapshotApplied());
             fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
-                    new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_WAIT_COMPLETE,
-                            new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart()))));
+                    new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_TRANSFER_COMPLETE,
+                            new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getSnapshotStart(),
+                                    negotiationResponse.getSnapshotTransferred()))));
             return;
         }
 
@@ -267,7 +275,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 log.info("Resume LOG ENTRY sync. Address space has not been trimmed, deltas are guaranteed to be available. " +
                         "logHead={}, lastLogProcessed={}", logHead, negotiationResponse.getLastLogProcessed());
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
-                        new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.REPLICATION_START,
+                        new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
                                 new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogProcessed(),
                                         negotiationResponse.getSnapshotApplied()))));
             } else {

@@ -33,7 +33,7 @@ public class LogReplicationStreamNameTableManager {
 
     private ILogReplicationConfigAdapter logReplicationConfigAdapter;
 
-    private CorfuRuntime corfuRuntime;
+    private final CorfuRuntime corfuRuntime;
 
     private String pluginConfigFilePath;
 

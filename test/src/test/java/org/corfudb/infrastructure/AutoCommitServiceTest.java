@@ -252,8 +252,10 @@ public class AutoCommitServiceTest extends AbstractViewTest {
         final long numIter = 2 * batchSize - 1;
         Set<Long> noWriteHoles = new HashSet<>();
         Set<Long> partialWriteHoles = new HashSet<>();
+        // Use numIter - 1 to prevent last address being a no-write hole
+        // which regresses sequencer token after sequencer failover.
         generateHoles(0, batchSize, 2, 2, noWriteHoles, partialWriteHoles);
-        generateHoles(batchSize, numIter, 3, 3, noWriteHoles, partialWriteHoles);
+        generateHoles(batchSize, numIter - 1, 3, 3, noWriteHoles, partialWriteHoles);
 
         write(runtime, 0L, numIter, noWriteHoles, partialWriteHoles);
 

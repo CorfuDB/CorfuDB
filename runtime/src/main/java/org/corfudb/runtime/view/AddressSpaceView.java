@@ -518,7 +518,8 @@ public class AddressSpaceView extends AbstractView {
      * @param end   end of address range, inclusive
      */
     public void commit(long start, long end) {
-        if (start >= end) {
+        if (start > end) {
+            log.trace("commit: range [{}, {}] start > end, skip.", start, end);
             return;
         }
 

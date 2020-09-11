@@ -80,7 +80,7 @@ public class LogEntryWriter {
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
         long persistedTopologyConfigId = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
         long persistedSnapshotStart = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
-        long persistedSnapshotDone= logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
+        long persistedSnapshotDone = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED);
         long persistedLogTs = logReplicationMetadataManager.query(timestamp, LogReplicationMetadataManager.LogReplicationMetadataType.LAST_LOG_ENTRY_PROCESSED);
 
         long topologyConfigId = txMessage.getMetadata().getTopologyConfigId();
@@ -127,20 +127,20 @@ public class LogEntryWriter {
     }
 
     /**
-     * Apply message generate by log entry logreader and will apply at the destination corfu cluster.
+     * Apply message generate by log entry reader and will apply at the destination corfu cluster.
      * @param msg
-     * @return long: the last processed message timestamp if apply processing any messages.
+     * @return last processed message timestamp
      * @throws ReplicationWriterException
      */
     public long apply(LogReplicationEntry msg) throws ReplicationWriterException {
 
-        log.trace("Apply log entry {}", msg.getMetadata().getTimestamp());
+        log.debug("Apply log entry {}", msg.getMetadata().getTimestamp());
 
         verifyMetadata(msg.getMetadata());
 
         // Ignore the out of date messages
         if (msg.getMetadata().getSnapshotTimestamp() < srcGlobalSnapshot) {
-            log.warn("Received message with snapshot {} is smaller than current snapshot {}.Ignore it",
+            log.warn("Ignore Log Entry. Received message with snapshot {} is smaller than current snapshot {}",
                     msg.getMetadata().getSnapshotTimestamp(), srcGlobalSnapshot);
             return Address.NON_ADDRESS;
         }
@@ -153,7 +153,7 @@ public class LogEntryWriter {
 
         // we will skip the entries has been processed.
         if (msg.getMetadata().getTimestamp() <= lastMsgTs) {
-            log.warn("Received message with snapshot {} is smaller than lastMsgTs {}.Ignore it",
+            log.warn("Ignore Log Entry. Received message with snapshot {} is smaller than lastMsgTs {}.",
                     msg.getMetadata().getSnapshotTimestamp(), lastMsgTs);
             return Address.NON_ADDRESS;
         }
@@ -171,7 +171,7 @@ public class LogEntryWriter {
     }
 
     /**
-     * Set the base snapshot that last full sync based on and ackTimesstamp
+     * Set the base snapshot that last full sync based on and ackTimestamp
      * that is the last log entry it has played.
      * This is called while the writer enter the log entry sync state.
      *

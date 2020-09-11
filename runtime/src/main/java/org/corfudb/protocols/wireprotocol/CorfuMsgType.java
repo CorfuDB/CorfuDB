@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationLeadershipLoss;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationNegotiationResponse;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
@@ -122,8 +122,8 @@ public enum CorfuMsgType {
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true, false),
 
     LOG_REPLICATION_ENTRY(201, new TypeToken<CorfuPayloadMsg<LogReplicationEntry>>() {}, true, true),
-    LOG_REPLICATION_NEGOTIATION_REQUEST(202, TypeToken.of(CorfuMsg.class), true, true),
-    LOG_REPLICATION_NEGOTIATION_RESPONSE(203, new TypeToken<CorfuPayloadMsg<LogReplicationNegotiationResponse>>() {}, true, true),
+    LOG_REPLICATION_METADATA_REQUEST(202, TypeToken.of(CorfuMsg.class), true, true),
+    LOG_REPLICATION_METADATA_RESPONSE(203, new TypeToken<CorfuPayloadMsg<LogReplicationMetadataResponse>>() {}, true, true),
     LOG_REPLICATION_QUERY_LEADERSHIP(204, TypeToken.of(CorfuMsg.class), true, true),
     LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE(205, new TypeToken<CorfuPayloadMsg<LogReplicationQueryLeaderShipResponse>>(){}, true, true),
     LOG_REPLICATION_LEADERSHIP_LOSS(206, new TypeToken<CorfuPayloadMsg<LogReplicationLeadershipLoss>>(){}, true, true),

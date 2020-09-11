@@ -5,6 +5,7 @@ import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 
 import java.util.LinkedList;
@@ -22,8 +23,7 @@ public class TestDataSender implements DataSender {
     @Getter
     private Queue<LogReplicationEntry> entryQueue = new LinkedList<>();
 
-    public TestDataSender() {
-    }
+    private long snapshotSyncBaseSnapshot = 0;
 
     @Override
     public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
@@ -40,7 +40,8 @@ public class TestDataSender implements DataSender {
 
         // Emulate behavior from Sink, send ACK per received message
         if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END)) {
-            ackMetadata.setMessageMetadataType(MessageType.SNAPSHOT_END);
+            snapshotSyncBaseSnapshot = message.getMetadata().getSnapshotTimestamp();
+            ackMetadata.setMessageMetadataType(MessageType.SNAPSHOT_TRANSFER_COMPLETE);
         } else if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_MESSAGE)) {
             ackMetadata.setMessageMetadataType(MessageType.SNAPSHOT_REPLICATED);
         } else if (message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
@@ -75,7 +76,16 @@ public class TestDataSender implements DataSender {
 
         return lastSentMessage;
     }
-    
+
+    @Override
+    public CompletableFuture<LogReplicationMetadataResponse> sendMetadataRequest() {
+        CompletableFuture<LogReplicationMetadataResponse> completableFuture = new CompletableFuture<>();
+        LogReplicationMetadataResponse response =  new LogReplicationMetadataResponse(0, "version",
+                snapshotSyncBaseSnapshot, snapshotSyncBaseSnapshot, snapshotSyncBaseSnapshot, snapshotSyncBaseSnapshot);
+        completableFuture.complete(response);
+        return completableFuture;
+    }
+
     public void reset() {
         entryQueue.clear();
     }

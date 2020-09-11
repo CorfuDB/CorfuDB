@@ -27,6 +27,9 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Runtime to connect to a remote Corfu Log Replication Cluster.
@@ -127,7 +130,7 @@ public class CorfuLogReplicationRuntime {
     /**
      * Executor service for FSM state tasks
      */
-    private ExecutorService communicationFSMWorkers;
+    private ThreadPoolExecutor communicationFSMWorkers;
 
     /**
      * Executor service for FSM event queue consume
@@ -159,8 +162,9 @@ public class CorfuLogReplicationRuntime {
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, remoteClusterId),
             metadataManager);
         this.connectedEndpoints = new HashSet<>();
-        this.communicationFSMWorkers = Executors.newSingleThreadExecutor(new
-                ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build());
+        ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build();
+        this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
+                TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("runtime-fsm-consumer").build());
 
@@ -273,31 +277,21 @@ public class CorfuLogReplicationRuntime {
     }
 
     public synchronized void setRemoteLeaderEndpoint(String leader) {
+        log.debug("Set remote leader endpoint {}", leader);
         leaderEndpoint = Optional.ofNullable(leader);
     }
 
-    public synchronized void resetRemoteLeaderEndpoint() { leaderEndpoint = Optional.empty(); }
+    public synchronized void resetRemoteLeaderEndpoint() {
+        log.debug("Reset remote leader endpoint");
+        leaderEndpoint = Optional.empty(); }
 
     public synchronized Optional<String> getRemoteLeader() {
+        log.trace("Retrieve remote leader endpoint {}", leaderEndpoint);
         return leaderEndpoint;
     }
 
     public synchronized Set<String> getConnectedEndpoints() {
         return connectedEndpoints;
-    }
-
-    /**
-     * Retrieve total number of entries to be sent based on a given timestamp.
-     *
-     * This is required for progress status reporting.
-     *
-     * @param ts base (reference) timestamp
-     *
-     * @return pending number of entries to send
-     */
-    public long getNumEntriesToSend(long ts) {
-        long ackTS = sourceManager.getLogReplicationFSM().getAckedTimestamp();
-        return ts - ackTS;
     }
 
     /**
