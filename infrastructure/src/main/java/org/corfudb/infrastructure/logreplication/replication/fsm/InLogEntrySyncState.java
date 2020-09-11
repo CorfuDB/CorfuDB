@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 
 import java.util.UUID;
@@ -134,6 +135,9 @@ public class InLogEntrySyncState implements LogReplicationState {
             // address and send incremental updates from this point onwards.
             if (from.getType() == LogReplicationStateType.WAIT_SNAPSHOT_APPLY
                     || from.getType() == LogReplicationStateType.INITIALIZED) {
+                // Set LogEntryAckReader to Log Entry Sync state, to compute remaining entries based
+                // on the tx stream, regardless of ACKs or updates being processed for the tx stream
+                fsm.getAckReader().setSyncType(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
                 logEntrySender.reset(fsm.getBaseSnapshot(), fsm.getAckedTimestamp());
             }
 

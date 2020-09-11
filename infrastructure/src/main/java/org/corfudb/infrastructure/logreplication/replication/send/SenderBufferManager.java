@@ -197,7 +197,7 @@ public abstract class SenderBufferManager {
         }
 
         for (int i = 0; i < pendingMessages.getSize(); i++) {
-            LogReplicationPendingEntry entry  = pendingMessages.getList().get(i);
+            LogReplicationPendingEntry entry  = pendingMessages.getPendingEntries().get(i);
             if (entry.timeout(msgTimer) || force) {
                 entry.retry();
                 // Update metadata as topologyConfigId could have changed in between resend cycles
@@ -205,8 +205,8 @@ public abstract class SenderBufferManager {
                 dataEntry.getMetadata().setTopologyConfigId(topologyConfigId);
                 CompletableFuture<LogReplicationEntry> cf = dataSender.send(entry.getData());
                 addCFToAcked(entry.getData(), cf);
-                log.debug("Resend message {}[ts={}]", entry.getData().getMetadata().getMessageMetadataType(),
-                        entry.getData().getMetadata().getTimestamp());
+                log.debug("Resend message {}[ts={}, snapshotSyncNum={}]", entry.getData().getMetadata().getMessageMetadataType(),
+                        entry.getData().getMetadata().getTimestamp(), entry.getData().getMetadata().getSnapshotSyncSeqNum());
             }
         }
 
