@@ -10,6 +10,8 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.Address;
 
+import java.io.IOException;
+import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,16 +27,16 @@ import static org.corfudb.util.serializer.CorfuSerializer.corfuPayloadMagic;
  *
  * Created by Maithem on 2/3/20.
  */
-public class OpaqueEntry {
+public class OpaqueEntry implements Serializable {
 
     private static OpaqueEntry empty = new OpaqueEntry(Address.NON_EXIST, Collections.emptyMap());
 
     @Getter
-    final Map<UUID, List<SMREntry>> entries;
+    Map<UUID, List<SMREntry>> entries;
 
     @Getter
     // TODO(Maithem): Inconsistent behavior when full-sync vs delta (for full sync the versions will change)
-    final long version;
+    long version;
 
 
     public OpaqueEntry(long version, Map<UUID, List<SMREntry>> updates) {
@@ -128,5 +130,27 @@ public class OpaqueEntry {
                 throw new IllegalStateException("Unknown type " + entry.getType());
         }
         return new OpaqueEntry(version, res);
+    }
+
+    private void writeObject(java.io.ObjectOutputStream stream)
+            throws IOException {
+        ByteBuf byteBuf = Unpooled.buffer();
+        OpaqueEntry.serialize(byteBuf, this);
+        stream.writeInt(byteBuf.writerIndex());
+        stream.write(byteBuf.array(), 0, byteBuf.writerIndex());
+    }
+
+    private void readObject(java.io.ObjectInputStream stream)
+            throws IOException, ClassNotFoundException {
+
+        int length = stream.readInt();
+        byte[] bytes = new byte[length];
+        stream.read(bytes);
+
+        ByteBuf byteBuf = Unpooled.wrappedBuffer(bytes);
+        OpaqueEntry opaqueEntry = deserialize(byteBuf);
+
+        this.version = opaqueEntry.getVersion();
+        this.entries = opaqueEntry.getEntries();
     }
 }

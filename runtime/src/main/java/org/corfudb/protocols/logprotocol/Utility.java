@@ -1,13 +1,12 @@
-package org.corfudb.infrastructure.logreplication.replication.send.logreader;
+package org.corfudb.protocols.logprotocol;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-
 import java.util.List;
 
 @Slf4j
-public class ReaderUtility {
+public class Utility {
     /**
      * Given a list of SMREntries, calculate the total size  in bytes.
      * @param smrEntries
