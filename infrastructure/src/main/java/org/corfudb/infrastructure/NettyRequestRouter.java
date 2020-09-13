@@ -106,6 +106,7 @@ public class NettyRequestRouter extends ChannelInboundHandlerAdapter implements 
         log.info("channelActive: Incoming connection established from: {}.", ctx.channel().remoteAddress());
         ctx.fireChannelActive(); // So that legacy handshake is initiated.
     }
+
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;

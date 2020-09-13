@@ -3,7 +3,6 @@ package org.corfudb.infrastructure;
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.annotation.Nonnull;
@@ -11,15 +10,6 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.API;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapLayoutResponse;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.CommitLayoutResponse;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.PrepareLayoutResponse;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.ProposeLayoutResponse;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.infrastructure.ServerThreadFactory.ExceptionHandler;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -32,6 +22,15 @@ import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.CommitLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.PrepareLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ProposeLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.Optional;
@@ -166,8 +165,7 @@ public class LayoutServer extends AbstractServer {
 
     private void handleWrongEpochError(Header reqHeader, ChannelHandlerContext ctx, IRequestRouter r, long serverEpoch) {
         final Header responseHeader = API.generateResponseHeader(reqHeader, false, true);
-        final ServerError wrongEpochError = API.getWrongEpochServerError("WRONG_EPOCH error "
-                + "triggered by " + reqHeader.toString(), serverEpoch);
+        final ServerError wrongEpochError = API.getWrongEpochServerError(serverEpoch);
 
         final Response response = API.getErrorResponseNoPayload(responseHeader, wrongEpochError);
         r.sendResponse(response, ctx);
@@ -213,8 +211,8 @@ public class LayoutServer extends AbstractServer {
         final long serverEpoch = getServerEpoch();
 
         if(payloadEpoch <= serverEpoch) {
-            final Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-            final Response response = API.getGetLayoutResponse(responseHeader, getCurrentLayout().asJSONString());
+            Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+            Response response = API.getGetLayoutResponse(responseHeader, getCurrentLayout());
             r.sendResponse(response, ctx);
         } else {
             //TODO: Client is ahead of the server. Is any other handling required?
@@ -267,11 +265,11 @@ public class LayoutServer extends AbstractServer {
     @RequestHandler(type = CorfuProtocol.MessageType.BOOTSTRAP_LAYOUT)
     public synchronized void handleBootstrapLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
         final Header requestHeader = req.getHeader();
-        final Header responseHeader;
-        final Response response;
+        Header responseHeader;
+        Response response;
 
         if(getCurrentLayout() == null) {
-            final Layout layout = Layout.fromJSONString(req.getBootstrapLayoutRequest().getLayout());
+            final Layout layout = API.fromProtobufLayout(req.getBootstrapLayoutRequest().getLayout());
             log.info("handleBootstrapLayout[{}]: Bootstrap with new layout={}", requestHeader.getRequestId(), layout);
 
             if(layout.getClusterId() == null) {
@@ -361,9 +359,9 @@ public class LayoutServer extends AbstractServer {
 
         final long payloadEpoch = req.getPrepareLayoutRequest().getEpoch();
         final long serverEpoch = getServerEpoch();
+
         final Rank phase1Rank = getPhase1Rank(payloadEpoch);
-        final Rank prepareRank = new Rank(req.getPrepareLayoutRequest().getRank(),
-                new UUID(requestHeader.getClientId().getMsb(), requestHeader.getClientId().getLsb()));
+        final Rank prepareRank = new Rank(req.getPrepareLayoutRequest().getRank(), API.getJavaUUID(requestHeader.getClientId()));
 
         if(payloadEpoch != serverEpoch) {
             handleWrongEpochError(requestHeader, ctx, r, serverEpoch);
@@ -371,8 +369,8 @@ public class LayoutServer extends AbstractServer {
         }
 
         final Layout proposedLayout = getProposedLayout(payloadEpoch);
-        final Header responseHeader;
-        final Response response;
+        Header responseHeader;
+        Response response;
 
         // If the PREPARE_LAYOUT rank is less than or equal to the highest phase 1 rank, reject.
         if(phase1Rank != null && prepareRank.lessThanEqualTo(phase1Rank)) {
@@ -380,19 +378,19 @@ public class LayoutServer extends AbstractServer {
                     requestHeader.getRequestId(), prepareRank, phase1Rank);
 
             responseHeader = API.generateResponseHeader(requestHeader, false, false);
-            response = API.getPrepareLayoutResponse(responseHeader, PrepareLayoutResponse.Type.REJECT,
-                    phase1Rank.getRank(), proposedLayout.asJSONString());
+            response = API.getPrepareLayoutResponse(responseHeader,
+                    PrepareLayoutResponse.Type.REJECT, phase1Rank.getRank(), proposedLayout);
         } else {
             // Return the layout with the highest rank proposed before.
-            Rank highestProposedRank = proposedLayout == null ? new Rank(-1L,
-                    new UUID(requestHeader.getClientId().getMsb(), requestHeader.getClientId().getLsb())) : getPhase2Rank(payloadEpoch);
+            Rank highestProposedRank = proposedLayout == null ?
+                    new Rank(-1L, API.getJavaUUID(requestHeader.getClientId())) : getPhase2Rank(payloadEpoch);
 
             setPhase1Rank(prepareRank, payloadEpoch);
             log.debug("handlePrepareLayout[{}]: New phase 1 rank={}", requestHeader.getRequestId(), prepareRank);
 
             responseHeader = API.generateResponseHeader(requestHeader, false, true);
-            response = API.getPrepareLayoutResponse(responseHeader, PrepareLayoutResponse.Type.ACK,
-                    highestProposedRank.getRank(), proposedLayout.asJSONString());
+            response = API.getPrepareLayoutResponse(responseHeader,
+                    PrepareLayoutResponse.Type.ACK, highestProposedRank.getRank(), proposedLayout);
         }
 
         r.sendResponse(response, ctx);
@@ -484,17 +482,17 @@ public class LayoutServer extends AbstractServer {
 
         final long payloadEpoch = req.getProposeLayoutRequest().getEpoch();
         final long serverEpoch = getServerEpoch();
+
         final Rank phase1Rank = getPhase1Rank(payloadEpoch);
-        final Rank proposeRank = new Rank(req.getProposeLayoutRequest().getRank(),
-                new UUID(requestHeader.getClientId().getMsb(), requestHeader.getClientId().getLsb()));
+        final Rank proposeRank = new Rank(req.getProposeLayoutRequest().getRank(), API.getJavaUUID(requestHeader.getClientId()));
 
         if(payloadEpoch != serverEpoch) {
             handleWrongEpochError(requestHeader, ctx, r, serverEpoch);
             return;
         }
 
-        final Header responseHeader;
-        final Response response;
+        Header responseHeader;
+        Response response;
 
         // If there is not corresponding PREPARE_LAYOUT, reject.
         if(phase1Rank == null) {
@@ -520,7 +518,7 @@ public class LayoutServer extends AbstractServer {
         }
 
         final Rank phase2Rank = getPhase2Rank(payloadEpoch);
-        final Layout proposeLayout = Layout.fromJSONString(req.getProposeLayoutRequest().getLayout());
+        final Layout proposeLayout = API.fromProtobufLayout(req.getProposeLayoutRequest().getLayout());
 
         // Make sure that the layout epoch is the same as the PROPOSE_LAYOUT epoch.
         if(proposeLayout.getEpoch() != payloadEpoch) {
@@ -589,8 +587,8 @@ public class LayoutServer extends AbstractServer {
         final long payloadEpoch = req.getCommitLayoutRequest().getEpoch();
         final long serverEpoch = getServerEpoch();
         final Header requestHeader = req.getHeader();
-        final Header responseHeader;
-        final Response response;
+        Header responseHeader;
+        Response response;
 
         if(payloadEpoch != serverEpoch) {
             log.warn("forceLayout[{}]: Trying to force a layout with an old epoch: payloadEpoch={}, serverEpoch={}",
@@ -602,7 +600,7 @@ public class LayoutServer extends AbstractServer {
             return;
         }
 
-        final Layout layout = Layout.fromJSONString(req.getCommitLayoutRequest().getLayout());
+        final Layout layout = API.fromProtobufLayout(req.getCommitLayoutRequest().getLayout());
 
         setCurrentLayout(layout);
         serverContext.setServerEpoch(layout.getEpoch(), r);
@@ -666,7 +664,7 @@ public class LayoutServer extends AbstractServer {
 
         final long payloadEpoch = req.getCommitLayoutRequest().getEpoch();
         final long serverEpoch = getServerEpoch();
-        final Layout layout = Layout.fromJSONString(req.getCommitLayoutRequest().getLayout());
+        final Layout layout = API.fromProtobufLayout(req.getCommitLayoutRequest().getLayout());
 
         if(payloadEpoch < serverEpoch) {
             handleWrongEpochError(req.getHeader(), ctx, r, serverEpoch);
@@ -676,8 +674,8 @@ public class LayoutServer extends AbstractServer {
         setCurrentLayout(layout);
         serverContext.setServerEpoch(payloadEpoch, r);
 
-        final Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        final Response response = API.getCommitLayoutResponse(responseHeader, CommitLayoutResponse.Type.ACK);
+        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+        Response response = API.getCommitLayoutResponse(responseHeader, CommitLayoutResponse.Type.ACK);
         log.info("handleCommitLayout[{}]: New layout committed: {}", req.getHeader().getRequestId(), layout);
         r.sendResponse(response, ctx);
     }

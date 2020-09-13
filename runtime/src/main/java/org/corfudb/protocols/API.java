@@ -25,9 +25,6 @@ public class API {
     public static final byte LEGACY_CORFU_MSG_MARK = 0x1;
     public static final byte PROTO_CORFU_MSG_MARK = 0x2;
 
-    //TODO(Zach): Move Layout (and dependencies) to common so that a Layout object can be passed.
-    // Meanwhile, use layout.asJSONString() and layout and Layout.fromJSONString().
-
     public static CorfuProtocol.UUID getUUID(UUID uuid) {
         return CorfuProtocol.UUID.newBuilder()
                 .setLsb(uuid.getLeastSignificantBits())
@@ -36,7 +33,7 @@ public class API {
     }
 
     public static UUID getJavaUUID(CorfuProtocol.UUID uuid) {
-        return new UUID(uuid.getLsb(),uuid.getMsb());
+        return new UUID(uuid.getLsb(), uuid.getMsb());
     }
 
     public static Header getHeader(long requestId, Priority priority, MessageType type, long epoch,
@@ -76,30 +73,26 @@ public class API {
     public static ServerError getNoServerError() {
         return ServerError.newBuilder()
                 .setCode(ERROR.OK)
-                .setMessage("")
                 .build();
     }
 
-    public static ServerError getWrongEpochServerError(String errorMsg, long serverEpoch) {
+    public static ServerError getWrongEpochServerError(long serverEpoch) {
         return ServerError.newBuilder()
                 .setCode(ERROR.WRONG_EPOCH)
-                .setMessage(errorMsg)
                 .setWrongEpochPayload(serverEpoch)
                 .build();
     }
 
-    public static ServerError getNotReadyServerError(String errorMsg) {
+    public static ServerError getNotReadyServerError() {
         return ServerError.newBuilder()
                 .setCode(ERROR.NOT_READY)
-                .setMessage(errorMsg)
                 .build();
     }
 
-    public static ServerError getWrongClusterServerError(String errorMsg, CorfuProtocol.UUID serverClusterId,
+    public static ServerError getWrongClusterServerError(CorfuProtocol.UUID serverClusterId,
                                                          CorfuProtocol.UUID clientClusterId) {
         return ServerError.newBuilder()
                 .setCode(ERROR.WRONG_CLUSTER)
-                .setMessage(errorMsg)
                 .setWrongClusterPayload(WrongClusterPayload.newBuilder()
                         .setServerClusterId(serverClusterId)
                         .setClientClusterId(clientClusterId)
@@ -114,10 +107,9 @@ public class API {
                 .build();
     }
 
-    public static ServerError getNotBootstrappedServerError(String errorMsg) {
+    public static ServerError getNotBootstrappedServerError() {
         return ServerError.newBuilder()
                 .setCode(ERROR.NOT_BOOTSTRAPPED)
-                .setMessage(errorMsg)
                 .build();
     }
 
@@ -582,18 +574,31 @@ public class API {
                 .build();
     }
 
-    public static Request getGetLayoutRequest(Header header, long epoch) {
-        GetLayoutRequest getLayoutRequest = GetLayoutRequest.newBuilder()
-                .setEpoch(epoch)
+    // Layout Messages API
+
+    public static Layout toProtobufLayout(org.corfudb.runtime.view.Layout layout) {
+        return Layout.newBuilder()
+                .setLayoutJSON(layout.asJSONString())
                 .build();
+
+    }
+
+    public static org.corfudb.runtime.view.Layout fromProtobufLayout(Layout protobufLayout) {
+        return org.corfudb.runtime.view.Layout.fromJSONString(protobufLayout.getLayoutJSON());
+    }
+
+    public static Request getGetLayoutRequest(Header header, long epoch) {
+        GetLayoutRequest getLayoutRequest = GetLayoutRequest.newBuilder().setEpoch(epoch).build();
         return Request.newBuilder()
                 .setHeader(header)
                 .setGetLayoutRequest(getLayoutRequest)
                 .build();
     }
 
-    public static Response getGetLayoutResponse(Header header, String layout) {
-        GetLayoutResponse getLayoutResponse = GetLayoutResponse.newBuilder().setLayout(layout).build();
+    public static Response getGetLayoutResponse(Header header, org.corfudb.runtime.view.Layout layout) {
+        GetLayoutResponse getLayoutResponse = GetLayoutResponse.newBuilder()
+                .setLayout(toProtobufLayout(layout))
+                .build();
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(getNoServerError())
@@ -612,11 +617,12 @@ public class API {
                 .build();
     }
 
-    public static Response getPrepareLayoutResponse(Header header, PrepareLayoutResponse.Type type, long rank, String layout) {
+    public static Response getPrepareLayoutResponse(Header header, PrepareLayoutResponse.Type type,
+                                                    long rank, org.corfudb.runtime.view.Layout layout) {
         PrepareLayoutResponse prepareLayoutResponse = PrepareLayoutResponse.newBuilder()
                 .setType(type)
                 .setRank(rank)
-                .setLayout(layout)
+                .setLayout(toProtobufLayout(layout))
                 .build();
         return Response.newBuilder()
                 .setHeader(header)
@@ -625,11 +631,12 @@ public class API {
                 .build();
     }
 
-    public static Request getProposeLayoutRequest(Header header, long epoch, long rank, String layout) {
+    public static Request getProposeLayoutRequest(Header header, long epoch, long rank,
+                                                  org.corfudb.runtime.view.Layout layout) {
         ProposeLayoutRequest proposeLayoutRequest = ProposeLayoutRequest.newBuilder()
                 .setEpoch(epoch)
                 .setRank(rank)
-                .setLayout(layout)
+                .setLayout(toProtobufLayout(layout))
                 .build();
         return Request.newBuilder()
                 .setHeader(header)
@@ -649,11 +656,12 @@ public class API {
                 .build();
     }
 
-    public static Request getCommitLayoutRequest(Header header, boolean forced, long epoch, String layout) {
+    public static Request getCommitLayoutRequest(Header header, boolean forced, long epoch,
+                                                 org.corfudb.runtime.view.Layout layout) {
         CommitLayoutRequest commitLayoutRequest = CommitLayoutRequest.newBuilder()
                 .setForced(forced)
                 .setEpoch(epoch)
-                .setLayout(layout)
+                .setLayout(toProtobufLayout(layout))
                 .build();
         return Request.newBuilder()
                 .setHeader(header)
@@ -672,8 +680,9 @@ public class API {
                 .build();
     }
 
-    public static Request getBootstrapLayoutRequest(Header header, String layout) {
-        BootstrapLayoutRequest bootstrapLayoutRequest = BootstrapLayoutRequest.newBuilder().setLayout(layout).build();
+    public static Request getBootstrapLayoutRequest(Header header, org.corfudb.runtime.view.Layout layout) {
+        BootstrapLayoutRequest bootstrapLayoutRequest =
+                BootstrapLayoutRequest.newBuilder().setLayout(toProtobufLayout(layout)).build();
         return Request.newBuilder()
                 .setHeader(header)
                 .setBootstrapLayoutRequest(bootstrapLayoutRequest)

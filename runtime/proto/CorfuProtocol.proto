@@ -138,9 +138,9 @@ message SealResponse {
  * Layout Definitions
  **/
 
-// Represent layout in Protobuf as JSON string
+// Represent a Layout in Protobuf as JSON string
 message Layout {
-  string layoutJson = 1;
+  string layoutJSON = 1;
 }
 
 // Retrieve layout
@@ -149,7 +149,7 @@ message GetLayoutRequest {
 }
 
 message GetLayoutResponse {
-  string layout = 1;
+  Layout layout = 1;
 }
 
 // Request in first phase of Paxos
@@ -166,14 +166,14 @@ message PrepareLayoutResponse {
 
   Type type = 1;
   int64 rank = 2;
-  string layout = 3;
+  Layout layout = 3;
 }
 
 // Request in second phase of Paxos
 message ProposeLayoutRequest {
   int64 epoch = 1;
   int64 rank = 2;
-  string layout = 3;
+  Layout layout = 3;
 }
 
 message ProposeLayoutResponse {
@@ -187,11 +187,11 @@ message ProposeLayoutResponse {
 }
 
 // If the first two phases (prepare and propose) of Paxos have been accepted, the
-// proposer sends a Committed message to commit the proposed {@link Layout}
+// proposer sends a Committed message to commit the proposed Layout
 message CommitLayoutRequest {
   bool forced = 1;
   int64 epoch = 2;
-  string layout = 3;
+  Layout layout = 3;
 }
 
 message CommitLayoutResponse {
@@ -203,9 +203,9 @@ message CommitLayoutResponse {
   Type type = 1;
 }
 
-// Request sent to bootstrap the server with a {@link Layout}.
+// Request sent to bootstrap the server with a Layout
 message BootstrapLayoutRequest {
-  string layout = 1;
+  Layout layout = 1;
 }
 
 message BootstrapLayoutResponse {

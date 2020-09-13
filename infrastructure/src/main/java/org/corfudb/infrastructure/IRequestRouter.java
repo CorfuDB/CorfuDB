@@ -46,12 +46,9 @@ public interface IRequestRouter {
      */
     default void sendWrongEpochError(Header requestHeader, ChannelHandlerContext ctx) {
         Header responseHeader = API.generateResponseHeader(requestHeader, false, true);
-        long serverEpoch = getServerEpoch();
+        final long serverEpoch = getServerEpoch();
 
-        ServerError wrongEpochError = API.getWrongEpochServerError("WRONG_EPOCH error "
-                + "triggered by " + requestHeader.toString(), serverEpoch);
-
-        Response response = API.getErrorResponseNoPayload(responseHeader, wrongEpochError);
+        Response response = API.getErrorResponseNoPayload(responseHeader, API.getWrongEpochServerError(serverEpoch));
         sendResponse(response, ctx);
 
         log.trace("sendWrongEpochError[{}]: Incoming request received with wrong epoch, got {}, expected {}, " +
@@ -65,10 +62,7 @@ public interface IRequestRouter {
      */
     default void sendNoBootstrapError(Header requestHeader, ChannelHandlerContext ctx) {
         Header responseHeader = API.generateResponseHeader(requestHeader, false, true);
-        ServerError notBootstrappedError = API.getNotBootstrappedServerError("NOT_BOOTSTRAPPED "
-                + " error triggered by " + requestHeader.toString());
-
-        Response response = API.getErrorResponseNoPayload(responseHeader, notBootstrappedError);
+        Response response = API.getErrorResponseNoPayload(responseHeader, API.getNotBootstrappedServerError());
         sendResponse(response, ctx);
 
         log.trace("sendNoBootstrapError[{}]: Received request but not bootstrapped! Request was {}",
@@ -83,9 +77,7 @@ public interface IRequestRouter {
      */
     default void sendWrongClusterError(Header requestHeader, ChannelHandlerContext ctx, UUID clusterId) {
         Header responseHeader = API.generateResponseHeader(requestHeader, false, true);
-        ServerError wrongClusterError = API.getWrongClusterServerError("WRONG_CLUSTER error triggered by "
-                + requestHeader.toString(), clusterId, requestHeader.getClusterId());
-
+        ServerError wrongClusterError = API.getWrongClusterServerError(clusterId, requestHeader.getClusterId());
         Response response = API.getErrorResponseNoPayload(responseHeader, wrongClusterError);
         sendResponse(response, ctx);
 
@@ -101,7 +93,7 @@ public interface IRequestRouter {
      * @return True, if the epoch is correct, but false otherwise.
      */
     default boolean epochIsValid(Header requestHeader, ChannelHandlerContext ctx) {
-        long serverEpoch = getServerEpoch();
+        final long serverEpoch = getServerEpoch();
         if(requestHeader.getEpoch() != serverEpoch) {
             sendWrongEpochError(requestHeader, ctx);
             return false;

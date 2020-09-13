@@ -32,7 +32,7 @@ public class BaseServer extends AbstractServer {
 
     private final ExecutorService executor;
 
-    /** HandlerMethod for the base server. */
+    /** [RM] HandlerMethod for the base server. */
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
@@ -173,7 +173,7 @@ public class BaseServer extends AbstractServer {
     @RequestHandler(type = CorfuProtocol.MessageType.SEAL)
     private synchronized void handleSeal(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
         try {
-            long epoch = req.getSealRequest().getEpoch();
+            final long epoch = req.getSealRequest().getEpoch();
             String remoteHostAddress;
             try {
                 remoteHostAddress = ((InetSocketAddress)ctx.channel().remoteAddress()).getAddress().getHostAddress();

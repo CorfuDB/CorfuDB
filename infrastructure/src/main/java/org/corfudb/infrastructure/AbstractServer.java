@@ -113,7 +113,8 @@ public abstract class AbstractServer {
      */
     public final void handleRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
         if (getState() == ServerState.SHUTDOWN) {
-            log.warn("handleRequest: Server received {} but is already shutdown.", req.getHeader().getType().toString());
+            log.warn("handleRequest[{}]: Server received {} but is already shutdown.",
+                    req.getHeader().getRequestId(), req.getHeader().getType().toString());
             return;
         }
 
@@ -127,7 +128,7 @@ public abstract class AbstractServer {
 
     private Response getNotReadyError(Header requestHeader) {
         return API.getErrorResponseNoPayload(API.generateResponseHeader(requestHeader, false, true),
-                API.getNotReadyServerError("Server is not ready to handle request messages."));
+                API.getNotReadyServerError());
     }
 
     /**
