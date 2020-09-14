@@ -22,7 +22,7 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
     /**
      * Enforce snapshotFullSync
      */
-    void forceSnapshotSync(String clusterId);
+    void forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
 
 
     LogReplicationClusterInfo.ClusterRole getLocalClusterRoleType();

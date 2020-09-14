@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
@@ -56,5 +57,5 @@ public interface CorfuReplicationClusterManagerAdapter {
      *
      * @param clusterId
      */
-    void forceSnapshotSync(String clusterId);
+    void forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
 }

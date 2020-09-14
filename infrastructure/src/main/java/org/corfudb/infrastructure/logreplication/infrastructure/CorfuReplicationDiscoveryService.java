@@ -738,11 +738,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     @Override
-    public void forceSnapshotSync(String clusterId) {
+    public void forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
         if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
             String errorStr = "The forceSnapshotSync command is not supported on standby cluster.";
             log.error(errorStr);
-            throw new RuntimeException(errorStr);
+            throw new LogReplicationDiscoveryServiceException(errorStr);
         }
 
         log.info("Received the forceSnapshotSync command.");
