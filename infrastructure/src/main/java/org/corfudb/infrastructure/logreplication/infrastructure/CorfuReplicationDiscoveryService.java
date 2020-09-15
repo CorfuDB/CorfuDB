@@ -30,6 +30,7 @@ import org.corfudb.utils.lock.states.LockState;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -435,6 +436,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             case STANDBY:
                 // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
                 log.info("Start as Sink (receiver)");
+                interClusterReplicationService.getLogReplicationServer().getSinkManager().reset();
                 interClusterReplicationService.getLogReplicationServer().setLeadership(true);
                 break;
             default:
@@ -523,13 +525,14 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @param newTopology new discovered topology
      */
     public void onClusterRoleChange(TopologyDescriptor newTopology) {
+
+        log.debug("OnClusterRoleChange, topology={}", newTopology);
+
         // Stop ongoing replication, stopLogReplication() checks leadership and active
         // We do not update topology until we successfully stop log replication
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             stopLogReplication();
         }
-
-        //TODO pankti: read the configuration again and refresh the LogReplicationConfig object
 
         // Update topology, cluster, and node configs
         updateLocalTopology(newTopology);
@@ -575,6 +578,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                     topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig());
             return;
         }
+
+        log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
         TopologyDescriptor discoveredTopology = new TopologyDescriptor(event.getTopologyConfig());
         boolean isValid = processDiscoveredTopology(discoveredTopology, localClusterDescriptor == null);
@@ -694,13 +699,22 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Active Cluster - Read the shared metadata table to find the status of any ongoing snapshot or log entry sync
      * and return a completion percentage.
+     *
      * Standby Cluster - Read the shared metadata table and find if data is consistent(returns false if
      * snapshot sync is in the apply phase)
      */
     @Override
     public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
         if (ClusterRole.ACTIVE == localClusterDescriptor.getRole()) {
-            return logReplicationMetadataManager.getReplicationRemainingEntries();
+            Map<String, LogReplicationMetadata.ReplicationStatusVal> mapReplicationStatus = logReplicationMetadataManager.getReplicationRemainingEntries();
+            Map<String, LogReplicationMetadata.ReplicationStatusVal> mapToSend = new HashMap<>(mapReplicationStatus);
+            // If map contains local cluster, remove (as it might have been added by the SinkManager) but this node
+            // has an active role.
+            if (mapToSend.containsKey(localClusterDescriptor.getClusterId())) {
+                log.warn("Remove localClusterDescriptor {} from replicationStatusMap", localClusterDescriptor.getClusterId());
+                mapToSend.remove(localClusterDescriptor.getClusterId());
+            }
+            return mapToSend;
         } else if (ClusterRole.STANDBY == localClusterDescriptor.getRole()) {
             return logReplicationMetadataManager.getDataConsistentOnStandby();
         }

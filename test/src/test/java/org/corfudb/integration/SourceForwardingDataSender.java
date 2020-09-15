@@ -12,15 +12,26 @@ import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourc
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
+import org.corfudb.runtime.view.Address;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * This is an implementation of the DataSender (data path layer) used for testing purposes.
+ *
+ * It emulates the channel by directly forwarding messages to the destination log replication sink manager
+ * (for processing).
+ */
 @Slf4j
 public class SourceForwardingDataSender implements DataSender {
+
+    private final static int DROP_INCREMENT = 4;
+
     // Runtime to remote/destination Corfu Server
     private CorfuRuntime runtime;
 
@@ -46,18 +57,24 @@ public class SourceForwardingDataSender implements DataSender {
      */
     final public static int DROP_MSG_ONCE = 1;
 
-    private int ifDropMsg = 0;
-
-    final static int DROP_INCREMENT = 4;
+    private int ifDropMsg;
 
     private int droppingNum = 2;
 
     private int msgCnt = 0;
 
+    // Represents the number of cycles for which we reply that snapshot sync apply has not completed
+    private int delayedApplyCycles;
+    private int countDelayedApplyCycles = 0;
+    private boolean timeoutMetadataResponse = false;
+
     @Getter
     private ObservableValue errors = new ObservableValue(errorCount);
 
-    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, int ifDropMsg, LogReplicationMetadataManager metadataManager,
+    private ObservableValue<LogReplicationMetadataResponse> metadataResponseObservable;
+
+    public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, LogReplicationIT.TestConfig testConfig,
+                                      LogReplicationMetadataManager metadataManager,
                                       String pluginConfigFilePath) {
         this.runtime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(destinationEndpoint)
@@ -65,8 +82,10 @@ public class SourceForwardingDataSender implements DataSender {
         this.destinationDataSender = new AckDataSender();
         this.destinationDataControl = new DefaultDataControl(new DefaultDataControlConfig(false, 0));
         this.destinationLogReplicationManager = new LogReplicationSinkManager(runtime.getLayoutServers().get(0), config, metadataManager, pluginConfigFilePath);
-        this.ifDropMsg = ifDropMsg;
-        log.info("Init SourceForwardingDataSender with ifDropMsg {}", ifDropMsg);
+        this.ifDropMsg = testConfig.getDropMessageLevel();
+        this.delayedApplyCycles = testConfig.getDelayedApplyCycles();
+        this.metadataResponseObservable = new ObservableValue<>(null);
+        this.timeoutMetadataResponse = testConfig.isTimeoutMetadataResponse();
     }
 
     @Override
@@ -119,10 +138,42 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     @Override
+    public CompletableFuture<LogReplicationMetadataResponse> sendMetadataRequest() {
+        CompletableFuture<LogReplicationMetadataResponse> completableFuture = new CompletableFuture<>();
+        long baseSnapshotTimestamp = destinationDataSender.getSourceManager().getLogReplicationFSM().getBaseSnapshot();
+        LogReplicationMetadataResponse response;
+
+        if (delayedApplyCycles > 0 && countDelayedApplyCycles < delayedApplyCycles) {
+            countDelayedApplyCycles++;
+            log.debug("Received query metadata request, count={}", countDelayedApplyCycles);
+            // Reply Snapshot Sync Apply has not completed yet
+            response = new LogReplicationMetadataResponse(0, "version", baseSnapshotTimestamp,
+                    baseSnapshotTimestamp, Address.NON_ADDRESS, Address.NON_ADDRESS);
+        } else {
+            if(timeoutMetadataResponse) {
+                log.debug("Delay metadata response to cause timeout");
+                // For this purpose return an empty completable future which as never completed will time out
+                // and reset timeoutMetadataResponse so it returns on next call
+                timeoutMetadataResponse = false;
+                return new CompletableFuture<>();
+            }
+            // In test implementation emulate the apply has succeeded and return a LogReplicationMetadataResponse
+            response = new LogReplicationMetadataResponse(0, "version", baseSnapshotTimestamp,
+                    destinationLogReplicationManager.getLogReplicationMetadataManager().getLastTransferredSnapshotTimestamp(),
+                    destinationLogReplicationManager.getLogReplicationMetadataManager().getLastAppliedSnapshotTimestamp(),
+                    destinationLogReplicationManager.getLogReplicationMetadataManager().getLastProcessedLogEntryTimestamp());
+        }
+
+        metadataResponseObservable.setValue(response);
+        completableFuture.complete(response);
+        return completableFuture;
+    }
+
+    @Override
     public void onError(LogReplicationError error) {
         errorCount++;
         errors.setValue(errorCount);
-        log.trace("\nSourceFowardingDataSender got an error " + error);
+        log.trace("OnError :: code={}, description={}", error.getCode(), error.getDescription());
     }
 
     /*
@@ -138,10 +189,6 @@ public class SourceForwardingDataSender implements DataSender {
         return destinationLogReplicationManager;
     }
 
-    public CorfuRuntime getWriterRuntime() {
-        return this.runtime;
-    }
-
     public void shutdown() {
         if (destinationDataSender != null && destinationDataSender.getSourceManager() != null) {
             destinationDataSender.getSourceManager().shutdown();
@@ -154,5 +201,9 @@ public class SourceForwardingDataSender implements DataSender {
         if (runtime != null) {
             runtime.shutdown();
         }
+    }
+
+    public ObservableValue<LogReplicationMetadataResponse> getMetadataResponses() {
+        return metadataResponseObservable;
     }
 }

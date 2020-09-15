@@ -56,7 +56,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
     private OpaqueEntry lastEntry = null;
 
     @Getter
-    private ObservableValue observeBiggerMsg = new ObservableValue(0);
+    private ObservableValue<Integer> observeBiggerMsg = new ObservableValue(0);
 
     @Setter
     private long topologyConfigId;
@@ -68,8 +68,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.rt = runtime;
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
-        streams = config.getStreamsToReplicate();
-        log.debug("The maxDataSizePerMsg {} ", maxDataSizePerMsg);
+        this.streams = config.getStreamsToReplicate();
     }
 
     /**
@@ -158,7 +157,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                 }
             }
         } catch (TrimmedException e) {
-            log.error("Catch an TrimmedException exception ", e);
+            log.error("Caught a TrimmedException", e);
             throw e;
         }
 

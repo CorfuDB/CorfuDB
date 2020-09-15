@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,7 +16,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.view.Address;
-import org.immutables.value.internal.$guava$.annotations.$VisibleForTesting;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -24,10 +24,10 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Properties;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
 
 /**
  * This class represents the Log Replication Manager at the destination.
@@ -71,13 +71,14 @@ public class LogReplicationSinkManager implements DataReceiver {
     private LogReplicationConfig config;
 
     private long baseSnapshotTimestamp = Address.NON_ADDRESS - 1;
+    private UUID lastSnapshotSyncId = null;
 
     /*
      * Current topologyConfigId, used to drop out of date messages.
      */
     private long topologyConfigId = 0;
 
-    @$VisibleForTesting
+    @VisibleForTesting
     private int rxMessageCounter = 0;
 
     // Count number of received messages, used for testing purposes
@@ -93,6 +94,8 @@ public class LogReplicationSinkManager implements DataReceiver {
     // In Snapshot Sync, if the StreamsSnapshotWriter is in the apply phase, the data is not yet
     // consistent and cannot be read by applications.  Data is always consistent during Log Entry Sync
     private AtomicBoolean dataConsistent = new AtomicBoolean(false);
+
+    private ExecutorService applyExecutor;
 
     /**
      * Constructor Sink Manager
@@ -116,7 +119,7 @@ public class LogReplicationSinkManager implements DataReceiver {
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = context.getPluginConfigFilePath();
         this.topologyConfigId = topologyConfigId;
-        initCommonParams(metadataManager, config);
+        init(metadataManager, config);
     }
 
     /**
@@ -131,10 +134,16 @@ public class LogReplicationSinkManager implements DataReceiver {
         this.runtime =  CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString(localCorfuEndpoint).connect();
         this.pluginConfigFilePath = pluginConfigFilePath;
-        initCommonParams(metadataManager, config);
+        init(metadataManager, config);
     }
 
-    private void initCommonParams(LogReplicationMetadataManager metadataManager, LogReplicationConfig config) {
+    /**
+     * Initialize common parameters
+     *
+     * @param metadataManager metadata manager instance
+     * @param config log replication configuration
+     */
+    private void init(LogReplicationMetadataManager metadataManager, LogReplicationConfig config) {
         this.logReplicationMetadataManager = metadataManager;
         this.config = config;
 
@@ -142,6 +151,12 @@ public class LogReplicationSinkManager implements DataReceiver {
         // The sender will query receiver's status and decide what type of replication to start with.
         // It will transit to SNAPSHOT_SYNC state if it received a SNAPSHOT_START message from the sender.
         this.rxState = RxState.LOG_ENTRY_SYNC;
+
+        this.applyExecutor = Executors.newSingleThreadExecutor(
+                new ThreadFactoryBuilder()
+                        .setDaemon(true)
+                        .setNameFormat("snapshotSyncApplyExecutor")
+                        .build());
 
         // Set the data consistent status.
         setDataConsistent(dataConsistent.get());
@@ -161,11 +176,11 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         snapshotWriter = new StreamsSnapshotWriter(runtime, config, logReplicationMetadataManager);
         logEntryWriter = new LogEntryWriter(runtime, config, logReplicationMetadataManager);
-        logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp());
+        logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedSnapshotTimestamp(),
+                logReplicationMetadataManager.getLastProcessedLogEntryTimestamp());
 
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
+                logReplicationMetadataManager.getLastProcessedLogEntryTimestamp(), this);
     }
 
     private ISnapshotSyncPlugin getSnapshotPlugin() {
@@ -221,8 +236,8 @@ public class LogReplicationSinkManager implements DataReceiver {
          // It could be caused by an out-of-date sender or the local node hasn't done the site discovery yet.
          // If there is a siteConfig change, the discovery service will detect it and reset the state.
         if (message.getMetadata().getTopologyConfigId() != topologyConfigId) {
-            log.warn("Sink manager with config id {} ignored msg id {}", topologyConfigId,
-                    message.getMetadata().getTopologyConfigId());
+            log.warn("Drop message {}. Topology config id mismatch, local={}, msg={}", message.getMetadata().getMessageMetadataType(),
+                    topologyConfigId, message.getMetadata().getTopologyConfigId());
             return null;
         }
 
@@ -236,28 +251,28 @@ public class LogReplicationSinkManager implements DataReceiver {
                 // (temporal non-checkpointed streams). This is a blocking call.
                 log.info("Enter onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
                 snapshotSyncPlugin.onSnapshotSyncStart(runtime);
-                log.info("OnExit onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
+                log.info("Exit onSnapshotSyncStart :: {}", snapshotSyncPlugin.getClass().getSimpleName());
             }
             return null;
         }
 
         if (!receivedValidMessage(message)) {
-            // It is possible that the sender doesn't receive the SNAPSHOT_END ACK message and
-            // sends the SNAPSHOT_END message again, but the receiver has already transited to
+            // It is possible that the sender doesn't receive the SNAPSHOT_TRANSFER_COMPLETE ack message and
+            // sends the SNAPSHOT_END marker again, but the receiver has already transited to
             // the LOG_ENTRY_SYNC state.
-            // Reply the SNAPSHOT_ACK again and let sender do the proper transition.
-            if (message.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
-                LogReplicationEntryMetadata metadata = snapshotSinkBufferManager.makeAckMessage(message);
-                if (metadata.getMessageMetadataType() == SNAPSHOT_END) {
-                    log.warn("Sink Manager in state {} and received message {}. Resending the ACK for SNAPSHOT_END.", rxState,
-                            message.getMetadata());
-                    return new LogReplicationEntry(metadata);
+            // In this case send the SNAPSHOT_TRANSFER_COMPLETE ack again so the sender can do the proper transition.
+            if (message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END) {
+                LogReplicationEntryMetadata ackMetadata = snapshotSinkBufferManager.generateAckMetadata(message);
+                if (ackMetadata.getMessageMetadataType() == MessageType.SNAPSHOT_TRANSFER_COMPLETE) {
+                    log.warn("Resend snapshot sync transfer complete ack. Sink state={}, received={}", rxState,
+                            message.getMetadata().getMessageMetadataType());
+                    return new LogReplicationEntry(ackMetadata);
                 }
             }
 
-            // Invalid message and drop it.
+            // Drop all other invalid messages
             log.warn("Sink Manager in state {} and received message {}. Dropping Message.", rxState,
-                    message.getMetadata());
+                    message.getMetadata().getMessageMetadataType());
 
             return null;
         }
@@ -275,24 +290,18 @@ public class LogReplicationSinkManager implements DataReceiver {
         if (rxState.equals(RxState.LOG_ENTRY_SYNC)) {
             return logEntrySinkBufferManager.processMsgAndBuffer(message);
         } else {
-            LogReplicationEntry ack = snapshotSinkBufferManager.processMsgAndBuffer(message);
-            // If the snapshot sync apply has completed (determined by the end marker) notify
-            // plugin the completion, so checkpoint/trim process is resumed.
-            if (ack.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
-                processSnapshotSyncApplied(ack);
-            }
-            return ack;
+            return snapshotSinkBufferManager.processMsgAndBuffer(message);
         }
     }
 
-    private void processSnapshotSyncApplied(LogReplicationEntry ack) {
-        long lastAppliedBaseSnapshotTimestamp = logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp();
+    private void processSnapshotSyncApplied(LogReplicationEntry entry) {
+        long lastAppliedBaseSnapshotTimestamp = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
         long latestSnapshotSyncCycleId = logReplicationMetadataManager.getCurrentSnapshotSyncCycleId();
-        long ackSnapshotSyncCycleId = ack.getMetadata().getSyncRequestId().getMostSignificantBits() & Long.MAX_VALUE;
+        long ackSnapshotSyncCycleId = entry.getMetadata().getSyncRequestId().getMostSignificantBits() & Long.MAX_VALUE;
         // Verify this snapshot ACK corresponds to the last initialized/valid snapshot sync
         // as a previous one could have been canceled but still processed due to messages being out of order
         if ((ackSnapshotSyncCycleId == latestSnapshotSyncCycleId) &&
-                (ack.getMetadata().getSnapshotTimestamp() == lastAppliedBaseSnapshotTimestamp)) {
+                (entry.getMetadata().getSnapshotTimestamp() == lastAppliedBaseSnapshotTimestamp)) {
             // Notify end of snapshot sync. This is a blocking call.
             log.info("Notify Snapshot Sync Plugin completion of snapshot sync id={}, baseSnapshot={}", ackSnapshotSyncCycleId,
                     lastAppliedBaseSnapshotTimestamp);
@@ -301,10 +310,9 @@ public class LogReplicationSinkManager implements DataReceiver {
             log.info("Exit onSnapshotSyncEnd :: {}", snapshotSyncPlugin.getClass().getSimpleName());
         } else {
             log.warn("SNAPSHOT_SYNC has completed for {}, but new ongoing SNAPSHOT_SYNC is {}",
-                    ack.getMetadata().getSnapshotTimestamp(), lastAppliedBaseSnapshotTimestamp);
+                    entry.getMetadata().getSnapshotTimestamp(), lastAppliedBaseSnapshotTimestamp);
         }
     }
-
 
     /**
      * Verify if current Snapshot Start message determines the start
@@ -317,32 +325,31 @@ public class LogReplicationSinkManager implements DataReceiver {
     private boolean isValidSnapshotStart(LogReplicationEntry entry) {
         long topologyConfigId = entry.getMetadata().getTopologyConfigId();
         long messageBaseSnapshot = entry.getMetadata().getSnapshotTimestamp();
+        UUID messageSnapshotId = entry.getMetadata().getSyncRequestId();
 
         log.debug("Received snapshot sync start marker with request id {} on base snapshot timestamp {}",
                 entry.getMetadata().getSyncRequestId(), entry.getMetadata().getSnapshotTimestamp());
 
-        /*
-         * It is out of date message due to resend, drop it.
-         */
-        if (messageBaseSnapshot <= baseSnapshotTimestamp) {
-            // Invalid message and drop it.
+        // Drop out of date messages, that have been resent
+        // If no further writes have come into the log, the baseSnapshotTimestamp could be the same,
+        // for this reason we should also compare based on the snapshot sync identifier
+        if (messageBaseSnapshot <= baseSnapshotTimestamp && messageSnapshotId != null && messageSnapshotId.equals(lastSnapshotSyncId)) {
             log.warn("Sink Manager, state={} while received message={}. " +
                             "Dropping message with smaller snapshot timestamp than current {}",
                     rxState, entry.getMetadata(), baseSnapshotTimestamp);
             return false;
         }
 
-        /*
-         * Fails to set the baseSnapshot at the metadata store, it could be a out of date message,
-         * or the current node is out of sync, ignore it.
-         */
-        if (!logReplicationMetadataManager.setSrcBaseSnapshotStart(topologyConfigId, messageBaseSnapshot)) {
+         // Fails to set the baseSnapshot at the metadata store, it could be a out of date message,
+         // or the current node is out of sync, ignore it.
+        if (!logReplicationMetadataManager.setBaseSnapshotStart(topologyConfigId, messageBaseSnapshot)) {
             log.warn("Sink Manager in state {} and received message {}. " +
                             "Dropping Message due to failure to update the metadata store {}",
                     rxState, entry.getMetadata(), logReplicationMetadataManager);
             return false;
         }
 
+        lastSnapshotSyncId = messageSnapshotId;
         return true;
     }
 
@@ -358,9 +365,7 @@ public class LogReplicationSinkManager implements DataReceiver {
         long topologyConfigId = entry.getMetadata().getTopologyConfigId();
         long timestamp = entry.getMetadata().getSnapshotTimestamp();
 
-        /*
-         * Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
-         */
+        // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
         snapshotWriter.reset(topologyConfigId, timestamp);
 
         // Update lastTransferDone with the new snapshot transfer timestamp.
@@ -368,7 +373,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
         // Setup buffer manager.
         snapshotSinkBufferManager = new SnapshotSinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastSnapSeqNum(), this);
+                logReplicationMetadataManager.getLastSnapshotTransferredSequenceNumber(), this);
 
         // Set state in SNAPSHOT_SYNC state.
         rxState = RxState.SNAPSHOT_SYNC;
@@ -377,41 +382,63 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     /**
-     * Signal the manager a snapshot sync is about to complete. This is required to transition to log sync.
+     * Given that snapshot sync apply phase has finished, set the corresponding
+     * metadata and signal external plugin on completion of snapshot sync, so
+     * checkpoint/trim process can be resumed.
      */
-    private void completeSnapshotApply(LogReplicationEntry inputEntry) {
-        log.debug("Complete of a snapshot apply");
-        //check if the all the expected message has received
+    private void completeSnapshotApply(LogReplicationEntry entry) {
+        logReplicationMetadataManager.setSnapshotAppliedComplete(entry);
+
+        processSnapshotSyncApplied(entry);
+
         rxState = RxState.LOG_ENTRY_SYNC;
-
-        logReplicationMetadataManager.setSnapshotApplied(inputEntry);
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
+                logReplicationMetadataManager.getLastProcessedLogEntryTimestamp(), this);
 
-        log.info("Sink manager completed SNAPSHOT transfer {} for ts={} and has transit to {} state.",
-                inputEntry.getMetadata().getSyncRequestId(), inputEntry.getMetadata().getTimestamp(), rxState);
+        log.info("Snapshot apply complete, sync_id={}, snapshot={}, state={}", entry.getMetadata().getSyncRequestId(),
+                entry.getMetadata().getSnapshotTimestamp(), rxState);
     }
 
     /**
-     * Process transferred SNAPSHOT messages
+     * Process transferred snapshot sync messages
      *
-     * @param message received entry message
+     * @param entry received entry
      */
-    private void processSnapshotMessage(LogReplicationEntry message) {
-        switch (message.getMetadata().getMessageMetadataType()) {
+    private void processSnapshotMessage(LogReplicationEntry entry) {
+        switch (entry.getMetadata().getMessageMetadataType()) {
             case SNAPSHOT_MESSAGE:
-                snapshotWriter.apply(message);
+                snapshotWriter.apply(entry);
                 break;
             case SNAPSHOT_END:
-                setDataConsistent(false);
-                snapshotWriter.snapshotTransferDone(message);
-                completeSnapshotApply(message);
-                setDataConsistent(true);
+                if (snapshotWriter.getPhase() != StreamsSnapshotWriter.Phase.APPLY_PHASE) {
+                    // Mark Snapshot Sync Transfer as complete and return ACK right away
+                    completeSnapshotTransfer(entry);
+                    startSnapshotApplyAsync(entry);
+                }
                 break;
             default:
-                log.warn("Message type {} should not be applied as snapshot sync.", message.getMetadata().getMessageMetadataType());
+                log.warn("Message type {} should not be applied during snapshot sync.", entry.getMetadata().getMessageMetadataType());
                 break;
         }
+    }
+
+    private void startSnapshotApplyAsync(LogReplicationEntry entry) {
+        applyExecutor.submit(() -> startSnapshotApply(entry));
+    }
+
+    private void startSnapshotApply(LogReplicationEntry entry) {
+        log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
+        setDataConsistent(false);
+        snapshotWriter.startSnapshotSyncApply();
+        completeSnapshotApply(entry);
+        setDataConsistent(true);
+        log.debug("Exit Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
+    }
+
+    private void completeSnapshotTransfer(LogReplicationEntry message) {
+        // Update metadata, indicating snapshot transfer completeness
+        logReplicationMetadataManager.setLastSnapshotTransferCompleteTimestamp(topologyConfigId,
+                message.getMetadata().getSnapshotTimestamp());
     }
 
     /**
@@ -435,14 +462,16 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
     }
 
-    /*
+    /**
      * Verify if the message is the correct type for the current state.
-     * @param message
-     * @return
+     *
+     * @param message received entry
+     * @return true, if received message is valid for the current sink state
+     *         false, otherwise
      */
     private boolean receivedValidMessage(LogReplicationEntry message) {
-        return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE
-                || message.getMetadata().getMessageMetadataType() == SNAPSHOT_END)
+        return rxState == RxState.SNAPSHOT_SYNC && (message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_MESSAGE
+                || message.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_END)
                 || rxState == RxState.LOG_ENTRY_SYNC && message.getMetadata().getMessageMetadataType() == MessageType.LOG_ENTRY_MESSAGE;
     }
 
@@ -461,22 +490,26 @@ public class LogReplicationSinkManager implements DataReceiver {
     }
 
     /**
-     * When there is a cluster role change, the Sink Manager needs do the following:
+     * When there is a cluster role change, the Sink Manager needs to do the following:
      *
      * 1. Reset snapshotWriter and logEntryWriter state
      * 2. Reset buffer logEntryBuffer state.
      *
      * */
     public void reset() {
-        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp());
-        logEntryWriter.reset(logReplicationMetadataManager.getLastAppliedBaseSnapshotTimestamp(),
-                logReplicationMetadataManager.getLastProcessedLogTimestamp());
+        long lastAppliedSnapshotTimestamp = logReplicationMetadataManager.getLastAppliedSnapshotTimestamp();
+        long lastProcessedLogEntryTimestamp = logReplicationMetadataManager.getLastProcessedLogEntryTimestamp();
+        log.debug("Reset Sink Manager, lastAppliedSnapshotTs={}, lastProcessedLogEntryTs={}", lastAppliedSnapshotTimestamp,
+                lastProcessedLogEntryTimestamp);
+        snapshotWriter.reset(topologyConfigId, lastAppliedSnapshotTimestamp);
+        logEntryWriter.reset(lastAppliedSnapshotTimestamp, lastProcessedLogEntryTimestamp);
         logEntrySinkBufferManager = new LogEntrySinkBufferManager(ackCycleTime, ackCycleCnt, bufferSize,
-                logReplicationMetadataManager.getLastProcessedLogTimestamp(), this);
+                lastProcessedLogEntryTimestamp, this);
     }
 
     public void shutdown() {
         this.runtime.shutdown();
+        this.applyExecutor.shutdownNow();
     }
 
     enum RxState {

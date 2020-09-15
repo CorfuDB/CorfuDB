@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.fsm;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
@@ -39,64 +40,84 @@ import java.util.concurrent.LinkedBlockingQueue;
  * communication channels.
  *
  * Log Replication on the source cluster is defined by an event-driven finite state machine, with 5 states
- * and 8 events/messages---which can trigger the transition between states.
+ * and 10 events/messages---which can trigger the transition between states.
  *
  * States:
  * ------
  *  - Initialized (initial state)
  *  - In_Log_Entry_Sync
  *  - In_Snapshot_Sync
- *  - Snapshot_Sync_Required
+ *  - Wait_Snapshot_Apply
  *  - Stopped
  *
  * Events:
  * ------
- *  - replication_start
- *  - replication_stop
  *  - snapshot_sync_request
- *  - snapshot_sync_complete
  *  - snapshot_sync_continue
+ *  - snapshot_transfer_complete
+ *  - snapshot_apply_in_progress
+ *  - snapshot_apply_complete
+ *  - log_entry_sync_request
+ *  - log_entry_sync_continue
  *  - sync_cancel
- *  - log_entry_sync_replicated
+ *  - replication_stop
  *  - replication_shutdown
  *
  *
  * The following diagram illustrates the Log Replication FSM state transition:
  *
  *
- *                                       replication_stop
- *                      +-------------------------------------------------+
- *    replication_stop  |                                                 |
- *             +-----+  |              replication_stop                   |
- *             |     |  v      v-----------------------------+            |
- *             |    ++--+---------+                          |        +---+--------------------+
- *             +--->+ INITIALIZED +------------------------+ |        | SNAPSHOT_SYNC_REQUIRED +<---+
- *                  +---+----+----+ snapshot_sync_request  | |        +---+---------------+----+    |
- *                      ^    |                             | |            |               ^         |
- *                      |    |                             | |   snapshot |               |         |
- *                      |    |                             | |    sync    |               |         |
- *     replication_stop |    | replication_start           | |    request |               |         |
- *                      |    |                             | |            |               |         |
- *                      |    v                             v |            v               |         |
- *               +------+----+-------+  snapshot_sync    +-+-+------------+-+             |         |
- *         +-----| IN_LOG_ENTRY_SYNC |     request       | IN_SNAPSHOT_SYNC +             |         |
- *         |     |                   +------------------>+                  |             |         |
- *         |     +----+----+---------+                   +---+---+----------+-------------+         |
- *         |       ^  |   ^                                 |    |        ^        sync             |
- *         |       |  |   +---------------------------------+    |        |       cancel            |
- *         + ----- +  |                snapshot_sync             + -------+                         |
- *  log_entry_sync    |                  complete               snapshot_sync                       |
- *    continue        |                                           continue                          |
- *                    +-----------------------------------------------------------------------------+
- *                                                     sync_cancel
- *               replication
- * +---------+    shutdown    +------------+
- * | STOPPED +<---------------+ ALL_STATES |
- * +---------+                +------------+
+ *
+ *                                          REPLICATION_STOP
+ *                                              +------+
+ *                                              |      |
+ *                                              |      |
+ *                LOG_ENTRY_SYNC_REQUEST   +----+------v-----+    SNAPSHOT_SYNC_REQUEST
+ *             +---------------------------+   INITIALIZED   +-----------------------------+
+ *             |                           +-^---^--+------^-+                             |
+ *             |                             |   |  |      |                               |
+ *             |                             |   |  |      |                               |
+ *             |                             |   |  |      |                               |
+ *             |                             |   |  |      |                               |
+ *             |                             |   |  |      |                               |
+ *             |                             |   |  |      |                               |     SYNC
+ *             |                             |   |  |      |                               |    CANCEL
+ *             |                             |   |  |      |                               |   +------+
+ *             |                             |   |  |      |                               |   |      |
+ *             |                             |   |  |      |                               |   |      |
+ * +-----------v-----------+   REPLICATION   |   |  |      |   REPLICATION     +-----------v---+------v--+
+ * |   IN_LOG_ENTRY_SYNC   +------STOP-------+   |  |      +------STOP---------+    IN_SNAPSHOT_SYNC     |
+ * +----+-----^---+------^-+                     |  |                          +-^-----+---^-----+-----^-+
+ *      |     |   |      |                       |  |                            |     |   |     |     |
+ *      |     |   |      |                       |  |                            |     |   |     |     |
+ *      |     |   +------+           REPLICATION |  | SNAPSHOT_TRANSFER          +-----+   |     |     |
+ *      |     |   LOG_ENTRY              STOP    |  |      COMPLETE              SNAPSHOT  |     |     |
+ *      |     | SYNC_CONTINUE                    |  |                              SYNC    |     |     |
+ *      |     |                                  |  |                            CONTINUE  |     |     |
+ *      |     |                                  |  |                                      |     |     |
+ *      |     |                                  |  |                                      |     |     |
+ *      |     |                                  |  |                                      |     |     |
+ *      |     |                         +--------+--v-------------+  SNAPSHOT_SYNC_REQUEST |     |     |
+ *      |     +-----SNAPSHOT_APPLY------+   WAIT_SNAPSHOT_APPLY   +------------------------+     |     |
+ *      |              COMPLETE         +-^----+---^--------------+       SYNC_CANCEL            |     |
+ *      |                                 |    |   |                                             |     |
+ *      |                                 |    |   +-----------SNAPSHOT_TRANSFER_COMPLETE--------+     |
+ *      |                                 +----+                                                       |
+ *      |                             SNAPSHOT_APPLY                                                   |
+ *      |                               IN_PROGRESS                                                    |
+ *      |                                                                                              |
+ *      +----------------------------------------SYNC_CANCEL-------------------------------------------+
+ *                                          SNAPSHOT_SYNC_REQUEST
+ *
+ *
+ *
+ *
+ *     +-------------+
+ *     |   STOPPED   <-----REPLICATION-----  ALL_STATES
+ *     +-------------+       SHUTDOWN
  *
  *
  */
-// TODO(Anny): insert new state to comply with SNAPSHOT_WAIT_COMPLETE event
 @Slf4j
 public class LogReplicationFSM {
 
@@ -136,11 +157,12 @@ public class LogReplicationFSM {
      */
     @VisibleForTesting
     @Getter
-    private ObservableValue numTransitions = new ObservableValue(0);
+    private ObservableValue<Integer> numTransitions = new ObservableValue(0);
 
     /**
      * Log Entry Reader (read incremental updated from Corfu Datatore)
      */
+    @Getter
     private LogEntryReader logEntryReader;
 
     /**
@@ -152,12 +174,14 @@ public class LogReplicationFSM {
      * Version on which snapshot sync is based on.
      */
     @Getter
+    @Setter
     private long baseSnapshot = Address.NON_ADDRESS;
 
     /**
      * Acknowledged timestamp
      */
     @Getter
+    @Setter
     private long ackedTimestamp = Address.NON_ADDRESS;
 
     /**
@@ -227,7 +251,7 @@ public class LogReplicationFSM {
         logEntrySender = new LogEntrySender(logEntryReader, dataSender, readProcessor, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
-        initializeStates(snapshotSender, logEntrySender);
+        initializeStates(snapshotSender, logEntrySender, dataSender);
 
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.logReplicationFSMWorkers = workers;
@@ -246,13 +270,14 @@ public class LogReplicationFSM {
      * @param snapshotSender reads and transmits snapshot syncs
      * @param logEntrySender reads and transmits log entry sync
      */
-    private void initializeStates(SnapshotSender snapshotSender, LogEntrySender logEntrySender) {
+    private void initializeStates(SnapshotSender snapshotSender, LogEntrySender logEntrySender, DataSender dataSender) {
         /*
          * Log Replication State instances are kept in a map to be reused in transitions, avoid creating one
-          * per every transition (reduce GC cycles).
+         * per every transition (reduce GC cycles).
          */
         states.put(LogReplicationStateType.INITIALIZED, new InitializedState(this));
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotSender));
+        states.put(LogReplicationStateType.WAIT_SNAPSHOT_APPLY, new WaitSnapshotApplyState(this, dataSender));
         states.put(LogReplicationStateType.IN_LOG_ENTRY_SYNC, new InLogEntrySyncState(this, logEntrySender));
         states.put(LogReplicationStateType.STOPPED, new StoppedState());
     }
@@ -295,42 +320,21 @@ public class LogReplicationFSM {
             // Block until an event shows up in the queue.
             LogReplicationEvent event = eventQueue.take();
 
-            if (event.getType() == LogReplicationEventType.REPLICATION_START) {
-                baseSnapshot = event.getMetadata().getLastBaseSnapshot();
-                ackedTimestamp = event.getMetadata().getLastLogEntrySyncedTimestamp();
-                log.info("Log Replication FSM consume event {}", event);
-            }
-
-            if (event.getType() == LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED) {
-                if (state.getType() == LogReplicationStateType.IN_LOG_ENTRY_SYNC &&
-                        state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
-                    log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
-                    ackedTimestamp = event.getMetadata().getLastLogEntrySyncedTimestamp();
-                    log.debug("Replicated Event ackTs {} ", ackedTimestamp);
-                }
-            } else {
-                if (event.getType() == LogReplicationEventType.SNAPSHOT_SYNC_COMPLETE) {
-                    // Verify it's for the same request, as that request could've been canceled and was received later
-                    if (state.getType() == LogReplicationStateType.IN_SNAPSHOT_SYNC &&
-                            state.getTransitionEventId().equals(event.getMetadata().getRequestId())) {
-                        log.info("Snapshot Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
-                        baseSnapshot = event.getMetadata().getLastBaseSnapshot();
-                        ackedTimestamp = event.getMetadata().getLastLogEntrySyncedTimestamp();
-                    }
-                }
-
-                try {
-                    LogReplicationState newState = state.processEvent(event);
-                    log.trace("Transition from {} to {}", state, newState);
-                    transition(state, newState);
-                    state = newState;
-                    numTransitions.setValue(numTransitions.getValue() + 1);
-                } catch (IllegalTransitionException illegalState) {
+            try {
+                LogReplicationState newState = state.processEvent(event);
+                log.trace("Transition from {} to {}", state, newState);
+                transition(state, newState);
+                state = newState;
+                numTransitions.setValue(numTransitions.getValue() + 1);
+            } catch (IllegalTransitionException illegalState) {
+                // Ignore LOG_ENTRY_SYNC_REPLICATED events for logging purposes as they will likely come in frequently,
+                // as it is used for update purposes but does not imply a transition.
+                if (!event.getType().equals(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED)) {
                     log.error("Illegal log replication event {} when in state {}", event.getType(), state.getType());
                 }
             }
 
-            //For testing purpose to notify the event generator the stop of the event.
+            // For testing purpose to notify the event generator the stop of the event.
             if (event.getType() == LogReplicationEventType.REPLICATION_STOP) {
                 synchronized (event) {
                     event.notifyAll();

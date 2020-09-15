@@ -44,6 +44,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.FAILED;
 import static org.corfudb.infrastructure.log.statetransfer.segment.TransferSegmentStatus.SegmentState.TRANSFERRED;
@@ -130,14 +131,21 @@ public class RestoreRedundancyMergeSegments extends Action {
                 Optional<Long> committedTail =
                         tryGetCommittedTail(runtime.getLayoutView().getRuntimeLayout());
 
-                // Execute state transfer.
-                ImmutableList<TransferSegment> transferSegments = ImmutableList.copyOf(
+                // Execute state transfer and return the list of transferred transfer segments.
+                ImmutableList<TransferSegment> transferredSegments = ImmutableList.copyOf(
                         getTransferSegments(transferManager, currentLayout,
                                 trimMark, committedTail));
 
-                // Get all the transferred segments as well as the current layout.
+                // Get segments that were trimmed but do not include the current node, if any.
+                ImmutableList<TransferSegment> trimmedNotRestoredSegments =
+                        redundancyCalculator.getTrimmedNotRestoredSegments(currentLayout, trimMark);
+
+                ImmutableList<TransferSegment> segmentsToGetRestored =
+                        Stream.concat(trimmedNotRestoredSegments.stream(), transferredSegments.stream())
+                                .collect(ImmutableList.toImmutableList());
+                // Get all the restorable segments as well as the current layout.
                 LayoutTransferSegments layoutTransferSegments =
-                        new LayoutTransferSegments(currentLayout, transferSegments);
+                        new LayoutTransferSegments(currentLayout, segmentsToGetRestored);
 
                 // Transfer a new committed tail after all segments are transferred.
                 // The new committed tail is the last transferred address.

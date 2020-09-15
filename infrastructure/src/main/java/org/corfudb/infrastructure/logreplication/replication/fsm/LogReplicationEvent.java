@@ -17,14 +17,15 @@ public class LogReplicationEvent {
      * Enum listing the various type of LogReplicationEvent.
      */
     public enum LogReplicationEventType {
-        REPLICATION_START,          // External event which signals start of log replication process
+        LOG_ENTRY_SYNC_REQUEST,     // External event which signals start of log replication process
         REPLICATION_STOP,           // External event which signals stop of log replication process
         SNAPSHOT_SYNC_REQUEST,      // External event which signals start of a snapshot sync (full-sync)
         SNAPSHOT_SYNC_CONTINUE,     // Internal event to continue snapshot sync (broken to accommodate multi-cluster
                                     // replication for a shared thread pool)
-        SNAPSHOT_WAIT_COMPLETE,     // Has sent over all snapshot full sync data and wait the destination to set back
-                                    // an ACK for snapshot_sync_complete. It will resend the SNAPSHOT_SYNC_COMPLETE message.
-        SNAPSHOT_SYNC_COMPLETE,     // External/Internal event which signals snapshot sync has been completed
+        SNAPSHOT_APPLY_IN_PROGRESS, // External event which signals the sender that snapshot apply is still in progress, wait.
+        SNAPSHOT_TRANSFER_COMPLETE, // External event which signals the sender that snapshot has been successfully transferred
+                                    // and log replication can transition to log entry (incremental) sync
+        SNAPSHOT_APPLY_COMPLETE,    // External/Internal event which signals snapshot sync has been completed
         LOG_ENTRY_SYNC_CONTINUE,    // Internal event to continue log entry sync (broken to accommodate multi-cluster
                                     // replication for a shared thread pool)
         SYNC_CANCEL,                // External/Internal event requesting to cancel sync (snapshot or log entry)

@@ -44,8 +44,8 @@ public class LockIT extends AbstractIT implements Observer {
     private static final String LOCK_GROUP = "Default_Lock_Group";
     private static final String LOCK_NAME = "Test_Lock";
 
-    private Map<UUID, ObservableValue> lockAcquiredObservables = new HashMap<>();
-    private Map<UUID, ObservableValue> lockRevokedObservables = new HashMap<>();
+    private Map<UUID, ObservableValue<Integer>> lockAcquiredObservables = new HashMap<>();
+    private Map<UUID, ObservableValue<Integer>> lockRevokedObservables = new HashMap<>();
     private Map<UUID, CorfuRuntime> clientIdToRuntimeMap = new HashMap<>();
 
     // A semaphore that allows to block until the observed value reaches the expected value
@@ -375,7 +375,7 @@ public class LockIT extends AbstractIT implements Observer {
         }
     }
 
-    private boolean lockHasNotBeenAcquired(Map<UUID, ObservableValue> lockAcquiredObservables) {
+    private boolean lockHasNotBeenAcquired(Map<UUID, ObservableValue<Integer>> lockAcquiredObservables) {
         return lockAcquiredObservables.values().stream()
                 .allMatch(acquiredObservable -> acquiredObservable.getValue() == 0);
     }
@@ -453,7 +453,7 @@ public class LockIT extends AbstractIT implements Observer {
         }
     }
 
-    private boolean observableOfType(Observable observable, Map<UUID, ObservableValue> lockObservables) {
+    private boolean observableOfType(Observable observable, Map<UUID, ObservableValue<Integer>> lockObservables) {
         return lockObservables.values().stream().anyMatch( o -> o == observable);
     }
 

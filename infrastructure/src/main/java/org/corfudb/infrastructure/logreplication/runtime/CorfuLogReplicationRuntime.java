@@ -164,7 +164,7 @@ public class CorfuLogReplicationRuntime {
         this.connectedEndpoints = new HashSet<>();
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build();
         this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
-                TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(), threadFactory);
+                TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
         this.communicationFSMConsumer = Executors.newSingleThreadExecutor(new
                 ThreadFactoryBuilder().setNameFormat("runtime-fsm-consumer").build());
 
@@ -286,26 +286,12 @@ public class CorfuLogReplicationRuntime {
         leaderEndpoint = Optional.empty(); }
 
     public synchronized Optional<String> getRemoteLeader() {
-        log.debug("Retrieve remote leader endpoint {}", leaderEndpoint);
+        log.trace("Retrieve remote leader endpoint {}", leaderEndpoint);
         return leaderEndpoint;
     }
 
     public synchronized Set<String> getConnectedEndpoints() {
         return connectedEndpoints;
-    }
-
-    /**
-     * Retrieve total number of entries to be sent based on a given timestamp.
-     *
-     * This is required for progress status reporting.
-     *
-     * @param ts base (reference) timestamp
-     *
-     * @return pending number of entries to send
-     */
-    public long getNumEntriesToSend(long ts) {
-        long ackTS = sourceManager.getLogReplicationFSM().getAckedTimestamp();
-        return ts - ackTS;
     }
 
     /**

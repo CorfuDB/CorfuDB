@@ -104,7 +104,7 @@ public abstract class SenderBufferManager {
     }
 
     /**
-     * read the config from a file. If the file doesn't exist, use the default values.
+     * Read the config from a file. If the file doesn't exist, use the default values.
      */
     private void readConfig() {
         try {
@@ -122,10 +122,9 @@ public abstract class SenderBufferManager {
                     Boolean.toString(errorOnMsgTimeout)));
             reader.close();
         } catch (Exception e) {
-            log.warn("The config file is not available {} , will use the default values for config.", config_file, e.getCause());
-
+            log.warn("Use default config, could not load {}, cause={}", config_file, e.getMessage());
         } finally {
-            log.info("Sender Buffer config max_retry {} reader_queue_size {} entry_resend_timer {} waitAck {}",
+            log.info("Config :: max_retry={}, reader_queue_size={}, entry_resend_timer={}, waitAck={}",
                     maxRetry, maxBufferSize, msgTimer, errorOnMsgTimeout);
         }
     }
@@ -198,7 +197,7 @@ public abstract class SenderBufferManager {
         }
 
         for (int i = 0; i < pendingMessages.getSize(); i++) {
-            LogReplicationPendingEntry entry  = pendingMessages.getList().get(i);
+            LogReplicationPendingEntry entry  = pendingMessages.getPendingEntries().get(i);
             if (entry.timeout(msgTimer) || force) {
                 entry.retry();
                 // Update metadata as topologyConfigId could have changed in between resend cycles
@@ -206,8 +205,8 @@ public abstract class SenderBufferManager {
                 dataEntry.getMetadata().setTopologyConfigId(topologyConfigId);
                 CompletableFuture<LogReplicationEntry> cf = dataSender.send(entry.getData());
                 addCFToAcked(entry.getData(), cf);
-                log.debug("Resend message {}[ts={}]", entry.getData().getMetadata().getMessageMetadataType(),
-                        entry.getData().getMetadata().getTimestamp());
+                log.debug("Resend message {}[ts={}, snapshotSyncNum={}]", entry.getData().getMetadata().getMessageMetadataType(),
+                        entry.getData().getMetadata().getTimestamp(), entry.getData().getMetadata().getSnapshotSyncSeqNum());
             }
         }
 
