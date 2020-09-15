@@ -1,12 +1,19 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
+
+
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
+import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -14,14 +21,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 /**
  * This class represents the Corfu Replication Server. This Server will be running on both ends
@@ -58,7 +57,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--metrics] [--metrics-port <metrics_port>]"
-                    + "[-P <prefix>] [-R <retention>] [--agent] <port>\n"
+                    + "[-P <prefix>] [-R <retention>] <port>\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -166,8 +165,6 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "                                                                          "
                     + " --logunit-threads=<logunit_threads>                  "
                     + "              Number of threads dedicated for the logunit server.\n"
-                    + "                                                                          "
-                    + " --agent      Run with byteman agent to enable runtime code injection.\n  "
                     + " --metrics                                                                "
                     + "              Enable metrics provider.\n                                  "
                     + " --metrics-port=<metrics_port>                                            "

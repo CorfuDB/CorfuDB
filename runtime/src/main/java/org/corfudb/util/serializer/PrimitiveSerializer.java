@@ -2,21 +2,15 @@ package org.corfudb.util.serializer;
 
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.ByteBuf;
-
 import java.lang.reflect.Array;
-import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.object.ICorfuSMR;
 
 
 /**
@@ -106,16 +100,12 @@ public class PrimitiveSerializer implements ISerializer {
     @Override
     @SuppressWarnings("unchecked")
     public void serialize(Object o, ByteBuf b) {
-        if (o.getClass().getName().contains("$ByteBuddy$")) {
-            ((SerializerFunction<Object>) Primitives.CORFU_SMR.getSerializer()).serialize(o, b);
-        } else {
-            Primitives p = SerializerMap.get(o.getClass());
-            if (p == null) {
-                throw new RuntimeException("Unsupported class for serialization: " + o.getClass());
-            }
-            b.writeByte(p.getTypeNum());
-            ((SerializerFunction<Object>)p.getSerializer()).serialize(o, b);
+        Primitives p = SerializerMap.get(o.getClass());
+        if (p == null) {
+            throw new RuntimeException("Unsupported class for serialization: " + o.getClass());
         }
+        b.writeByte(p.getTypeNum());
+        ((SerializerFunction<Object>)p.getSerializer()).serialize(o, b);
     }
 
     enum Primitives {
@@ -155,44 +145,6 @@ public class PrimitiveSerializer implements ISerializer {
                     byte[] bs = new byte[length];
                     b.readBytes(bs, 0, length);
                     return new String(bs);
-                }),
-        CORFU_SMR(15, Object.class, null, (o, b) -> {
-            String className = o.getClass().toString();
-            className = "SMRObject";
-            byte[] classNameBytes = className.getBytes();
-            b.writeShort(classNameBytes.length);
-            b.writeBytes(classNameBytes);
-            String smrClass = className.split("\\$")[0];
-            byte[] smrClassNameBytes = smrClass.getBytes();
-            b.writeShort(smrClassNameBytes.length);
-            b.writeBytes(smrClassNameBytes);
-            try {
-                Field f = o.getClass().getDeclaredField("_corfuStreamID");
-                f.setAccessible(true);
-                UUID id = (UUID) f.get(o);
-                log.trace("Serializing a SMRObject of type {} as a stream pointer to {}",
-                        smrClass, id);
-                b.writeLong(id.getMostSignificantBits());
-                b.writeLong(id.getLeastSignificantBits());
-            } catch (NoSuchFieldException | IllegalAccessException nsfe) {
-                log.error("Error serializing fields");
-                throw new RuntimeException(nsfe);
-            }
-        },
-                (b, r) -> {
-                    int smrClassNameLength = b.readShort();
-                    byte[] smrClassNameBytes = new byte[smrClassNameLength];
-                    b.readBytes(smrClassNameBytes, 0, smrClassNameLength);
-                    String smrClassName = new String(smrClassNameBytes);
-                    try {
-                        return r.getObjectsView().build()
-                                .setStreamID(new UUID(b.readLong(), b.readLong()))
-                                .setType((Class<? extends ICorfuSMR>) Class.forName(smrClassName))
-                                .open();
-                    } catch (ClassNotFoundException cnfe) {
-                        log.error("Exception during deserialization!", cnfe);
-                        throw new RuntimeException(cnfe);
-                    }
                 });
 
         @Getter
