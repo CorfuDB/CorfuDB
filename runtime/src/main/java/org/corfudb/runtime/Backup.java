@@ -80,7 +80,6 @@ public class Backup {
         Stream stream = (new OpaqueStream(runtime, runtime.getStreamsView().get(uuid, options))).streamUpTo(timestamp);
         Iterator iterator = stream.iterator();
 
-        long numEntries = 0;
         while (iterator.hasNext()) {
             OpaqueEntry lastEntry = (OpaqueEntry) iterator.next();
             List<SMREntry> smrEntries = lastEntry.getEntries().get(uuid);
@@ -88,10 +87,7 @@ public class Backup {
                 Map<UUID, List<SMREntry>> map = new HashMap<>();
                 map.put(uuid, smrEntries);
                 OpaqueEntry newOpaqueEntry = new OpaqueEntry(lastEntry.getVersion(), map);
-                ByteBuf byteBuf = Unpooled.buffer(Utility.calculateSize(smrEntries));
-                OpaqueEntry.serialize(byteBuf, newOpaqueEntry);
                 objectOutput.writeObject(newOpaqueEntry);
-                numEntries++;
             }
         }
 
