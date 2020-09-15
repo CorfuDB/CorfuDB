@@ -1,13 +1,16 @@
 package org.corfudb.protocols;
 
+import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import lombok.NonNull;
+import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.*;
 import org.corfudb.common.util.Address;
 
 import java.util.UUID;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType;
 import static org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenRequest.TokenRequestType.*;
@@ -100,10 +103,9 @@ public class API {
                 .build();
     }
 
-    public static ServerError getBootstrappedServerError(String errorMsg) {
+    public static ServerError getBootstrappedServerError() {
         return ServerError.newBuilder()
                 .setCode(ERROR.BOOTSTRAPPED)
-                .setMessage(errorMsg)
                 .build();
     }
 
@@ -620,7 +622,7 @@ public class API {
     public static Response getPrepareLayoutResponse(Header header, PrepareLayoutResponse.Type type,
                                                     long rank, org.corfudb.runtime.view.Layout layout) {
         PrepareLayoutResponse prepareLayoutResponse = PrepareLayoutResponse.newBuilder()
-                .setType(type)
+                .setRespType(type)
                 .setRank(rank)
                 .setLayout(toProtobufLayout(layout))
                 .build();
@@ -645,10 +647,8 @@ public class API {
     }
 
     public static Response getProposeLayoutResponse(Header header, ProposeLayoutResponse.Type type, long rank) {
-        ProposeLayoutResponse proposeLayoutResponse = ProposeLayoutResponse.newBuilder()
-                .setType(type)
-                .setRank(rank)
-                .build();
+        ProposeLayoutResponse proposeLayoutResponse =
+                ProposeLayoutResponse.newBuilder().setRespType(type).setRank(rank).build();
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(getNoServerError())
@@ -670,9 +670,8 @@ public class API {
     }
 
     public static Response getCommitLayoutResponse(Header header, CommitLayoutResponse.Type type) {
-        CommitLayoutResponse commitLayoutResponse = CommitLayoutResponse.newBuilder()
-                .setType(type)
-                .build();
+        CommitLayoutResponse commitLayoutResponse =
+                CommitLayoutResponse.newBuilder().setRespType(type).build();
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(getNoServerError())
@@ -690,13 +689,88 @@ public class API {
     }
 
     public static Response getBootstrapLayoutResponse(Header header, BootstrapLayoutResponse.Type type) {
-        BootstrapLayoutResponse bootstrapLayoutResponse = BootstrapLayoutResponse.newBuilder().setType(type).build();
+        BootstrapLayoutResponse bootstrapLayoutResponse =
+                BootstrapLayoutResponse.newBuilder().setRespType(type).build();
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(getNoServerError())
                 .setBootstrapLayoutResponse(bootstrapLayoutResponse)
                 .build();
     }
+
+    // Management Messages API
+
+    public static Response getBootstrapManagementResponse(Header header, BootstrapManagementResponse.Type type) {
+        BootstrapManagementResponse bootstrapManagementResponse =
+                BootstrapManagementResponse.newBuilder().setRespType(type).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setBootstrapManagementResponse(bootstrapManagementResponse)
+                .build();
+    }
+
+    public static Response getReportFailureResponse(Header header, ReportFailureResponse.Type type) {
+        ReportFailureResponse reportFailureResponse =
+                ReportFailureResponse.newBuilder().setRespType(type).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setReportFailureResponse(reportFailureResponse)
+                .build();
+    }
+
+    public static Response getHealFailureResponse(Header header, HealFailureResponse.Type type) {
+        HealFailureResponse healFailureResponse =
+                HealFailureResponse.newBuilder().setRespType(type).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setHealFailureResponse(healFailureResponse)
+                .build();
+    }
+
+    public static Response getGetManagementLayoutResponse(Header header, org.corfudb.runtime.view.Layout layout) {
+        GetManagementLayoutResponse getManagementLayoutResponse =
+                GetManagementLayoutResponse.newBuilder().setLayout(toProtobufLayout(layout)).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setGetManagementLayoutResponse(getManagementLayoutResponse)
+                .build();
+    }
+
+    public static NodeConnectivity toProtobufNodeConnectivity(
+            org.corfudb.protocols.wireprotocol.failuredetector.NodeConnectivity nc) {
+        return NodeConnectivity.newBuilder()
+                .setEndpoint(nc.getEndpoint())
+                .setConnectivityType(nc.getType().name())
+                .setEpoch(nc.getEpoch())
+                .setConnectivityMap(Entries.newBuilder()
+                        .addAllItems(nc.getConnectivity()
+                                .entrySet()
+                                .stream()
+                                .map(e -> Any.pack(StringToStringPair.newBuilder()
+                                        .setKey(e.getKey())
+                                        .setValue(e.getValue().name())
+                                        .build()))
+                                .collect(Collectors.toList()))
+                        .build())
+                .build();
+    }
+
+    public static Response getQueryNodeResponse(Header header, NodeState state) {
+        QueryNodeResponse queryNodeResponse = QueryNodeResponse.newBuilder()
+                .setNodeConnectivity(toProtobufNodeConnectivity(state.getConnectivity()))
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setQueryNodeResponse(queryNodeResponse)
+                .build();
+    }
+
+    // Misc. API
 
     public static Response getErrorResponseNoPayload(Header header, ServerError error) {
         return Response.newBuilder()

@@ -289,10 +289,7 @@ public class LayoutServer extends AbstractServer {
                     + "already bootstrapped, rejecting!", requestHeader.getRequestId());
 
             responseHeader = API.generateResponseHeader(requestHeader, false, true);
-            final ServerError alreadyBootstrapped = API.getBootstrappedServerError("BOOTSTRAPPED " +
-                    "error triggered by " + requestHeader.toString());
-
-            response = API.getErrorResponseNoPayload(responseHeader, alreadyBootstrapped);
+            response = API.getErrorResponseNoPayload(responseHeader, API.getBootstrappedServerError());
         }
 
         r.sendResponse(response, ctx);

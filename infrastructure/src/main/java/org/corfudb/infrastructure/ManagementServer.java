@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
+import org.corfudb.protocols.API;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -19,6 +20,14 @@ import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapManagementResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.HealFailureResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ReportFailureResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ServerError;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -69,9 +78,17 @@ public class ManagementServer extends AbstractServer {
 
     /**
      * HandlerMethod for this server.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /**
+     * RequestHandlerMethods for the Management server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     /**
      * System down handler to break out of live-locks if the runtime cannot reach the cluster for a
@@ -99,11 +116,18 @@ public class ManagementServer extends AbstractServer {
 
     private final Lock healingLock = new ReentrantLock();
 
+    // [RM] Remove this after Protobuf for RPC Completion
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
         return getState() == ServerState.READY;
     }
 
+    @Override
+    public boolean isServerReadyToHandleReq(Header requestHeader) {
+        return getState() == ServerState.READY;
+    }
+
+    // [RM] Remove this after Protobuf for RPC Completion
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (msg.getMsgType() == CorfuMsgType.NODE_STATE_REQUEST) {
@@ -111,6 +135,15 @@ public class ManagementServer extends AbstractServer {
             getHandler().handle(msg, ctx, r);
         } else {
             executor.submit(() -> getHandler().handle(msg, ctx, r));
+        }
+    }
+
+    @Override
+    protected void processRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        if(req.getHeader().getType().equals(CorfuProtocol.MessageType.QUERY_NODE)) {
+            getHandlerMethods().handle(req, ctx, r);
+        } else {
+            executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
         }
     }
 
@@ -184,11 +217,21 @@ public class ManagementServer extends AbstractServer {
         return runtime;
     }
 
+    // [RM] Remove this after Protobuf for RPC Completion
     private boolean isBootstrapped(CorfuMsg msg) {
         if (serverContext.getManagementLayout() == null) {
             log.warn("Received message but not bootstrapped! Message={}", msg);
             return false;
         }
+        return true;
+    }
+
+    private boolean isBootstrapped(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        if(serverContext.getManagementLayout() == null) {
+            r.sendNoBootstrapError(req.getHeader(), ctx);
+            return false;
+        }
+
         return true;
     }
 
@@ -236,6 +279,40 @@ public class ManagementServer extends AbstractServer {
                 r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
             }
         }
+    }
+
+    @RequestHandler(type = CorfuProtocol.MessageType.BOOTSTRAP_MANAGEMENT)
+    public synchronized  void handleManagementBootstrap(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        final Layout layout = API.fromProtobufLayout(req.getBootstrapManagementRequest().getLayout());
+        Header responseHeader;
+        Response response;
+
+        if(serverContext.getManagementLayout() != null) {
+            log.warn("handleManagementBootstrap[{}]: Got a request to bootstrap a server, with layout " +
+                    "{}, which is already bootstrapped... Rejecting!", req.getHeader().getRequestId(), layout);
+
+            responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+            response = API.getErrorResponseNoPayload(responseHeader, API.getBootstrappedServerError());
+        } else {
+            log.info("handleManagementBootstrap[{}]: Received bootstrap " +
+                    "layout {}", req.getHeader().getRequestId(), layout);
+
+            if(layout.getClusterId() == null) {
+                log.warn("handleManagementBootstrap[{}]: clusterId " +
+                        "for the layout is not present", req.getHeader().getRequestId());
+
+                responseHeader = API.generateResponseHeader(req.getHeader(), false, false);
+                response = API.getBootstrapManagementResponse(responseHeader, BootstrapManagementResponse.Type.NACK);
+
+            } else {
+                serverContext.saveManagementLayout(layout);
+
+                responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+                response = API.getBootstrapManagementResponse(responseHeader, BootstrapManagementResponse.Type.ACK);
+            }
+        }
+
+        r.sendResponse(response, ctx);
     }
 
     /**
@@ -302,6 +379,52 @@ public class ManagementServer extends AbstractServer {
             log.error("handleFailureDetectedMsg: failure handling unsuccessful.");
             r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.NACK));
         }
+    }
+
+    @RequestHandler(type = CorfuProtocol.MessageType.REPORT_FAILURE)
+    public void handleReportFailure(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        // If the server isn't bootstrapped yet, ignore the request
+        if(!isBootstrapped(req, ctx, r)) return;
+
+        log.info("handleReportFailure[{}]: Received report failure request {}", req.getHeader().getRequestId(), req);
+        Layout layout = serverContext.copyManagementLayout();
+        Header responseHeader;
+        Response response;
+
+        final Set<String> allActiveServers = layout.getAllActiveServers();
+        final Set<String> responsiveFailedNodes = req.getReportFailureRequest()
+                .getFailedNodesList()
+                .stream()
+                .filter(allActiveServers::contains)
+                .collect(Collectors.toSet());
+
+        if(!req.getReportFailureRequest().getFailedNodesList().isEmpty() && responsiveFailedNodes.isEmpty()) {
+            log.warn("handleReportFailure[{}]: No action taken as none of the failed nodes are responsive. " +
+                    "failedNodes:{} responsiveLayoutNodes:{}, latestLayoutEpoch:{}", req.getHeader().getRequestId(),
+                    req.getReportFailureRequest().getFailedNodesList(), allActiveServers, layout.getEpoch());
+
+            responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+            response = API.getReportFailureResponse(responseHeader, ReportFailureResponse.Type.ACK);
+            r.sendResponse(response, ctx);
+            return;
+        }
+
+        boolean result = ReconfigurationEventHandler.handleFailure(
+                failureHandlerPolicy,
+                layout,
+                managementAgent.getCorfuRuntime(),
+                responsiveFailedNodes);
+
+        if(result) {
+            responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+            response = API.getReportFailureResponse(responseHeader, ReportFailureResponse.Type.ACK);
+        } else {
+            log.error("handleReportFailure[{}]: failure handling unsuccessful.", req.getHeader().getRequestId());
+            responseHeader = API.generateResponseHeader(req.getHeader(), false, false);
+            response = API.getReportFailureResponse(responseHeader, ReportFailureResponse.Type.NACK);
+        }
+
+        r.sendResponse(response, ctx);
     }
 
     /**
@@ -382,6 +505,82 @@ public class ManagementServer extends AbstractServer {
         }
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.HEAL_FAILURE)
+    public void handleHealFailure(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        // If the server isn't bootstrapped yet, ignore the request
+        if(!isBootstrapped(req, ctx, r)) return;
+
+        log.info("handleHealFailure[{}]: Received heal failure request {}", req.getHeader().getRequestId(), req);
+        Layout layout = serverContext.copyManagementLayout();
+        Header responseHeader;
+        Response response;
+
+        // If this message is stamped with an older epoch which indicates the polling was
+        // conducted in an old epoch. This message cannot be considered and is discarded.
+        if(req.getHealFailureRequest().getDetectorEpoch() != layout.getEpoch()) {
+            log.error("handleHealFailure[{}]: Discarding request received... detectorEpoch:{} latestLayoutEpoch:{}",
+                    req.getHeader().getRequestId(), req.getHealFailureRequest().getDetectorEpoch(), layout.getEpoch());
+
+            responseHeader = API.generateResponseHeader(req.getHeader(), false, false);
+            response = API.getHealFailureResponse(responseHeader, HealFailureResponse.Type.NACK);
+            r.sendResponse(response, ctx);
+            return;
+        }
+
+        final List<String> unresponsiveServers = layout.getUnresponsiveServers();
+        final Set<String> unresponsiveHealedNodes = req.getHealFailureRequest()
+                .getHealedNodesList()
+                .stream()
+                .filter(unresponsiveServers::contains)
+                .collect(Collectors.toSet());
+
+        if(!req.getHealFailureRequest().getHealedNodesList().isEmpty() && unresponsiveHealedNodes.isEmpty()) {
+            log.warn("handleHealFailure[{}]: No action taken as none of the healed nodes are unresponsive. " +
+                    "healedNodes:{} unresponsiveLayoutNodes:{}, latestLayoutEpoch:{}", req.getHeader().getRequestId(),
+                    req.getHealFailureRequest().getHealedNodesList(), unresponsiveServers, layout.getEpoch());
+
+            responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+            response = API.getHealFailureResponse(responseHeader, HealFailureResponse.Type.ACK);
+            r.sendResponse(response, ctx);
+            return;
+        }
+
+        boolean result;
+        if (healingLock.tryLock()) {
+            try {
+                log.info("handleHealFailure[{}]: Acquired healing lock. Performing healing for nodes: {}",
+                        req.getHeader().getRequestId(), unresponsiveHealedNodes);
+
+                final Duration retryWorkflowQueryTimeout = Duration.ofSeconds(1L);
+                result = ReconfigurationEventHandler.handleHealing(
+                        managementAgent.getCorfuRuntime(),
+                        unresponsiveHealedNodes,
+                        retryWorkflowQueryTimeout);
+            } finally {
+                healingLock.unlock();
+            }
+        } else {
+            log.info("handleHealFailure[{}]: healing handling " +
+                    "already in progress... Skipping.", req.getHeader().getRequestId());
+
+            responseHeader = API.generateResponseHeader(req.getHeader(), false, false);
+            response = API.getHealFailureResponse(responseHeader, HealFailureResponse.Type.NACK);
+            r.sendResponse(response, ctx);
+            return;
+        }
+
+        if(result) {
+            responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+            response = API.getHealFailureResponse(responseHeader, HealFailureResponse.Type.ACK);
+        } else {
+            log.error("handleHealFailure[{}]: healing handling unsuccessful.", req.getHeader().getRequestId());
+            responseHeader = API.generateResponseHeader(req.getHeader(), false, false);
+            response = API.getHealFailureResponse(responseHeader, HealFailureResponse.Type.NACK);
+        }
+
+        r.sendResponse(response, ctx);
+    }
+
     /**
      * Returns current {@link NodeState} provided by failure detector.
      * The detector periodically collects current cluster state and saves it in {@link ClusterStateContext}.
@@ -448,5 +647,14 @@ public class ManagementServer extends AbstractServer {
         }
         r.sendResponse(ctx, msg,
                 CorfuMsgType.LAYOUT_RESPONSE.payloadMsg(serverContext.getManagementLayout()));
+    }
+
+    @RequestHandler(type = CorfuProtocol.MessageType.GET_MANAGEMENT_LAYOUT)
+    public void handleGetManagementLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        if(!isBootstrapped(req, ctx, r)) return;
+
+        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+        Response response = API.getGetManagementLayoutResponse(responseHeader, serverContext.getManagementLayout());
+        r.sendResponse(response, ctx);
     }
 }
