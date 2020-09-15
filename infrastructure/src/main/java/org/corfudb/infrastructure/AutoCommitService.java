@@ -110,10 +110,13 @@ public class AutoCommitService implements ManagementService {
                 long currEpoch = currentLayout.getEpoch();
                 if (lastEpoch < 0 || trimmed || currEpoch != lastEpoch) {
                     Token trimMark = getCorfuRuntime().getAddressSpaceView().getTrimMark(false);
+                    long lastTrimmed = trimMark.getSequence() - 1;
                     // Make sure all log units have same trim mark, then we can start committing
                     // from the trim mark instead of the trailing committed tail.
-                    if (committedTail < trimMark.getSequence() - 1) {
-                        Token trimToken = new Token(trimMark.getEpoch(), trimMark.getSequence() - 1);
+                    if (committedTail < lastTrimmed) {
+                        log.info("runAutoCommit: committedTail {} < last trimmed address {}, " +
+                                "starting prefix trim.", committedTail, lastTrimmed);
+                        Token trimToken = new Token(trimMark.getEpoch(), lastTrimmed);
                         getCorfuRuntime().getAddressSpaceView().prefixTrim(trimToken, false);
                         committedTail = trimMark.getSequence() - 1;
                     }
