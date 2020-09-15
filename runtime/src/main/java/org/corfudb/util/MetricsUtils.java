@@ -3,37 +3,32 @@ package org.corfudb.util;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.CsvReporter;
 import com.codahale.metrics.Gauge;
-import com.codahale.metrics.jmx.JmxReporter;
 import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.RatioGauge;
 import com.codahale.metrics.Slf4jReporter;
 import com.codahale.metrics.Timer;
+import com.codahale.metrics.jmx.JmxReporter;
 import com.codahale.metrics.jvm.BufferPoolMetricSet;
 import com.codahale.metrics.jvm.ClassLoadingGaugeSet;
 import com.codahale.metrics.jvm.FileDescriptorRatioGauge;
 import com.codahale.metrics.jvm.GarbageCollectorMetricSet;
 import com.codahale.metrics.jvm.MemoryUsageGaugeSet;
 import com.codahale.metrics.jvm.ThreadStatesGaugeSet;
-import com.github.benmanes.caffeine.cache.Cache;
-
 import io.netty.buffer.PooledByteBufAllocator;
-
 import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.TimeUnit;
-
+import lombok.Getter;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.MetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer.Config;
 import org.ehcache.sizeof.SizeOf;
 import org.slf4j.LoggerFactory;
-
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class MetricsUtils {
@@ -339,36 +334,5 @@ public class MetricsUtils {
                     sizeOf.deepSizeOf(objectOfInterest) :
                     0L;
         };
-    }
-
-    /**
-     * This method adds different properties of provided instance of {@link Cache} to the
-     * indicated metrics registry. The added properties of cache are:
-     *
-     * cache.object-counts: estimated size of cache.
-     * cache.evictions : number of cache evictions
-     * cache.hit-rate : hit rate of cache.
-     * cache.hits :
-     * cache.misses :
-     *
-     *
-     * @param metrics
-     * @param cache
-     */
-    public static void addCacheMeasurerFor(@NonNull MetricRegistry metrics, Cache cache) {
-        try {
-            metrics.register("cache.object-counts." + cache.toString(),
-                             (Gauge<Long>) cache::estimatedSize);
-            metrics.register("cache.evictions." + cache.toString(),
-                             (Gauge<Long>) cache.stats()::evictionCount);
-            metrics.register("cache.hit-rate." + cache.toString(),
-                             (Gauge<Double>) cache.stats()::hitRate);
-            metrics.register("cache.hits." + cache.toString(),
-                             (Gauge<Long>) cache.stats()::hitCount);
-            metrics.register("cache.misses." + cache.toString(),
-                             (Gauge<Long>) cache.stats()::missCount);
-        } catch (IllegalArgumentException e) {
-            // Re-registering metrics during test runs, not a problem
-        }
     }
 }
