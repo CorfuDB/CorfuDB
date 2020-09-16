@@ -351,9 +351,9 @@ public class AutoCommitServiceTest extends AbstractViewTest {
         Token oldTrimMark = Token.of(layout.getEpoch(), 100);
         Token newTrimMark = Token.of(layout.getEpoch(), 200);
         // Head and middle chain has old trim mark, tail chain has new trim mark.
-        runtime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0).prefixTrim(oldTrimMark);
-        runtime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_1).prefixTrim(oldTrimMark);
-        runtime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_2).prefixTrim(newTrimMark);
+        runtime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0).prefixTrim(oldTrimMark).join();
+        runtime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_1).prefixTrim(oldTrimMark).join();
+        runtime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_2).prefixTrim(newTrimMark).join();
 
         autoCommitService.runAutoCommit();
 
