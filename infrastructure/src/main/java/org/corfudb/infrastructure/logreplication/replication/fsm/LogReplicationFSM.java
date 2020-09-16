@@ -162,6 +162,7 @@ public class LogReplicationFSM {
     /**
      * Log Entry Reader (read incremental updated from Corfu Datatore)
      */
+    @Getter
     private LogEntryReader logEntryReader;
 
     /**

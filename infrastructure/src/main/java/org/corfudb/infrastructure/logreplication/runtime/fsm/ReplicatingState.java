@@ -56,8 +56,6 @@ public class ReplicatingState implements LogReplicationRuntimeState {
                 // Some node got connected, update connected endpoints
                 fsm.updateConnectedEndpoints(event.getEndpoint());
                 return null;
-            case NEGOTIATION_COMPLETE:
-                return fsm.getStates().get(LogReplicationRuntimeStateType.REPLICATING);
             case LOCAL_LEADER_LOSS:
                 return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);
             default: {

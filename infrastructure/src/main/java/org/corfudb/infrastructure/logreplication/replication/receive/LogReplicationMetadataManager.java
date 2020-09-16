@@ -65,7 +65,7 @@ public class LogReplicationMetadataManager {
                             LogReplicationMetadataVal.class,
                             null,
                             TableOptions.builder().build());
-            replicationStatusTable = this.corfuStore.openTable(NAMESPACE,
+            this.replicationStatusTable = this.corfuStore.openTable(NAMESPACE,
                             REPLICATION_STATUS_TABLE,
                             ReplicationStatusKey.class,
                             ReplicationStatusVal.class,
@@ -344,7 +344,7 @@ public class LogReplicationMetadataManager {
         txBuilder.update(REPLICATION_STATUS_TABLE, key, val, null);
         txBuilder.commit();
 
-        log.trace("setReplicationRemainingEntries: clusterId: {}, remainingEntries: {}, type: {}",
+        log.debug("setReplicationRemainingEntries: clusterId: {}, remainingEntries: {}, type: {}",
                 clusterId, remainingEntries, type);
     }
 
@@ -354,7 +354,12 @@ public class LogReplicationMetadataManager {
                 corfuStore.query(NAMESPACE).executeQuery(REPLICATION_STATUS_TABLE, record -> true);
 
         for(CorfuStoreEntry<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal>entry : entries.getResult()) {
-            replicationStatusMap.put(entry.getKey().getClusterId(), entry.getPayload());
+            String clusterId = entry.getKey().getClusterId();
+            ReplicationStatusVal value = entry.getPayload();
+            replicationStatusMap.put(clusterId, value);
+            log.debug("getReplicationRemainingEntries: clusterId={}, remainingEntriesToSend={}, " +
+                    "syncType={}, is_consistent={}", clusterId, value.getRemainingEntriesToSend(),
+                    value.getType(), value.getDataConsistent());
         }
 
         log.debug("getReplicationRemainingEntries: replicationStatusMap size: {}", replicationStatusMap.size());
@@ -402,6 +407,7 @@ public class LogReplicationMetadataManager {
     }
 
     public void resetReplicationStatus() {
+        log.info("Reset replication status");
         replicationStatusTable.clear();
     }
 

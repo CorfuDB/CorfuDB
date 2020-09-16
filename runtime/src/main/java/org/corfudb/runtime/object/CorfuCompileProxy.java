@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -184,31 +185,35 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
             }
         }
 
+        // Linearize this read against a timestamp
+        AtomicLong timestamp = new AtomicLong(rt.getSequencerView().query(getStreamID()));
+
+        log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
+
         // Perform underlying access
-        for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
-            // Linearize this read against a timestamp
-            final long timestamp = rt.getSequencerView()
-                            .query(getStreamID());
-            log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
+        return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp.get()
+                        && !o.isOptimisticallyModifiedUnsafe(),
+                o -> {
+                    for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
+                        try {
+                            o.syncObjectUnsafe(timestamp.get());
+                            break;
+                        } catch (TrimmedException te) {
+                            log.info("accessInner: Encountered trimmed address space " +
+                                            "while accessing version {} of stream {} on attempt {}",
+                                    timestamp.get(), getStreamID(), x);
 
-            try {
-                return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp
-                                && !o.isOptimisticallyModifiedUnsafe(),
-                        o -> o.syncObjectUnsafe(timestamp),
-                        o -> accessMethod.access(o));
-            } catch (TrimmedException te) {
-                log.info("accessInner: Encountered trimmed address space " +
-                    "while accessing version {} of stream {} on attempt {}",
-                    timestamp, getStreamID(), x);
-                // We encountered a TRIM during sync, reset the object
-                underlyingObject.update(o -> {
-                    o.resetUnsafe();
-                    return null;
-                });
-            }
-        }
+                            o.resetUnsafe();
 
-        throw new TrimmedException();
+                            if (x == (rt.getParameters().getTrimRetry() - 1)) {
+                                throw te;
+                            }
+
+                            timestamp.set(rt.getSequencerView().query(getStreamID()));
+                        }
+                    }
+                },
+                o -> accessMethod.access(o));
     }
 
     /**
@@ -280,9 +285,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
             return ret == VersionLockedObject.NullValue.NULL_VALUE ? null : ret;
         }
 
-        for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
-            try {
-                return underlyingObject.update(o -> {
+        return underlyingObject.update(o -> {
+            for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
+                try {
                     o.syncObjectUnsafe(timestamp);
                     if (o.getUpcallResults().containsKey(timestamp)) {
                         log.trace("Upcall[{}] {} Sync'd", this, timestamp);
@@ -299,20 +304,17 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                             + "of an upcall@" + timestamp + " but we are @"
                             + underlyingObject.getVersionUnsafe()
                             + " and we don't have a copy");
-                });
-            } catch (TrimmedException ex) {
-                log.info("getUpcallResultInner: Encountered trimmed address space " +
-                    "while accessing version {} of stream {} on attempt {}",
-                    timestamp, getStreamID(), x);
-                // We encountered a TRIM during sync, reset the object
-                underlyingObject.update(o -> {
+                } catch (TrimmedException ex) {
+                    log.info("getUpcallResultInner: Encountered trimmed address space " +
+                                    "while accessing version {} of stream {} on attempt {}",
+                            timestamp, getStreamID(), x);
+                    // We encountered a TRIM during sync, reset the object
                     o.resetUnsafe();
-                    return null;
-                });
+                }
             }
-        }
 
-        throw new TrimmedUpcallException(timestamp);
+            throw new TrimmedUpcallException(timestamp);
+        });
     }
 
     /**
