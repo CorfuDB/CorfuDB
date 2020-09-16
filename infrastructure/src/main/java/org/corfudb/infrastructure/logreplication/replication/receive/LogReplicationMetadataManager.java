@@ -2,10 +2,13 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
@@ -13,11 +16,14 @@ import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.QueryResult;
+import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -31,15 +37,19 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LogReplicationMetadataManager {
 
-    private static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
-    private static final String METADATA_TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
+    public static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
+    public static final String METADATA_TABLE_PREFIX_NAME = "CORFU-REPLICATION-WRITER-";
     private static final String REPLICATION_STATUS_TABLE = "LogReplicationStatus";
+    private static final String REPLICATION_EVENT_TABLE_NAME = "LogReplicationEventTable";
 
     private CorfuStore corfuStore;
 
     private String metadataTableName;
 
     private Table<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal> replicationStatusTable;
+
+    @Getter
+    private Table<ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, ReplicationEventKey> replicationEventTable;
 
     private CorfuRuntime runtime;
     private String localClusterId;
@@ -61,6 +71,14 @@ public class LogReplicationMetadataManager {
                             ReplicationStatusVal.class,
                             null,
                             TableOptions.builder().build());
+
+            replicationEventTable = this.corfuStore.openTable(NAMESPACE,
+                    REPLICATION_EVENT_TABLE_NAME,
+                    ReplicationEventKey.class,
+                    ReplicationEvent.class,
+                    null,
+                    TableOptions.builder().build());
+
             this.localClusterId = localClusterId;
         } catch (Exception e) {
             log.error("Caught an exception while opening MetadataManagerTables {}", e);
@@ -471,6 +489,36 @@ public class LogReplicationMetadataManager {
      */
     public long getCurrentSnapshotSyncCycleId() {
         return query(null, LogReplicationMetadataType.CURRENT_SNAPSHOT_CYCLE_ID);
+    }
+
+    /**
+     * Interface to write an event to the logReplicationEventTable.
+     * @param key
+     * @param event
+     */
+    public void updateLogReplicationEventTable(ReplicationEventKey key, ReplicationEvent event) {
+        log.info("UpdateReplicationEvent {} with event {}", REPLICATION_EVENT_TABLE_NAME, event);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
+        txBuilder.update(REPLICATION_EVENT_TABLE_NAME, key, event, null);
+        txBuilder.commit();
+    }
+
+    /**
+     * Subscribe to the logReplicationEventTable
+     * @param listener
+     */
+    public void subscribeReplicationEventTable(StreamListener listener) {
+        log.info("LogReplication start listener for table {}", REPLICATION_EVENT_TABLE_NAME);
+        corfuStore.subscribe(listener, NAMESPACE,
+                Collections.singletonList(new TableSchema(REPLICATION_EVENT_TABLE_NAME, ReplicationEventKey.class, ReplicationEvent.class, null)), null);
+    }
+
+    /**
+     * Unsubscribe the logReplicationEventTable
+     * @param listener
+     */
+    public void unsubscribeReplicationEventTable(StreamListener listener) {
+        corfuStore.unsubscribe(listener);
     }
 
     public enum LogReplicationMetadataType {

@@ -144,6 +144,8 @@ public class CorfuLogReplicationRuntime {
 
     private final LogReplicationClientRouter router;
     private final LogReplicationMetadataManager metadataManager;
+
+    @Getter
     private final LogReplicationSourceManager sourceManager;
     private volatile Set<String> connectedEndpoints;
     private volatile Optional<String> leaderEndpoint = Optional.empty();
