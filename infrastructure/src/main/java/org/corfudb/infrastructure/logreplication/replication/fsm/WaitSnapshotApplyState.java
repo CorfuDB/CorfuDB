@@ -73,9 +73,9 @@ public class WaitSnapshotApplyState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-                log.info("Snapshot Sync requested {} while waiting for {} to complete.", event.getEventID(), getTransitionEventId());
+                log.info("Snapshot Sync requested {} while waiting for {} to complete.", event.getEventId(), getTransitionEventId());
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
-                snapshotSyncState.setTransitionEventId(event.getEventID());
+                snapshotSyncState.setTransitionEventId(event.getEventId());
                 return snapshotSyncState;
             case SYNC_CANCEL:
                 log.debug("Sync has been canceled while waiting for Snapshot Sync {} to complete apply. Restart.", transitionEventId);
@@ -102,11 +102,11 @@ public class WaitSnapshotApplyState implements LogReplicationState {
                             .get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
                     // We need to set a new transition event Id, so anything happening on this new state
                     // is marked with this unique Id and correlated to cancel or trimmed events.
-                    logEntrySyncState.setTransitionEventId(event.getEventID());
+                    logEntrySyncState.setTransitionEventId(event.getEventId());
                     fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                     log.info("Snapshot Sync apply completed, syncRequestId={}, baseSnapshot={}. Transition to LOG_ENTRY_SYNC",
-                            event.getEventID(), event.getMetadata().getLastTransferredBaseSnapshot());
+                            event.getEventId(), event.getMetadata().getLastTransferredBaseSnapshot());
                     return logEntrySyncState;
                 }
 

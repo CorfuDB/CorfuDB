@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * This class manages Log Replication for multiple remote (standby) clusters.
@@ -216,7 +217,8 @@ public class CorfuReplicationManager {
         } else {
             log.info("EnforceSnapshotSync for cluster {}", standbyRuntime.getRemoteClusterId());
             standbyRuntime.getSourceManager().stopLogReplication();
-            standbyRuntime.getSourceManager().startSnapshotSync();
+            // TODO: add Id from DiscoveryServiceEvent provided by Nan
+            standbyRuntime.getSourceManager().startForcedSnapshotSync(UUID.randomUUID());
         }
     }
 }

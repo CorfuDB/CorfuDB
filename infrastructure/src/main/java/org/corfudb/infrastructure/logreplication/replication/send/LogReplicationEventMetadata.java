@@ -30,6 +30,8 @@ public class LogReplicationEventMetadata {
      */
     private long lastTransferredBaseSnapshot;
 
+    private boolean forceSnapshotSync = false;
+
     /**
      * Empty Metadata
      *
@@ -71,6 +73,17 @@ public class LogReplicationEventMetadata {
         this.lastTransferredBaseSnapshot = baseSnapshot;
     }
 
+    /**
+     * Constructor
+     *
+     * @param forceSnapshotSync true, if snapshot sync has been forced by caller.
+     *                          false, otherwise.
+     */
+    public LogReplicationEventMetadata(boolean forceSnapshotSync) {
+        this(NIL_UUID, -1L);
+        this.forceSnapshotSync = forceSnapshotSync;
+    }
+
     public UUID getRequestId() {
         return this.requestId;
     }
@@ -82,5 +95,7 @@ public class LogReplicationEventMetadata {
     public long getLastTransferredBaseSnapshot() {
         return this.lastTransferredBaseSnapshot;
     }
+
+    public boolean isForcedSnapshotSync() { return this.forceSnapshotSync; }
 }
 

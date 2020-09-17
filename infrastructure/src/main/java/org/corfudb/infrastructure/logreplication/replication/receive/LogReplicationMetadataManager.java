@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import lombok.val;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
@@ -521,6 +522,12 @@ public class LogReplicationMetadataManager {
         corfuStore.unsubscribe(listener);
     }
 
+    /**
+     * Set the type of Snapshot Sync (forced or default)
+     */
+    public void setSnapshotSyncType() {
+    }
+
     public enum LogReplicationMetadataType {
         TOPOLOGY_CONFIG_ID("topologyConfigId"),
         VERSION("version"),
@@ -532,7 +539,9 @@ public class LogReplicationMetadataManager {
         CURRENT_CYCLE_MIN_SHADOW_STREAM_TS("minShadowStreamTimestamp"),
         LAST_LOG_ENTRY_PROCESSED("lastLogEntryProcessed"),
         REMAINING_REPLICATION_PERCENT("replicationStatus"),
-        DATA_CONSISTENT_ON_STANDBY("dataConsistentOnStandby");
+        DATA_CONSISTENT_ON_STANDBY("dataConsistentOnStandby"),
+        SNAPSHOT_SYNC_TYPE("snapshotSyncType"),
+        SNAPSHOT_SYNC_COMPLETE_TIME("snapshotSyncCompleteTime");
 
         @Getter
         String val;

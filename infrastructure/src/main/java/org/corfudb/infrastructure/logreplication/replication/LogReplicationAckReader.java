@@ -28,9 +28,11 @@ public class LogReplicationAckReader {
     private LogReplicationConfig config;
     private CorfuRuntime runtime;
     private String remoteClusterId;
+
     // Log tail when the current snapshot sync started.  We do not need to synchronize access to it because it will not
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
     private long baseSnapshotTimestamp;
+    private boolean forcedSnapshotSync = false;
 
     /*
      * Periodic Thread which reads the last Acked Timestamp and writes it to the metadata table
@@ -113,7 +115,7 @@ public class LogReplicationAckReader {
      * If the ack'd timestamp is uninitialized(no ack received), it returns the log tail, which means no replication has
      * been done.
      */
-    private long calculateRemainingEntriesToSend(long ackedTimestamp) {
+    private synchronized long calculateRemainingEntriesToSend(long ackedTimestamp) {
         // Get all streams tails, which will be used in the computation of remaining entries
         Map<UUID, Long> tailMap = runtime.getAddressSpaceView().getAllTails().getStreamTails();
 
@@ -323,8 +325,9 @@ public class LogReplicationAckReader {
         }
     }
 
-    public void setBaseSnapshot(long baseSnapshotTimestamp) {
+    public synchronized void setBaseSnapshot(long baseSnapshotTimestamp, boolean forcedSnapshotSync) {
         this.baseSnapshotTimestamp = baseSnapshotTimestamp;
+        this.forcedSnapshotSync = forcedSnapshotSync;
     }
 
     /**

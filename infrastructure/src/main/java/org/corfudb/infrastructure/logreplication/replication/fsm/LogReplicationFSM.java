@@ -11,6 +11,7 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
@@ -217,10 +218,11 @@ public class LogReplicationFSM {
      * @param workers FSM executor service for state tasks
      */
     public LogReplicationFSM(CorfuRuntime runtime, LogReplicationConfig config, ClusterDescriptor remoteCluster, DataSender dataSender,
-                             ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader) {
+                             ReadProcessor readProcessor, ExecutorService workers, LogReplicationAckReader ackReader,
+                             LogReplicationMetadataManager metadataManager) {
         // Use stream-based readers for snapshot and log entry sync reads
         this(runtime, new StreamsSnapshotReader(runtime, config), dataSender,
-                new StreamsLogEntryReader(runtime, config), readProcessor, config, remoteCluster, workers, ackReader);
+                new StreamsLogEntryReader(runtime, config), readProcessor, config, remoteCluster, workers, ackReader, metadataManager);
     }
 
     /**
@@ -238,7 +240,8 @@ public class LogReplicationFSM {
     @VisibleForTesting
     public LogReplicationFSM(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
                              LogEntryReader logEntryReader, ReadProcessor readProcessor, LogReplicationConfig config,
-                             ClusterDescriptor remoteCluster, ExecutorService workers, LogReplicationAckReader ackReader) {
+                             ClusterDescriptor remoteCluster, ExecutorService workers, LogReplicationAckReader ackReader,
+                             LogReplicationMetadataManager metadataManager) {
 
         this.snapshotReader = snapshotReader;
         this.logEntryReader = logEntryReader;
@@ -251,7 +254,7 @@ public class LogReplicationFSM {
         logEntrySender = new LogEntrySender(logEntryReader, dataSender, readProcessor, this);
 
         // Initialize Log Replication 5 FSM states - single instance per state
-        initializeStates(snapshotSender, logEntrySender, dataSender);
+        initializeStates(snapshotSender, logEntrySender, dataSender, metadataManager);
 
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.logReplicationFSMWorkers = workers;
@@ -270,13 +273,13 @@ public class LogReplicationFSM {
      * @param snapshotSender reads and transmits snapshot syncs
      * @param logEntrySender reads and transmits log entry sync
      */
-    private void initializeStates(SnapshotSender snapshotSender, LogEntrySender logEntrySender, DataSender dataSender) {
+    private void initializeStates(SnapshotSender snapshotSender, LogEntrySender logEntrySender, DataSender dataSender, LogReplicationMetadataManager metadataManager) {
         /*
          * Log Replication State instances are kept in a map to be reused in transitions, avoid creating one
          * per every transition (reduce GC cycles).
          */
         states.put(LogReplicationStateType.INITIALIZED, new InitializedState(this));
-        states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotSender));
+        states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotSender, metadataManager));
         states.put(LogReplicationStateType.WAIT_SNAPSHOT_APPLY, new WaitSnapshotApplyState(this, dataSender));
         states.put(LogReplicationStateType.IN_LOG_ENTRY_SYNC, new InLogEntrySyncState(this, logEntrySender));
         states.put(LogReplicationStateType.STOPPED, new StoppedState());
@@ -296,7 +299,7 @@ public class LogReplicationFSM {
                 return;
             }
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
-                log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventID());
+                log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
             }
             eventQueue.put(event);
         } catch (InterruptedException ex) {

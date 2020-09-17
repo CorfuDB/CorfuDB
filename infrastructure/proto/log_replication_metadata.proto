@@ -1,5 +1,8 @@
 syntax = "proto3";
+
 package org.corfudb.infrastructure.logreplication.proto;
+
+import "google/protobuf/timestamp.proto";
 
 /**
  * This is used by replication metadata table in corfu store.
@@ -44,11 +47,41 @@ message ReplicationStatusVal {
     SNAPSHOT = 0;
     LOG_ENTRY = 1;
   }
-  SyncType type = 3;
+  SyncType syncType = 3;
+  SyncStatus status = 4;
+  SnapshotSyncInfo snapshotSyncInfo = 5;
+}
+
+/*
+ * Snapshot Sync Info
+ *
+ * If replication is in SNAPSHOT sync, this provides details of the
+ * ongoing snapshot sync. If replication is in LOG ENTRY sync (delta).
+ * this provides details of the previous SNAPSHOT sync leading up to
+ * the log entry sync.
+ */
+message SnapshotSyncInfo {
+  enum SnapshotSyncType {
+    DEFAULT = 0;
+    FORCED = 1;
+  }
+  SnapshotSyncType type = 1;
+  SyncStatus status = 2;
+  string snapshotRequestId = 3;
+  google.protobuf.Timestamp completed = 4;
+  uint64 baseSnapshot = 5;
+}
+
+enum SyncStatus {
+  DEFAULT = 0;
+  FORCED = 1;
 }
 
 enum ReplicationEventType {
-  FORCE_SNAPSHOT_SYNC = 0;
+  ONGOING = 0;
+  COMPLETED = 1;
+  ERROR = 2;
+  NOT_STARTED = 3;
 }
 
 message ReplicationEventKey {
