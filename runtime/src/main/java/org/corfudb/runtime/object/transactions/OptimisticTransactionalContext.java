@@ -3,6 +3,7 @@ package org.corfudb.runtime.object.transactions;
 import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -186,6 +187,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Override
     public void logUpdate(UUID streamId, SMREntry updateEntry) {
         addToWriteSet(streamId, updateEntry);
+    }
+
+    @Override
+    public void logUpdate(UUID streamId, List<SMREntry> updateEntries) {
+        addToWriteSet(streamId, updateEntries);
     }
 
     /**

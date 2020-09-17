@@ -249,6 +249,8 @@ public abstract class AbstractTransactionalContext implements
 
     public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
 
+    public abstract void logUpdate(UUID streamId, List<SMREntry> updateEntries);
+
     /**
      * Add a given transaction to this transactional context, merging
      * the read and write sets.
@@ -358,6 +360,10 @@ public abstract class AbstractTransactionalContext implements
 
     void addToWriteSet(UUID streamId, SMREntry updateEntry) {
         getWriteSetInfo().add(streamId, updateEntry);
+    }
+
+    void addToWriteSet(UUID streamId, List<SMREntry> updateEntries) {
+        getWriteSetInfo().add(streamId, updateEntries);
     }
 
     void mergeWriteSetInto(WriteSetInfo other) {

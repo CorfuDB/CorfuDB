@@ -46,6 +46,10 @@ public class MultiSMREntry extends LogEntry implements ISMRConsumable {
         getUpdates().add(entry);
     }
 
+    public void addTo(List<SMREntry> entries) {
+        getUpdates().addAll(entries);
+    }
+
     public void mergeInto(MultiSMREntry other) {
         getUpdates().addAll(other.getUpdates());
     }

@@ -102,10 +102,10 @@ public class CorfuTestParameters {
                                             Duration.of(100, MILLIS);
         TIMEOUT_SHORT = TRAVIS_BUILD ? Duration.of(5, SECONDS) :
                                         Duration.of(1, SECONDS);
-        TIMEOUT_NORMAL = TRAVIS_BUILD ? Duration.of(20, SECONDS) :
-                                        Duration.of(10, SECONDS);
-        TIMEOUT_LONG = TRAVIS_BUILD ? Duration.of(2, MINUTES):
-                                        Duration.of(2, MINUTES);
+        TIMEOUT_NORMAL = TRAVIS_BUILD ? Duration.of(20, MINUTES) :
+                                        Duration.of(10, MINUTES);
+        TIMEOUT_LONG = TRAVIS_BUILD ? Duration.of(10, MINUTES):
+                                        Duration.of(10, MINUTES);
 
         // Iterations
         NUM_ITERATIONS_VERY_LOW = TRAVIS_BUILD ? 1 : 10;

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object.transactions;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -41,6 +42,13 @@ public class WriteSetInfo extends ConflictSetInfo {
         synchronized (getRootContext().getTransactionID()) {
             // add the SMRentry to the list of updates for this stream
             writeSet.addTo(streamId, updateEntry);
+        }
+    }
+
+    public void add(UUID streamId, List<SMREntry> updateEntries) {
+        synchronized (getRootContext().getTransactionID()) {
+            // add the SMRentry to the list of updates for this stream
+            writeSet.addTo(streamId, updateEntries);
         }
     }
 

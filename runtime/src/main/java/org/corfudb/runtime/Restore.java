@@ -37,11 +37,7 @@ public class Restore {
 
             CorfuStoreMetadata.Timestamp ts = corfuStore.getTimestamp();
             TxBuilder txBuilder = corfuStore.tx(CORFU_SYSTEM_NAMESPACE);
-
-            for (SMREntry smrEntry : smrEntries) {
-                txBuilder.logUpdate(streamId, smrEntry);
-            }
-
+            txBuilder.logUpdate(streamId, smrEntries);
             txBuilder.commit(ts);
         }
 

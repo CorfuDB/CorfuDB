@@ -115,6 +115,20 @@ public class TxBuilder {
     }
 
     /**
+     *
+     * @param streamId
+     * @param updateEntries
+     * @return
+     */
+    public TxBuilder logUpdate(UUID streamId, List<SMREntry> updateEntries) {
+
+        operations.add(() -> {
+            TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntries);
+        });
+        return this;
+    }
+
+    /**
      * Touches the specified key without mutating the version of the record.
      * This provides read after write conflict semantics.
      *
