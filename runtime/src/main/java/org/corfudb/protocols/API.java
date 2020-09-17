@@ -4,9 +4,13 @@ import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import lombok.NonNull;
 import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.orchestrator.*;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.*;
 import org.corfudb.common.util.Address;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.OrchestratorResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
 
 import java.util.UUID;
 import java.util.*;
@@ -750,7 +754,8 @@ public class API {
                         .addAllItems(nc.getConnectivity()
                                 .entrySet()
                                 .stream()
-                                .map(e -> Any.pack(StringToStringPair.newBuilder()
+                                .map(e -> Any.pack(NodeConnectivity.ConnectivityMapEntry
+                                        .newBuilder()
                                         .setKey(e.getKey())
                                         .setValue(e.getValue().name())
                                         .build()))
@@ -760,6 +765,7 @@ public class API {
     }
 
     public static Response getQueryNodeResponse(Header header, NodeState state) {
+        //TODO(Zach): setSequencerMetrics
         QueryNodeResponse queryNodeResponse = QueryNodeResponse.newBuilder()
                 .setNodeConnectivity(toProtobufNodeConnectivity(state.getConnectivity()))
                 .build();
@@ -768,6 +774,55 @@ public class API {
                 .setError(getNoServerError())
                 .setQueryNodeResponse(queryNodeResponse)
                 .build();
+    }
+
+    // Orchestrator Messages API
+
+    public static Response getQueryWorkflowResponse(Header header, boolean active) {
+        OrchestratorResponse orchestratorResponse = OrchestratorResponse.newBuilder()
+                .setQueryWorkflow(OrchestratorResponse.QueryWorkflow.newBuilder().setIsActive(active).build())
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setOrchestratorResponse(orchestratorResponse)
+                .build();
+    }
+
+    public static Response getCreateWorkflowResponse(Header header, UUID id) {
+        OrchestratorResponse orchestratorResponse = OrchestratorResponse.newBuilder()
+                .setCreateWorkflow(OrchestratorResponse.CreateWorkflow.newBuilder().setWorkflowId(getUUID(id)).build())
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setOrchestratorResponse(orchestratorResponse)
+                .build();
+    }
+
+    public static AddNodeRequest getJavaAddNodeRequest(OrchestratorRequest.ExecuteWorkflow workflowReq) {
+        return new AddNodeRequest(workflowReq.getEndpoint());
+    }
+
+    public static RemoveNodeRequest getJavaRemoveNodeRequest(OrchestratorRequest.ExecuteWorkflow workflowReq) {
+        return new RemoveNodeRequest(workflowReq.getEndpoint());
+    }
+
+    public static ForceRemoveNodeRequest getJavaForceRemoveNodeRequest(OrchestratorRequest.ExecuteWorkflow workflowReq) {
+        return new ForceRemoveNodeRequest(workflowReq.getEndpoint());
+    }
+
+    public static HealNodeRequest getJavaHealNodeRequest(OrchestratorRequest.ExecuteWorkflow workflowReq) {
+        return new HealNodeRequest(workflowReq.getEndpoint(),
+                workflowReq.getLayoutServer(),
+                workflowReq.getSequencerServer(),
+                workflowReq.getLogUnitServer(),
+                workflowReq.getStripeIndex());
+    }
+
+    public static RestoreRedundancyMergeSegmentsRequest getJavaRestoreRedundancyMergeSegmentsRequest(
+            OrchestratorRequest.ExecuteWorkflow workflowReq) {
+        return new RestoreRedundancyMergeSegmentsRequest(workflowReq.getEndpoint());
     }
 
     // Misc. API

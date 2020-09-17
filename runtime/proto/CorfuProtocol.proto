@@ -83,11 +83,6 @@ message UUID {
   int64 msb = 2;
 }
 
-message StringToStringPair {
-  string key = 1;
-  string value = 2;
-}
-
 message Entries {
   repeated google.protobuf.Any items = 1;
 }
@@ -596,6 +591,11 @@ message ResetLogUnitResponse {
  **/
 
 message NodeConnectivity {
+  message ConnectivityMapEntry {
+    string key = 1;
+    string value = 2;
+  }
+
   string endpoint = 1;
   string connectivityType = 2;
   Entries connectivityMap = 3;
@@ -638,75 +638,55 @@ message HealFailureResponse {
   Type respType = 1;
 }
 
-enum OrchestratorRequestType {
-  QUERY_WORKFLOW = 0;
-  ADD_NODE = 1;
-  REMOVE_NODE = 2;
-  HEAL_NODE = 3;
-  FORCE_REMOVE_NODE = 4;
-  RESTORE_REDUNDANCY_MERGE_SEGMENTS = 5;
-}
-
-message QueryWorkflowRequest {
-  UUID id = 1;
-}
-
-message AddNodeWorkflowRequest {
-  string endpoint = 1;
-}
-
-message RemoveNodeWorkflowRequest {
-  string endpoint = 1;
-}
-
-message HealNodeWorkflowRequest {
-  string endpoint = 1;
-  int32  stripeIndex = 2;
-  bool layoutServer = 3;
-  bool sequencerServer = 4;
-  bool logUnitServer = 5;
-}
-
-message ForceRemoveNodeWorkflowRequest {
-  string endpoint = 1;
-}
-
-message RestoreRedundancyWorkflowRequest {
-  string endpoint = 1;
-}
-
 message OrchestratorRequest {
-  OrchestratorRequestType reqType = 1;
+  enum Type {
+    QUERY_WORKFLOW = 0;
+    ADD_NODE = 1;
+    REMOVE_NODE = 2;
+    HEAL_NODE = 3;
+    FORCE_REMOVE_NODE = 4;
+    RESTORE_REDUNDANCY_MERGE_SEGMENTS = 5;
+  }
+
+  message QueryWorkflow {
+    UUID id = 1;
+  }
+
+  message ExecuteWorkflow {
+    string endpoint = 1;
+    int32  stripeIndex = 2;
+    bool layoutServer = 3;
+    bool sequencerServer = 4;
+    bool logUnitServer = 5;
+  }
+
+  Type reqType = 1;
 
   oneof payload {
-    QueryWorkflowRequest queryRequest = 10;
-    AddNodeWorkflowRequest addNodeRequest = 11;
-    RemoveNodeWorkflowRequest removeNodeRequest = 12;
-    HealNodeWorkflowRequest healNodeRequest = 13;
-    ForceRemoveNodeWorkflowRequest forceRemoveNodeRequest = 14;
-    RestoreRedundancyWorkflowRequest restoreRedundancyRequest = 15;
+    QueryWorkflow queryWorkflow = 10;
+    ExecuteWorkflow executeWorkflow = 11;
   }
 }
 
-enum OrchestratorResponseType {
+message OrchestratorResponse {
+  enum Type {
     WORKFLOW_STATUS = 0;
     WORKFLOW_CREATED = 1;
-}
+  }
 
-message QueryWorkflowResponse {
-  bool isActive = 1;
-}
+  message QueryWorkflow {
+    bool isActive = 1;
+  }
 
-message CreateWorkflowResponse {
-  UUID workflowId = 1;
-}
+  message CreateWorkflow {
+    UUID workflowId = 1;
+  }
 
-message OrchestratorResponse {
-  OrchestratorResponseType respType = 1;
+  Type respType = 1;
 
   oneof payload {
-    QueryWorkflowResponse queryResponse = 10;
-    CreateWorkflowResponse createWorkflowResponse = 11;
+    QueryWorkflow queryWorkflow = 10;
+    CreateWorkflow createWorkflow = 11;
   }
 }
 

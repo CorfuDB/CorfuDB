@@ -250,6 +250,12 @@ public class ManagementServer extends AbstractServer {
         orchestrator.handle(msg, ctx, r);
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.ORCHESTRATOR)
+    public synchronized void handleOrchestratorMsg(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.debug("handleOrchestratorMsg: Received an orchestrator request {}", req);
+        orchestrator.handle(req, ctx, r);
+    }
+
     /**
      * Bootstraps the management server.
      * The msg contains the layout to be bootstrapped.
