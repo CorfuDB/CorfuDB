@@ -27,6 +27,7 @@ import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.protocols.API;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -52,6 +53,10 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
 
@@ -86,9 +91,17 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * HandlerMethod for this server.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /**
+     * RequestHandlerMethods for the LogUnit server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     /**
      * This cache services requests for data at various addresses. In a memory implementation,
@@ -133,9 +146,15 @@ public class LogUnitServer extends AbstractServer {
     }
 
 
+    // [RM] Remove this after Protobuf for RPC Completion
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         executor.submit(() -> getHandler().handle(msg, ctx, r));
+    }
+
+    @Override
+    protected void processRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
     /**
@@ -179,6 +198,16 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.TRIM_MARK)
+    public void handleTrimMarkRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.trace("handleTrimMarkRequest: received a trim mark request {}", req);
+
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = API.getTrimMarkResponse(req.getHeader(), streamLog.getTrimMark());
+        r.sendResponse(response, ctx);
+    }
+
     /**
      * Service an incoming query for the committed tail on this log unit server.
      */
@@ -186,6 +215,16 @@ public class LogUnitServer extends AbstractServer {
     public void handleCommittedTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleCommittedTailRequest: received a committed log tail request {}", msg);
         r.sendResponse(ctx, msg, CorfuMsgType.COMMITTED_TAIL_RESPONSE.payloadMsg(streamLog.getCommittedTail()));
+    }
+
+    @RequestHandler(type = CorfuProtocol.MessageType.COMMITTED_TAIL)
+    public void handleCommittedTailRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.trace("handleCommittedTailRequest: received a committed log tail request {}", req);
+
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = API.getCommittedTailResponse(req.getHeader(), streamLog.getCommittedTail());
+        r.sendResponse(response, ctx);
     }
 
     /**
@@ -197,6 +236,16 @@ public class LogUnitServer extends AbstractServer {
         log.trace("updateCommittedTail: received request to update committed tail {}", msg);
         streamLog.updateCommittedTail(msg.getPayload());
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    @RequestHandler(type = CorfuProtocol.MessageType.UPDATE_COMMITTED_TAIL)
+    public void updateCommittedTailRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.trace("handleUpdateCommittedTailRequest: received request to update committed tail {}", req);
+        streamLog.updateCommittedTail(req.getUpdateCommittedTailRequest().getCommittedTail());
+
+        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
+        Response response = API.getUpdateCommittedTailResponse(responseHeader);
+        r.sendResponse(response, ctx);
     }
 
     /**
@@ -396,10 +445,17 @@ public class LogUnitServer extends AbstractServer {
         log.info("LogUnit sealServerWithEpoch: sealed and flushed with epoch {}", epoch);
     }
 
+    // [RM] Remove this after Protobuf for RPC Completion
     @Override
     public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
         return getState() == ServerState.READY;
     }
+
+    @Override
+    public boolean isServerReadyToHandleReq(Header requestHeader) {
+        return getState() == ServerState.READY;
+    }
+
 
     /**
      * Resets the log unit server via the BatchProcessor.

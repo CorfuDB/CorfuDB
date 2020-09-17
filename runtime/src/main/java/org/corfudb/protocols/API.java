@@ -825,6 +825,36 @@ public class API {
         return new RestoreRedundancyMergeSegmentsRequest(workflowReq.getEndpoint());
     }
 
+    // LogUnit Messages RPCs
+
+    public static Response getTrimMarkResponse(Header header, long trimMark) {
+        TrimMarkResponse trimMarkResponse = TrimMarkResponse.newBuilder().setTrimMark(trimMark).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setTrimMarkResponse(trimMarkResponse)
+                .build();
+    }
+
+    public static Response getCommittedTailResponse(Header header, long committedTail) {
+        CommittedTailResponse committedTailResponse =
+                CommittedTailResponse.newBuilder().setCommittedTail(committedTail).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setCommittedTailResponse(committedTailResponse)
+                .build();
+    }
+
+    public static Response getUpdateCommittedTailResponse(Header header) {
+        UpdateCommittedTailResponse updateCommittedTailResponse = UpdateCommittedTailResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setUpdateCommittedTailResponse(updateCommittedTailResponse)
+                .build();
+    }
+
     // Misc. API
 
     public static Response getErrorResponseNoPayload(Header header, ServerError error) {

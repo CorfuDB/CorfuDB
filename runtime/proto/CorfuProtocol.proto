@@ -515,11 +515,10 @@ message TrimLogResponse {
 }
 
 message TrimMarkRequest {
-
 }
 
 message TrimMarkResponse {
-
+  int64 trimMark = 1;
 }
 
 message TailRequest {
@@ -563,19 +562,17 @@ message KnownAddressResponse {
 }
 
 message CommittedTailRequest {
-
 }
 
 message CommittedTailResponse {
-
+  int64 committedTail = 1;
 }
 
 message UpdateCommittedTailRequest {
-
+  int64 committedTail = 1;
 }
 
 message UpdateCommittedTailResponse {
-
 }
 
 message ResetLogUnitRequest {
