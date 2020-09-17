@@ -1,20 +1,21 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
-import lombok.Setter;
-
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
+import java.util.UUID;
+
+@Getter
 public class DiscoveryServiceEvent {
-    DiscoveryServiceEventType type;
 
-    @Getter
-    TopologyConfigurationMsg topologyConfig = null;
+    private final DiscoveryServiceEventType type;
 
-    @Getter
-    @Setter
-    ClusterDescriptor remoteClusterInfo;
+    private TopologyConfigurationMsg topologyConfig = null;
+
+    private ClusterDescriptor remoteClusterInfo;
+
+    private UUID eventId = null;
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
        this.type = type;
@@ -22,12 +23,17 @@ public class DiscoveryServiceEvent {
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId) {
         this.type = type;
-        remoteClusterInfo = new ClusterDescriptor(clusterId, LogReplicationClusterInfo.ClusterRole.STANDBY);
+        this.remoteClusterInfo = new ClusterDescriptor(clusterId, LogReplicationClusterInfo.ClusterRole.STANDBY);
     }
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {
         this.type = type;
         this.topologyConfig = topologyConfigMsg;
+    }
+
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId, String eventId) {
+        this(type, clusterId);
+        this.eventId = UUID.fromString(eventId);
     }
 
     public enum DiscoveryServiceEventType {

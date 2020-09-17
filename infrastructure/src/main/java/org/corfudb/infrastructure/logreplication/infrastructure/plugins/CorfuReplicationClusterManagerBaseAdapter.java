@@ -9,6 +9,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
 import java.util.Map;
+import java.util.UUID;
 
 /***
  * This is the base class for CorfuReplicationClusterManagerAdapter and implements the basic functionality.
@@ -50,7 +51,7 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
     }
 
     @Override
-    public void forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
-        corfuReplicationDiscoveryService.forceSnapshotSync(clusterId);
+    public UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
+        return corfuReplicationDiscoveryService.forceSnapshotSync(clusterId);
     }
 }

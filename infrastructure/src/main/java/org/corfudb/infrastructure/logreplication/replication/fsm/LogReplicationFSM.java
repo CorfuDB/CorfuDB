@@ -11,11 +11,11 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
+import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
-import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
@@ -253,6 +253,9 @@ public class LogReplicationFSM {
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender, dataSender);
 
+        // Assign logEntryReader to ackReader
+        this.ackReader.setLogEntryReader(logEntryReader);
+
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new
@@ -296,7 +299,7 @@ public class LogReplicationFSM {
                 return;
             }
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
-                log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventID());
+                log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
             }
             eventQueue.put(event);
         } catch (InterruptedException ex) {

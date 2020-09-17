@@ -33,26 +33,27 @@ public class InitializedState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-                log.info("Start Snapshot Sync, requestId={}", event.getEventID());
+                log.info("Start Snapshot Sync, requestId={}", event.getEventId());
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState snapshotSyncState = fsm.getStates().get(LogReplicationStateType.IN_SNAPSHOT_SYNC);
-                snapshotSyncState.setTransitionEventId(event.getEventID());
+                snapshotSyncState.setTransitionEventId(event.getEventId());
+                ((InSnapshotSyncState)snapshotSyncState).setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
                 return snapshotSyncState;
             case SNAPSHOT_TRANSFER_COMPLETE:
                 log.info("Snapshot Sync transfer completed. Wait for snapshot apply to complete.");
                 WaitSnapshotApplyState waitSnapshotApplyState = (WaitSnapshotApplyState)fsm.getStates().get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
-                waitSnapshotApplyState.setTransitionEventId(event.getEventID());
+                waitSnapshotApplyState.setTransitionEventId(event.getEventId());
                 waitSnapshotApplyState.setBaseSnapshotTimestamp(fsm.getBaseSnapshot());
                 fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                 fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 return waitSnapshotApplyState;
             case LOG_ENTRY_SYNC_REQUEST:
-                log.info("Start Log Entry Sync, requestId={}", event.getEventID());
+                log.info("Start Log Entry Sync, requestId={}", event.getEventId());
                 // Set the id of the event that caused the transition to the new state
                 // This is used to correlate trim or error events that derive from this state
                 LogReplicationState logEntrySyncState = fsm.getStates().get(LogReplicationStateType.IN_LOG_ENTRY_SYNC);
-                logEntrySyncState.setTransitionEventId(event.getEventID());
+                logEntrySyncState.setTransitionEventId(event.getEventId());
                 fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                 fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
                 return logEntrySyncState;

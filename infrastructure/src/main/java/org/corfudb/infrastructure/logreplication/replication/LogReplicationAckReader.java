@@ -1,8 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication;
 
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
@@ -22,12 +21,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
+
 @Slf4j
 public class LogReplicationAckReader {
-    private LogReplicationMetadataManager metadataManager;
-    private LogReplicationConfig config;
-    private CorfuRuntime runtime;
-    private String remoteClusterId;
+    private final LogReplicationMetadataManager metadataManager;
+    private final LogReplicationConfig config;
+    private final CorfuRuntime runtime;
+    private final String remoteClusterId;
+
     // Log tail when the current snapshot sync started.  We do not need to synchronize access to it because it will not
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
     private long baseSnapshotTimestamp;
@@ -35,7 +37,7 @@ public class LogReplicationAckReader {
     /*
      * Periodic Thread which reads the last Acked Timestamp and writes it to the metadata table
      */
-    private ScheduledExecutorService lastAckedTsPoller;
+    private final ScheduledExecutorService lastAckedTsPoller;
 
     /*
      * Interval at which the thread reads the last Acked Timestamp
@@ -56,9 +58,10 @@ public class LogReplicationAckReader {
     private LogReplicationMetadata.ReplicationStatusVal.SyncType lastSyncType =
             LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY;
 
+    @Setter
     private LogEntryReader logEntryReader;
 
-    private Lock lock = new ReentrantLock();
+    private final Lock lock = new ReentrantLock();
 
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfig config,
                                     CorfuRuntime runtime, String remoteClusterId) {
@@ -89,8 +92,7 @@ public class LogReplicationAckReader {
         }
     }
 
-    public void startAckReader(LogEntryReader logEntryReader) {
-        this.logEntryReader = logEntryReader;
+    public void startAckReader() {
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0,
                 ACKED_TS_READ_INTERVAL_SECONDS, TimeUnit.SECONDS);
     }
@@ -327,6 +329,26 @@ public class LogReplicationAckReader {
         this.baseSnapshotTimestamp = baseSnapshotTimestamp;
     }
 
+    public void markSnapshotSyncInfoCompleted() {
+        lock.lock();
+        try {
+            metadataManager.updateSnapshotSyncInfo(remoteClusterId);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void markSnapshotSyncInfoOngoing(boolean forced, UUID eventId) {
+        lock.lock();
+        try {
+            long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
+            metadataManager.updateSnapshotSyncInfo(remoteClusterId, forced, eventId,
+                    baseSnapshotTimestamp, remainingEntriesToSend);
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /**
      * Task which periodically updates the metadata table with replication completion percentage
      */
@@ -335,8 +357,8 @@ public class LogReplicationAckReader {
         public void run() {
             lock.lock();
             try {
-                long remainingReplicationStatus = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                metadataManager.setReplicationRemainingEntries(remoteClusterId, remainingReplicationStatus,
+                long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
+                metadataManager.setReplicationStatusTable(remoteClusterId, remainingEntriesToSend,
                         lastSyncType);
             } finally {
                 lock.unlock();

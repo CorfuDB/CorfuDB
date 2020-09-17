@@ -4,7 +4,6 @@ import com.google.common.collect.Sets;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
@@ -216,7 +215,7 @@ public class CorfuReplicationManager {
         } else {
             log.info("EnforceSnapshotSync for cluster {}", standbyRuntime.getRemoteClusterId());
             standbyRuntime.getSourceManager().stopLogReplication();
-            standbyRuntime.getSourceManager().startSnapshotSync();
+            standbyRuntime.getSourceManager().startForcedSnapshotSync(event.getEventId());
         }
     }
 }
