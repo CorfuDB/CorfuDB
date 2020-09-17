@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 import lombok.Getter;
 import lombok.Setter;
 
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
 public class DiscoveryServiceEvent {
@@ -13,10 +14,15 @@ public class DiscoveryServiceEvent {
 
     @Getter
     @Setter
-    ClusterDescriptor remoteSiteInfo;
+    ClusterDescriptor remoteClusterInfo;
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
        this.type = type;
+    }
+
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId) {
+        this.type = type;
+        remoteClusterInfo = new ClusterDescriptor(clusterId, LogReplicationClusterInfo.ClusterRole.STANDBY);
     }
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {
@@ -28,6 +34,7 @@ public class DiscoveryServiceEvent {
         DISCOVERED_TOPOLOGY,
         ACQUIRE_LOCK,
         RELEASE_LOCK,
-        UPGRADE
+        UPGRADE,
+        ENFORCE_SNAPSHOT_SYNC
     }
 }

@@ -204,4 +204,19 @@ public class CorfuReplicationManager {
             }
         }
     }
+
+    /**
+     * Stop the current log replication event and start a full snapshot sync for all standby clusters
+     */
+    public void enforceSnapshotSync(DiscoveryServiceEvent event) {
+        CorfuLogReplicationRuntime standbyRuntime = runtimeToRemoteCluster.get(event.getRemoteClusterInfo().getClusterId());
+        if (standbyRuntime == null) {
+            log.warn("Failed to start enforceSnapshotSync for cluster {} as it is not on the standby list.",
+                    event.getRemoteClusterInfo());
+        } else {
+            log.info("EnforceSnapshotSync for cluster {}", standbyRuntime.getRemoteClusterId());
+            standbyRuntime.getSourceManager().stopLogReplication();
+            standbyRuntime.getSourceManager().startSnapshotSync();
+        }
+    }
 }

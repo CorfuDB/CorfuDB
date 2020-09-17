@@ -46,3 +46,15 @@ message ReplicationStatusVal {
   }
   SyncType type = 3;
 }
+
+enum ReplicationEventType {
+  FORCE_SNAPSHOT_SYNC = 0;
+}
+
+message ReplicationEventKey {
+  string key = 1;
+}
+message ReplicationEvent {
+  ReplicationEventType type = 1;
+  string clusterId = 2;
+}

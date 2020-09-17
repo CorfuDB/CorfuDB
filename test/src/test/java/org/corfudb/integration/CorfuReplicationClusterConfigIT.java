@@ -3,7 +3,11 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterManager;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.LogReplicationMetadataVal;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
@@ -15,11 +19,14 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.IntPredicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_APPLIED;
+import static org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType.LAST_SNAPSHOT_STARTED;
 
 
 /**
@@ -625,6 +632,130 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapStandby.size()).isEqualTo(thirdBatch);
     }
 
+    private Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> getMetadataTable(CorfuRuntime runtime) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+        CorfuStore corfuStore = new CorfuStore(runtime);
+        CorfuStoreMetadata.TableName metadataTableName = null;
+        Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable = null;
+
+        for (CorfuStoreMetadata.TableName name : corfuStore.listTables(LogReplicationMetadataManager.NAMESPACE)){
+            if(name.getTableName().contains(LogReplicationMetadataManager.METADATA_TABLE_PREFIX_NAME)) {
+                metadataTableName = name;
+            }
+        }
+
+        metadataTable = corfuStore.openTable(
+                    LogReplicationMetadataManager.NAMESPACE,
+                    metadataTableName.getTableName(),
+                    LogReplicationMetadataKey.class,
+                    LogReplicationMetadataVal.class,
+                    null,
+                    TableOptions.builder().build());
+
+        return metadataTable;
+    }
+
+
+    /**
+     * This test verifies enforceSnapshotSync API
+     * <p>
+     * 1. Init with corfu 9000 active and 9001 standby
+     * 2. Write 10 entries to active map
+     * 3. Start log replication: Node 9010 - active, Node 9020 - standby
+     * 4. Wait for Snapshot Sync, both maps have size 10
+     * 5. Write 5 more entries to active map, to verify Log Entry Sync
+     * 6. Write 5 more entries to active map and perform an enforced full snapshot sync
+     * 7. Verify a full snapshot sync is triggered
+     * 8. Verify a full snapshot sync is completed and data is correctly replicated.
+     */
+    @Test
+    public void testEnforceSnapshotSync() throws Exception {
+        // Write 10 entries to active map
+        for (int i = 0; i < firstBatch; i++) {
+            activeRuntime.getObjectsView().TXBegin();
+            mapActive.put(String.valueOf(i), i);
+            activeRuntime.getObjectsView().TXEnd();
+        }
+        assertThat(mapActive.size()).isEqualTo(firstBatch);
+        assertThat(mapStandby.size()).isZero();
+
+        log.info("Before log replication, append {} entries to active map. Current active corfu" +
+                        "[{}] log tail is {}, standby corfu[{}] log tail is {}", firstBatch, activeClusterCorfuPort,
+                activeRuntime.getAddressSpaceView().getLogTail(), standbyClusterCorfuPort,
+                standbyRuntime.getAddressSpaceView().getLogTail());
+
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort, nettyPluginPath);
+        standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, nettyPluginPath);
+        log.info("Replication servers started, and replication is in progress...");
+
+
+        // Wait until data is fully replicated
+        waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
+
+        Table<LogReplicationMetadataKey, LogReplicationMetadataVal, LogReplicationMetadataVal> metadataTable = getMetadataTable(standbyRuntime);
+        LogReplicationMetadataKey txKey = LogReplicationMetadataKey.newBuilder().setKey(LAST_SNAPSHOT_APPLIED.getVal()).build();
+        long lastAppliedSnapshot = Long.parseLong(metadataTable.get(txKey).getPayload().getVal());
+
+        log.info("After full sync, both maps have size {}. Current active corfu[{}] log tail " +
+                        "is {}, standby corfu[{}] log tail is {} lastAppliedSnapshot {}",
+                firstBatch, activeClusterCorfuPort, activeRuntime.getAddressSpaceView().getLogTail(),
+                standbyClusterCorfuPort, standbyRuntime.getAddressSpaceView().getLogTail(), lastAppliedSnapshot);
+        assertThat(lastAppliedSnapshot).isEqualTo(activeRuntime.getAddressSpaceView().getLogTail());
+
+        // Write 5 entries to active map
+        for (int i = firstBatch; i < secondBatch; i++) {
+            activeRuntime.getObjectsView().TXBegin();
+            mapActive.put(String.valueOf(i), i);
+            activeRuntime.getObjectsView().TXEnd();
+        }
+        assertThat(mapActive.size()).isEqualTo(secondBatch);
+
+        // Wait until data is fully replicated again
+        waitForReplication(size -> size == secondBatch, mapStandby, secondBatch);
+        log.info("After delta sync, both maps have size {}. Current active corfu[{}] log tail " +
+                        "is {}, standby corfu[{}] log tail is {}", secondBatch, activeClusterCorfuPort,
+                activeRuntime.getAddressSpaceView().getLogTail(), standbyClusterCorfuPort,
+                standbyRuntime.getAddressSpaceView().getLogTail());
+
+        // Verify data
+        for (int i = 0; i < secondBatch; i++) {
+            assertThat(mapStandby.containsKey(String.valueOf(i))).isTrue();
+        }
+
+        log.info("Log replication succeeds before enforcing full snapshot sync! LastSnapshotApplied Timestamp {}",
+                Long.parseLong(metadataTable.get(txKey).getPayload().getVal()));
+
+        // Append to mapActive
+        for (int i = secondBatch; i < thirdBatch; i++) {
+            activeRuntime.getObjectsView().TXBegin();
+            mapActive.put(String.valueOf(i), i);
+            activeRuntime.getObjectsView().TXEnd();
+        }
+        assertThat(mapActive.size()).isEqualTo(thirdBatch);
+
+        // Perform an enforce full snapshot sync
+        corfuStore.tx(DefaultClusterManager.CONFIG_NAMESPACE)
+                .update(DefaultClusterManager.CONFIG_TABLE_NAME, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC,
+                        DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC, DefaultClusterManager.OP_ENFORCE_SNAPSHOT_FULL_SYNC)
+                .commit();
+        TimeUnit.SECONDS.sleep(mediumInterval);
+
+        // Verify that a fullsnapshot sync is triggered.
+        txKey = LogReplicationMetadataKey.newBuilder().setKey(LAST_SNAPSHOT_STARTED.getVal()).build();
+        long newSnapshotTimestamp = Long.parseLong(metadataTable.get(txKey).getPayload().getVal());
+        assertThat(lastAppliedSnapshot).isLessThan(newSnapshotTimestamp);
+        assertThat(newSnapshotTimestamp).isEqualTo(activeRuntime.getAddressSpaceView().getLogTail());
+
+        // Standby map should have thirdBatch size, since topology config is resumed.
+        waitForReplication(size -> size == thirdBatch, mapStandby, thirdBatch);
+        assertThat(mapStandby.size()).isEqualTo(thirdBatch);
+
+        txKey = LogReplicationMetadataKey.newBuilder().setKey(LAST_SNAPSHOT_APPLIED.getVal()).build();
+        log.info("NewSnapshot Timestamp {} active logTail {} after full snapshot sync!", newSnapshotTimestamp, activeRuntime.getAddressSpaceView().getLogTail());
+
+        // The enforced snapshot sync completed.
+        assertThat(newSnapshotTimestamp).isEqualTo(Long.parseLong(metadataTable.get(txKey).getPayload().getVal()));
+    }
+
     private void waitForReplication(IntPredicate verifier, CorfuTable table, int expected) {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_MODERATE; i++) {
             log.info("Waiting for replication, table size is {}, expected size is {}", table.size(), expected);
@@ -635,6 +766,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         assertThat(verifier.test(table.size())).isTrue();
     }
+
 
     private void sleepUninterruptibly(long seconds) {
         try {
