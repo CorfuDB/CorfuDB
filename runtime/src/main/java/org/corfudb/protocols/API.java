@@ -855,6 +855,15 @@ public class API {
                 .build();
     }
 
+    public static Response getFlushCacheResponse(Header header) {
+        FlushCacheResponse flushCacheResponse = FlushCacheResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setFlushCacheResponse(flushCacheResponse)
+                .build();
+    }
+
     // Misc. API
 
     public static Response getErrorResponseNoPayload(Header header, ServerError error) {

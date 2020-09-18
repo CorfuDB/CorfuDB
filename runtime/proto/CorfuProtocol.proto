@@ -538,11 +538,9 @@ message CompactResponse {
 }
 
 message FlushCacheRequest {
-
 }
 
 message FlushCacheResponse {
-
 }
 
 message LogAddressSpaceRequest {
@@ -722,6 +720,8 @@ message Header {
   bool ignore_cluster_id = 8;
   bool ignore_epoch = 9;
 }
+
+//TODO(Zach): Remove empty message types from Request and Response?
 
 message Request {
   Header header = 1;

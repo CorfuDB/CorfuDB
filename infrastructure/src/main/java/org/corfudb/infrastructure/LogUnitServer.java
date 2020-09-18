@@ -191,6 +191,7 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * Service an incoming request to retrieve the starting address of this logging unit.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @ServerHandler(type = CorfuMsgType.TRIM_MARK_REQUEST)
     public void handleTrimMarkRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
@@ -210,6 +211,7 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * Service an incoming query for the committed tail on this log unit server.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @ServerHandler(type = CorfuMsgType.COMMITTED_TAIL_REQUEST)
     public void handleCommittedTailRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
@@ -229,6 +231,7 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * Service an incoming request to update the current committed tail.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @ServerHandler(type = CorfuMsgType.UPDATE_COMMITTED_TAIL)
     public void updateCommittedTail(CorfuPayloadMsg<Long> msg,
@@ -239,7 +242,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.UPDATE_COMMITTED_TAIL)
-    public void updateCommittedTailRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handleUpdateCommittedTailRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
         log.trace("handleUpdateCommittedTailRequest: received request to update committed tail {}", req);
         streamLog.updateCommittedTail(req.getUpdateCommittedTailRequest().getCommittedTail());
 
@@ -250,6 +253,7 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * A helper function that maps an exception to the appropriate response message.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     private void handleException(Throwable ex, ChannelHandlerContext ctx, CorfuPayloadMsg msg, IServerRouter r) {
         log.trace("handleException: handling exception {} for {}", ex, msg);
@@ -419,6 +423,17 @@ public class LogUnitServer extends AbstractServer {
         log.debug("handleFlushCacheRequest: received a cache flush request {}", msg);
         dataCache.invalidateAll();
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    }
+
+    @RequestHandler(type = CorfuProtocol.MessageType.FLUSH_CACHE)
+    private void handleFlushCacheRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.debug("handleFlushCacheRequest: received a cache flush request {}", req);
+        dataCache.invalidateAll();
+
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = API.getFlushCacheResponse(req.getHeader());
+        r.sendResponse(response, ctx);
     }
 
     /**
