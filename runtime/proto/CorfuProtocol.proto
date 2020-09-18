@@ -83,7 +83,7 @@ message UUID {
   int64 msb = 2;
 }
 
-message Entries {
+message List {
   repeated google.protobuf.Any items = 1;
 }
 
@@ -384,7 +384,7 @@ message UUIDToStreamAddressMap {
 }
 
 // SequencerRecoveryMsg
-message BootStrapSequencerRequest {
+message BootstrapSequencerRequest {
   int64 globalTail = 1;
   UUIDToStreamAddressMap streamsAddressMap = 2;
   int64 sequencerEpoch = 3;
@@ -397,7 +397,7 @@ message BootStrapSequencerRequest {
   bool bootstrapWithoutTailsUpdate = 4;
 }
 
-message BootStrapSequencerResponse {
+message BootstrapSequencerResponse {
 
 }
 
@@ -593,7 +593,7 @@ message NodeConnectivity {
 
   string endpoint = 1;
   string connectivityType = 2;
-  Entries connectivityMap = 3;
+  List connectivityMap = 3;
   int64 epoch = 4;
 }
 
@@ -743,7 +743,7 @@ message Request {
 
     // Sequencer Requests
     TokenRequest tokenRequest = 30;
-    BootStrapSequencerRequest bootStrapSequencerRequest = 31;
+    BootstrapSequencerRequest bootstrapSequencerRequest = 31;
     SequencerTrimRequest sequencerTrimRequest = 32;
     SequencerMetricsRequest sequencerMetricsRequest = 33;
     StreamsAddressRequest streamsAddressRequest = 34;
@@ -794,7 +794,7 @@ message Response {
 
     // Sequencer Responses
     TokenResponse tokenResponse = 30;
-    BootStrapSequencerResponse BootStrapSequencerResponse = 31;
+    BootstrapSequencerResponse bootstrapSequencerResponse = 31;
     SequencerTrimResponse sequencerTrimResponse = 32;
     SequencerMetricsResponse sequencerMetricsResponse = 33;
     StreamsAddressResponse streamsAddressResponse = 34;

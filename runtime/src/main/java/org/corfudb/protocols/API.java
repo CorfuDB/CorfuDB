@@ -4,13 +4,78 @@ import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import lombok.NonNull;
 import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.protocols.wireprotocol.orchestrator.*;
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.*;
-import org.corfudb.common.util.Address;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapLayoutRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapManagementResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapSequencerRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapSequencerResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.CommitLayoutRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.CommitLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.CommittedTailResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.FlushCacheResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ERROR;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.GetLayoutRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.GetLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.GetManagementLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.HealFailureResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Layout;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.MessageType;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.NodeConnectivity;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.OrchestratorRequest;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.OrchestratorResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.PingRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.PingResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.PrepareLayoutRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.PrepareLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ProposeLayoutRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ProposeLayoutResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Priority;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ProtocolVersion;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.QueryNodeResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ReportFailureResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ResetRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ResetResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.RestartRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.RestartResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SealRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SealResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SequencerMetrics;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SequencerMetricsRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SequencerMetricsResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SequencerTrimRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.SequencerTrimResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.ServerError;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.StreamAddressRange;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.StreamsAddressRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.StreamsAddressResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.Token;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenRequest;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TokenType;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TrimMarkResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TxResolutionInfo;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.TxResolutionResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UpdateCommittedTailResponse;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUIDToListOfBytesPair;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUIDToListOfBytesMap;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUIDToLongMap;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUIDToLongPair;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUIDToStreamAddressMap;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol.WrongClusterPayload;
+
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
+
+import org.corfudb.common.util.Address;
+
+
 
 import java.util.UUID;
 import java.util.*;
@@ -539,10 +604,10 @@ public class API {
                 .build();
     }
 
-    public static Request getBootStrapSequencerRequest(Header header, long globalTail,
+    public static Request getBootstrapSequencerRequest(Header header, long globalTail,
             UUIDToStreamAddressMap streamAddressMap, long sequencerEpoch,
                                                        boolean bootstrapWithoutTailsUpdate) {
-        BootStrapSequencerRequest bootStrapSequencerRequest = BootStrapSequencerRequest.newBuilder()
+        BootstrapSequencerRequest bootstrapSequencerRequest = BootstrapSequencerRequest.newBuilder()
                 .setGlobalTail(globalTail)
                 .setStreamsAddressMap(streamAddressMap)
                 .setSequencerEpoch(globalTail)
@@ -550,16 +615,16 @@ public class API {
                 .build();
         return Request.newBuilder()
                 .setHeader(header)
-                .setBootStrapSequencerRequest(bootStrapSequencerRequest)
+                .setBootstrapSequencerRequest(bootstrapSequencerRequest)
                 .build();
     }
 
-    public static Response getBootStrapSequencerResponse(Header header) {
-        BootStrapSequencerResponse bootStrapSequencerResponse = BootStrapSequencerResponse.getDefaultInstance();
+    public static Response getBootstrapSequencerResponse(Header header) {
+        BootstrapSequencerResponse bootstrapSequencerResponse = BootstrapSequencerResponse.getDefaultInstance();
         return Response.newBuilder()
                 .setHeader(header)
                 .setError(getNoServerError())
-                .setBootStrapSequencerResponse(bootStrapSequencerResponse)
+                .setBootstrapSequencerResponse(bootstrapSequencerResponse)
                 .build();
     }
 
@@ -750,7 +815,7 @@ public class API {
                 .setEndpoint(nc.getEndpoint())
                 .setConnectivityType(nc.getType().name())
                 .setEpoch(nc.getEpoch())
-                .setConnectivityMap(Entries.newBuilder()
+                .setConnectivityMap(CorfuProtocol.List.newBuilder()
                         .addAllItems(nc.getConnectivity()
                                 .entrySet()
                                 .stream()
@@ -899,7 +964,7 @@ public class API {
             case TOKEN:
                 return request.hasTokenRequest();
             case BOOTSTRAP_SEQUENCER:
-                return request.hasBootStrapSequencerRequest();
+                return request.hasBootstrapSequencerRequest();
             case SEQUENCER_TRIM:
                 return request.hasSequencerTrimRequest();
             case SEQUENCER_METRICS:

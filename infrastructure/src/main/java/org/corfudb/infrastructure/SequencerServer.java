@@ -681,7 +681,7 @@ public class SequencerServer extends AbstractServer {
 
         // Converting from addressSpaceProtoMap to java addressSpaceMap as
         // this.streamsAddressMap needs java objects in putAll() method call
-        final UUIDToStreamAddressMap addressSpaceProtoMap = req.getBootStrapSequencerRequest()
+        final UUIDToStreamAddressMap addressSpaceProtoMap = req.getBootstrapSequencerRequest()
                                     .getStreamsAddressMap();
         addressSpaceProtoMap.getEntriesList().forEach(uuidToStreamAddressPair -> {
 
@@ -700,12 +700,12 @@ public class SequencerServer extends AbstractServer {
 
         });
 
-        final long bootstrapMsgEpoch = req.getBootStrapSequencerRequest().getSequencerEpoch();
+        final long bootstrapMsgEpoch = req.getBootstrapSequencerRequest().getSequencerEpoch();
 
         // Boolean flag to denote whether this bootstrap message is just updating an existing
         // primary sequencer with the new epoch (if set to true) or bootstrapping a currently
         // NOT_READY sequencer.
-        final boolean bootstrapWithoutTailsUpdate = req.getBootStrapSequencerRequest()
+        final boolean bootstrapWithoutTailsUpdate = req.getBootstrapSequencerRequest()
                 .getBootstrapWithoutTailsUpdate();
 
         // If sequencerEpoch is -1 (startup) OR bootstrapMsgEpoch is not the consecutive epoch of
@@ -744,7 +744,7 @@ public class SequencerServer extends AbstractServer {
         // Note, this is correct, but conservative (may lead to false abort).
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
-            globalLogTail = req.getBootStrapSequencerRequest().getGlobalTail();
+            globalLogTail = req.getBootstrapSequencerRequest().getGlobalTail();
             cache = new SequencerServerCache(cache.getCacheSize(), globalLogTail - 1);
             // Clear the existing map as it could have been populated by an earlier reset.
             streamTailToGlobalTailMap = new HashMap<>();
@@ -789,7 +789,7 @@ public class SequencerServer extends AbstractServer {
 
         Header responseHeader = API.generateResponseHeader(req.getHeader(),
                 req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-        Response response = API.getBootStrapSequencerResponse(responseHeader);
+        Response response = API.getBootstrapSequencerResponse(responseHeader);
         r.sendResponse(response, ctx);
     }
 
