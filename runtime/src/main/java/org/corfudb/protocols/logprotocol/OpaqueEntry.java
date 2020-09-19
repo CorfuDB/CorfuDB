@@ -5,15 +5,19 @@ import com.google.common.collect.Lists;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.Address;
 
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -22,12 +26,17 @@ import java.util.UUID;
 
 import static org.corfudb.util.serializer.CorfuSerializer.corfuPayloadMagic;
 
+@Slf4j
 /**
  *
  *
  * Created by Maithem on 2/3/20.
  */
 public class OpaqueEntry implements Serializable {
+
+    private static final int INT_BYTES = 4;
+    public static byte[] writeBytes;
+    public static byte[] readBytes;
 
     private static OpaqueEntry empty = new OpaqueEntry(Address.NON_EXIST, Collections.emptyMap());
 
@@ -132,25 +141,30 @@ public class OpaqueEntry implements Serializable {
         return new OpaqueEntry(version, res);
     }
 
-    private void writeObject(java.io.ObjectOutputStream stream)
-            throws IOException {
+    public static void write(FileOutputStream fileOutput, OpaqueEntry opaqueEntry) throws IOException {
         ByteBuf byteBuf = Unpooled.buffer();
-        OpaqueEntry.serialize(byteBuf, this);
-        stream.writeInt(byteBuf.writerIndex());
-        stream.write(byteBuf.array(), 0, byteBuf.writerIndex());
+        OpaqueEntry.serialize(byteBuf, opaqueEntry);
+        int size = byteBuf.writerIndex();
+        byte[] intBytes = ByteBuffer.allocate(INT_BYTES).putInt(size).array();
+        byte[] dataBytes = Arrays.copyOfRange(byteBuf.array(), 0, size);
+
+        log.debug("write opaqueEntry size ", size);
+
+        fileOutput.write(intBytes);
+        fileOutput.write(dataBytes);
     }
 
-    private void readObject(java.io.ObjectInputStream stream)
-            throws IOException, ClassNotFoundException {
+    public static OpaqueEntry read(FileInputStream fileInput) throws IOException {
+        byte[] intBytes = new byte[INT_BYTES];
+        fileInput.read(intBytes);
+        int size = ByteBuffer.wrap(intBytes).getInt();
+        log.debug("read the opaqueEntry size {}", size);
 
-        int length = stream.readInt();
-        byte[] bytes = new byte[length];
-        stream.read(bytes);
+        byte[] dataBytes = new byte[size];
+        fileInput.read(dataBytes);
 
-        ByteBuf byteBuf = Unpooled.wrappedBuffer(bytes);
-        OpaqueEntry opaqueEntry = deserialize(byteBuf);
-
-        this.version = opaqueEntry.getVersion();
-        this.entries = opaqueEntry.getEntries();
+        ByteBuf byteBuf = Unpooled.wrappedBuffer(dataBytes);
+        OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(byteBuf);
+        return opaqueEntry;
     }
 }

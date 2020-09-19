@@ -1,18 +1,13 @@
 package org.corfudb.runtime;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.logprotocol.Utility;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.OpaqueStream;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.ObjectOutputStream;
-
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -70,8 +65,6 @@ public class Backup {
      */
     public static boolean backupTable(String fileName, UUID uuid, CorfuRuntime runtime, long timestamp) throws IOException, TrimmedException {
         FileOutputStream fileOutput = new FileOutputStream(fileName);
-        ObjectOutputStream objectOutput = new ObjectOutputStream(fileOutput);
-
         StreamOptions options = StreamOptions.builder()
                 .ignoreTrimmed(false)
                 .cacheEntries(false)
@@ -87,11 +80,12 @@ public class Backup {
                 Map<UUID, List<SMREntry>> map = new HashMap<>();
                 map.put(uuid, smrEntries);
                 OpaqueEntry newOpaqueEntry = new OpaqueEntry(lastEntry.getVersion(), map);
-                objectOutput.writeObject(newOpaqueEntry);
+                OpaqueEntry.write(fileOutput, newOpaqueEntry);
             }
         }
 
-        objectOutput.close();
+        fileOutput.flush();
+        fileOutput.close();
         return true;
     }
 

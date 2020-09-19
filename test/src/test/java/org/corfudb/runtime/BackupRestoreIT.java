@@ -29,12 +29,12 @@ import org.corfudb.test.SampleSchema.Uuid;
 // Check the opaque entries are the same with the opaque entries in the original database.
 
 public class BackupRestoreIT extends AbstractIT {
-    final static public int numEntries = 40000;
-    final static public int valSize = 50000;
+    final static public int numEntries = 10000;
+    final static public int valSize = 20000;
     static final String NAMESPACE = "test_namespace";
     static final String backupFileName = "test_backup_file";
-    static final String backupTable = "backup_table";
-    static final String restoreTable = "restore_table";
+    static final String backupTable = "test_table";
+    static final String restoreTable = backupTable;
     static final String DEFAULT_HOST = "localhost";
     static final String LOG_PATH1 = "/Users/maxi/corfu1";
     static final String LOG_PATH2 = "/Users/maxi/corfu2";
@@ -63,15 +63,30 @@ public class BackupRestoreIT extends AbstractIT {
 
         String name = RandomStringUtils.random(valSize, true, true);
 
-        for (int i = 0 ; i < numEntries; i++) {
-            uuidKey = SampleSchema.Uuid.newBuilder()
-                    .setMsb(i)
-                    .setLsb(i)
-                    .build();
-            TxBuilder tx = dataStore.tx(NAMESPACE);
-            eventInfo = SampleSchema.EventInfo.newBuilder().setName(name).build();
-            tx.update(tableName, uuidKey, eventInfo, uuidKey).commit();
+        try {
+            for (int i = 0; i < numEntries; i++) {
+                uuidKey = SampleSchema.Uuid.newBuilder()
+                        .setMsb(i)
+                        .setLsb(i)
+                        .build();
+                TxBuilder tx = dataStore.tx(NAMESPACE);
+                eventInfo = SampleSchema.EventInfo.newBuilder().setName(name).build();
+                tx.update(tableName, uuidKey, eventInfo, uuidKey).commit();
+            }
+        } catch (Exception e) {
+            System.out.print("\nCaught an exception " + e);
         }
+    }
+
+    public static boolean verifyByteArray(byte[] src, byte[] dst, int size) {
+        for (int i = 0; i < size; i++) {
+            if (src[i] != dst[i]) {
+                log.error("Byte is different at index {}", i);
+                return false;
+            }
+        }
+
+        return true;
     }
 
     @Test
@@ -81,6 +96,7 @@ public class BackupRestoreIT extends AbstractIT {
 
         logPath = LOG_PATH2 + "/corfu/log";
         Runtime.getRuntime().exec("rm -rf " + logPath);
+        Runtime.getRuntime().exec("rm -rf " + "/Users/maxi/Projects/CorfuDB/test/" + backupFileName);
 
         sourceServer = new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
@@ -130,14 +146,12 @@ public class BackupRestoreIT extends AbstractIT {
         long time2 = System.currentTimeMillis();
         System.out.print("\nrestore takes " + (time2 - time1));
 
-
-        /*
         Query q1 = dataCorfuStore.query(NAMESPACE);
 
         table2 = restoreDataCorfuStore.openTable(NAMESPACE,
                 restoreTable,
                 SampleSchema.Uuid.class,
-                SampleSchema.Uuid.class,
+                SampleSchema.EventInfo.class,
                 SampleSchema.Uuid.class,
                 TableOptions.builder().build());
 
@@ -145,7 +159,7 @@ public class BackupRestoreIT extends AbstractIT {
 
         Set<Uuid> aSet = q1.keySet(backupTable, null);
         Set<Uuid> bSet = q2.keySet(restoreTable, null);
-
+        System.out.print("\naSet size " + aSet.size() + " bSet " + bSet.size());
 
         assertThat(aSet.containsAll(bSet));
         assertThat(bSet.containsAll(aSet));
@@ -158,6 +172,6 @@ public class BackupRestoreIT extends AbstractIT {
             CorfuRecord<SampleSchema.Uuid, SampleSchema.Uuid> rd1 = dataCorfuStore.query(NAMESPACE).getRecord(backupTable, uuidKey);
             CorfuRecord<SampleSchema.Uuid, SampleSchema.Uuid> rd2 = restoreDataCorfuStore.query(NAMESPACE).getRecord(restoreTable, uuidKey);
             assertThat(rd1).isEqualTo(rd2);
-        }*/
+        }
     }
 }
