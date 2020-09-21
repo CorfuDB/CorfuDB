@@ -232,8 +232,8 @@ public class NettyRequestRouterTest {
 
         assertTrue(compareCommonHeaderFields(request.getHeader(), response.getHeader()));
         assertTrue(response.getError().getCode().equals(CorfuProtocol.ERROR.WRONG_CLUSTER));
-        assertTrue(response.getError().getWrongClusterPayload().getClientClusterId().equals(API.getUUID(badClusterId)));
-        assertTrue(response.getError().getWrongClusterPayload().getServerClusterId().equals(API.getUUID(clusterId)));
+        assertTrue(response.getError().getWrongClusterPayload().getClientClusterId().equals(API.getProtoUUID(badClusterId)));
+        assertTrue(response.getError().getWrongClusterPayload().getServerClusterId().equals(API.getProtoUUID(clusterId)));
     }
 
     /**

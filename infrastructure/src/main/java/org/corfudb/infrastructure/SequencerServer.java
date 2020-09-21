@@ -2,7 +2,9 @@ package org.corfudb.infrastructure;
 
 import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.InvalidProtocolBufferException;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -35,7 +37,6 @@ import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
-import java.io.*;
 import java.lang.invoke.MethodHandles;
 import java.util.Collections;
 import java.util.HashMap;
@@ -131,10 +132,19 @@ public class SequencerServer extends AbstractServer {
     private final Map<CorfuProtocol.TokenRequest.TokenRequestType, String> timerNameCacheProto = new HashMap<>();
 
     /**
+     * Remove this after Protobuf for RPC Completion
+     *
      * HandlerMethod for this server.
      */
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /**
+     * RequestHandlerMethods for the LogUnit server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @Getter
     private SequencerServerCache cache;
@@ -390,8 +400,13 @@ public class SequencerServer extends AbstractServer {
             return getTxResolutionResponse(CorfuProtocol.TokenType.TX_ABORT_SEQ_TRIM);
         }
 
-        for (UUIDToListOfBytesPair conflictStream : txInfo.getConflictSet().getEntriesList()) {
-
+        for (Any item : txInfo.getConflictSet().getItemsList()) {
+            UUIDToListOfBytesPair conflictStream = null;
+            try {
+                conflictStream = item.unpack(UUIDToListOfBytesPair.class);
+            } catch (InvalidProtocolBufferException e) {
+                log.error(e.getMessage());
+            }
             // if conflict-parameters are present, check for conflict based on conflict-parameter
             // updates
             List<ByteString> conflictParamSet = conflictStream.getValueList();
@@ -525,10 +540,10 @@ public class SequencerServer extends AbstractServer {
         CorfuProtocol.TokenResponse tokenResponse = getTokenResponse(
                 CorfuProtocol.TokenType.TX_NORMAL,
                 ByteString.copyFrom(TOKEN_RESPONSE_NO_CONFLICT_KEY),
-                getUUID(TOKEN_RESPONSE_NO_CONFLICT_STREAM),
+                getProtoUUID(TOKEN_RESPONSE_NO_CONFLICT_STREAM),
                 token,
-                UUIDToLongMap.getDefaultInstance(),
-                getProtoUUIDToLongMap(streamTails));
+                CorfuProtocol.List.getDefaultInstance(),
+                getProtoUUIDToLongList(streamTails));
         Response response = getTokenResponse(responseHeader, tokenResponse);
         r.sendResponse(response, ctx);
     }
@@ -677,28 +692,11 @@ public class SequencerServer extends AbstractServer {
     @RequestHandler(type = CorfuProtocol.MessageType.BOOTSTRAP_SEQUENCER)
     public void resetServer(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
         log.info("Reset sequencer server.");
-        final Map<UUID, StreamAddressSpace> addressSpaceMap = new HashMap<>();
 
         // Converting from addressSpaceProtoMap to java addressSpaceMap as
         // this.streamsAddressMap needs java objects in putAll() method call
-        final UUIDToStreamAddressMap addressSpaceProtoMap = req.getBootstrapSequencerRequest()
-                                    .getStreamsAddressMap();
-        addressSpaceProtoMap.getEntriesList().forEach(uuidToStreamAddressPair -> {
-
-            Roaring64NavigableMap roaring64NavigableMap = new Roaring64NavigableMap();
-            final ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(
-                    uuidToStreamAddressPair.getValue().getAddressMap().toByteArray());
-            final DataInputStream dataInputStream = new DataInputStream(byteArrayInputStream);
-            try {
-                roaring64NavigableMap.deserialize(dataInputStream);
-            } catch (IOException e) {
-                log.error("resetServer: error while deserializing roaring64NavigableMap");
-            }
-            addressSpaceMap.put(getJavaUUID(uuidToStreamAddressPair.getKey()),
-                    new StreamAddressSpace(uuidToStreamAddressPair.getValue().getTrimMark(),
-                            roaring64NavigableMap));
-
-        });
+        final Map<UUID, StreamAddressSpace> addressSpaceMap = getJavaStreamAddressSpaceMap(
+                req.getBootstrapSequencerRequest().getStreamsAddressMap());
 
         final long bootstrapMsgEpoch = req.getBootstrapSequencerRequest().getSequencerEpoch();
 
@@ -718,9 +716,9 @@ public class SequencerServer extends AbstractServer {
                     sequencerEpoch, bootstrapMsgEpoch
             );
 
-            Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                    req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-            r.sendWrongEpochError(responseHeader, ctx);
+            // Note: we reuse the request header as the ignore_cluster_id and
+            // ignore_epoch fields are the same in both cases.
+            r.sendWrongEpochError(req.getHeader(), ctx);
             return;
         }
 
@@ -730,9 +728,9 @@ public class SequencerServer extends AbstractServer {
                     sequencerEpoch, bootstrapMsgEpoch
             );
 
-            Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                    req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-            r.sendWrongEpochError(responseHeader, ctx);
+            // Note: we reuse the request header as the ignore_cluster_id and
+            // ignore_epoch fields are the same in both cases.
+            r.sendWrongEpochError(req.getHeader(), ctx);
             return;
         }
 
@@ -787,9 +785,9 @@ public class SequencerServer extends AbstractServer {
         log.info("Sequencer reset with token = {}, size {} streamTailToGlobalTailMap = {}, sequencerEpoch = {}",
                 globalLogTail, streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-        Response response = API.getBootstrapSequencerResponse(responseHeader);
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = API.getBootstrapSequencerResponse(req.getHeader());
         r.sendResponse(response, ctx);
     }
 
@@ -816,9 +814,9 @@ public class SequencerServer extends AbstractServer {
         CorfuProtocol.SequencerMetrics sequencerMetrics =
                 getSequencerMetrics(CorfuProtocol.SequencerMetrics.SequencerStatus.READY);
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-        Response response = API.getSequencerMetricsResponse(responseHeader, sequencerMetrics);
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = API.getSequencerMetricsResponse(req.getHeader(), sequencerMetrics);
         r.sendResponse(response, ctx);
     }
 
@@ -954,12 +952,11 @@ public class SequencerServer extends AbstractServer {
         CorfuProtocol.Token token = getToken(sequencerEpoch, globalLogTail);
         globalLogTail += tokenRequest.getNumTokens();
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-        CorfuProtocol.TokenResponse tokenResponse = getTokenResponse(
-                token,
-                UUIDToLongMap.getDefaultInstance());
-        Response response = getTokenResponse(responseHeader, tokenResponse);
+        CorfuProtocol.TokenResponse tokenResponse = getTokenResponse(token);
+
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = getTokenResponse(req.getHeader(), tokenResponse);
         r.sendResponse(response, ctx);
     }
 
@@ -1026,15 +1023,15 @@ public class SequencerServer extends AbstractServer {
             // If the txn aborts, then DO NOT hand out a token.
             CorfuProtocol.Token newToken = getToken(sequencerEpoch, txResolutionResponse.getAddress());
 
-            Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                    req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
             CorfuProtocol.TokenResponse tokenResponse = getTokenResponse(txResolutionResponse.getTokenType(),
                     txResolutionResponse.getConflictingKey(),
                     txResolutionResponse.getConflictingStream(),
                     newToken,
-                    UUIDToLongMap.getDefaultInstance(),
-                    UUIDToLongMap.getDefaultInstance());
-            Response response = getTokenResponse(responseHeader, tokenResponse);
+                    CorfuProtocol.List.getDefaultInstance(),
+                    CorfuProtocol.List.getDefaultInstance());
+            // Note: we reuse the request header as the ignore_cluster_id and
+            // ignore_epoch fields are the same in both cases.
+            Response response = getTokenResponse(req.getHeader(), tokenResponse);
             r.sendResponse(response, ctx);
             return;
         }
@@ -1166,13 +1163,19 @@ public class SequencerServer extends AbstractServer {
         // update the cache of conflict parameters
         if (tokenRequest.getTxnResolution() != null) {
             tokenRequest.getTxnResolution()
-                    .getWriteConflictParamsSet().getEntriesList()
-                    .forEach((uuidToListOfBytesPair) -> {
-                        // insert an entry with the new timestamp using the
-                        // hash code based on the param and the stream id.
-                        uuidToListOfBytesPair.getValueList().forEach(conflictParam ->
-                                cache.put(new ConflictTxStream(getJavaUUID(uuidToListOfBytesPair.getKey()),
-                                        conflictParam.toByteArray(), newTail - 1)));
+                    .getWriteConflictParamsSet().getItemsList()
+                    .forEach((item) -> {
+                        try {
+                            UUIDToListOfBytesPair uuidToListOfBytesPair = item.unpack(UUIDToListOfBytesPair.class);
+                            // insert an entry with the new timestamp using the
+                            // hash code based on the param and the stream id.
+                            uuidToListOfBytesPair.getValueList().forEach(conflictParam ->
+                                    cache.put(new ConflictTxStream(getJavaUUID(uuidToListOfBytesPair.getKey()),
+                                            conflictParam.toByteArray(), newTail - 1)));
+                        } catch (InvalidProtocolBufferException e) {
+                            log.error(e.getMessage());
+                        }
+
                     });
         }
 
@@ -1181,11 +1184,11 @@ public class SequencerServer extends AbstractServer {
         // return the token response with the global tail and the streams backpointers
         CorfuProtocol.Token newToken = getToken(sequencerEpoch, globalLogTail);
         globalLogTail = newTail;
-        Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
         CorfuProtocol.TokenResponse tokenResponse = getTokenResponse(newToken,
-                getProtoUUIDToLongMap(backPointerMap.build()));
-        Response response = getTokenResponse(responseHeader,tokenResponse);
+                getProtoUUIDToLongList(backPointerMap.build()));
+        Response response = getTokenResponse(req.getHeader(),tokenResponse);
         r.sendResponse(response, ctx);
     }
 
@@ -1238,7 +1241,7 @@ public class SequencerServer extends AbstractServer {
         Map<UUID, StreamAddressSpace> streamsAddressMap;
 
         if (streamsAddressRequest.getReqType() == CorfuProtocol.StreamsAddressRequest.Type.STREAMS) {
-            streamsAddressMap = getStreamsAddressesProto(streamsAddressRequest.getStreamsRangesList());
+            streamsAddressMap = getJavaStreamsAddresses(streamsAddressRequest.getStreamsRangesList());
         } else {// Retrieve address space for all streams
             streamsAddressMap = new HashMap<>(this.streamsAddressMap);
         }
@@ -1246,38 +1249,10 @@ public class SequencerServer extends AbstractServer {
         log.trace("handleStreamsAddressRequest: return address space for streams [{}]",
                 streamsAddressMap.keySet());
 
-        // Converting Map<UUID, StreamAddressSpace> to proto UUIDToStreamAddressMap
-        UUIDToStreamAddressMap.Builder addressMapBuilder = UUIDToStreamAddressMap.newBuilder();
-        streamsAddressMap.forEach((uuid, streamAddressSpace) -> {
-            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-            DataOutputStream outputStream = new DataOutputStream(byteArrayOutputStream);
-            try {
-                streamAddressSpace.getAddressMap().serialize(outputStream);
-                ByteString addressMap = ByteString.copyFrom(byteArrayOutputStream.toByteArray());
-                outputStream.close();
-
-                // Create and add UUIDToStreamAddressPair entries
-                addressMapBuilder.addEntries(
-                        UUIDToStreamAddressPair.newBuilder()
-                                .setKey(getUUID(uuid))
-                                .setValue(
-                                        CorfuProtocol.StreamAddressSpace.newBuilder()
-                                                .setTrimMark(streamAddressSpace.getTrimMark())
-                                                .setAddressMap(addressMap)
-                                )
-                                .build()
-                );
-
-            } catch (IOException e) {
-                log.error("resetServer: error while serializing roaring64NavigableMap");
-            }
-        });
-
-        Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-
-        Response response = getStreamsAddressResponse(responseHeader,
-                getGlobalLogTail(), addressMapBuilder.build());
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = getStreamsAddressResponse(req.getHeader(),
+                getGlobalLogTail(), getProtoStreamAddressSpaceMap(streamsAddressMap));
         r.sendResponse(response, ctx);
     }
 
@@ -1315,7 +1290,7 @@ public class SequencerServer extends AbstractServer {
      * @param addressRanges list of requested a stream and ranges.
      * @return map of stream to address space.
      */
-    private Map<UUID, StreamAddressSpace> getStreamsAddressesProto(List<CorfuProtocol.StreamAddressRange> addressRanges) {
+    private Map<UUID, StreamAddressSpace> getJavaStreamsAddresses(List<CorfuProtocol.StreamAddressRange> addressRanges) {
         Map<UUID, StreamAddressSpace> requestedAddressSpaces = new HashMap<>();
         Roaring64NavigableMap addressMap;
 
