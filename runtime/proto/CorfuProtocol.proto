@@ -241,9 +241,6 @@ message UUIDToListOfBytesPair {
   UUID key = 1;
   repeated bytes value = 2;
 }
-message UUIDToListOfBytesMap {
-  repeated UUIDToListOfBytesPair entries = 1;
-}
 
 enum TokenType {
   // Standard token issue by sequencer or a tail-query response
@@ -288,9 +285,8 @@ message TxResolutionInfo {
   Token snapshotTimestamp = 2;
 
   /** A set of poisoned streams, which have a conflict against all updates. */
-  UUIDToListOfBytesMap conflictSet = 3;
-
-  UUIDToListOfBytesMap writeConflictParamsSet = 4;
+  List conflictSet = 3;
+  List writeConflictParamsSet = 4;
 }
 
 /**
@@ -330,10 +326,6 @@ message UUIDToLongPair {
   int64 value = 2;
 }
 
-message UUIDToLongMap {
-  repeated UUIDToLongPair entries = 1;
-}
-
 message TokenResponse {
   /** the cause/type of response. */
   TokenType respType = 1;
@@ -347,9 +339,13 @@ message TokenResponse {
   /** The current token or global log tail in the case of stream tails query */
   Token token = 4;
 
-  /** The backPointer map, if available. */
-  UUIDToLongMap backPointerMap = 5;
-  UUIDToLongMap streamTails = 6;
+  /** The backPointer map, if available.
+      A list of UUIDToLongPair
+  */
+  List backPointerMap = 5;
+
+  // A list of UUIDToLongPair
+  List streamTails = 6;
 }
 
 /**
@@ -378,15 +374,11 @@ message UUIDToStreamAddressPair {
   StreamAddressSpace value = 2;
 }
 
-
-message UUIDToStreamAddressMap {
-  repeated UUIDToStreamAddressPair entries = 1;
-}
-
 // SequencerRecoveryMsg
 message BootstrapSequencerRequest {
   int64 globalTail = 1;
-  UUIDToStreamAddressMap streamsAddressMap = 2;
+  // List of UUIDToStreamAddressPairs
+  List streamsAddressMap = 2;
   int64 sequencerEpoch = 3;
 
   /**
@@ -475,7 +467,8 @@ message StreamsAddressRequest {
  */
 message StreamsAddressResponse {
   uint64 logTail = 1;
-  UUIDToStreamAddressMap addressMap = 2;
+  // List of UUIDToStreamAddressPairs
+  List addressMap = 2;
 }
 
 /**

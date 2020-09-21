@@ -111,7 +111,7 @@ public interface IRequestRouter {
      * @return True, if the cluster ID of the request matches the cluster ID of the layout, but false otherwise.
      */
     default boolean clusterIdIsValid(Header requestHeader, ChannelHandlerContext ctx, Layout layout) {
-        UUID currentClusterID = API.getUUID(layout.getClusterId());
+        UUID currentClusterID = API.getProtoUUID(layout.getClusterId());
         boolean match = requestHeader.getClusterId().equals(currentClusterID);
 
         if(!match) {
