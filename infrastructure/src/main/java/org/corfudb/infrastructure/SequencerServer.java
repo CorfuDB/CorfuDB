@@ -132,10 +132,19 @@ public class SequencerServer extends AbstractServer {
     private final Map<CorfuProtocol.TokenRequest.TokenRequestType, String> timerNameCacheProto = new HashMap<>();
 
     /**
+     * Remove this after Protobuf for RPC Completion
+     *
      * HandlerMethod for this server.
      */
     @Getter
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /**
+     * RequestHandlerMethods for the LogUnit server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @Getter
     private SequencerServerCache cache;
@@ -707,9 +716,9 @@ public class SequencerServer extends AbstractServer {
                     sequencerEpoch, bootstrapMsgEpoch
             );
 
-            Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                    req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-            r.sendWrongEpochError(responseHeader, ctx);
+            // Note: we reuse the request header as the ignore_cluster_id and
+            // ignore_epoch fields are the same in both cases.
+            r.sendWrongEpochError(req.getHeader(), ctx);
             return;
         }
 
@@ -719,9 +728,9 @@ public class SequencerServer extends AbstractServer {
                     sequencerEpoch, bootstrapMsgEpoch
             );
 
-            Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                    req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-            r.sendWrongEpochError(responseHeader, ctx);
+            // Note: we reuse the request header as the ignore_cluster_id and
+            // ignore_epoch fields are the same in both cases.
+            r.sendWrongEpochError(req.getHeader(), ctx);
             return;
         }
 
@@ -776,9 +785,9 @@ public class SequencerServer extends AbstractServer {
         log.info("Sequencer reset with token = {}, size {} streamTailToGlobalTailMap = {}, sequencerEpoch = {}",
                 globalLogTail, streamTailToGlobalTailMap.size(), streamTailToGlobalTailMap, sequencerEpoch);
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-        Response response = API.getBootstrapSequencerResponse(responseHeader);
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = API.getBootstrapSequencerResponse(req.getHeader());
         r.sendResponse(response, ctx);
     }
 
@@ -805,9 +814,9 @@ public class SequencerServer extends AbstractServer {
         CorfuProtocol.SequencerMetrics sequencerMetrics =
                 getSequencerMetrics(CorfuProtocol.SequencerMetrics.SequencerStatus.READY);
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-        Response response = API.getSequencerMetricsResponse(responseHeader, sequencerMetrics);
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = API.getSequencerMetricsResponse(req.getHeader(), sequencerMetrics);
         r.sendResponse(response, ctx);
     }
 
@@ -943,12 +952,11 @@ public class SequencerServer extends AbstractServer {
         CorfuProtocol.Token token = getToken(sequencerEpoch, globalLogTail);
         globalLogTail += tokenRequest.getNumTokens();
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-        CorfuProtocol.TokenResponse tokenResponse = getTokenResponse(
-                token,
-                CorfuProtocol.List.getDefaultInstance());
-        Response response = getTokenResponse(responseHeader, tokenResponse);
+        CorfuProtocol.TokenResponse tokenResponse = getTokenResponse(token);
+
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = getTokenResponse(req.getHeader(), tokenResponse);
         r.sendResponse(response, ctx);
     }
 
@@ -1015,15 +1023,15 @@ public class SequencerServer extends AbstractServer {
             // If the txn aborts, then DO NOT hand out a token.
             CorfuProtocol.Token newToken = getToken(sequencerEpoch, txResolutionResponse.getAddress());
 
-            Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                    req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
             CorfuProtocol.TokenResponse tokenResponse = getTokenResponse(txResolutionResponse.getTokenType(),
                     txResolutionResponse.getConflictingKey(),
                     txResolutionResponse.getConflictingStream(),
                     newToken,
                     CorfuProtocol.List.getDefaultInstance(),
                     CorfuProtocol.List.getDefaultInstance());
-            Response response = getTokenResponse(responseHeader, tokenResponse);
+            // Note: we reuse the request header as the ignore_cluster_id and
+            // ignore_epoch fields are the same in both cases.
+            Response response = getTokenResponse(req.getHeader(), tokenResponse);
             r.sendResponse(response, ctx);
             return;
         }
@@ -1176,11 +1184,11 @@ public class SequencerServer extends AbstractServer {
         // return the token response with the global tail and the streams backpointers
         CorfuProtocol.Token newToken = getToken(sequencerEpoch, globalLogTail);
         globalLogTail = newTail;
-        Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
         CorfuProtocol.TokenResponse tokenResponse = getTokenResponse(newToken,
                 getProtoUUIDToLongList(backPointerMap.build()));
-        Response response = getTokenResponse(responseHeader,tokenResponse);
+        Response response = getTokenResponse(req.getHeader(),tokenResponse);
         r.sendResponse(response, ctx);
     }
 
@@ -1233,7 +1241,7 @@ public class SequencerServer extends AbstractServer {
         Map<UUID, StreamAddressSpace> streamsAddressMap;
 
         if (streamsAddressRequest.getReqType() == CorfuProtocol.StreamsAddressRequest.Type.STREAMS) {
-            streamsAddressMap = getStreamsAddressesProto(streamsAddressRequest.getStreamsRangesList());
+            streamsAddressMap = getJavaStreamsAddresses(streamsAddressRequest.getStreamsRangesList());
         } else {// Retrieve address space for all streams
             streamsAddressMap = new HashMap<>(this.streamsAddressMap);
         }
@@ -1241,10 +1249,9 @@ public class SequencerServer extends AbstractServer {
         log.trace("handleStreamsAddressRequest: return address space for streams [{}]",
                 streamsAddressMap.keySet());
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(),
-                req.getHeader().getIgnoreClusterId(), req.getHeader().getIgnoreEpoch());
-
-        Response response = getStreamsAddressResponse(responseHeader,
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = getStreamsAddressResponse(req.getHeader(),
                 getGlobalLogTail(), getProtoStreamAddressSpaceMap(streamsAddressMap));
         r.sendResponse(response, ctx);
     }
@@ -1283,7 +1290,7 @@ public class SequencerServer extends AbstractServer {
      * @param addressRanges list of requested a stream and ranges.
      * @return map of stream to address space.
      */
-    private Map<UUID, StreamAddressSpace> getStreamsAddressesProto(List<CorfuProtocol.StreamAddressRange> addressRanges) {
+    private Map<UUID, StreamAddressSpace> getJavaStreamsAddresses(List<CorfuProtocol.StreamAddressRange> addressRanges) {
         Map<UUID, StreamAddressSpace> requestedAddressSpaces = new HashMap<>();
         Roaring64NavigableMap addressMap;
 

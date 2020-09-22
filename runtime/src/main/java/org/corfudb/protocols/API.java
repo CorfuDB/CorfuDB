@@ -462,24 +462,6 @@ public class API {
     /**
      * Create a new proto TokenResponse object with the parameters.
      *
-     * @param token token value
-     * @param backPointerMap  map of backPointers for all requested streams
-     */
-    public static CorfuProtocol.TokenResponse getTokenResponse(CorfuProtocol.Token token,
-                                                               CorfuProtocol.List backPointerMap){
-        return getTokenResponse(
-                TokenType.TX_NORMAL,
-                ByteString.copyFrom(TOKEN_RESPONSE_NO_CONFLICT_KEY),
-                getProtoUUID(TOKEN_RESPONSE_NO_CONFLICT_STREAM),
-                token,
-                backPointerMap,
-                CorfuProtocol.List.getDefaultInstance()
-        );
-    }
-
-    /**
-     * Create a new proto TokenResponse object with the parameters.
-     *
      * @param tokenType token type
      * @param conflictingKey the key responsible for the conflict
      * @param conflictingStream the stream responsible for the conflict
@@ -500,6 +482,36 @@ public class API {
                 .setBackPointerMap(backPointerMap)
                 .setStreamTails(streamTails)
                 .build();
+    }
+
+    /**
+     * Create a new proto TokenResponse object with the parameters.
+     *
+     * @param token token value
+     * @param backPointerMap  map of backPointers for all requested streams
+     * @return new TokenResponse proto object
+     */
+    public static CorfuProtocol.TokenResponse getTokenResponse(CorfuProtocol.Token token,
+                                                               CorfuProtocol.List backPointerMap){
+        return getTokenResponse(
+                TokenType.TX_NORMAL,
+                ByteString.copyFrom(TOKEN_RESPONSE_NO_CONFLICT_KEY),
+                getProtoUUID(TOKEN_RESPONSE_NO_CONFLICT_STREAM),
+                token,
+                backPointerMap,
+                CorfuProtocol.List.getDefaultInstance()
+        );
+    }
+
+    /**
+     * Create a new proto TokenResponse object with the parameters.
+     *
+     * @param token token value
+     * @return new TokenResponse proto object
+     */
+    public static CorfuProtocol.TokenResponse getTokenResponse(CorfuProtocol.Token token){
+        return getTokenResponse(token,
+                CorfuProtocol.List.getDefaultInstance());
     }
 
     /**
