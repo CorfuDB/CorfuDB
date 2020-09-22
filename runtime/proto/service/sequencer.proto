@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto.service";
+
+import "common.proto";
+import "tx_resolution.proto";
+
+message TokenRequestMsg {
+  enum TokenRequestType {
+    INVALID = 0;
+    TK_QUERY = 1;
+    TK_RAW = 2;
+    TK_MULTI_STREAM = 3;
+    TK_TX = 4;
+  }
+
+  TokenRequestType request_type = 11;
+  int64 num_tokens = 12;
+  repeated UuidMsg streams = 13;
+  TxResolutionInfoMsg txn_resolution = 14;
+}
+
+message TokenResponseMsg {
+  TokenType resp_type = 1;
+  bytes conflict_key = 2;
+  UuidMsg conflict_stream = 3;
+  TokenMsg token = 4;
+  // Map of (UUID, Long) pairs
+  MapMsg backpointer_map = 5;
+  // Map of (UUID, Long) pairs
+  MapMsg stream_tails = 6;
+}
+
+// SequencerRecoveryMsg
+message BootstrapSequencerRequestMsg {
+  int64 global_tail = 1;
+  // Map of (UUID, StreamAddressSpace) pairs
+  MapMsg streams_address_map = 2;
+  int64 sequencer_epoch = 3;
+  bool bootstrap_without_tails_update = 4;
+}
+
+message BootstrapSequencerResponseMsg {
+}
+
+message SequencerTrimRequestMsg {
+  int64 trim_mark = 1;
+}
+
+message SequencerTrimResponseMsg {
+}
+
+message SequencerMetricsRequestMsg {
+}
+
+message SequencerMetricsResponseMsg {
+  SequencerMetricsMsg sequencer_metrics = 1;
+}
+
+message StreamsAddressRequestMsg {
+  enum Type {
+    INVALID = 0;
+    STREAMS = 1;
+    ALL_STREAMS = 2;
+  }
+
+  Type req_type = 1;
+  repeated StreamAddressRangeMsg stream_range = 2;
+}
+
+message StreamsAddressResponseMsg {
+  uint64 log_tail = 1;
+  // Map of (UUID, StreamAddressSpace) pairs
+  MapMsg address_map = 2;
+}

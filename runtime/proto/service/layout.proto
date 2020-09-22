@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto.service";
+
+import "common.proto";
+
+// Retrieve layout
+message LayoutRequestMsg {
+  int64 epoch = 1;
+}
+
+message LayoutResponseMsg {
+  LayoutMsg layout = 1;
+}
+
+// Request in first phase of Paxos
+message PrepareLayoutRequestMsg {
+  int64 epoch = 1;
+  int64 rank = 2;
+}
+
+message PrepareLayoutResponseMsg {
+  enum Type {
+    INVALID = 0;
+    ACK = 1;
+    REJECT = 2;
+  }
+
+  Type resp_type = 1;
+  int64 rank = 2;
+  LayoutMsg layout = 3;
+}
+
+// Request in second phase of Paxos
+message ProposeLayoutRequestMsg {
+  int64 epoch = 1;
+  int64 rank = 2;
+  LayoutMsg layout = 3;
+}
+
+message ProposeLayoutResponseMsg {
+  enum Type {
+    INVALID = 0;
+    ACK = 1;
+    REJECT = 2;
+  }
+
+  Type resp_type = 1;
+  int64 rank = 2;
+}
+
+// If the first two phases (prepare and propose) of Paxos have been accepted, the
+// proposer sends a Committed message to commit the proposed Layout
+message CommitLayoutRequestMsg {
+  bool forced = 1;
+  int64 epoch = 2;
+  LayoutMsg layout = 3;
+}
+
+message CommitLayoutResponseMsg {
+  enum Type {
+    INVALID = 0;
+    ACK = 1;
+    NACK = 2;
+  }
+
+  Type resp_type = 1;
+}
+
+// Request sent to bootstrap the server with a Layout
+message BootstrapLayoutRequestMsg {
+  LayoutMsg layout = 1;
+}
+
+message BootstrapLayoutResponseMsg {
+  enum Type {
+    INVALID = 0;
+    ACK = 1;
+    NACK = 2;
+  }
+
+  Type resp_type = 1;
+}

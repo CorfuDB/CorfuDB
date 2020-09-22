@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto.service";
+
+import "common.proto";
+import "log_data.proto";
+
+message WriteLogRequestMsg {
+  LogDataMsg log_data = 1;
+}
+
+message WriteLogResponseMsg {
+}
+
+message RangeWriteLogRequestMsg {
+  repeated LogDataMsg log_data = 1;
+}
+
+message RangeWriteLogResponseMsg {
+}
+
+message ReadLogRequestMsg {
+  repeated int64 address = 1;
+  bool cache_results = 2;
+}
+
+message ReadLogResponseMsg {
+  repeated ReadResponseMsg response = 1;
+}
+
+message InspectAddressesRequestMsg {
+  repeated int64 address = 1;
+}
+
+message InspectAddressesResponseMsg {
+  repeated int64 empty_address = 1;
+}
+
+message TrimLogRequestMsg {
+  TokenMsg address = 1;
+}
+
+message TrimLogResponseMsg {
+}
+
+message TrimMarkRequestMsg {
+}
+
+message TrimMarkResponseMsg {
+  int64 trim_mark = 1;
+}
+
+message TailRequestMsg {
+  enum Type {
+    INVALID = 0;
+    LOG_TAIL = 1;
+    STREAMS_TAILS = 2;
+    ALL_STREAMS_TAIL = 3;
+  }
+
+  Type req_type = 1;
+  repeated UuidMsg stream = 2;
+}
+
+message TailResponseMsg {
+  int64 epoch = 1;
+  int64 log_tail = 2;
+  // Map of (UUID, Long) pairs
+  MapMsg stream_tails = 3;
+}
+
+message CompactRequestMsg {
+}
+
+message CompactResponseMsg {
+}
+
+message FlushCacheRequestMsg {
+}
+
+message FlushCacheResponseMsg {
+}
+
+message LogAddressSpaceRequestMsg {
+}
+
+message LogAddressSpaceResponseMsg {
+  int64 log_tail = 1;
+  // Map of (UUID, StreamAddressSpace) pairs
+  MapMsg address_map = 2;
+}
+
+message KnownAddressRequestMsg {
+  int64 start_range = 1;
+  int64 end_range = 2;
+}
+
+message KnownAddressResponseMsg {
+  repeated int64 known_address = 1;
+}
+
+message CommittedTailRequestMsg {
+}
+
+message CommittedTailResponseMsg {
+  int64 committed_tail = 1;
+}
+
+message UpdateCommittedTailRequestMsg {
+  int64 committed_tail = 1;
+}
+
+message UpdateCommittedTailResponseMsg {
+}
+
+message ResetLogUnitRequestMsg {
+  int64 epoch = 1;
+}
+
+message ResetLogUnitResponseMsg {
+}

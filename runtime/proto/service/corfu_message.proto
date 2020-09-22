@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto.service";
+
+import "common.proto";
+import "service/base.proto";
+import "service/layout.proto";
+import "service/log_unit.proto";
+import "service/sequencer.proto";
+import "service/management.proto";
+import "server_errors.proto";
+
+message HeaderMsg {
+  ProtocolVersion version = 1;
+  int64 request_id = 2;
+  PriorityLevel priority = 3;
+  int64 epoch = 4;
+  UuidMsg cluster_id = 5;
+  UuidMsg client_id = 6;
+  bool ignore_cluster_id = 7;
+  bool ignore_epoch = 8;
+}
+
+message RequestPayloadMsg {
+  oneof payload {
+    // Base Requests
+    PingRequestMsg ping_request = 10;
+    AuthenticateRequestMsg authenticate_request = 11;
+    RestartRequestMsg restart_request = 12;
+    ResetRequestMsg reset_request = 13;
+    SealRequestMsg seal_request = 14;
+
+    // Layout Requests
+    LayoutRequestMsg layout_request = 20;
+    PrepareLayoutRequestMsg prepare_layout_request = 21;
+    ProposeLayoutRequestMsg propose_layout_request = 22;
+    CommitLayoutRequestMsg commit_layout_request = 23;
+    BootstrapLayoutRequestMsg bootstrap_layout_request = 24;
+
+    // Sequencer Requests
+    TokenRequestMsg token_request = 30;
+    BootstrapSequencerRequestMsg bootstrap_sequencer_request = 31;
+    SequencerTrimRequestMsg sequencer_trim_request = 32;
+    SequencerMetricsRequestMsg sequencer_metrics_request = 33;
+    StreamsAddressRequestMsg streams_address_request = 34;
+
+    // LogUnit Requests
+    WriteLogRequestMsg write_log_request = 40;
+    RangeWriteLogRequestMsg range_write_log_request = 41;
+    ReadLogRequestMsg read_log_request = 42;
+    InspectAddressesRequestMsg inspect_addresses_request = 43;
+    TrimLogRequestMsg trim_log_request = 44;
+    TrimMarkRequestMsg trim_mark_request = 45;
+    TailRequestMsg tail_request = 46;
+    CompactRequestMsg compact_request = 47;
+    FlushCacheRequestMsg flush_cache_request = 48;
+    LogAddressSpaceRequestMsg log_address_space_request = 49;
+    KnownAddressRequestMsg known_address_request = 50;
+    CommittedTailRequestMsg committed_tail_request = 51;
+    UpdateCommittedTailRequestMsg update_committed_tail_request = 52;
+    ResetLogUnitRequestMsg reset_log_unit_request = 53;
+
+    // Management Requests
+    QueryNodeRequestMsg query_node_request = 60;
+    ReportFailureRequestMsg report_failure_request = 61;
+    HealFailureRequestMsg heal_failure_request = 62;
+    OrchestratorRequestMsg orchestrator_request = 63;
+    BootstrapManagementRequestMsg bootstrap_management_request = 64;
+    ManagementLayoutRequestMsg management_layout_request = 65;
+  }
+}
+
+message ResponsePayloadMsg {
+  oneof payload {
+    // Base Responses
+    PingResponseMsg ping_response = 10;
+    AuthenticateResponseMsg authenticate_response = 11;
+    RestartResponseMsg restart_response = 12;
+    ResetResponseMsg reset_response = 13;
+    SealResponseMsg seal_response = 14;
+
+    // Layout Responses
+    LayoutResponseMsg layout_response = 20;
+    PrepareLayoutResponseMsg prepare_layout_response = 21;
+    ProposeLayoutResponseMsg propose_layout_response = 22;
+    CommitLayoutResponseMsg commit_layout_response = 23;
+    BootstrapLayoutResponseMsg bootstrap_layout_response = 24;
+
+    // Sequencer Responses
+    TokenResponseMsg token_response = 30;
+    BootstrapSequencerResponseMsg bootstrap_sequencer_response = 31;
+    SequencerTrimResponseMsg sequencer_trim_response = 32;
+    SequencerMetricsResponseMsg sequencer_metrics_response = 33;
+    StreamsAddressResponseMsg streams_address_response = 34;
+
+    // LogUnit Responses
+    WriteLogResponseMsg write_log_response = 40;
+    RangeWriteLogResponseMsg range_write_log_response =  41;
+    ReadLogResponseMsg read_log_response = 42;
+    InspectAddressesResponseMsg inspect_addresses_response = 43;
+    TrimLogResponseMsg trim_log_response = 44;
+    TrimMarkResponseMsg trim_mark_response = 45;
+    TailResponseMsg tail_response = 46;
+    CompactResponseMsg compact_response = 47;
+    FlushCacheResponseMsg flush_cache_response = 48;
+    LogAddressSpaceResponseMsg log_address_space_response = 49;
+    KnownAddressResponseMsg known_address_response = 50;
+    CommittedTailResponseMsg committed_tail_response = 51;
+    UpdateCommittedTailResponseMsg update_committed_tail_response = 52;
+    ResetLogUnitResponseMsg reset_log_unit_response = 53;
+
+    // Management Responses
+    QueryNodeResponseMsg query_node_response = 60;
+    ReportFailureResponseMsg report_failure_response = 61;
+    HealFailureResponseMsg heal_failure_response = 62;
+    OrchestratorResponseMsg orchestrator_response = 63;
+    BootstrapManagementResponseMsg bootstrap_management_response = 64;
+    ManagementLayoutResponseMsg management_layout_response = 65;
+
+    // Server Error
+    ServerErrorMsg server_error = 200;
+  }
+}
+
+message RequestMsg {
+  HeaderMsg header = 1;
+  RequestPayloadMsg payload = 2;
+}
+
+message ResponseMsg {
+  HeaderMsg header = 1;
+  ResponsePayloadMsg payload = 2;
+}

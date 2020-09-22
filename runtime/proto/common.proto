@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto";
+
+import "google/protobuf/any.proto";
+
+//TODO: Reasonable way to determine version?
+enum ProtocolVersion {
+  PROTOCOL_VERSION_INVALID = 0;
+  V0 = 1;
+}
+
+enum PriorityLevel {
+  PRIORITY_LEVEL_INVALID = 0;
+  NORMAL = 1;
+  HIGH = 2;
+}
+
+message UuidMsg {
+  int64 lsb = 1;
+  int64 msb = 2;
+}
+
+message TokenMsg {
+  int64 epoch = 1;
+  int64 sequence = 2;
+}
+
+message SequencerMetricsMsg {
+  enum SequencerStatus {
+    INVALID = 0;
+    READY = 1;
+    NOT_READY = 2;
+    UNKNOWN = 3;
+  }
+
+  SequencerStatus sequencer_status = 1;
+}
+
+//TODO: Consider alternate representations of a Layout?
+message LayoutMsg {
+  string layout_json = 1;
+}
+
+//TODO: Why do we need NO_ADDRESSES?
+message StreamAddressSpaceMsg {
+  int32 NO_ADDRESSES = 1;
+  uint64 trim_mark = 2;
+  bytes address_map = 3;
+}
+
+message StreamAddressRangeMsg {
+  UuidMsg stream_id = 1;
+  int64 start = 2;
+  int64 end = 3;
+}
+
+// Used to store KVPs -- See pairs below
+message MapMsg {
+  repeated google.protobuf.Any key_value_pair = 1;
+}
+
+message UuidToListOfBytesPairMsg {
+  UuidMsg key = 1;
+  repeated bytes value = 2;
+}
+
+message UuidToLongPairMsg {
+  UuidMsg key = 1;
+  int64 value = 2;
+}
+
+message UuidToStreamAddressSpacePairMsg {
+  UuidMsg key = 1;
+  StreamAddressSpaceMsg value = 2;
+}

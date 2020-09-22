@@ -43,16 +43,19 @@ public interface IRequestRouter {
      * Send a WRONG_EPOCH error response.
      * @param requestHeader The header of the incoming request.
      * @param ctx The context of the channel handler.
+     * @param correctEpoch The current epoch.
      */
-    default void sendWrongEpochError(Header requestHeader, ChannelHandlerContext ctx) {
+    default void sendWrongEpochError(Header requestHeader, ChannelHandlerContext ctx, long correctEpoch) {
         Header responseHeader = API.generateResponseHeader(requestHeader, false, true);
-        final long serverEpoch = getServerEpoch();
-
-        Response response = API.getErrorResponseNoPayload(responseHeader, API.getWrongEpochServerError(serverEpoch));
+        Response response = API.getErrorResponseNoPayload(responseHeader, API.getWrongEpochServerError(correctEpoch));
         sendResponse(response, ctx);
 
         log.trace("sendWrongEpochError[{}]: Incoming request received with wrong epoch, got {}, expected {}, " +
-                "request was {}", requestHeader.getRequestId(), requestHeader.getEpoch(), serverEpoch, requestHeader);
+                "request was {}", requestHeader.getRequestId(), requestHeader.getEpoch(), correctEpoch, requestHeader);
+    }
+
+    default void sendWrongEpochError(Header requestHeader, ChannelHandlerContext ctx) {
+        sendWrongEpochError(requestHeader, ctx, getServerEpoch());
     }
 
     /**

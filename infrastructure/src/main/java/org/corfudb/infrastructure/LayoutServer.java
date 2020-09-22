@@ -163,14 +163,6 @@ public class LayoutServer extends AbstractServer {
         return true;
     }
 
-    private void handleWrongEpochError(Header reqHeader, ChannelHandlerContext ctx, IRequestRouter r, long serverEpoch) {
-        final Header responseHeader = API.generateResponseHeader(reqHeader, false, true);
-        final ServerError wrongEpochError = API.getWrongEpochServerError(serverEpoch);
-
-        final Response response = API.getErrorResponseNoPayload(responseHeader, wrongEpochError);
-        r.sendResponse(response, ctx);
-    }
-
     // Helper Methods
 
     /**
@@ -219,7 +211,7 @@ public class LayoutServer extends AbstractServer {
             log.warn("handleGetLayout[{}]: Payload epoch {} ahead of Server epoch {}",
                     req.getHeader().getRequestId(), payloadEpoch, serverEpoch);
 
-            handleWrongEpochError(req.getHeader(), ctx, r, serverEpoch);
+            r.sendWrongEpochError(req.getHeader(), ctx, serverEpoch);
         }
     }
 
@@ -361,7 +353,7 @@ public class LayoutServer extends AbstractServer {
         final Rank prepareRank = new Rank(req.getPrepareLayoutRequest().getRank(), API.getJavaUUID(requestHeader.getClientId()));
 
         if(payloadEpoch != serverEpoch) {
-            handleWrongEpochError(requestHeader, ctx, r, serverEpoch);
+            r.sendWrongEpochError(requestHeader, ctx, serverEpoch);
             return;
         }
 
@@ -484,7 +476,7 @@ public class LayoutServer extends AbstractServer {
         final Rank proposeRank = new Rank(req.getProposeLayoutRequest().getRank(), API.getJavaUUID(requestHeader.getClientId()));
 
         if(payloadEpoch != serverEpoch) {
-            handleWrongEpochError(requestHeader, ctx, r, serverEpoch);
+            r.sendWrongEpochError(requestHeader, ctx, serverEpoch);
             return;
         }
 
@@ -664,7 +656,7 @@ public class LayoutServer extends AbstractServer {
         final Layout layout = API.fromProtobufLayout(req.getCommitLayoutRequest().getLayout());
 
         if(payloadEpoch < serverEpoch) {
-            handleWrongEpochError(req.getHeader(), ctx, r, serverEpoch);
+            r.sendWrongEpochError(req.getHeader(), ctx, serverEpoch);
             return;
         }
 

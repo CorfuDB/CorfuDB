@@ -363,7 +363,7 @@ public class API {
                 );
 
             } catch (IOException e) {
-                log.error("resetServer/getProtoStreamAddressSpaceMap: error while serializing roaring64NavigableMap");
+                log.error("getProtoStreamAddressSpaceMap: error while serializing roaring64NavigableMap");
             }
         });
         return addressMapBuilder.build();
@@ -941,6 +941,86 @@ public class API {
                 .setHeader(header)
                 .setError(getNoServerError())
                 .setFlushCacheResponse(flushCacheResponse)
+                .build();
+    }
+
+    public static Response getCompactLogResponse(Header header) {
+        CompactResponse compactResponse = CompactResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setCompactResponse(compactResponse)
+                .build();
+    }
+
+    public static Response getKnownAddressResponse(Header header, Set<Long> addresses) {
+        KnownAddressResponse knownAddressResponse =
+                KnownAddressResponse.newBuilder().addAllKnownAddresses(addresses).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setKnownAddressResponse(knownAddressResponse)
+                .build();
+    }
+
+    public static Response getInspectAddressesResponse(Header header, List<Long> emptyAddresses) {
+        InspectAddressesResponse inspectAddressesResponse =
+                InspectAddressesResponse.newBuilder().addAllEmptyAddresses(emptyAddresses).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setInspectAddressesResponse(inspectAddressesResponse)
+                .build();
+    }
+
+    public static Response getResetLogUnitResponse(Header header) {
+        ResetLogUnitResponse resetLogUnitResponse = ResetLogUnitResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setResetLogUnitResponse(resetLogUnitResponse)
+                .build();
+    }
+
+    public static Response getTrimLogResponse(Header header) {
+        TrimLogResponse trimLogResponse = TrimLogResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setTrimLogResponse(trimLogResponse)
+                .build();
+    }
+
+    public static Response getTailResponse(Header header, long epoch, long logTail, Map<UUID, Long> streamTails) {
+        TailResponse tailResponse = TailResponse.newBuilder()
+                .setEpoch(epoch)
+                .setLogTail(logTail)
+                .setStreamTails(CorfuProtocol.List.newBuilder()
+                        .addAllItems(streamTails.entrySet()
+                                .stream()
+                                .map(e -> Any.pack(UUIDToLongPair.newBuilder()
+                                        .setKey(getProtoUUID(e.getKey()))
+                                        .setValue(e.getValue())
+                                        .build()))
+                                .collect(Collectors.toList())))
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setTailResponse(tailResponse)
+                .build();
+    }
+
+    public static Response getLogAddressSpaceResponse(
+            Header header, long logTail, Map<UUID, StreamAddressSpace> addressMap) {
+        LogAddressSpaceResponse logAddressSpaceResponse = LogAddressSpaceResponse.newBuilder()
+                .setLogTail(logTail)
+                .setAddressMap(getProtoStreamAddressSpaceMap(addressMap))
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setLogAddressSpaceResponse(logAddressSpaceResponse)
                 .build();
     }
 
