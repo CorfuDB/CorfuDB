@@ -1,13 +1,19 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class represents the InSnapshotSync state of the Log Replication State Machine.
@@ -21,6 +27,10 @@ public class InSnapshotSyncState implements LogReplicationState {
      * Log Replication Finite State Machine Instance
      */
     private final LogReplicationFSM fsm;
+
+    private final Optional<AtomicInteger> snapshotSyncAcksCounter;
+
+    private final Optional<Timer> senderTimer;
 
     /**
      Uniquely identifies the event that caused the transition to this state.
@@ -54,6 +64,8 @@ public class InSnapshotSyncState implements LogReplicationState {
     public InSnapshotSyncState(LogReplicationFSM logReplicationFSM, SnapshotSender snapshotSender) {
         this.fsm = logReplicationFSM;
         this.snapshotSender = snapshotSender;
+        this.snapshotSyncAcksCounter = configureAcksCounter();
+        this.senderTimer = configureTransmitTimer();
     }
 
     @Override
@@ -96,6 +108,7 @@ public class InSnapshotSyncState implements LogReplicationState {
                 waitSnapshotApplyState.setBaseSnapshotTimestamp(snapshotSender.getBaseSnapshotTimestamp());
                 fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                 fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
+                snapshotSyncAcksCounter.ifPresent(AtomicInteger::getAndIncrement);
                 return waitSnapshotApplyState;
             case SYNC_CANCEL:
                 // If cancel was intended for current snapshot sync task, cancel and transition to new state
@@ -140,8 +153,11 @@ public class InSnapshotSyncState implements LogReplicationState {
             if (from != this) {
                 snapshotSender.reset();
             }
-
-            transmitFuture = fsm.getLogReplicationFSMWorkers().submit(() -> snapshotSender.transmit(transitionEventId));
+            Runnable snapShotSendTask = () -> snapshotSender.transmit(transitionEventId);
+            if (senderTimer.isPresent()) {
+                snapShotSendTask = senderTimer.get().wrap(snapShotSendTask);
+            }
+            transmitFuture = fsm.getLogReplicationFSMWorkers().submit(snapShotSendTask);
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
         }
@@ -176,5 +192,19 @@ public class InSnapshotSyncState implements LogReplicationState {
     @Override
     public LogReplicationStateType getType() {
         return LogReplicationStateType.IN_SNAPSHOT_SYNC;
+    }
+
+    private Optional<AtomicInteger> configureAcksCounter() {
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> registry.gauge("logreplication.snapshot.acks",
+                        ImmutableList.of(Tag.of("replication.type", "snapshot")),
+                        new AtomicInteger(0)));
+    }
+
+    private Optional<Timer> configureTransmitTimer() {
+        return MeterRegistryProvider.getInstance().map(registry ->
+                Timer.builder("logreplication.snapshot.sender.duration")
+                .tags("replication.type", "snapshot")
+                .register(registry));
     }
 }

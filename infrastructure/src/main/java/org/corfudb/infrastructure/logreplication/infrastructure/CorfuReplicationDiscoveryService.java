@@ -1,8 +1,12 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
+import com.google.common.collect.ImmutableList;
+import io.micrometer.core.instrument.LongTaskTimer;
+import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -32,6 +36,7 @@ import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -127,6 +132,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
 
+
+    private Optional<LongTaskTimer.Sample> lockAcquireSample;
     /**
      * Callback to Log Replication Server upon topology discovery
      */
@@ -173,6 +180,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.serverCallback = serverCallback;
         this.isLeader = new AtomicBoolean();
+        MeterRegistryProvider.createLoggingMeterRegistry(log, Duration.ofSeconds(1));
     }
 
     public void run() {
@@ -432,12 +440,14 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 }
                 replicationManager.setTopology(topologyDescriptor);
                 replicationManager.start();
+                lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 break;
             case STANDBY:
                 // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
                 log.info("Start as Sink (receiver)");
                 interClusterReplicationService.getLogReplicationServer().getSinkManager().reset();
                 interClusterReplicationService.getLogReplicationServer().setLeadership(true);
+                lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
                 break;
             default:
                 log.error("Log Replication not started on this cluster. Leader node {} belongs to cluster with {} role.",
@@ -512,6 +522,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         stopLogReplication();
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
         interClusterReplicationService.getLogReplicationServer().setLeadership(false);
+        recordLockRelease(lockAcquireSample);
     }
 
     /**
@@ -743,5 +754,19 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private String getLocalHost() {
         return NodeLocator.parseString(serverContext.getLocalEndpoint()).getHost();
+    }
+
+
+    private Optional<LongTaskTimer.Sample> recordLockAcquire(ClusterRole role) {
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> registry.more()
+                                .longTaskTimer("logreplication.lock.duration",
+                                        ImmutableList.of(Tag.of("cluster.role",
+                                                role.toString().toLowerCase())))
+                .start());
+    }
+
+    private void recordLockRelease(Optional<LongTaskTimer.Sample> sample) {
+        sample.ifPresent(LongTaskTimer.Sample::stop);
     }
 }

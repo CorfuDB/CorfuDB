@@ -1,11 +1,17 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
+import com.google.common.collect.ImmutableList;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class represents the InLogEntrySync state of the Log Replication State Machine.
@@ -20,6 +26,10 @@ public class InLogEntrySyncState implements LogReplicationState {
      */
     private final LogReplicationFSM fsm;
 
+
+    private final Optional<AtomicInteger> logEntrySinkAcksCounter;
+
+    private final Optional<Timer> senderTimer;
     /**
      * Log Entry Sender, used to read and send incremental updates.
      */
@@ -45,6 +55,8 @@ public class InLogEntrySyncState implements LogReplicationState {
     public InLogEntrySyncState(LogReplicationFSM logReplicationFSM, LogEntrySender logEntrySender) {
         this.fsm = logReplicationFSM;
         this.logEntrySender = logEntrySender;
+        this.logEntrySinkAcksCounter = configureAcksCounter();
+        this.senderTimer = configureSenderTimer();
     }
 
     @Override
@@ -80,6 +92,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 if (transitionEventId.equals(event.getMetadata().getRequestId())) {
                     log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
+                    logEntrySinkAcksCounter.ifPresent(AtomicInteger::getAndIncrement);
                 }
                 // Do not return a new state as there is no actual transition, the IllegalTransitionException
                 // will allow us to avoid any transition from this state given the event.
@@ -141,7 +154,13 @@ public class InLogEntrySyncState implements LogReplicationState {
                 logEntrySender.reset(fsm.getBaseSnapshot(), fsm.getAckedTimestamp());
             }
 
-            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() -> logEntrySender.send(transitionEventId));
+            Runnable logEntrySendTask = () -> logEntrySender.send(transitionEventId);
+
+            if (senderTimer.isPresent()) {
+                logEntrySendTask = senderTimer.get().wrap(logEntrySendTask);
+            }
+
+            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(logEntrySendTask);
 
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
@@ -161,5 +180,19 @@ public class InLogEntrySyncState implements LogReplicationState {
     @Override
     public LogReplicationStateType getType() {
         return LogReplicationStateType.IN_LOG_ENTRY_SYNC;
+    }
+
+    private Optional<AtomicInteger> configureAcksCounter() {
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> registry.gauge("logreplication.logentry.acks",
+                        ImmutableList.of(Tag.of("replication.type", "logentry")),
+                        new AtomicInteger(0)));
+    }
+
+    private Optional<Timer> configureSenderTimer() {
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> Timer.builder("logreplication.logentry.sender.duration")
+                .tags("replication.type", "logentry")
+                .register(registry));
     }
 }
