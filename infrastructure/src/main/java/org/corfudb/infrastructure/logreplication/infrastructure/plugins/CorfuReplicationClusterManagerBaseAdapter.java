@@ -4,6 +4,7 @@ import lombok.Getter;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
@@ -46,5 +47,10 @@ public abstract class CorfuReplicationClusterManagerBaseAdapter implements Corfu
 
     public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
         return corfuReplicationDiscoveryService.queryReplicationStatus();
+    }
+
+    @Override
+    public void forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
+        corfuReplicationDiscoveryService.forceSnapshotSync(clusterId);
     }
 }

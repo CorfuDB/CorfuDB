@@ -105,6 +105,13 @@ public class StreamsView extends AbstractView {
     }
 
     /**
+     * Remove a specific stream from openedStreams
+     */
+    public void removeStream(IStreamView stream) {
+        openedStreams.remove(stream);
+    }
+
+    /**
      * Run garbage collection on all opened streams. Note that opened
      * unsafe streams will be excluded (because its unsafe for the garbage
      * collector thread to operate on them while being used by a different
