@@ -944,6 +944,15 @@ public class API {
                 .build();
     }
 
+    public static Response getCompactLogResponse(Header header) {
+        CompactResponse compactResponse = CompactResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setCompactResponse(compactResponse)
+                .build();
+    }
+
     // Misc. API
 
     public static Response getErrorResponseNoPayload(Header header, ServerError error) {

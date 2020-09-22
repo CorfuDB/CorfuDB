@@ -523,11 +523,9 @@ message TailResponse {
 }
 
 message CompactRequest {
-
 }
 
 message CompactResponse {
-
 }
 
 message FlushCacheRequest {

@@ -418,6 +418,17 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.COMPACT_LOG)
+    private void handleCompactLogRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.debug("handleCompactLogRequest: received a compact request {}", req);
+        streamLog.compact();
+
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
+        Response response = API.getCompactLogResponse(req.getHeader());
+        r.sendResponse(response, ctx);
+    }
+
     @ServerHandler(type = CorfuMsgType.FLUSH_CACHE)
     private void handleFlushCacheRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleFlushCacheRequest: received a cache flush request {}", msg);
