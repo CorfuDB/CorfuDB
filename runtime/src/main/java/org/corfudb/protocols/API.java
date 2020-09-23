@@ -953,6 +953,26 @@ public class API {
                 .build();
     }
 
+    public static Response getKnownAddressResponse(Header header, Set<Long> addresses) {
+        KnownAddressResponse knownAddressResponse =
+                KnownAddressResponse.newBuilder().addAllKnownAddresses(addresses).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setKnownAddressResponse(knownAddressResponse)
+                .build();
+    }
+
+    public static Response getInspectAddressesResponse(Header header, List<Long> emptyAddresses) {
+        InspectAddressesResponse inspectAddressesResponse =
+                InspectAddressesResponse.newBuilder().addAllEmptyAddresses(emptyAddresses).build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setInspectAddressesResponse(inspectAddressesResponse)
+                .build();
+    }
+
     // Misc. API
 
     public static Response getErrorResponseNoPayload(Header header, ServerError error) {

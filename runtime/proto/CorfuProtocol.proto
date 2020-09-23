@@ -492,11 +492,11 @@ message ReadLogResponse {
 }
 
 message InspectAddressesRequest {
-
+  repeated int64 addresses = 1;
 }
 
 message InspectAddressesResponse {
-
+  repeated int64 emptyAddresses = 1;
 }
 
 message TrimLogRequest {
@@ -543,11 +543,12 @@ message LogAddressSpaceResponse {
 }
 
 message KnownAddressRequest {
-
+  int64 startRange = 1;
+  int64 endRange = 2;
 }
 
 message KnownAddressResponse {
-
+  repeated int64 knownAddresses = 1;
 }
 
 message CommittedTailRequest {

@@ -12,10 +12,7 @@ import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -392,6 +389,26 @@ public class LogUnitServer extends AbstractServer {
     r.sendResponse(ctx, msg, CorfuMsgType.INSPECT_ADDRESSES_RESPONSE.payloadMsg(inspectResponse));
   }
 
+  @RequestHandler(type = CorfuProtocol.MessageType.INSPECT_ADDRESSES)
+  public void handleInspectAddressesRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        final List<Long> addresses = req.getInspectAddressesRequest().getAddressesList();
+        List<Long> emptyAddresses = new ArrayList<>();
+
+        log.trace("handleInspectAddressesRequest[{}]: addresses {}", req.getHeader().getRequestId(), addresses);
+
+        for(long address : addresses) {
+            try {
+                if(!streamLog.contains(address)) emptyAddresses.add(address);
+            } catch (Exception e) {
+                //TODO(Zach): handleException(e, ctx, req, r);
+                return;
+            }
+        }
+
+        Response response = API.getInspectAddressesResponse(req.getHeader(), emptyAddresses);
+        r.sendResponse(response, ctx);
+  }
+
     /**
      * Handles requests for known entries in specified range.
      * This is used by state transfer to catch up only the remainder of the segment.
@@ -408,6 +425,21 @@ public class LogUnitServer extends AbstractServer {
                     CorfuMsgType.KNOWN_ADDRESS_RESPONSE.payloadMsg(knownAddresses));
         } catch (Exception e) {
             handleException(e, ctx, msg, r);
+        }
+    }
+
+    @RequestHandler(type = CorfuProtocol.MessageType.KNOWN_ADDRESS)
+    private void handleKnownAddressRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        try {
+            Set<Long> knownAddresses = streamLog.getKnownAddressesInRange(
+                    req.getKnownAddressRequest().getStartRange(), req.getKnownAddressRequest().getStartRange());
+
+            // Note: we reuse the request header as the ignore_cluster_id and
+            // ignore_epoch fields are the same in both cases.
+            Response response = API.getKnownAddressResponse(req.getHeader(), knownAddresses);
+            r.sendResponse(response, ctx);
+        } catch (Exception e) {
+            //TODO(Zach): handleException(e, ctx, req, r);
         }
     }
 
