@@ -51,7 +51,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
      */
     @Getter
     private final ReadOptions readOptions = ReadOptions.builder()
-            .waitForHole(true)
+            .waitForHole(false)
             .clientCacheable(false)
             .serverCacheable(false)
             .build();
