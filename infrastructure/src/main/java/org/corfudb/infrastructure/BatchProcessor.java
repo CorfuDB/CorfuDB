@@ -11,6 +11,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
@@ -18,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.protocols.API;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
@@ -303,6 +305,8 @@ public class BatchProcessor implements AutoCloseable {
                         //TODO(Zach): complete implementations
                         switch (currentOp.getType()) {
                             case PREFIX_TRIM:
+                                final long addr = currentOp.getRequest().getTrimLogRequest().getAddress().getSequence();
+                                streamLog.prefixTrim(addr);
                                 break;
                             case WRITE:
                                 break;
@@ -312,8 +316,30 @@ public class BatchProcessor implements AutoCloseable {
                                 streamLog.reset();
                                 break;
                             case TAILS_QUERY:
+                                final TailsResponse tails;
+
+                                switch (currentOp.getRequest().getTailRequest().getReqType()) {
+                                    case LOG_TAIL:
+                                        tails = new TailsResponse(streamLog.getLogTail());
+                                        break;
+                                    case STREAMS_TAILS:
+                                        tails = streamLog.getTails(currentOp.getRequest()
+                                                .getTailRequest()
+                                                .getStreamsList()
+                                                .stream()
+                                                .map(API::getJavaUUID)
+                                                .collect(Collectors.toList()));
+                                        break;
+                                    default:
+                                        tails = streamLog.getAllTails();
+                                        break;
+                                }
+
+                                currentOp.setResultValue(tails);
                                 break;
                             case LOG_ADDRESS_SPACE_QUERY:
+                                // Retrieve the address space for every stream in the log.
+                                currentOp.setResultValue(streamLog.getStreamsAddressSpace());
                                 break;
                             default:
                                 log.warn("batchWriteProcessor: unknown operation {}", currentOp);

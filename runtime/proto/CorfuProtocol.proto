@@ -500,11 +500,10 @@ message InspectAddressesResponse {
 }
 
 message TrimLogRequest {
-
+  Token address = 1;
 }
 
 message TrimLogResponse {
-
 }
 
 message TrimMarkRequest {
@@ -544,11 +543,12 @@ message FlushCacheResponse {
 }
 
 message LogAddressSpaceRequest {
-
 }
 
 message LogAddressSpaceResponse {
-
+  int64 logTail = 1;
+  // List of UUIDToStreamAddressPairs
+  List addressMap = 2;
 }
 
 message KnownAddressRequest {

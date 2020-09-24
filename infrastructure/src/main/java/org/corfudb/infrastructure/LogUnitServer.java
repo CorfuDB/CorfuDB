@@ -168,6 +168,21 @@ public class LogUnitServer extends AbstractServer {
                 });
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.TAIL)
+    public void handleTailRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.debug("handleTailRequest[{}]: received a tail request {}", req.getHeader().getRequestId(), req);
+        batchWriter.<TailsResponse>addTask(BatchWriterOp.Type.TAILS_QUERY, req)
+                .thenAccept(tailsResp -> {
+                    // Note: we reuse the request header as the ignore_cluster_id and
+                    // ignore_epoch fields are the same in both cases.
+                    r.sendResponse(API.getTailResponse(req.getHeader(), tailsResp.getEpoch(),
+                            tailsResp.getLogTail(), tailsResp.getStreamTails()), ctx);
+                }).exceptionally(ex -> {
+                    //TODO(Zach): handleException(ex, ctx, req, r);
+                    return null;
+                });
+    }
+
     /**
      * Service an incoming request for log address space, i.e., the map of addresses for every stream in the log.
      * This is used on sequencer bootstrap to provide the address maps for initialization.
@@ -182,6 +197,22 @@ public class LogUnitServer extends AbstractServer {
                         CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE.payloadMsg(tailsResp)))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, payloadMsg, r);
+                    return null;
+                });
+    }
+
+    @RequestHandler(type = CorfuProtocol.MessageType.LOG_ADDRESS_SPACE)
+    public void handleLogAddressSpaceRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.trace("handleLogAddressSpaceRequest[{}]: received a log " +
+                "address space request {}", req.getHeader().getRequestId(), req);
+        batchWriter.<StreamsAddressResponse>addTask(BatchWriterOp.Type.LOG_ADDRESS_SPACE_QUERY, req)
+                .thenAccept(resp -> {
+                    // Note: we reuse the request header as the ignore_cluster_id and
+                    // ignore_epoch fields are the same in both cases.
+                    r.sendResponse(API.getLogAddressSpaceResponse(req.getHeader(),
+                            resp.getLogTail(), resp.getAddressMap()), ctx);
+                }).exceptionally(ex -> {
+                    //TODO(Zach): handleException(ex, ctx, req, r);
                     return null;
                 });
     }
@@ -333,6 +364,22 @@ public class LogUnitServer extends AbstractServer {
                 .thenRun(() -> r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg()))
                 .exceptionally(ex -> {
                     handleException(ex, ctx, msg, r);
+                    return null;
+                });
+    }
+
+    @RequestHandler(type = CorfuProtocol.MessageType.TRIM_LOG)
+    private void handleTrimLog(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        log.debug("handleTrimLog[{}]: trimming prefix to {}",
+                req.getHeader().getRequestId(), req.getTrimLogRequest().getAddress());
+
+        batchWriter.addTask(BatchWriterOp.Type.PREFIX_TRIM, req)
+                .thenRun(() -> {
+                    Header header = API.generateResponseHeader(req.getHeader(), false, true);
+                    r.sendResponse(API.getTrimLogResponse(header), ctx);
+                })
+                .exceptionally(ex -> {
+                    //TODO(Zach): handleException(ex, ctx, req, r);
                     return null;
                 });
     }
