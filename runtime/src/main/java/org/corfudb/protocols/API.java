@@ -973,6 +973,15 @@ public class API {
                 .build();
     }
 
+    public static Response getResetLogUnitResponse(Header header) {
+        ResetLogUnitResponse resetLogUnitResponse = ResetLogUnitResponse.getDefaultInstance();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setResetLogUnitResponse(resetLogUnitResponse)
+                .build();
+    }
+
     // Misc. API
 
     public static Response getErrorResponseNoPayload(Header header, ServerError error) {

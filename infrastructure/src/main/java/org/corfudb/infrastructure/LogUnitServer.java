@@ -405,6 +405,8 @@ public class LogUnitServer extends AbstractServer {
             }
         }
 
+        // Note: we reuse the request header as the ignore_cluster_id and
+        // ignore_epoch fields are the same in both cases.
         Response response = API.getInspectAddressesResponse(req.getHeader(), emptyAddresses);
         r.sendResponse(response, ctx);
   }
@@ -549,6 +551,32 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
+    @RequestHandler(type = CorfuProtocol.MessageType.RESET_LOG_UNIT)
+    private synchronized void handleResetLogUnit(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+        // Check if the reset request is with an epoch greater than the last reset epoch seen to
+        // prevent multiple reset in the same epoch. and should be equal to the current router
+        // epoch to prevent stale reset requests from wiping out the data.
+
+        if(req.getResetLogUnitRequest().getEpoch() > serverContext.getLogUnitEpochWaterMark() &&
+                req.getResetLogUnitRequest().getEpoch() == serverContext.getServerEpoch()) {
+            serverContext.setLogUnitEpochWaterMark(req.getResetLogUnitRequest().getEpoch());
+            batchWriter.addTask(BatchWriterOp.Type.RESET, req)
+                    .thenRun(() -> {
+                        dataCache.invalidateAll();
+                        log.info("handleResetLogUnit: LogUnit server reset.");
+                        r.sendResponse(API.getResetLogUnitResponse(req.getHeader()), ctx);
+                    }).exceptionally(ex -> {
+                //TODO(Zach): handleException(ex, ctx, req, r);
+                return null;
+            });
+        } else {
+            log.info("handleResetLogUnit: LogUnit server reset request received but reset already done.");
+
+            // Note: we reuse the request header as the ignore_cluster_id and
+            // ignore_epoch fields are the same in both cases. The same above.
+            r.sendResponse(API.getResetLogUnitResponse(req.getHeader()), ctx);
+        }
+    }
 
     /**
      * Shutdown the server.
@@ -587,6 +615,7 @@ public class LogUnitServer extends AbstractServer {
         streamLog.prefixTrim(trimAddress);
     }
 
+    //TODO(Zach): this doesn't appear used -- can it be removed?
     private void readData(long address, boolean cacheable, ReadResponse rr) {
 
         ILogData logData;

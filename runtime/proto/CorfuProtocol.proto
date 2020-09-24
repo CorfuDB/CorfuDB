@@ -515,11 +515,20 @@ message TrimMarkResponse {
 }
 
 message TailRequest {
+  enum Type {
+    LOG_TAIL = 0;
+    STREAMS_TAILS = 1;
+    ALL_STREAMS_TAIL = 2;
+  }
 
+  Type reqType = 1;
+  repeated UUID streams = 2;
 }
 
 message TailResponse {
-
+  int64 epoch = 1;
+  int64 logTail = 2;
+  List streamTails = 3;
 }
 
 message CompactRequest {
@@ -566,11 +575,10 @@ message UpdateCommittedTailResponse {
 }
 
 message ResetLogUnitRequest {
-
+  int64 epoch = 1;
 }
 
 message ResetLogUnitResponse {
-
 }
 
 /**
