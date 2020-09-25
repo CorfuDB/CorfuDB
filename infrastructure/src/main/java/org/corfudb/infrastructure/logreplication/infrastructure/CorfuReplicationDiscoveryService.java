@@ -5,20 +5,19 @@ import io.micrometer.core.instrument.LongTaskTimer;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.LogReplicationServer;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
-import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.NodeLocator;
@@ -45,9 +44,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class represents the Log Replication Discovery Service.
- *
+ * <p>
  * It manages the following:
- *
+ * <p>
  * - Discover topology and determine cluster role: active/standby
  * - Lock acquisition (leader election), node leading the log replication sending and receiving
  * - Log replication configuration (streams to replicate)
@@ -166,10 +165,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Constructor Discovery Service
      *
-     * @param serverContext current server's context
+     * @param serverContext         current server's context
      * @param clusterManagerAdapter adapter to communicate to external Cluster Manager
-     * @param serverCallback callback to Log Replication Server upon discovery
-     *
+     * @param serverCallback        callback to Log Replication Server upon discovery
      */
     public CorfuReplicationDiscoveryService(@Nonnull ServerContext serverContext,
                                             @Nonnull CorfuReplicationClusterManagerAdapter clusterManagerAdapter,
@@ -243,7 +241,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * On first access start topology discovery.
-     *
+     * <p>
      * On discovery, process the topology information and fetch log replication configuration
      * (streams to replicate) required by an active and standby site before starting
      * log replication.
@@ -283,7 +281,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Bootstrap the Log Replication Service, which includes:
-     *
+     * <p>
      * - Building Log Replication Context (LR context shared across receiving and sending components)
      * - Start Log Replication Server (receiver component)
      */
@@ -337,7 +335,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Verify current node belongs to a cluster in the topology.
      *
      * @param topology discovered topology
-     * @param update indicates if the discovered topology should immediately be reflected as current (cached)
+     * @param update   indicates if the discovered topology should immediately be reflected as current (cached)
      */
     private boolean clusterPresentInTopology(TopologyDescriptor topology, boolean update) {
         ClusterDescriptor tmpClusterDescriptor = topology.getClusterDescriptor(localEndpoint);
@@ -365,7 +363,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Retrieve Log Replication Configuration.
-     *
+     * <p>
      * This configuration represents all common parameters for the log replication, regardless of
      * a cluster's role.
      */
@@ -390,16 +388,16 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Register interest on Log Replication Lock.
-     *
+     * <p>
      * The node that acquires the lock will drive/lead log replication.
      */
     private void registerToLogReplicationLock() {
         try {
 
             Lock.setLeaseDuration(serverContext.getLockLeaseDuration());
-            LockClient.setDurationBetweenLockMonitorRuns(serverContext.getLockLeaseDuration()/MONITOR_LEASE_FRACTION);
-            LockState.setDurationBetweenLeaseRenewals(serverContext.getLockLeaseDuration()/RENEWAL_LEASE_FRACTION);
-            HasLeaseState.setDurationBetweenLeaseChecks(serverContext.getLockLeaseDuration()/MONITOR_LEASE_FRACTION);
+            LockClient.setDurationBetweenLockMonitorRuns(serverContext.getLockLeaseDuration() / MONITOR_LEASE_FRACTION);
+            LockState.setDurationBetweenLeaseRenewals(serverContext.getLockLeaseDuration() / RENEWAL_LEASE_FRACTION);
+            HasLeaseState.setDurationBetweenLeaseChecks(serverContext.getLockLeaseDuration() / MONITOR_LEASE_FRACTION);
 
             IRetry.build(IntervalRetry.class, () -> {
                 try {
@@ -425,7 +423,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * This method is only called on the leader node and it triggers the start of log replication
-     *
+     * <p>
      * Depending on the role of the cluster to which this leader node belongs to, it will start
      * as source (sender/producer) or sink (receiver).
      */
@@ -451,7 +449,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 break;
             default:
                 log.error("Log Replication not started on this cluster. Leader node {} belongs to cluster with {} role.",
-                            localEndpoint, localClusterDescriptor.getRole());
+                        localEndpoint, localClusterDescriptor.getRole());
                 break;
         }
     }
@@ -513,7 +511,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Process lock release event
-     *
+     * <p>
      * Set leadership metadata and stop log replication in the event of leadership loss
      */
     public void processLockRelease() {
@@ -527,12 +525,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Process Topology Config Change:
-     *   - Higher config id
-     *   - Potential cluster role change
-     *
+     * - Higher config id
+     * - Potential cluster role change
+     * <p>
      * Cluster change from active to standby is a two step process, we first confirm that
      * we are ready to do the cluster role change, so by the time we receive cluster change
      * notification, nothing needs to be done, other than stop.
+     *
      * @param newTopology new discovered topology
      */
     public void onClusterRoleChange(TopologyDescriptor newTopology) {
@@ -576,9 +575,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     /**
      * Process a topology change as provided by the Cluster Manager
-     *
+     * <p>
      * Note: We are assuming that topology configId change implies a role change.
-     *       The number of standby clusters change would not bump config id.
+     * The number of standby clusters change would not bump config id.
      *
      * @param event discovery event
      */
@@ -611,7 +610,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Determine if there was a cluster change between former topology and newly discovered
      *
      * @return true, cluster role changed
-     *         false, otherwise
+     * false, otherwise
      */
     private boolean clusterRoleChanged(TopologyDescriptor discoveredTopology) {
         if (localClusterDescriptor != null) {
@@ -647,10 +646,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Process the discovered topology to determine if it is a valid topology view.
      *
      * @param topology cluster manager provided topology
-     * @param update indicates if the discovered topology should immediately be reflected as current (cached)
-     *
+     * @param update   indicates if the discovered topology should immediately be reflected as current (cached)
      * @return true, valid topology
-     *         false, otherwise
+     * false, otherwise
      */
     private boolean processDiscoveredTopology(TopologyDescriptor topology, boolean update) {
         // Health check - confirm this node belongs to a cluster in the topology
@@ -710,7 +708,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Active Cluster - Read the shared metadata table to find the status of any ongoing snapshot or log entry sync
      * and return a completion percentage.
-     *
+     * <p>
      * Standby Cluster - Read the shared metadata table and find if data is consistent(returns false if
      * snapshot sync is in the apply phase)
      */
@@ -760,10 +758,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private Optional<LongTaskTimer.Sample> recordLockAcquire(ClusterRole role) {
         return MeterRegistryProvider.getInstance()
                 .map(registry -> registry.more()
-                                .longTaskTimer("logreplication.lock.duration",
-                                        ImmutableList.of(Tag.of("cluster.role",
-                                                role.toString().toLowerCase())))
-                .start());
+                        .longTaskTimer("logreplication.lock.duration",
+                                ImmutableList.of(
+                                        Tag.of("cluster.role", role.toString().toLowerCase()),
+                                        Tag.of("host", localEndpoint)))
+                        .start());
     }
 
     private void recordLockRelease(Optional<LongTaskTimer.Sample> sample) {

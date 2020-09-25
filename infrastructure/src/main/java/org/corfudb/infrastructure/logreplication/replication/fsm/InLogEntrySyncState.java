@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This class represents the InLogEntrySync state of the Log Replication State Machine.
@@ -27,7 +28,7 @@ public class InLogEntrySyncState implements LogReplicationState {
     private final LogReplicationFSM fsm;
 
 
-    private final Optional<AtomicInteger> logEntrySinkAcksCounter;
+    private final Optional<AtomicLong> logEntrySinkAcksCounter;
 
     private final Optional<Timer> senderTimer;
     /**
@@ -92,7 +93,7 @@ public class InLogEntrySyncState implements LogReplicationState {
                 if (transitionEventId.equals(event.getMetadata().getRequestId())) {
                     log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
-                    logEntrySinkAcksCounter.ifPresent(AtomicInteger::getAndIncrement);
+                    logEntrySinkAcksCounter.ifPresent(AtomicLong::getAndIncrement);
                 }
                 // Do not return a new state as there is no actual transition, the IllegalTransitionException
                 // will allow us to avoid any transition from this state given the event.
@@ -182,16 +183,16 @@ public class InLogEntrySyncState implements LogReplicationState {
         return LogReplicationStateType.IN_LOG_ENTRY_SYNC;
     }
 
-    private Optional<AtomicInteger> configureAcksCounter() {
+    private Optional<AtomicLong> configureAcksCounter() {
         return MeterRegistryProvider.getInstance()
-                .map(registry -> registry.gauge("logreplication.logentry.acks",
+                .map(registry -> registry.gauge("logreplication.messages",
                         ImmutableList.of(Tag.of("replication.type", "logentry")),
-                        new AtomicInteger(0)));
+                        new AtomicLong(0)));
     }
 
     private Optional<Timer> configureSenderTimer() {
         return MeterRegistryProvider.getInstance()
-                .map(registry -> Timer.builder("logreplication.logentry.sender.duration")
+                .map(registry -> Timer.builder("logreplication.sender.duration.seconds")
                 .tags("replication.type", "logentry")
                 .register(registry));
     }

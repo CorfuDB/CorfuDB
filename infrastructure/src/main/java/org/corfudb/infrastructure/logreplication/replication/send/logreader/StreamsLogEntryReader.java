@@ -1,9 +1,12 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -22,6 +25,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -58,6 +62,9 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private final int maxDataSizePerMsg;
 
+    private final Optional<DistributionSummary> messageSizeDistributionSummary;
+    private final Optional<Counter> deltaCounter;
+
     @Getter
     @VisibleForTesting
     private OpaqueEntry lastOpaqueEntry = null;
@@ -73,7 +80,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
-
+        this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
+        this.deltaCounter = configureDeltaCounter();
         Set<String> streams = config.getStreamsToReplicate();
 
         streamUUIDs = new HashSet<>();
@@ -101,16 +109,15 @@ public class StreamsLogEntryReader implements LogEntryReader {
     /**
      * Verify the transaction entry is valid, i.e., if the entry contains any
      * of the streams to be replicated.
-     *
+     * <p>
      * Notice that a transaction stream entry can be fully or partially replicated,
      * i.e., if only a subset of streams in the transaction entry are part of the streams
      * to replicate, the transaction entry will be partially replicated,
      * avoiding replication of the other streams present in the transaction.
      *
      * @param entry transaction stream opaque entry
-     *
      * @return true, if the transaction entry has any valid stream to replicate.
-     *         false, otherwise.
+     * false, otherwise.
      */
     private boolean isValidTransactionEntry(@NonNull OpaqueEntry entry) {
         Set<UUID> txEntryStreamIds = new HashSet<>(entry.getEntries().keySet());
@@ -197,12 +204,17 @@ public class StreamsLogEntryReader implements LogEntryReader {
                 }
 
                 lastOpaqueEntry = txOpaqueStream.next();
+                deltaCounter.ifPresent(Counter::increment);
+
                 lastOpaqueEntryValid = isValidTransactionEntry(lastOpaqueEntry);
                 currentProcessedEntryMetadata = new StreamIteratorMetadata(txOpaqueStream.txStream.pos(), lastOpaqueEntryValid);
             }
 
             log.trace("Generate LogEntryDataMessage size {} with {} entries for maxDataSizePerMsg {}. lastEntry size {}",
                     currentMsgSize, opaqueEntryList.size(), maxDataSizePerMsg, lastOpaqueEntry == null ? 0 : currentEntrySize);
+            final double currentMsgSizeSnapshot = currentMsgSize;
+
+            messageSizeDistributionSummary.ifPresent(distribution -> distribution.record(currentMsgSizeSnapshot));
 
             if (opaqueEntryList.isEmpty()) {
                 return null;
@@ -231,6 +243,19 @@ public class StreamsLogEntryReader implements LogEntryReader {
         return new OpaqueEntry(opaqueEntry.getVersion(), filteredTxEntryMap);
     }
 
+    private Optional<DistributionSummary> configureMessageSizeDistributionSummary() {
+        return MeterRegistryProvider.getInstance().map(registry ->
+                DistributionSummary.builder("logreplication.message.size.bytes")
+                        .baseUnit("bytes")
+                        .tags("replication.type", "logentry")
+                        .register(registry));
+    }
+
+    private Optional<Counter> configureDeltaCounter() {
+        return MeterRegistryProvider.getInstance().map(registry ->
+                registry.counter("logreplication.delta.count"));
+    }
+
     @Override
     public void reset(long lastSentBaseSnapshotTimestamp, long lastAckedTimestamp) {
         messageExceededSize = false;
@@ -249,7 +274,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         private CorfuRuntime rt;
         private OpaqueStream txStream;
         private Iterator iterator;
-        
+
         public TxOpaqueStream(CorfuRuntime rt) {
             //create an opaque stream for transaction stream
             this.rt = rt;
@@ -259,6 +284,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
         /**
          * Set the iterator with entries from current seekAddress till snapshot
+         *
          * @param snapshot
          */
         private void streamUpTo(long snapshot) {
@@ -272,7 +298,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         private void streamUpTo() {
             streamUpTo(rt.getAddressSpaceView().getLogTail());
         }
-            
+
         /**
          * Tell if the transaction stream has the next entry
          */
@@ -290,14 +316,15 @@ public class StreamsLogEntryReader implements LogEntryReader {
             if (!hasNext())
                 return null;
 
-            OpaqueEntry opaqueEntry = (OpaqueEntry)iterator.next();
+            OpaqueEntry opaqueEntry = (OpaqueEntry) iterator.next();
             log.trace("Address {} OpaqueEntry {}", opaqueEntry.getVersion(), opaqueEntry);
             return opaqueEntry;
         }
 
         /**
-         * Set stream head as firstAddress, set the iterator from 
+         * Set stream head as firstAddress, set the iterator from
          * firstAddress till the current tail of the log
+         *
          * @param firstAddress
          */
         public void seek(long firstAddress) {
@@ -316,9 +343,13 @@ public class StreamsLogEntryReader implements LogEntryReader {
             this.streamsToReplicatePresent = streamsToReplicatePresent;
         }
 
-        public long getTimestamp() { return timestamp; }
+        public long getTimestamp() {
+            return timestamp;
+        }
 
-        public boolean isStreamsToReplicatePresent() { return streamsToReplicatePresent; }
+        public boolean isStreamsToReplicatePresent() {
+            return streamsToReplicatePresent;
+        }
     }
 
     @Override

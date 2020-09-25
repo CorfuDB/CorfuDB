@@ -100,7 +100,6 @@ public class LogEntrySender {
              */
             try {
                 message = logEntryReader.read(logEntrySyncEventId);
-
                 if (message != null) {
                     dataSenderBufferManager.sendWithBuffering(message);
                 } else {

@@ -1,14 +1,17 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent.LogReplicationRuntimeEventType;
+import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
+import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverterUtils;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -18,8 +21,6 @@ import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
-import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.util.CFUtils;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
@@ -41,7 +42,6 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * This Client Router is used when a custom (client-defined) transport layer is specified for
  * Log Replication Server communication.
- *
  */
 @Slf4j
 public class LogReplicationClientRouter implements IClientRouter {
@@ -90,6 +90,8 @@ public class LogReplicationClientRouter implements IClientRouter {
      * The outstanding requests on this router.
      */
     public final Map<Long, CompletableFuture> outstandingRequests;
+
+    private Optional<Timer.Sample> requestSample;
 
     /**
      * Adapter to the channel implementation
@@ -187,7 +189,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                     }
 
                     // Get Remote Leader
-                    if(runtimeFSM.getRemoteLeader().isPresent()) {
+                    if (runtimeFSM.getRemoteLeader().isPresent()) {
                         endpoint = runtimeFSM.getRemoteLeader().get();
                     } else {
                         log.error("Leader not found to remote cluster {}", remoteClusterId);
@@ -247,8 +249,9 @@ public class LogReplicationClientRouter implements IClientRouter {
         // Get the next request ID.
         message.setRequestID(requestID.getAndIncrement());
         // Get Remote Leader
-        if(runtimeFSM.getRemoteLeader().isPresent()) {
+        if (runtimeFSM.getRemoteLeader().isPresent()) {
             String remoteLeader = runtimeFSM.getRemoteLeader().get();
+            this.requestSample = MeterRegistryProvider.getInstance().map(Timer::start);
             channelAdapter.send(remoteLeader, CorfuMessageConverterUtils.toProtoBuf(message));
             log.trace("Sent one-way message: {}", message);
         } else {
@@ -328,6 +331,11 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public void receive(CorfuMessage msg) {
         try {
+            requestSample.flatMap(sample -> MeterRegistryProvider.getInstance()
+                            .map(registry -> {
+                                Timer timer = registry.timer("logreplication.rtt.seconds");
+                                return sample.stop(timer);
+                            }));
             CorfuMsg corfuMsg = CorfuMessageConverterUtils.fromProtoBuf(msg);
 
             // If it is a Leadership Loss Message re-trigger leadership discovery
