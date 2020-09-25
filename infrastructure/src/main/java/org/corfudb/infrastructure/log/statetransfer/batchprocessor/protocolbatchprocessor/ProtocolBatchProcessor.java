@@ -19,9 +19,11 @@ import org.corfudb.runtime.view.ReadOptions;
 import org.corfudb.util.Sleep;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static lombok.Builder.Default;
 import static org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse.TransferStatus.FAILED;
@@ -46,14 +48,26 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
     private final int maxWriteRetries = 3;
     @Default
     private final Duration writeSleepDuration = Duration.ofMillis(300);
+
+    private final AtomicBoolean waitForHole = new AtomicBoolean(true);
     /**
-     * Default read options for the replication protocol read.
+     * Read options for the replication protocol read. We wait for the hole fill for the first read
+     * batch. For all the subsequent batches we hole fill directly.
      */
     @Getter
-    private final ReadOptions readOptions = ReadOptions.builder()
-            .waitForHole(false)
+    private final ReadOptions waitForHoleReadOptions = ReadOptions
+            .builder()
             .clientCacheable(false)
             .serverCacheable(false)
+            .waitForHole(true)
+            .build();
+
+    @Getter
+    private final ReadOptions dontWaitForHoleReadOptions = ReadOptions
+            .builder()
+            .clientCacheable(false)
+            .serverCacheable(false)
+            .waitForHole(false)
             .build();
 
     @Getter
@@ -78,6 +92,18 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                 );
     }
 
+    private Map<Long, ILogData> protocolReadWaitForFirstHoleFill(List<Long> addresses) {
+        ReadOptions readOptions;
+        if (waitForHole.get()){
+            readOptions = waitForHoleReadOptions;
+            waitForHole.set(false);
+        }
+        else {
+            readOptions = dontWaitForHoleReadOptions;
+        }
+        return addressSpaceView.simpleProtocolRead(
+                addresses, readOptions);
+    }
     /**
      * Reads data entries by utilizing the replication protocol. If there are errors, retry.
      * If the wrong epoch exception occurs, fail immediately, so that we can retry the workflow
@@ -93,9 +119,7 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
             for (int i = 0; i < maxReadRetries; i++) {
                 try {
                     Map<Long, ILogData> records =
-                            addressSpaceView.simpleProtocolRead(
-                                    transferBatchRequest.getAddresses(),
-                                    readOptions);
+                            protocolReadWaitForFirstHoleFill(transferBatchRequest.getAddresses());
                     ReadBatch batch = checkReadRecords(
                             transferBatchRequest.getAddresses(),
                             records, Optional.empty());
