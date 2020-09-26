@@ -1096,7 +1096,7 @@ public class CorfuRuntime {
 
                         layout = layoutFuture;
                         latestLayout = l;
-                        log.debug("Layout server {} responded with layout {}", s, l);
+                        log.trace("Layout server {} responded with layout {}", s, l);
 
                         // Prune away removed node routers from the nodeRouterPool.
                         pruneRemovedRouters(l);
