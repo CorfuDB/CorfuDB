@@ -116,57 +116,13 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
     }
 
     /**
-     * @param requestID
-     * @param completion
-     */
-    @Override
-    public <T> void completeRequest(long requestID, T completion) {
-        // TODO: Implementation
-    }
-
-    /**
-     * @param requestID
-     * @param cause
-     */
-    @Override
-    public void completeExceptionally(long requestID, Throwable cause) {
-        // TODO: Implementation
-    }
-
-    /**
+     * Send a request message and get a completable future to be fulfilled by the reply.
      *
-     */
-    @Override
-    public void stop() {
-        // TODO: Implementation
-    }
-
-    /**
-     * @return
-     */
-    @Override
-    public String getHost() {
-        // TODO: Implementation
-
-        return null;
-    }
-
-    /**
-     * @return
-     */
-    @Override
-    public Integer getPort() {
-        // TODO: Implementation
-
-        return null;
-    }
-
-    /**
-     *
-     * @param request
-     * @param ctx
-     * @param <T>
-     * @return
+     * @param request The request message to send.
+     * @param ctx Context of the channel handler.
+     * @param <T> The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply,
+     * or a timeout in the case there is no response.
      */
     @Override
     public  <T> CompletableFuture<T> sendRequestAndGetCompletable(Request request, ChannelHandlerContext ctx) {
@@ -252,8 +208,10 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
     }
 
     /**
-     * Send a one way request, without adding a completable future.
-     * @param request The request to send.
+     * Send a one way message, without adding a completable future.
+     *
+     * @param request The request message to send.
+     * @param ctx Context of the channel handler.
      */
     @Override
     public void sendRequest(Request request, ChannelHandlerContext ctx) {
@@ -267,6 +225,7 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
         ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
         ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(outBuf);
 
+        // TODO: Directly write to channel or through context?
         try {
             // Mark this message as Protobuf message (temporarily)
             requestOutputStream.writeByte(API.PROTO_CORFU_MSG_MARK);
@@ -297,6 +256,13 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
         return true;
     }
 
+    /**
+     * Read data from the Channel.
+     *
+     * @param ctx Channel handler context
+     * @param msg Object received in inbound buffer
+     * @throws Exception Exception thrown during channelRead
+     */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         ByteBuf msgBuf = (ByteBuf) msg;
@@ -330,7 +296,8 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
                         log.trace("Message routed to {}: {}",
                                 handler.getClass().getSimpleName(), response);
                     }
-                    handler.handleMessage(m, ctx);
+                    // TODO: New implementation of methods for handling response
+                    // handler.handleMessage(response, ctx);
                 }
             }
         } catch (Exception e) {
@@ -339,5 +306,55 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
             msgInputStream.close();
             msgBuf.release();
         }
+    }
+
+    /**
+     * Complete a given outstanding request with a completion value.
+     *
+     * @param requestID  The request to complete.
+     * @param completion The value to complete the request with.
+     */
+    @Override
+    public <T> void completeRequest(long requestID, T completion) {
+        // TODO
+    }
+
+    /**
+     * Exceptionally complete a request with a given cause.
+     *
+     * @param requestID The request to complete.
+     * @param cause     The cause to give for the exceptional completion.
+     */
+    @Override
+    public void completeExceptionally(long requestID, Throwable cause) {
+        // TODO
+    }
+
+    /**
+     * Stops routing requests.
+     */
+    @Override
+    public void stop() {
+        // TODO
+    }
+
+    /**
+     * Get the host that this router is routing requests for.
+     */
+    @Override
+    public String getHost() {
+        // TODO
+
+        return null;
+    }
+
+    /**
+     * Get the port that this router is routing requests for.
+     */
+    @Override
+    public Integer getPort() {
+        // TODO
+
+        return null;
     }
 }
