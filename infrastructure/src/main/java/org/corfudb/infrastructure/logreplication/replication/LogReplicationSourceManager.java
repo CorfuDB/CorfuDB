@@ -140,7 +140,7 @@ public class LogReplicationSourceManager {
      * @param snapshotSyncRequestId unique identifier of the forced snapshot sync (already provided to the caller)
      */
     public void startForcedSnapshotSync(UUID snapshotSyncRequestId) {
-        startSnapshotSync( new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, snapshotSyncRequestId), true);
+        startSnapshotSync(new LogReplicationEvent(LogReplicationEventType.SNAPSHOT_SYNC_REQUEST, snapshotSyncRequestId), true);
     }
 
     private UUID startSnapshotSync(LogReplicationEvent snapshotSyncRequest, boolean forced) {

@@ -69,5 +69,20 @@ public class InitializedState implements LogReplicationState {
     }
 
     @Override
+    public void onEntry(LogReplicationState from) {
+        try {
+            fsm.getAckReader().getOngoing().set(false);
+            fsm.getAckReader().markSyncStatusStopped();
+        } catch (Exception e) {
+            log.error("Error on exit of InitializedState.", e);
+        }
+    }
+
+    @Override
+    public void onExit(LogReplicationState to) {
+        fsm.getAckReader().getOngoing().set(true);
+    }
+
+    @Override
     public LogReplicationStateType getType() { return LogReplicationStateType.INITIALIZED; }
 }

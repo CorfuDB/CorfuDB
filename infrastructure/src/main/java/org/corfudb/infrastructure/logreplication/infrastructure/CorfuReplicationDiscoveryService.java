@@ -708,7 +708,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private void processEnforceSnapshotSync(DiscoveryServiceEvent event) {
         if (replicationManager == null || !isLeader.get()) {
-            log.warn("The current node is not the leader will skip doing the snapshot full sync");
+            log.warn("The current node is not the leader, will skip doing the " +
+                    "forced snapshot sync with id {}", event.getEventId());
             return;
         }
 
@@ -759,14 +760,16 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             throw new LogReplicationDiscoveryServiceException(errorStr);
         }
 
-        log.info("Received the forceSnapshotSync command for standby cluster {}", clusterId);
+        UUID forceSyncId = UUID.randomUUID();
+        log.info("Received the forceSnapshotSync command for standby cluster {}, forced sync id {}",
+                clusterId, forceSyncId);
 
         // Write to the event to the event corfu table
-        UUID forceSyncId = UUID.randomUUID();
         ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(System.currentTimeMillis() + " "+ clusterId).build();
         ReplicationEvent event = ReplicationEvent.newBuilder()
                 .setClusterId(clusterId)
                 .setEventId(forceSyncId.toString())
+                .setType(ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC)
                 .build();
         getLogReplicationMetadataManager().updateLogReplicationEventTable(key, event);
         return forceSyncId;

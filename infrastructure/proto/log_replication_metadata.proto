@@ -85,6 +85,10 @@ message ReplicationEventKey {
 }
 
 message ReplicationEvent {
+  enum ReplicationEventType {
+    FORCE_SNAPSHOT_SYNC = 0;
+  }
   string clusterId = 1;
   string eventId = 2;
+  ReplicationEventType type = 3;
 }

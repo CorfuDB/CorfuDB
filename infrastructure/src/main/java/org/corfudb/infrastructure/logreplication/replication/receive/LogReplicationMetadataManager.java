@@ -52,7 +52,7 @@ public class LogReplicationMetadataManager {
     private final Table<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal> replicationStatusTable;
 
     @Getter
-    private final Table<ReplicationEventKey, LogReplicationMetadata.ReplicationEvent, ReplicationEventKey> replicationEventTable;
+    private final Table<ReplicationEventKey, ReplicationEvent, ReplicationEventKey> replicationEventTable;
 
     private final CorfuRuntime runtime;
     private final String localClusterId;
@@ -339,7 +339,7 @@ public class LogReplicationMetadataManager {
     }
 
     /**
-     * Update replication status table's snapshot sync info as completed.
+     * Update replication status table's snapshot sync info as ongoing.
      *
      * @param clusterId standby cluster id
      */
@@ -380,6 +380,7 @@ public class LogReplicationMetadataManager {
      */
     public void updateSnapshotSyncInfo(String clusterId) {
         Instant time = Instant.now();
+
         Timestamp timestamp = Timestamp.newBuilder().setSeconds(time.getEpochSecond())
                 .setNanos(time.getNano()).build();
 
@@ -409,6 +410,41 @@ public class LogReplicationMetadataManager {
             log.debug("updateSnapshotSyncInfo as completed: clusterId: {}, syncInfo: {}",
                     clusterId, currentSyncInfo);
         }
+    }
+
+    /**
+     * Update replication status table's sync status
+     *
+     * @param clusterId standby cluster id
+     */
+    public void updateSyncStatus(String clusterId, ReplicationStatusVal.SyncType lastSyncType, LogReplicationMetadata.SyncStatus status) {
+        ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
+
+        CorfuRecord<ReplicationStatusVal, Message> record =
+                corfuStore.query(NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
+
+        ReplicationStatusVal previous;
+        if (record != null) {
+            previous = record.getPayload();
+        } else {
+            previous = ReplicationStatusVal.newBuilder().build();
+        }
+
+        ReplicationStatusVal current;
+        if (lastSyncType.equals(ReplicationStatusVal.SyncType.LOG_ENTRY)) {
+            current = previous.toBuilder().setStatus(status).build();
+        } else {
+            LogReplicationMetadata.SnapshotSyncInfo syncInfo = previous.getSnapshotSyncInfo();
+            syncInfo = syncInfo.toBuilder().setStatus(status).build();
+            current = previous.toBuilder().setStatus(status).setSnapshotSyncInfo(syncInfo).build();
+        }
+
+        corfuStore.tx(NAMESPACE)
+                .update(REPLICATION_STATUS_TABLE, key, current, null)
+                .commit();
+
+        log.debug("updateSyncStatus: clusterId: {}, type: {}, status: {}",
+                clusterId, lastSyncType, status);
     }
 
     /**
