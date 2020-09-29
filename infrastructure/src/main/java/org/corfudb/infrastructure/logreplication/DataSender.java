@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication;
 
-import io.micrometer.core.annotation.Timed;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;

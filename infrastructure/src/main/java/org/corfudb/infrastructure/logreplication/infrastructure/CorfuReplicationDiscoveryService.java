@@ -132,7 +132,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
 
 
-    private Optional<LongTaskTimer.Sample> lockAcquireSample;
+    private Optional<LongTaskTimer.Sample> lockAcquireSample = Optional.empty();
     /**
      * Callback to Log Replication Server upon topology discovery
      */
