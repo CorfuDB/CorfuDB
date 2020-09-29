@@ -253,9 +253,6 @@ public class LogReplicationFSM {
         // Initialize Log Replication 5 FSM states - single instance per state
         initializeStates(snapshotSender, logEntrySender, dataSender);
 
-        // Assign logEntryReader to ackReader
-        this.ackReader.setLogEntryReader(logEntryReader);
-
         this.state = states.get(LogReplicationStateType.INITIALIZED);
         this.logReplicationFSMWorkers = workers;
         this.logReplicationFSMConsumer = Executors.newSingleThreadExecutor(new

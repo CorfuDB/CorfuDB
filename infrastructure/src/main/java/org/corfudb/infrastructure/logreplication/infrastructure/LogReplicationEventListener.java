@@ -43,7 +43,7 @@ public final class LogReplicationEventListener implements StreamListener {
             for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {
                 for (CorfuStreamEntry entry : entryList) {
                     ReplicationEvent event = (ReplicationEvent) entry.getPayload();
-                    log.info("ReplicationEventListener received an event with id {}, type {}, cluster id{}",
+                    log.info("ReplicationEventListener received an event with id {}, type {}, cluster id {}",
                             event.getEventId(), event.getType(), event.getClusterId());
                     if (event.getType().equals(ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC)) {
                         discoveryService.input(new DiscoveryServiceEvent(

@@ -23,7 +23,7 @@ public class DiscoveryServiceEvent {
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId) {
         this.type = type;
-        this.remoteClusterInfo = new ClusterDescriptor(clusterId, LogReplicationClusterInfo.ClusterRole.STANDBY);
+        this.remoteClusterInfo = new ClusterDescriptor(clusterId);
     }
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {

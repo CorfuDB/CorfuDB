@@ -120,7 +120,7 @@ public class LogReplicationSourceManager {
                 dataSender, readProcessor, logReplicationFSMWorkers, ackReader);
 
         this.logReplicationFSM.setTopologyConfigId(params.getTopologyConfigId());
-        this.ackReader.startAckReader();
+        this.ackReader.startAckReader(this.logReplicationFSM.getLogEntryReader());
     }
 
     /**

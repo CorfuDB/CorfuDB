@@ -72,6 +72,14 @@ message SnapshotSyncInfo {
   uint64 baseSnapshot = 5;
 }
 
+/*
+ * SyncStatus
+ *
+ * COMPLETED:   Used in SnapshotSyncInfo only for the latest snapshot sync
+ * ERROR:       Log Replication is unrecoverable, need to restart
+ * NOT_STARTED: Log Replication might be in the very beginning state
+ * STOPPED:     Log Replication is in initialized state
+ */
 enum SyncStatus {
   ONGOING = 0;
   COMPLETED = 1;
