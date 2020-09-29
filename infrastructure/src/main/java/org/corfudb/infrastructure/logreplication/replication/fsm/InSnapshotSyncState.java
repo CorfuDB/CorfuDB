@@ -12,7 +12,6 @@ import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
