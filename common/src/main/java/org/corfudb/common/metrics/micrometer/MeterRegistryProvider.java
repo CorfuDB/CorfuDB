@@ -21,11 +21,17 @@ public class MeterRegistryProvider {
 
     /**
      * Get the previously configured meter registry.
-     * If the registry has not been previously configured return an
-     * empty option.
+     * If the registry has not been previously configured, create a default logging MeterRegistry
+     * and return.
      * @return An optional configured meter registry.
      */
     public static Optional<MeterRegistry> getInstance() {
+        if (!meterRegistry.isPresent()) {
+            synchronized (MeterRegistry.class) {
+                createLoggingMeterRegistry();
+                return meterRegistry;
+            }
+        }
         return meterRegistry;
     }
 
@@ -43,6 +49,14 @@ public class MeterRegistryProvider {
                     .loggingSink(logger::debug).build());
         };
 
+        create(supplier);
+    }
+
+    /**
+     * Configure the default registry of type LoggingMeterRegistry.
+     */
+    public static void createLoggingMeterRegistry() {
+        Supplier<Optional<MeterRegistry>> supplier = () -> Optional.of(new LoggingMeterRegistry());
         create(supplier);
     }
 
