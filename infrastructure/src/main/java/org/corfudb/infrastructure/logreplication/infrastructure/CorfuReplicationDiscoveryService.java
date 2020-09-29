@@ -764,7 +764,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         log.info("Received the forceSnapshotSync command for standby cluster {}, forced sync id {}",
                 clusterId, forceSyncId);
 
-        // Write to the event to the event corfu table
+        // Write an force sync event to the logReplicationEventTable
         ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(System.currentTimeMillis() + " "+ clusterId).build();
         ReplicationEvent event = ReplicationEvent.newBuilder()
                 .setClusterId(clusterId)

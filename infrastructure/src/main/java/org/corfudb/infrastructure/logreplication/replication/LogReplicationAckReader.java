@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.replication;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
@@ -36,9 +35,10 @@ public class LogReplicationAckReader {
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
     private long baseSnapshotTimestamp;
 
-    // Flag for the periodic task
+    // Flag for the periodic task. It will protect status table from overriding by the periodic task
+    // if current replication state is initialized or stopped
     @Getter
-    private AtomicBoolean ongoing;
+    private final AtomicBoolean ongoing;
 
     /*
      * Periodic Thread which reads the last Acked Timestamp and writes it to the metadata table
@@ -64,7 +64,6 @@ public class LogReplicationAckReader {
     private LogReplicationMetadata.ReplicationStatusVal.SyncType lastSyncType =
             LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY;
 
-    @Setter
     private LogEntryReader logEntryReader;
 
     private final Lock lock = new ReentrantLock();
@@ -99,7 +98,8 @@ public class LogReplicationAckReader {
         }
     }
 
-    public void startAckReader() {
+    public void startAckReader(LogEntryReader logEntryReader) {
+        this.logEntryReader = logEntryReader;
         lastAckedTsPoller.scheduleWithFixedDelay(new TsPollingTask(), 0,
                 ACKED_TS_READ_INTERVAL_SECONDS, TimeUnit.SECONDS);
     }
@@ -389,6 +389,8 @@ public class LogReplicationAckReader {
                 } finally {
                     lock.unlock();
                 }
+            } else {
+                log.debug("Skip TsPollingTask, ongoing flag is false.");
             }
         }
     }

@@ -1232,6 +1232,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                                 .replicationConfig(config).localCorfuEndpoint(SOURCE_ENDPOINT).build(),
                 logReplicationMetadataManager,
                 sourceDataSender);
+        logReplicationSourceManager.getLogReplicationFSM().getAckReader().getOngoing().set(false);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)

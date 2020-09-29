@@ -547,7 +547,6 @@ public class LogReplicationMetadataManager {
     public void setDataConsistentOnStandby(boolean isConsistent) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build();
         ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
-                .setStatus(LogReplicationMetadata.SyncStatus.STOPPED)
                 .setDataConsistent(isConsistent)
                 .build();
         TxBuilder txBuilder = corfuStore.tx(NAMESPACE);

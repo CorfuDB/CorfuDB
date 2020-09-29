@@ -29,9 +29,8 @@ public class ClusterDescriptor {
     @Getter
     private int corfuPort;    // Port on which Corfu DB runs on this cluster
 
-    public ClusterDescriptor(String clusterId, ClusterRole role) {
+    public ClusterDescriptor(String clusterId) {
         this.clusterId = clusterId;
-        this.role = role;
     }
 
     public ClusterDescriptor(ClusterConfigurationMsg clusterConfig) {

@@ -205,7 +205,7 @@ public class CorfuReplicationManager {
     }
 
     /**
-     * Stop the current log replication event and start a full snapshot sync for all standby clusters
+     * Stop the current log replication event and start a full snapshot sync for the given remote cluster.
      */
     public void enforceSnapshotSync(DiscoveryServiceEvent event) {
         CorfuLogReplicationRuntime standbyRuntime = runtimeToRemoteCluster.get(event.getRemoteClusterInfo().getClusterId());
