@@ -32,7 +32,7 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     private final Optional<Timer> senderTimer;
 
-    private Optional<Timer.Sample> snapshotSyncTimerSample;
+    private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
 
     /**
      * Uniquely identifies the event that caused the transition to this state.
@@ -74,7 +74,6 @@ public class InSnapshotSyncState implements LogReplicationState {
     public LogReplicationState processEvent(LogReplicationEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case SNAPSHOT_SYNC_REQUEST:
-                snapshotSyncTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
                 /*
                  Cancel ongoing snapshot sync, if it is still in progress.
                  */
@@ -162,6 +161,8 @@ public class InSnapshotSyncState implements LogReplicationState {
             // If the transition is to itself, the snapshot sync is continuing, no need to reset the sender
             if (from != this) {
                 snapshotSender.reset();
+                snapshotSyncTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
+
             }
             Runnable snapShotSendTask = () -> snapshotSender.transmit(transitionEventId);
             if (senderTimer.isPresent()) {

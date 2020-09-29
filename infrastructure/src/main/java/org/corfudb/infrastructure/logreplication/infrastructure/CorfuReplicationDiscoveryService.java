@@ -178,7 +178,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         this.localEndpoint = serverContext.getLocalEndpoint();
         this.serverCallback = serverCallback;
         this.isLeader = new AtomicBoolean();
-        MeterRegistryProvider.createLoggingMeterRegistry(log, Duration.ofSeconds(1));
     }
 
     public void run() {

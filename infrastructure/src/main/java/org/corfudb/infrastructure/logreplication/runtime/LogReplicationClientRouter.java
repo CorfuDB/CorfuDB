@@ -91,7 +91,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public final Map<Long, CompletableFuture> outstandingRequests;
 
-    private Optional<Timer.Sample> requestSample;
+    private Optional<Timer.Sample> requestSample = Optional.empty();
 
     /**
      * Adapter to the channel implementation
@@ -202,6 +202,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                 // In the case the message is intended for a specific endpoint, we do not
                 // block on connection future, this is the case of leader verification.
                 log.info("Send message to {}, type={}", endpoint, message.getMsgType());
+                this.requestSample = MeterRegistryProvider.getInstance().map(Timer::start);
                 channelAdapter.send(endpoint, CorfuMessageConverterUtils.toProtoBuf(message));
 
             } catch (NetworkException ne) {
@@ -333,7 +334,8 @@ public class LogReplicationClientRouter implements IClientRouter {
         try {
             requestSample.flatMap(sample -> MeterRegistryProvider.getInstance()
                             .map(registry -> {
-                                Timer timer = registry.timer("logreplication.rtt.seconds");
+                                Timer timer = registry
+                                        .timer("logreplication.rtt.seconds");
                                 return sample.stop(timer);
                             }));
             CorfuMsg corfuMsg = CorfuMessageConverterUtils.fromProtoBuf(msg);

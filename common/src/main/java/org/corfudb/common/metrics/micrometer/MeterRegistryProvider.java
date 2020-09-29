@@ -1,81 +1,54 @@
 package org.corfudb.common.metrics.micrometer;
 
-import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.logging.LoggingMeterRegistry;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
-import io.micrometer.prometheus.PrometheusConfig;
-import io.micrometer.prometheus.PrometheusMeterRegistry;
 import org.slf4j.Logger;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+/**
+ * A configuration class for a meter (metrics) registry.
+ */
 public class MeterRegistryProvider {
-    private static Optional<MeterRegistry> meterRegistry;
+    private static Optional<MeterRegistry> meterRegistry = Optional.empty();
 
     private MeterRegistryProvider() {
 
     }
 
+    /**
+     * Get the previously configured meter registry.
+     * If the registry has not been previously configured return an
+     * empty option.
+     * @return An optional configured meter registry.
+     */
     public static Optional<MeterRegistry> getInstance() {
         return meterRegistry;
     }
 
-    public static Optional<MeterRegistry> createLoggingMeterRegistry(Logger logger, Duration loggingInterval) {
+    /**
+     * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
+     * with this meter registry will be exported via provided logger with
+     * the provided loggingInterval frequency.
+     * @param logger A configured logger.
+     * @param loggingInterval A duration between log appends for every metric.
+     */
+    public static void createLoggingMeterRegistry(Logger logger, Duration loggingInterval) {
         Supplier<Optional<MeterRegistry>> supplier = () -> {
             LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
             return Optional.of(LoggingMeterRegistry.builder(config)
-                    .loggingSink(logger::info).build());
+                    .loggingSink(logger::debug).build());
         };
 
-        return create(supplier);
+        create(supplier);
     }
 
-    public static Optional<MeterRegistry> createLoggingMeterRegistry(Logger logger) {
-        return create(() -> createLoggingMeterRegistry(logger, Duration.ofMinutes(1)));
-    }
-
-    public static Optional<MeterRegistry> createLoggingMeterRegistry() {
-        return create(() -> Optional.of(new LoggingMeterRegistry()));
-    }
-
-    public static Optional<MeterRegistry> createPrometheusMeterRegistry(int exporterPort, String path) {
-        Supplier<Optional<MeterRegistry>> supplier = () -> {
-            PrometheusMeterRegistry prometheusMeterRegistry =
-                    new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-            try {
-                HttpServer server = HttpServer.create(new InetSocketAddress(exporterPort), 0);
-                server.createContext("/" + path, httpExchange -> {
-                    String response = prometheusMeterRegistry.scrape();
-                    httpExchange.sendResponseHeaders(200, response.getBytes().length);
-                    try (OutputStream os = httpExchange.getResponseBody()) {
-                        os.write(response.getBytes());
-                    }
-                });
-
-                new Thread(server::start).start();
-            } catch (IOException e) {
-                throw new IllegalStateException(e);
-            }
-            return Optional.of(prometheusMeterRegistry);
-        };
-
-        return create(supplier);
-    }
-
-    private static Optional<MeterRegistry> create(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
+    private static synchronized void create(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
         if (!meterRegistry.isPresent()) {
-            synchronized (MeterRegistryProvider.class) {
-                if (!meterRegistry.isPresent()) {
-                    meterRegistry = meterRegistrySupplier.get();
-                }
-            }
+            meterRegistry = meterRegistrySupplier.get();
         }
-        return meterRegistry;
     }
 }

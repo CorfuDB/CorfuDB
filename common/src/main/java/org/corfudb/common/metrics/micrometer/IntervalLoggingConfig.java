@@ -11,12 +11,12 @@ public class IntervalLoggingConfig implements LoggingRegistryConfig {
     private final Duration intervalBetweenLogs;
 
     @Override
-    public String get(String key) {
-        throw new IllegalArgumentException("Getting config values is disabled.");
+    public Duration step() {
+        return intervalBetweenLogs;
     }
 
     @Override
-    public Duration step() {
-        return intervalBetweenLogs;
+    public String get(String key) {
+        return null;
     }
 }
