@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.protocol.proto";
+
+import "common.proto";
+
+message ConnectivityMapEntryMsg {
+  string key = 1;
+  string value = 2;
+}
+
+message NodeConnectivityMsg {
+  string endpoint = 1;
+  string connectivity_type = 2; //TODO: Use an enum instead of name()?
+  // List of ConnectivityMapEntryMsg
+  // List connectivity_map = 3;
+  int64 epoch = 4;
+}
+
+message QueryNodeRequestMsg {
+}
+
+message QueryNodeResponseMsg {
+  // SequencerMetrics sequencer_metrics = 1;
+  NodeConnectivityMsg node_connectivity = 2;
+}
+
+message ReportFailureRequestMsg {
+  int64 detector_epoch = 1;
+  repeated string failed_nodes = 2;
+}
+
+message ReportFailureResponseMsg {
+  enum Type {
+    INVALID = 0;
+    ACK = 1;
+    NACK = 2;
+  }
+
+  Type resp_type = 1;
+}
+
+message HealFailureRequestMsg {
+  int64 detector_epoch = 1;
+  repeated string healed_nodes = 2;
+}
+
+message HealFailureResponseMsg {
+  enum Type {
+    INVALID = 0;
+    ACK = 1;
+    NACK  = 2;
+  }
+
+  Type resp_type = 1;
+}
+
+message QueryWorkflowMsg {
+  UuidMsg workflow_id = 1;
+}
+
+message AddNodeWorkflowMsg {
+  string endpoint = 1;
+}
+
+message RemoveNodeWorkflowMsg {
+  string endpoint = 1;
+}
+
+message HealNodeWorkflowMsg {
+  string endpoint = 1;
+  int32 stripe_index = 2;
+  bool layout_server = 3;
+  bool sequencer_server = 4;
+  bool log_unit_server = 5;
+}
+
+message ForceRemoveNodeWorkflowMsg {
+  string endpoint = 1;
+}
+
+message RestoreRedundancyMergeSegmentsWorkflowMsg {
+  string endpoint = 1;
+}
+
+message OrchestratorRequestMsg {
+  oneof payload {
+    QueryWorkflowMsg query = 1;
+    AddNodeWorkflowMsg add_node = 2;
+    RemoveNodeWorkflowMsg remove_node = 3;
+    HealNodeWorkflowMsg heal_node = 4;
+    ForceRemoveNodeWorkflowMsg force_remove_node = 5;
+    RestoreRedundancyMergeSegmentsWorkflowMsg restore_redundancy_merge_segments = 6;
+  }
+}
+
+message QueriedWorkflowMsg {
+  bool active = 1;
+}
+
+message CreatedWorkflowMsg {
+  UuidMsg workflow_id = 1;
+}
+
+message OrchestratorResponseMsg {
+  oneof payload {
+    QueriedWorkflowMsg query_result = 1;
+    CreatedWorkflowMsg workflow_created = 2;
+  }
+}
+
+message BootstrapManagementRequestMsg {
+  LayoutMsg layout = 1;
+}
+
+message BootstrapManagementResponseMsg {
+  enum Type {
+    INVALID = 0;
+    ACK = 1;
+    NACK = 2;
+  }
+
+  Type resp_type = 1;
+}
+
+message ManagementLayoutRequestMsg {
+}
+
+message ManagementLayoutResponseMsg {
+  LayoutMsg layout = 1;
+}

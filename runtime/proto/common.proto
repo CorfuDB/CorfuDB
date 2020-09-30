@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.protocol.proto";
+
+import "google/protobuf/any.proto";
+
+//TODO: Reasonable way to determine version?
+enum ProtocolVersion {
+  PROTOCOL_VERSION_INVALID = 0;
+  V0 = 1;
+}
+
+enum PriorityLevel {
+  PRIORITY_LEVEL_INVALID = 0;
+  NORMAL = 1;
+  HIGH = 2;
+}
+
+//TODO: Should we shy away from generic messages? Primarily used (currently) to store KVPs
+message ListMsg {
+  repeated google.protobuf.Any items = 1;
+}
+
+message UuidMsg {
+  int64 lsb = 1;
+  int64 msb = 2;
+}
+
+//TODO: Consider alternate representations of a Layout?
+message LayoutMsg {
+  string layout_json = 1;
+}

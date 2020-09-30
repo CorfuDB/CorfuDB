@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.protocol.proto";
+
+import "common.proto";
+
+//TODO: Place sequencer related definitions here

@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.protocol.proto";
+
+//TODO: Complete handshake (authenticate) message types
+
+message PingRequestMsg {
+}
+
+message PingResponseMsg {
+}
+
+message AuthenticateRequestMsg {
+
+}
+
+message AuthenticateResponseMsg {
+
+}
+
+message RestartRequestMsg {
+}
+
+message RestartResponseMsg {
+}
+
+message ResetRequestMsg {
+}
+
+message ResetResponseMsg {
+}
+
+message SealRequestMsg {
+  int64 epoch = 1;
+}
+
+message SealResponseMsg {
+}
