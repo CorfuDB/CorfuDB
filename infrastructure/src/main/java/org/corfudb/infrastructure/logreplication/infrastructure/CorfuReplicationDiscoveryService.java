@@ -30,6 +30,8 @@ import org.corfudb.utils.lock.LockClient;
 import org.corfudb.utils.lock.LockListener;
 import org.corfudb.utils.lock.states.HasLeaseState;
 import org.corfudb.utils.lock.states.LockState;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
@@ -53,7 +55,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Slf4j
 public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicationDiscoveryServiceAdapter {
-
     /**
      * Wait interval (in seconds) between consecutive fetch topology attempts to cap exponential back-off.
      */
@@ -106,6 +107,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Defines the cluster to which this node belongs to.
      */
+    @Getter
     private ClusterDescriptor localClusterDescriptor;
 
     /**
@@ -116,6 +118,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Current node information
      */
+    @Getter
     private NodeDescriptor localNodeDescriptor;
 
     /**
@@ -150,6 +153,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
     private boolean shouldRun = true;
 
+    @Getter
     private volatile AtomicBoolean isLeader;
 
     private LogReplicationServer logReplicationServerHandler;
@@ -161,6 +165,13 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * that this node belongs to a cluster in the topology provided by ClusterManager.
      */
     private boolean serverStarted = false;
+
+    /**
+     * This is the listener to the replication event table shared by the nodes in the cluster.
+     * When a non-leader node is called to do the enforcedSnapshotSync, it will write the event to
+     * the shared event-table and the leader node will be notified to do the work.
+     */
+    private LogReplicationEventListener logReplicationEventListener;
 
     /**
      * Constructor Discovery Service
@@ -214,7 +225,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Process discovery event
      */
-    public void processEvent(DiscoveryServiceEvent event) {
+    public synchronized void processEvent(DiscoveryServiceEvent event) {
         switch (event.type) {
             case ACQUIRE_LOCK:
                 processLockAcquire();
@@ -230,6 +241,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
             case UPGRADE:
                 processUpgrade(event);
+                break;
+
+            case ENFORCE_SNAPSHOT_SYNC:
+                processEnforceSnapshotSync(event);
                 break;
 
             default:
@@ -306,6 +321,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         // Unblock server initialization & register to Log Replication Lock, to attempt lock / leadership acquisition
         serverCallback.complete(interClusterReplicationService);
 
+        logReplicationEventListener = new LogReplicationEventListener(this);
+        logReplicationEventListener.start();
         serverStarted = true;
     }
 
@@ -690,8 +707,20 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private void processUpgrade(DiscoveryServiceEvent event) {
         if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             // TODO pankti: is this correct?
-            replicationManager.restart(event.getRemoteSiteInfo());
+            replicationManager.restart(event.getRemoteClusterInfo());
         }
+    }
+
+    /**
+     * Enforce a snapshot full sync for all standbys if the current node is a leader node
+     */
+    private void processEnforceSnapshotSync(DiscoveryServiceEvent event) {
+        if (replicationManager == null || !isLeader.get()) {
+            log.warn("The current node is not the leader will skip doing the snapshot full sync");
+            return;
+        }
+
+        replicationManager.enforceSnapshotSync(event);
     }
 
     public synchronized void input(DiscoveryServiceEvent event) {
@@ -730,7 +759,34 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         return null;
     }
 
+    @Override
+    public void forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
+        if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
+            String errorStr = "The forceSnapshotSync command is not supported on standby cluster.";
+            log.error(errorStr);
+            throw new LogReplicationDiscoveryServiceException(errorStr);
+        }
+
+        log.info("Received the forceSnapshotSync command.");
+
+        /**
+         * write to the event to the event corfu table
+         */
+        ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(System.currentTimeMillis() + " "+ clusterId).build();
+        ReplicationEvent event = ReplicationEvent.newBuilder().setClusterId(clusterId).setType(LogReplicationMetadata.ReplicationEventType.FORCE_SNAPSHOT_SYNC).build();
+        getLogReplicationMetadataManager().updateLogReplicationEventTable(key, event);
+    }
+
+    @Override
+    public ClusterRole getLocalClusterRoleType() {
+        return localClusterDescriptor.getRole();
+    }
+
     public void shutdown() {
+        if (logReplicationEventListener != null) {
+            logReplicationEventListener.stop();
+        }
+
         if (replicationManager != null) {
             replicationManager.stop();
         }

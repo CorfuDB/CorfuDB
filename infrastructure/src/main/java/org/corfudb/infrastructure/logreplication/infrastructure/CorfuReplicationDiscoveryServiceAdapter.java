@@ -18,4 +18,12 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
      * @return
      */
     Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
+
+    /**
+     * Enforce snapshotFullSync
+     */
+    void forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
+
+
+    LogReplicationClusterInfo.ClusterRole getLocalClusterRoleType();
 }
