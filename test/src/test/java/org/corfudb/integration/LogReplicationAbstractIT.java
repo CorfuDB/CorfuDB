@@ -177,10 +177,12 @@ public class LogReplicationAbstractIT extends AbstractIT {
         try {
             if (runProcess) {
                 // Start Log Replication Server on Active Site
-                activeReplicationServer = runReplicationServer(activeReplicationServerPort, pluginConfigFilePath, lockLeaseDuration);
+                activeReplicationServer = runReplicationServer(activeReplicationServerPort, pluginConfigFilePath,
+                        lockLeaseDuration);
 
                 // Start Log Replication Server on Standby Site
-                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath, lockLeaseDuration);
+                standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, pluginConfigFilePath,
+                        lockLeaseDuration);
             } else {
                 executorService.submit(() -> {
                     CorfuInterClusterReplicationServer.main(new String[]{"-m", "--max-data-message-size=" + MSG_SIZE,  "--plugin=" + pluginConfigFilePath,

@@ -41,12 +41,16 @@ public class MeterRegistryProvider {
      * the provided loggingInterval frequency.
      * @param logger A configured logger.
      * @param loggingInterval A duration between log appends for every metric.
+     * @param localEndpoint A local endpoint to tag every metric with.
      */
-    public static void createLoggingMeterRegistry(Logger logger, Duration loggingInterval) {
+    public static void createLoggingMeterRegistry(Logger logger, Duration loggingInterval,
+                                                  String localEndpoint) {
         Supplier<Optional<MeterRegistry>> supplier = () -> {
             LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
-            return Optional.of(LoggingMeterRegistry.builder(config)
-                    .loggingSink(logger::debug).build());
+            LoggingMeterRegistry registry = LoggingMeterRegistry.builder(config)
+                    .loggingSink(logger::debug).build();
+            registry.config().commonTags("endpoint", localEndpoint);
+            return Optional.of(registry);
         };
 
         create(supplier);

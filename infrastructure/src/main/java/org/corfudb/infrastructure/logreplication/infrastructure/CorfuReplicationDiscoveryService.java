@@ -815,8 +815,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 .map(registry -> registry.more()
                         .longTaskTimer("logreplication.lock.duration",
                                 ImmutableList.of(
-                                        Tag.of("cluster.role", role.toString().toLowerCase()),
-                                        Tag.of("host", localEndpoint)))
+                                        Tag.of("cluster.role", role.toString().toLowerCase())))
                         .start());
     }
 
