@@ -28,41 +28,72 @@ message LogUnitMetadataMsg {
   }
 }
 
-//TODO: Determine Protobuf representation of LogData and complete Read/Write RPCs
-message LogDataMsg {
+//TODO: Adequate representation for LogData?
+// Types of LogData defined in DataType.java
+// Note: All metadata aware
 
+message LogDataEntryMsg {
+  // ListMsg metadata = 1;
+  bytes data = 2;
+}
+
+message LogDataEmptyMsg {
+  // ListMsg metadata = 1;
+}
+
+message LogDataHoleMsg {
+  // ListMsg metadata = 1;
+}
+
+message LogDataTrimmedMsg {
+  // ListMsg metadata = 1;
+}
+
+message LogDataRankOnlyMsg {
+  // ListMsg metadata = 1;
+}
+
+message LogDataMsg {
+  oneof payload {
+    LogDataEntryMsg log_data_entry = 1;
+    LogDataEmptyMsg log_data_empty = 2;
+    LogDataHoleMsg log_data_hole = 3;
+    LogDataTrimmedMsg log_data_trimmed = 4;
+    LogDataRankOnlyMsg log_data_rank_only = 5;
+  }
 }
 
 message WriteLogRequestMsg {
-
+  LogDataMsg log_data = 1;
 }
 
 message WriteLogResponseMsg {
-
 }
 
 message RangeWriteLogRequestMsg {
-
+  // Use ListMsg instead?
+  repeated LogDataMsg log_data = 1;
 }
 
 message RangeWriteLogResponseMsg {
-
 }
 
 message ReadLogRequestMsg {
-
+  repeated int64 address = 1;
+  bool cache_results = 2;
 }
 
 message ReadLogResponseMsg {
-
+  // List of LongToLogData pairs
+  // ListMsg response = 1;
 }
 
 message InspectAddressesRequestMsg {
-  repeated int64 addresses = 1;
+  repeated int64 address = 1;
 }
 
 message InspectAddressesResponseMsg {
-  repeated int64 empty_addresses = 1;
+  repeated int64 empty_address = 1;
 }
 
 message TrimLogRequestMsg {
@@ -88,7 +119,7 @@ message TailRequestMsg {
   }
 
   Type req_type = 1;
-  repeated UuidMsg streams = 2;
+  repeated UuidMsg stream = 2;
 }
 
 message TailResponseMsg {
@@ -125,7 +156,7 @@ message KnownAddressRequestMsg {
 }
 
 message KnownAddressResponseMsg {
-  repeated int64 known_addresses = 1;
+  repeated int64 known_address = 1;
 }
 
 message CommittedTailRequestMsg {

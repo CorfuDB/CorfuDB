@@ -19,7 +19,7 @@ enum PriorityLevel {
 
 //TODO: Should we shy away from generic messages? Primarily used (currently) to store KVPs
 message ListMsg {
-  repeated google.protobuf.Any items = 1;
+  repeated google.protobuf.Any item = 1;
 }
 
 message UuidMsg {

@@ -28,7 +28,7 @@ message QueryNodeResponseMsg {
 
 message ReportFailureRequestMsg {
   int64 detector_epoch = 1;
-  repeated string failed_nodes = 2;
+  repeated string failed_node = 2;
 }
 
 message ReportFailureResponseMsg {
@@ -43,7 +43,7 @@ message ReportFailureResponseMsg {
 
 message HealFailureRequestMsg {
   int64 detector_epoch = 1;
-  repeated string healed_nodes = 2;
+  repeated string healed_node = 2;
 }
 
 message HealFailureResponseMsg {
