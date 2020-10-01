@@ -2,8 +2,6 @@ package org.corfudb.runtime.clients;
 
 import java.util.concurrent.CompletableFuture;
 
-import io.netty.channel.ChannelHandlerContext;
-import org.corfudb.protocols.wireprotocol.orchestrator.Request;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
 
 
@@ -23,21 +21,19 @@ public interface IClientProtobufRouter {
     /**
      * Send a request message and get a completable future to be fulfilled by the reply.
      *
-     * @param request The request message to send.
-     * @param ctx Context of the channel handler.
+     * @param reqBuilder The message builder for the request to send.
      * @param <T> The type of completable to return.
      * @return A completable future which will be fulfilled by the reply,
      * or a timeout in the case there is no response.
      */
-    <T> CompletableFuture<T> sendRequestAndGetCompletable(Request request, ChannelHandlerContext ctx);
+    <T> CompletableFuture<T> sendRequestAndGetCompletable(Request.Builder reqBuilder);
 
     /**
      * Send a one way message, without adding a completable future.
      *
-     * @param request The request message to send.
-     * @param ctx Context of the channel handler.
+     * @param reqBuilder The message builder for the request to send.
      */
-    void sendRequest(Request request, ChannelHandlerContext ctx);
+    void sendRequest(Request.Builder reqBuilder);
 
     /**
      * Complete a given outstanding request with a completion value.
