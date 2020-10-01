@@ -94,7 +94,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setSerializer(serializer)
                 .setArguments(new ProtobufIndexer(valueSchema), streamingMapSupplier, versionPolicy)
                 .open();
-        this.metrics = new TableMetrics(this.fullyQualifiedTableName);
+        this.metrics = new TableMetrics(this.fullyQualifiedTableName, corfuRuntime.getParameters().getMetricRegistry());
     }
 
     /**
