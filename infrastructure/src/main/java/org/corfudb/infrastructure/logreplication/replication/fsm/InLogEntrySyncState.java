@@ -5,6 +5,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
 
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 /**
@@ -28,7 +29,7 @@ public class InLogEntrySyncState implements LogReplicationState {
     /**
      * A future on the log entry send, send call.
      */
-    private Future<?> logEntrySyncFuture;
+    private Future<?> logEntrySyncFuture = CompletableFuture.completedFuture(null);
 
     /**
      * Unique Identifier of the event that caused the transition to this state,
