@@ -140,7 +140,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 .setMsb(uuid1.getMostSignificantBits()).setLsb(uuid1.getLeastSignificantBits())
                 .build();
         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
-        long expectedVersion = 0L;
 
         ufoStore.txn(someNamespace)
                 .putRecord(tableName, key1,
