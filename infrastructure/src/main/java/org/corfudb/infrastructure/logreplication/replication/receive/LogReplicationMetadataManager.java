@@ -242,16 +242,16 @@ public class LogReplicationMetadataManager {
     public boolean setBaseSnapshotStart(long topologyConfigId, long ts) {
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
         long persistedTopologyConfigID = query(timestamp, LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
-        long persistSnapStart = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
+        long persistedSnapshotStart = query(timestamp, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED);
 
         log.debug("Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, persistedSnapshotStart={}",
-                topologyConfigId, ts, persistedTopologyConfigID, persistSnapStart);
+                topologyConfigId, ts, persistedTopologyConfigID, persistedSnapshotStart);
 
         // It means the cluster config has changed, ignore the update operation.
-        if (topologyConfigId != persistedTopologyConfigID || ts <= persistedTopologyConfigID) {
-            log.warn("The metadata is older than the persisted one. Set snapshotStart topologyConfigId={}, ts={}," +
-                    " persistedTopologyConfigId={}, persistedSnapshotStart={}", topologyConfigId, ts,
-                    persistedTopologyConfigID, persistSnapStart);
+        if (topologyConfigId != persistedTopologyConfigID) {
+            log.warn("Config differs between sender and receiver, sender[topologyConfigId={}, ts={}]" +
+                    " receiver[persistedTopologyConfigId={}, persistedSnapshotStart={}]", topologyConfigId, ts,
+                    persistedTopologyConfigID, persistedSnapshotStart);
             return false;
         }
 
@@ -273,7 +273,7 @@ public class LogReplicationMetadataManager {
 
         log.debug("Commit. Set snapshotStart topologyConfigId={}, ts={}, persistedTopologyConfigID={}, " +
                         "persistedSnapshotStart={}",
-                topologyConfigId, ts, persistedTopologyConfigID, persistSnapStart);
+                topologyConfigId, ts, persistedTopologyConfigID, persistedSnapshotStart);
 
         return (ts == getLastStartedSnapshotTimestamp() && topologyConfigId == getTopologyConfigId());
     }
