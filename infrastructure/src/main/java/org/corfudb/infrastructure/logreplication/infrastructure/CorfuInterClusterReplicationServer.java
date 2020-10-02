@@ -341,8 +341,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
         if ((boolean) opts.get("--metrics")) {
             org.slf4j.Logger logger = LoggerFactory.getLogger(DEFAULT_METRICS_LOGGER_NAME);
-            MeterRegistryProvider
-                    .createLoggingMeterRegistry(logger, DEFAULT_METRICS_LOGGING_INTERVAL_DURATION,
+            MeterRegistryProvider.MeterRegistryInitializer
+                    .init(logger, DEFAULT_METRICS_LOGGING_INTERVAL_DURATION,
                             localEndpoint);
         }
     }

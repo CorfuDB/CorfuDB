@@ -1,6 +1,7 @@
 package org.corfudb.common.metrics.micrometer.protocoltransformer.influx;
 
 import lombok.AllArgsConstructor;
+import lombok.NonNull;
 import org.corfudb.common.metrics.micrometer.protocoltransformer.MatcherTransformer;
 
 import java.util.Optional;
@@ -19,9 +20,13 @@ public interface InfluxLineProtocolTransformer extends MatcherTransformer {
      */
     @AllArgsConstructor
     class InfluxLineProtocolPoint {
+        @NonNull
         private final String measurement;
+        @NonNull
         private final String tagSet;
+        @NonNull
         private final String fieldSet;
+        @NonNull
         private final long timeStamp;
 
         @Override

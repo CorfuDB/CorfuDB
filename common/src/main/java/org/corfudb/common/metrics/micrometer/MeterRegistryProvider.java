@@ -22,70 +22,69 @@ public class MeterRegistryProvider {
     }
 
     /**
-     * Get the previously configured meter registry.
-     * If the registry has not been previously configured, create a default logging MeterRegistry
-     * and return.
-     * @return An optional configured meter registry.
+     * Class that initializes the Meter Registry.
      */
-    public static Optional<MeterRegistry> getInstance() {
-        if (!meterRegistry.isPresent()) {
-            synchronized (MeterRegistry.class) {
-                createLoggingMeterRegistry();
-                return meterRegistry;
-            }
+    public static class MeterRegistryInitializer extends MeterRegistryProvider{
+        /**
+         * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
+         * with this meter registry will be exported in the InfluxDB line protocol format
+         * (https://docs.influxdata.com/influxdb/v1.8/write_protocols/line_protocol_tutorial/)
+         * with  the provided loggingInterval frequency.
+         * @param logger A configured logger.
+         * @param loggingInterval A duration between log appends for every metric.
+         * @param localEndpoint A local endpoint to tag every metric with.
+         */
+        public static synchronized void init(Logger logger, Duration loggingInterval,
+                                                      String localEndpoint) {
+            InfluxLineProtocolLoggingSink influxLineProtocolLoggingSink =
+                    new InfluxLineProtocolLoggingSink(logger);
+            init(loggingInterval, localEndpoint, influxLineProtocolLoggingSink);
         }
-        return meterRegistry;
-    }
 
-    /**
-     * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
-     * with this meter registry will be exported in the InfluxDB line protocol format
-     * (https://docs.influxdata.com/influxdb/v1.8/write_protocols/line_protocol_tutorial/)
-     * with  the provided loggingInterval frequency.
-     * @param logger A configured logger.
-     * @param loggingInterval A duration between log appends for every metric.
-     * @param localEndpoint A local endpoint to tag every metric with.
-     */
-    public static void createLoggingMeterRegistry(Logger logger, Duration loggingInterval,
-                                                  String localEndpoint) {
-        InfluxLineProtocolLoggingSink influxLineProtocolLoggingSink =
-                new InfluxLineProtocolLoggingSink(logger);
-        createLoggingMeterRegistry(loggingInterval, localEndpoint, influxLineProtocolLoggingSink);
-    }
+        /**
+         * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
+         * with this meter registry will be exported via provided logging sink with
+         * the provided loggingInterval frequency.
+         * @param sink A configured logging sink.
+         * @param loggingInterval A duration between log appends for every metric.
+         * @param localEndpoint A local endpoint to tag every metric with.
+         */
+        public static synchronized void init(Duration loggingInterval,
+                                                      String localEndpoint,
+                                                      LoggingSink sink) {
+            Supplier<Optional<MeterRegistry>> supplier = () -> {
+                LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
+                LoggingMeterRegistry registry = LoggingMeterRegistry.builder(config)
+                        .loggingSink(sink).build();
+                registry.config().commonTags("endpoint", localEndpoint);
+                return Optional.of(registry);
+            };
 
-    /**
-     * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
-     * with this meter registry will be exported via provided logging sink with
-     * the provided loggingInterval frequency.
-     * @param sink A configured logging sink.
-     * @param loggingInterval A duration between log appends for every metric.
-     * @param localEndpoint A local endpoint to tag every metric with.
-     */
-    public static void createLoggingMeterRegistry(Duration loggingInterval,
-                                                  String localEndpoint,
-                                                  LoggingSink sink) {
-        Supplier<Optional<MeterRegistry>> supplier = () -> {
-            LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
-            LoggingMeterRegistry registry = LoggingMeterRegistry.builder(config)
-                    .loggingSink(sink).build();
-            registry.config().commonTags("endpoint", localEndpoint);
-            return Optional.of(registry);
-        };
+            init(supplier);
+        }
 
-        create(supplier);
-    }
+        /**
+         * Configure the default registry of type LoggingMeterRegistry.
+         */
+        public static synchronized void init() {
+            Supplier<Optional<MeterRegistry>> supplier = () -> Optional.of(new LoggingMeterRegistry());
+            init(supplier);
+        }
 
-    /**
-     * Configure the default registry of type LoggingMeterRegistry.
-     */
-    public static void createLoggingMeterRegistry() {
-        Supplier<Optional<MeterRegistry>> supplier = () -> Optional.of(new LoggingMeterRegistry());
-        create(supplier);
-    }
-
-    private static synchronized void create(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
-        if (!meterRegistry.isPresent()) {
+        private static void init(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
+            if (meterRegistry.isPresent()) {
+                throw new IllegalStateException("Registry has already been initialized.");
+            }
             meterRegistry = meterRegistrySupplier.get();
         }
+    }
+
+    /**
+     * Get the previously configured meter registry.
+     * If the registry has not been previously configured, return an empty option.
+     * @return An optional configured meter registry.
+     */
+    public static synchronized Optional<MeterRegistry> getInstance() {
+        return meterRegistry;
     }
 }

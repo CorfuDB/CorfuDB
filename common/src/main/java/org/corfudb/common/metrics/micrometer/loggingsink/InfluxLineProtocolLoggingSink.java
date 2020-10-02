@@ -2,6 +2,7 @@ package org.corfudb.common.metrics.micrometer.loggingsink;
 
 import com.google.common.collect.ImmutableList;
 import lombok.AllArgsConstructor;
+import lombok.NonNull;
 import org.corfudb.common.metrics.micrometer.protocoltransformer.LineTransformer;
 import org.corfudb.common.metrics.micrometer.protocoltransformer.influx.ByteDistSummaryInfluxLineTransformer;
 import org.corfudb.common.metrics.micrometer.protocoltransformer.influx.CounterInfluxLineTransformer;
@@ -17,6 +18,7 @@ import org.slf4j.Logger;
 @AllArgsConstructor
 public class InfluxLineProtocolLoggingSink implements LoggingSink {
 
+    @NonNull
     private final Logger logger;
     private final LineTransformer lineTransformer = new LineTransformer(
             ImmutableList.of(
