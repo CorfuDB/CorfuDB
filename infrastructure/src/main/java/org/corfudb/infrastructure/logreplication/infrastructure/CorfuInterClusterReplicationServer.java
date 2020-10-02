@@ -197,7 +197,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
-    private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL_DURATION = Duration.ofSeconds(1);
+    private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL_DURATION = Duration.ofMinutes(1);
 
     private static final String DEFAULT_METRICS_LOGGER_NAME = "LogReplicationMetrics";
 

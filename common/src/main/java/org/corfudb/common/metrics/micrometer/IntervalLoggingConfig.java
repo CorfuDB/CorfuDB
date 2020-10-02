@@ -5,6 +5,10 @@ import lombok.AllArgsConstructor;
 
 import java.time.Duration;
 
+/**
+ * A configuration for the logging meter registry that configures the interval
+ * between each logging event.
+ */
 @AllArgsConstructor
 public class IntervalLoggingConfig implements LoggingRegistryConfig {
 
