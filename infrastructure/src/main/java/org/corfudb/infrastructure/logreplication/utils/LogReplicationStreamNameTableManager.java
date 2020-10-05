@@ -96,7 +96,7 @@ public class LogReplicationStreamNameTableManager {
     private boolean verifyTableExists(String tableName) {
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         try {
-            corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, tableName);
+            corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, tableName);
         } catch (NoSuchElementException e) {
             // Table does not exist
             return false;
@@ -121,7 +121,7 @@ public class LogReplicationStreamNameTableManager {
 
     private boolean tableVersionMatchesPlugin() {
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
-        corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE);
+        corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE);
         LogReplicationStreams.VersionString versionString = LogReplicationStreams.VersionString.newBuilder().setName("VERSION").build();
         Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
 
@@ -175,7 +175,7 @@ public class LogReplicationStreamNameTableManager {
 
     private Set<String> readStreamsToReplicateFromTable() {
         CorfuStore corfuStore = new CorfuStore(corfuRuntime);
-        corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_STREAMS_NAME_TABLE);
+        corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_STREAMS_NAME_TABLE);
         Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
         Set<LogReplicationStreams.TableInfo> tables = q.keySet(LOG_REPLICATION_STREAMS_NAME_TABLE, null);
         Set<String> tableNames = new HashSet<>();

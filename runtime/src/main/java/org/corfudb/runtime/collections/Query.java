@@ -34,6 +34,7 @@ import org.corfudb.runtime.view.TableRegistry;
  * <p>
  * Created by zlokhandwala on 2019-08-09.
  */
+@Deprecated
 public class Query {
 
     private final TableRegistry tableRegistry;
@@ -90,6 +91,7 @@ public class Query {
      * @return CorfuRecord encapsulating the payload and the metadata.
      */
     @Nullable
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message>
     CorfuRecord<V, M> getRecord(@Nonnull final String tableName,
                                 @Nonnull final K key) {
@@ -108,6 +110,7 @@ public class Query {
      * @return Value.
      */
     @Nullable
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message>
     CorfuRecord<V, M> getRecord(@Nonnull final String tableName,
                                 @Nullable final Timestamp timestamp,
@@ -130,6 +133,7 @@ public class Query {
      * @param tableName Table name.
      * @return Count of records.
      */
+    @Deprecated
     public int count(@Nonnull final String tableName) {
         return count(tableName, null);
     }
@@ -141,6 +145,7 @@ public class Query {
      * @param timestamp Timestamp to perform the query on.
      * @return Count of records.
      */
+    @Deprecated
     public int count(@Nonnull final String tableName,
                      @Nullable final Timestamp timestamp) {
         try {
@@ -160,6 +165,7 @@ public class Query {
      * @return Set of keys.
      */
     @Nonnull
+    @Deprecated
     public <K extends Message> Set<K> keySet(@Nonnull String tableName,
                                              @Nullable Timestamp timestamp) {
         try {
@@ -171,6 +177,7 @@ public class Query {
     }
 
     @Nonnull
+    @Deprecated
     private <K extends Message, V extends Message, M extends Message>
     List<CorfuStoreEntry<K, V, M>> scanAndFilterByEntry(
             @Nonnull final String tableName,
@@ -196,11 +203,12 @@ public class Query {
      * @return Result of the query.
      */
     @Nonnull
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message, I extends Comparable<I>>
     QueryResult<Entry<K, V>> getByIndex(@Nonnull final String tableName,
                                         @Nonnull final String indexName,
                                         @Nonnull final I indexKey) {
-        return new QueryResult<>(((Table<K, V, M>) getTable(tableName)).getByIndex(indexName, indexKey));
+        return new QueryResult<>(((Table<K, V, M>) getTable(tableName)).getByIndexAsQueryResult(indexName, indexKey));
     }
 
     private <K extends Message, V extends Message, M extends Message, R>
@@ -214,6 +222,7 @@ public class Query {
         return new HashSet<>();
     }
 
+    @Deprecated
     private <K extends Message, V extends Message, M extends Message, R>
     Collection<R> transform(Collection<CorfuStoreEntry<K, V, M>> queryResult,
                             Collection<R> resultCollection,
@@ -236,6 +245,7 @@ public class Query {
      * @return Result of the query.
      */
     @Nonnull
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message, R>
     QueryResult<R> executeQuery(@Nonnull final String tableName,
                                 @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> query) {
@@ -257,6 +267,7 @@ public class Query {
      * @return Result of the query.
      */
     @Nonnull
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message, R>
     QueryResult<R> executeQuery(@Nonnull final String tableName,
                                 @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> query,
@@ -285,6 +296,7 @@ public class Query {
      * @return Result of query.
      */
     @Nonnull
+    @Deprecated
     public <K1 extends Message, K2 extends Message,
             V1 extends Message, V2 extends Message,
             M1 extends Message, M2 extends Message, T, U>
@@ -329,6 +341,7 @@ public class Query {
      * @return Result of query.
      */
     @Nonnull
+    @Deprecated
     public <K1 extends Message, K2 extends Message,
             V1 extends Message, V2 extends Message,
             M1 extends Message, M2 extends Message,
@@ -384,6 +397,7 @@ public class Query {
      * @param <R> Type of result.
      */
     @FunctionalInterface
+    @Deprecated
     public interface MergeFunction<R> {
 
         /**
@@ -442,6 +456,7 @@ public class Query {
      * @return Result of the query.
      */
     @Nonnull
+    @Deprecated
     public <R> QueryResult<R> executeMultiJoinQuery(@Nonnull final Collection<String> tableNames,
                                                     @Nonnull final MergeFunction<R> joinFunction) {
 

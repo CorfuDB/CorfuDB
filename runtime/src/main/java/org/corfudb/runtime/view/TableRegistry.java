@@ -33,6 +33,7 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
@@ -173,23 +174,21 @@ public class TableRegistry {
         TableMetadata.Builder metadataBuilder = TableMetadata.newBuilder();
         metadataBuilder.setDiskBased(tableOptions.getPersistentDataPath().isPresent());
 
-        // Schema validation to ensure that there is either proper modification of the schema across open calls.
-        // Or no modification to the protobuf files.
-        boolean hasSchemaChanged = false;
-        CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
-        if (oldRecord != null) {
-            if (!oldRecord.getPayload().getFileDescriptorsMap().equals(tableDescriptors.getFileDescriptorsMap())) {
-                hasSchemaChanged = true;
-                log.error("registerTable: Schema update detected for table "+namespace+" "+ tableName);
-                log.debug("registerTable: old schema:"+oldRecord.getPayload().getFileDescriptorsMap());
-                log.debug("registerTable: new schema:"+tableDescriptors.getFileDescriptorsMap());
-            }
-        }
         int numRetries = 9; // Since this is an internal transaction, retry a few times before giving up.
-        long finalAddress = Address.NON_ADDRESS;
         while (numRetries-- > 0) {
+            // Schema validation to ensure that there is either proper modification of the schema across open calls.
+            // Or no modification to the protobuf files.
             try {
-                this.runtime.getObjectsView().TXBuild().type(TransactionType.OPTIMISTIC).build().begin();
+                this.runtime.getObjectsView().TXBuild().type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+                boolean hasSchemaChanged = false;
+                CorfuRecord<TableDescriptors, TableMetadata> oldRecord = this.registryTable.get(tableNameKey);
+                if (oldRecord != null && !oldRecord.getPayload().getFileDescriptorsMap()
+                        .equals(tableDescriptors.getFileDescriptorsMap())) {
+                    hasSchemaChanged = true;
+                    log.warn("registerTable: Schema update detected for table {}${}", namespace, tableName);
+                    log.debug("registerTable: old schema: {}", oldRecord.getPayload().getFileDescriptorsMap());
+                    log.debug("registerTable: new schema: {}", tableDescriptors.getFileDescriptorsMap());
+                }
                 if (hasSchemaChanged) {
                     this.registryTable.put(tableNameKey,
                             new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
@@ -197,7 +196,8 @@ public class TableRegistry {
                     this.registryTable.putIfAbsent(tableNameKey,
                             new CorfuRecord<>(tableDescriptors, metadataBuilder.build()));
                 }
-                finalAddress = this.runtime.getObjectsView().TXEnd();
+                this.runtime.getObjectsView().TXEnd();
+                break;
             } catch (TransactionAbortedException txAbort) {
                 if (numRetries <= 0) {
                     throw txAbort;
@@ -205,7 +205,7 @@ public class TableRegistry {
                 log.info("registerTable: commit failed. Will retry {} times. Cause {}", numRetries, txAbort);
                 continue;
             } finally {
-                if (finalAddress == Address.NON_ADDRESS) { // Transaction failed or an exception occurred.
+                if (TransactionalContext.isInTransaction()) { // Transaction failed or an exception occurred.
                     this.runtime.getObjectsView().TXAbort(); // clear Txn context so thread can be reused.
                 }
             }

@@ -22,8 +22,9 @@ import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.StreamingMap;
+import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
@@ -232,10 +233,11 @@ public class CorfuStoreBrowser {
             if (diskPath != null) {
                 optionsBuilder.persistentDataPath(Paths.get(diskPath));
             }
-            store.openTable(namespace, tablename,
-                    TableName.getDefaultInstance().getClass(),
-                    TableName.getDefaultInstance().getClass(),
-                    TableName.getDefaultInstance().getClass(),
+            final Table<TableName, TableName, TableName> table = store.openTable(
+                    namespace, tablename,
+                    TableName.class,
+                    TableName.class,
+                    TableName.class,
                     optionsBuilder.build());
 
             byte[] array = new byte[itemSize];
@@ -253,12 +255,12 @@ public class CorfuStoreBrowser {
             int itemsRemaining = numItems;
             while (itemsRemaining > 0) {
                 log.info("loadTable: Items left {}", itemsRemaining);
-                TxBuilder tx = store.tx(namespace);
+                TxnContext tx = store.txn(namespace);
                 for (int j = batchSize; j > 0 && itemsRemaining > 0; j--, itemsRemaining--) {
                     TableName dummyKey = TableName.newBuilder()
                             .setNamespace(Integer.toString(itemsRemaining))
                             .setTableName(Integer.toString(j)).build();
-                    tx.update(tablename, dummyKey, dummyVal, dummyVal);
+                    tx.put(table, dummyKey, dummyVal, dummyVal);
                 }
                 tx.commit();
             }
