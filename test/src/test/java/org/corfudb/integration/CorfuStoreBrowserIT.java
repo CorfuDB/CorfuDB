@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Paths;
 
+import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
 import org.junit.Assert;
 import org.junit.Before;
@@ -16,7 +17,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.test.SampleAppliance;
 import org.corfudb.test.SampleSchema;
 
@@ -79,13 +80,13 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
         CorfuStore store = new CorfuStore(runtime);
 
-        store.openTable(
-            namespace,
-            tableName,
-            SampleSchema.Uuid.class,
-            SampleSchema.Uuid.class,
-            SampleSchema.Uuid.class,
-            TableOptions.builder().build());
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.builder().build());
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
@@ -103,9 +104,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
             .setMsb(metadataUuid)
             .setLsb(metadataUuid)
             .build();
-        TxBuilder tx = store.tx(namespace);
-        tx.create(tableName, uuidKey, uuidVal, metadata)
-            .update(tableName, uuidKey, uuidVal, metadata)
+        TxnContext tx = store.txn(namespace);
+        tx.put(table1, uuidKey, uuidVal, metadata)
             .commit();
         runtime.shutdown();
 
@@ -180,13 +180,13 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         final long ruleIdVal = 50L;
         final long metaUuid = 100L;
 
-        store.openTable(
-            namespace,
-            tableName,
-            SampleSchema.Uuid.class,
-            SampleSchema.FirewallRule.class,
-            SampleSchema.Uuid.class,
-            TableOptions.builder().build());
+        final Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.Uuid> table = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.FirewallRule.class,
+                SampleSchema.Uuid.class,
+                TableOptions.builder().build());
 
         SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder().setLsb(keyUuid)
             .setMsb(keyUuid).build();
@@ -199,19 +199,18 @@ public class CorfuStoreBrowserIT extends AbstractIT {
             .build();
         SampleSchema.Uuid uuidMeta = SampleSchema.Uuid.newBuilder().setLsb(metaUuid)
             .setMsb(metaUuid).build();
-        TxBuilder tx = store.tx(namespace);
-        tx.create(tableName, uuidKey, firewallRuleVal, uuidMeta)
-            .update(tableName, uuidKey, firewallRuleVal, uuidMeta)
+        TxnContext tx = store.txn(namespace);
+        tx.put(table, uuidKey, firewallRuleVal, uuidMeta)
             .commit();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
-        CorfuTable table = browser.getTable(namespace, tableName);
+        CorfuTable table2 = browser.getTable(namespace, tableName);
         browser.printTable(namespace, tableName);
-        Assert.assertEquals(1, table.size());
+        Assert.assertEquals(1, table2.size());
 
-        for(Object obj : table.values()) {
+        for(Object obj : table2.values()) {
             CorfuDynamicRecord record = (CorfuDynamicRecord)obj;
             Assert.assertEquals(
                 UnknownFieldSet.newBuilder().build(),
@@ -243,7 +242,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
         CorfuStore store = new CorfuStore(runtime);
 
-        store.openTable(
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table = store.openTable(
                 namespace,
                 tableName,
                 SampleSchema.Uuid.class,
@@ -267,9 +266,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 .setMsb(metadataUuid)
                 .setLsb(metadataUuid)
                 .build();
-        TxBuilder tx = store.tx(namespace);
-        tx.create(tableName, uuidKey, uuidVal, metadata)
-                .update(tableName, uuidKey, uuidVal, metadata)
+        TxnContext tx = store.txn(namespace);
+        tx.put(table, uuidKey, uuidVal, metadata)
                 .commit();
         runtime.shutdown();
 
@@ -304,7 +302,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
         CorfuStore store = new CorfuStore(runtime);
 
-        store.openTable(
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table = store.openTable(
                 namespace,
                 tableName,
                 SampleSchema.Uuid.class,
@@ -328,10 +326,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 .setMsb(metadataUuid)
                 .setLsb(metadataUuid)
                 .build();
-        TxBuilder tx = store.tx(namespace);
-        tx.create(tableName, uuidKey, uuidVal, metadata)
-                .update(tableName, uuidKey, uuidVal, metadata)
-                .commit();
+        TxnContext tx = store.txn(namespace);
+        tx.put(table, uuidKey, uuidVal, metadata).commit();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
