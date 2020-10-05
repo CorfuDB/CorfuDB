@@ -177,8 +177,8 @@ public class SnapshotSender {
                 snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                 snapshotSyncTransferComplete(snapshotSyncEventId);
             } catch (Exception e) {
-                //todo: generate an event for discovery service
-                log.warn("While sending data, caught an exception. Will notify discovery service");
+                log.warn("Caught exception while sending data to standby.", e);
+                snapshotSyncCancel(snapshotSyncEventId, LogReplicationError.UNKNOWN);
             }
         }
     }

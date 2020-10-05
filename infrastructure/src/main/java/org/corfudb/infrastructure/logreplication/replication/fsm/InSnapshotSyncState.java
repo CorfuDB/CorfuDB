@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This class represents the InSnapshotSync state of the Log Replication State Machine.
- * <p>
+ *
  * In this state full logs are being synced to the remote cluster, based on a snapshot timestamp.
  */
 @Slf4j
@@ -49,12 +49,17 @@ public class InSnapshotSyncState implements LogReplicationState {
      */
     @Getter
     @VisibleForTesting
-    private SnapshotSender snapshotSender;
+    private final SnapshotSender snapshotSender;
 
     /**
      * A future on the send, in case we need to cancel the ongoing snapshot sync.
      */
     private Future<?> transmitFuture;
+
+    /**
+     * Indicates if the snapshot sync was forced by the caller (instead of determined by negotiation)
+     */
+    private boolean forcedSnapshotSync = false;
 
     /**
      * Constructor
@@ -76,7 +81,9 @@ public class InSnapshotSyncState implements LogReplicationState {
                 /*
                  Cancel ongoing snapshot sync, if it is still in progress.
                  */
-                cancelSnapshotSync("another snapshot sync request.");
+                setForcedSnapshotSync(event.getMetadata().isForcedSnapshotSync());
+                String cancelCause = forcedSnapshotSync ? "incoming forced snapshot sync." : "another snapshot sync request.";
+                cancelSnapshotSync(cancelCause);
 
                 /*
                  Set the id of the new snapshot sync request causing the transition.
@@ -84,8 +91,9 @@ public class InSnapshotSyncState implements LogReplicationState {
                  This will be taken onEntry of this state to initiate a snapshot send
                  for this given request.
                  */
-                setTransitionEventId(event.getEventID());
+                setTransitionEventId(event.getEventId());
                 snapshotSender.reset();
+                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
                 return this;
             case SNAPSHOT_SYNC_CONTINUE:
                 /*
@@ -95,16 +103,16 @@ public class InSnapshotSyncState implements LogReplicationState {
                  batch of updates for the current snapshot sync.
                  */
                 if (event.getMetadata().getRequestId() == transitionEventId) {
-                    log.debug("InSnapshotSync[{}] :: Continuation of snapshot sync for {}", transitionEventId, event.getEventID());
+                    log.debug("InSnapshotSync[{}] :: Continuation of snapshot sync for {}", transitionEventId, event.getEventId());
                     return this;
                 } else {
                     log.warn("Unexpected snapshot sync continue event {} when in snapshot sync state {}.",
-                            event.getEventID(), transitionEventId);
+                            event.getEventId(), transitionEventId);
                     throw new IllegalTransitionException(event.getType(), getType());
                 }
             case SNAPSHOT_TRANSFER_COMPLETE:
-                log.info("Snapshot Sync transfer is complete for {}", event.getEventID());
-                WaitSnapshotApplyState waitSnapshotApplyState = (WaitSnapshotApplyState) fsm.getStates().get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
+                log.info("Snapshot Sync transfer is complete for {}", event.getEventId());
+                WaitSnapshotApplyState waitSnapshotApplyState = (WaitSnapshotApplyState)fsm.getStates().get(LogReplicationStateType.WAIT_SNAPSHOT_APPLY);
                 waitSnapshotApplyState.setTransitionEventId(transitionEventId);
                 waitSnapshotApplyState.setBaseSnapshotTimestamp(snapshotSender.getBaseSnapshotTimestamp());
                 fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
@@ -127,12 +135,14 @@ public class InSnapshotSyncState implements LogReplicationState {
                     UUID newSnapshotSyncId = UUID.randomUUID();
                     log.debug("Starting new snapshot sync after cancellation id={}", newSnapshotSyncId);
                     inSnapshotSyncState.setTransitionEventId(newSnapshotSyncId);
+                    ((InSnapshotSyncState)inSnapshotSyncState).setForcedSnapshotSync(false);
                     snapshotSender.reset();
+                    fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
                     return inSnapshotSyncState;
                 }
 
                 log.warn("Sync Cancel for eventId {}, but running snapshot sync for {}",
-                        event.getEventID(), transitionEventId);
+                        event.getEventId(), transitionEventId);
                 return this;
             case REPLICATION_STOP:
                 /*
@@ -160,6 +170,7 @@ public class InSnapshotSyncState implements LogReplicationState {
             // If the transition is to itself, the snapshot sync is continuing, no need to reset the sender
             if (from != this) {
                 snapshotSender.reset();
+                fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
                 snapshotSyncTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
 
             }
@@ -179,15 +190,12 @@ public class InSnapshotSyncState implements LogReplicationState {
     }
 
     @Override
-    public UUID getTransitionEventId() {
-        return transitionEventId;
-    }
+    public UUID getTransitionEventId() { return transitionEventId; }
 
     /**
      * Force interruption of the ongoing snapshot sync task.
      *
      * @param cancelCause cancel cause description
-     * @return True, if the task was successfully canceled. False, otherwise
      */
     private void cancelSnapshotSync(String cancelCause) {
         snapshotSender.stop();
@@ -218,5 +226,9 @@ public class InSnapshotSyncState implements LogReplicationState {
                 Timer.builder("logreplication.sender.duration.seconds")
                         .tags("replication.type", "snapshot")
                         .register(registry));
+    }
+
+    public void setForcedSnapshotSync(boolean forced) {
+        forcedSnapshotSync = forced;
     }
 }

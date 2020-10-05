@@ -506,6 +506,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
                 LogReplicationClusterInfo.ClusterRole.ACTIVE, CORFU_PORT),
                 Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setNameFormat("fsm-worker").build()),
                 ackReader);
+        ackReader.startAckReader(fsm.getLogEntryReader());
         transitionObservable = fsm.getNumTransitions();
         transitionObservable.addObserver(this);
 
@@ -548,7 +549,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
         // Wait until the expected state
         while (waitUntilExpected) {
             if (fsm.getState().getType() == expectedState) {
-                return event.getEventID();
+                return event.getEventId();
             } else {
                 transitionAvailable.acquire();
             }
@@ -556,7 +557,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
 
         assertThat(fsm.getState().getType()).isEqualTo(expectedState);
 
-        return event.getEventID();
+        return event.getEventId();
     }
 
     /**

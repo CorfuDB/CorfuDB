@@ -97,7 +97,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Adapter for cluster discovery service
      */
     @Getter
-    private CorfuReplicationClusterManagerAdapter clusterManagerAdapter;
+    private final CorfuReplicationClusterManagerAdapter clusterManagerAdapter;
 
     /**
      * Defines the topology, which is discovered through the Cluster Manager
@@ -139,11 +139,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Callback to Log Replication Server upon topology discovery
      */
-    private CompletableFuture<CorfuInterClusterReplicationServerNode> serverCallback;
+    private final CompletableFuture<CorfuInterClusterReplicationServerNode> serverCallback;
 
     private CorfuInterClusterReplicationServerNode interClusterReplicationService;
 
-    private ServerContext serverContext;
+    private final ServerContext serverContext;
 
     private String localCorfuEndpoint;
 
@@ -154,7 +154,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private boolean shouldRun = true;
 
     @Getter
-    private volatile AtomicBoolean isLeader;
+    private final AtomicBoolean isLeader;
 
     private LogReplicationServer logReplicationServerHandler;
 
@@ -226,7 +226,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Process discovery event
      */
     public synchronized void processEvent(DiscoveryServiceEvent event) {
-        switch (event.type) {
+        switch (event.getType()) {
             case ACQUIRE_LOCK:
                 processLockAcquire();
                 break;
@@ -248,7 +248,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 break;
 
             default:
-                log.error("Invalid event type {}", event.type);
+                log.error("Invalid event type {}", event.getType());
                 break;
         }
     }
@@ -716,7 +716,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private void processEnforceSnapshotSync(DiscoveryServiceEvent event) {
         if (replicationManager == null || !isLeader.get()) {
-            log.warn("The current node is not the leader will skip doing the snapshot full sync");
+            log.warn("The current node is not the leader, will skip doing the " +
+                    "forced snapshot sync with id {}", event.getEventId());
             return;
         }
 
@@ -760,21 +761,26 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     }
 
     @Override
-    public void forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
+    public UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException {
         if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
             String errorStr = "The forceSnapshotSync command is not supported on standby cluster.";
             log.error(errorStr);
             throw new LogReplicationDiscoveryServiceException(errorStr);
         }
 
-        log.info("Received the forceSnapshotSync command.");
+        UUID forceSyncId = UUID.randomUUID();
+        log.info("Received the forceSnapshotSync command for standby cluster {}, forced sync id {}",
+                clusterId, forceSyncId);
 
-        /**
-         * write to the event to the event corfu table
-         */
+        // Write an force sync event to the logReplicationEventTable
         ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(System.currentTimeMillis() + " "+ clusterId).build();
-        ReplicationEvent event = ReplicationEvent.newBuilder().setClusterId(clusterId).setType(LogReplicationMetadata.ReplicationEventType.FORCE_SNAPSHOT_SYNC).build();
+        ReplicationEvent event = ReplicationEvent.newBuilder()
+                .setClusterId(clusterId)
+                .setEventId(forceSyncId.toString())
+                .setType(ReplicationEvent.ReplicationEventType.FORCE_SNAPSHOT_SYNC)
+                .build();
         getLogReplicationMetadataManager().updateLogReplicationEventTable(key, event);
+        return forceSyncId;
     }
 
     @Override

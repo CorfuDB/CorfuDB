@@ -1,8 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication;
 
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
@@ -19,30 +18,39 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
+
 @Slf4j
 public class LogReplicationAckReader {
-    private LogReplicationMetadataManager metadataManager;
-    private LogReplicationConfig config;
-    private CorfuRuntime runtime;
-    private String remoteClusterId;
+    private final LogReplicationMetadataManager metadataManager;
+    private final LogReplicationConfig config;
+    private final CorfuRuntime runtime;
+    private final String remoteClusterId;
+
     // Log tail when the current snapshot sync started.  We do not need to synchronize access to it because it will not
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
     private long baseSnapshotTimestamp;
 
+    // Flag for the periodic task. It will protect status table from overriding by the periodic task
+    // if current replication state is initialized or stopped
+    @Getter
+    private final AtomicBoolean ongoing;
+
     /*
      * Periodic Thread which reads the last Acked Timestamp and writes it to the metadata table
      */
-    private ScheduledExecutorService lastAckedTsPoller;
+    private final ScheduledExecutorService lastAckedTsPoller;
 
     /*
      * Interval at which the thread reads the last Acked Timestamp
      */
-    private static int ACKED_TS_READ_INTERVAL_SECONDS = 15;
+    private static final int ACKED_TS_READ_INTERVAL_SECONDS = 15;
 
-    private static int NO_REPLICATION_REMAINING_ENTRIES = 0;
+    private static final int NO_REPLICATION_REMAINING_ENTRIES = 0;
 
     /*
      * Last ack'd timestamp from Receiver
@@ -58,7 +66,7 @@ public class LogReplicationAckReader {
 
     private LogEntryReader logEntryReader;
 
-    private Lock lock = new ReentrantLock();
+    private final Lock lock = new ReentrantLock();
 
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfig config,
                                     CorfuRuntime runtime, String remoteClusterId) {
@@ -66,6 +74,7 @@ public class LogReplicationAckReader {
         this.config = config;
         this.runtime = runtime;
         this.remoteClusterId = remoteClusterId;
+        this.ongoing = new AtomicBoolean(true);
         lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader").build());
     }
@@ -327,19 +336,61 @@ public class LogReplicationAckReader {
         this.baseSnapshotTimestamp = baseSnapshotTimestamp;
     }
 
+    public void markSnapshotSyncInfoCompleted() {
+        lock.lock();
+        try {
+            metadataManager.updateSnapshotSyncInfo(remoteClusterId);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void markSnapshotSyncInfoOngoing(boolean forced, UUID eventId) {
+        lock.lock();
+        try {
+            long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
+            metadataManager.updateSnapshotSyncInfo(remoteClusterId, forced, eventId,
+                    baseSnapshotTimestamp, remainingEntriesToSend);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void markSyncStatusError() {
+        lock.lock();
+        try {
+            metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, LogReplicationMetadata.SyncStatus.ERROR);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void markSyncStatusStopped() {
+        lock.lock();
+        try {
+            metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, LogReplicationMetadata.SyncStatus.STOPPED);
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /**
      * Task which periodically updates the metadata table with replication completion percentage
      */
     private class TsPollingTask implements Runnable {
         @Override
         public void run() {
-            lock.lock();
-            try {
-                long remainingReplicationStatus = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                metadataManager.setReplicationRemainingEntries(remoteClusterId, remainingReplicationStatus,
-                        lastSyncType);
-            } finally {
-                lock.unlock();
+            if (ongoing.get()) {
+                lock.lock();
+                try {
+                    long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
+                    metadataManager.setReplicationStatusTable(remoteClusterId, remainingEntriesToSend,
+                            lastSyncType);
+                } finally {
+                    lock.unlock();
+                }
+            } else {
+                log.debug("Skip TsPollingTask, ongoing flag is false.");
             }
         }
     }

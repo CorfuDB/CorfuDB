@@ -488,20 +488,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         // Open Streams on Source
         openStreams(srcCorfuTables, srcDataRuntime, NUM_STREAMS);
 
-        // Open a dump table
-        CorfuTable<Long, Long> dumpDataTable = srcDataRuntime.getObjectsView()
-                .build()
-                .setStreamName("dumpData")
-                .setTypeToken(new TypeToken<CorfuTable<Long, Long>>() {
-                })
-                .setSerializer(Serializers.PRIMITIVE)
-                .open();
-
-        // Generate some dump data to enforce an empty snapshot transfer
-        for (long i = 0; i < NUM_KEYS; i++) {
-            dumpDataTable.put(i, i);
-        }
-
         // Verify no data on source
         log.debug("****** Verify No Data in Source Site");
         verifyNoData(srcCorfuTables);
@@ -1232,6 +1218,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
                                 .replicationConfig(config).localCorfuEndpoint(SOURCE_ENDPOINT).build(),
                 logReplicationMetadataManager,
                 sourceDataSender);
+        logReplicationSourceManager.getLogReplicationFSM().getAckReader().getOngoing().set(false);
 
         // Set Log Replication Source Manager so we can emulate the channel for data & control messages (required
         // for testing)
