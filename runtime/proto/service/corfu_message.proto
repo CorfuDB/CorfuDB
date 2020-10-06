@@ -22,9 +22,7 @@ message HeaderMsg {
   bool ignore_epoch = 8;
 }
 
-message RequestMsg {
-  HeaderMsg header = 1;
-
+message RequestPayloadMsg {
   oneof payload {
     // Base Requests
     PingRequestMsg ping_request = 10;
@@ -73,9 +71,7 @@ message RequestMsg {
   }
 }
 
-message ResponseMsg {
-  HeaderMsg header = 1;
-
+message ResponsePayloadMsg {
   oneof payload {
     // Base Responses
     PingResponseMsg ping_response = 10;
@@ -125,4 +121,14 @@ message ResponseMsg {
     // Server Error
     ServerErrorMsg server_error = 200;
   }
+}
+
+message RequestMsg {
+  HeaderMsg header = 1;
+  RequestPayloadMsg payload = 2;
+}
+
+message ResponseMsg {
+  HeaderMsg header = 1;
+  ResponsePayloadMsg payload = 2;
 }

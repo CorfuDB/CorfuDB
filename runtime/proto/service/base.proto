@@ -3,7 +3,7 @@ syntax = "proto3";
 package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime.proto.service";
 
-//TODO: Complete handshake (authenticate) message types
+//TODO: Complete handshake (authenticate) and version info message types
 
 message PingRequestMsg {
 }
