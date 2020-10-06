@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package org.corfudb.runtime;
-option java_package = "org.corfudb.runtime.protocol.proto";
+option java_package = "org.corfudb.runtime.proto.service";
 
 import "common.proto";
 

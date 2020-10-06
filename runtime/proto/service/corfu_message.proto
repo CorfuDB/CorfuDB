@@ -1,14 +1,14 @@
 syntax = "proto3";
 
 package org.corfudb.runtime;
-option java_package = "org.corfudb.runtime.protocol.proto";
+option java_package = "org.corfudb.runtime.proto.service";
 
 import "common.proto";
-import "base.proto";
-import "layout.proto";
-import "log_unit.proto";
-import "sequencer.proto";
-import "management.proto";
+import "service/base.proto";
+import "service/layout.proto";
+import "service/log_unit.proto";
+import "service/sequencer.proto";
+import "service/management.proto";
 import "server_errors.proto";
 
 message HeaderMsg {
@@ -41,7 +41,11 @@ message RequestMsg {
     BootstrapLayoutRequestMsg bootstrap_layout_request = 24;
 
     // Sequencer Requests
-    //TODO: Sequencer types here
+    TokenRequestMsg token_request = 30;
+    BootstrapSequencerRequestMsg bootstrap_sequencer_request = 31;
+    SequencerTrimRequestMsg sequencer_trim_request = 32;
+    SequencerMetricsRequestMsg sequencer_metrics_request = 33;
+    StreamsAddressRequestMsg streams_address_request = 34;
 
     // LogUnit Requests
     WriteLogRequestMsg write_log_request = 40;
@@ -88,7 +92,11 @@ message ResponseMsg {
     BootstrapLayoutResponseMsg bootstrap_layout_response = 24;
 
     // Sequencer Responses
-    //TODO: Sequencer types here
+    TokenResponseMsg token_response = 30;
+    BootstrapSequencerResponseMsg bootstrap_sequencer_response = 31;
+    SequencerTrimResponseMsg sequencer_trim_response = 32;
+    SequencerMetricsResponseMsg sequencer_metrics_response = 33;
+    StreamsAddressResponseMsg streams_address_response = 34;
 
     // LogUnit Responses
     WriteLogResponseMsg write_log_response = 40;

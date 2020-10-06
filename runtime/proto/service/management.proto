@@ -1,28 +1,17 @@
 syntax = "proto3";
 
 package org.corfudb.runtime;
-option java_package = "org.corfudb.runtime.protocol.proto";
+option java_package = "org.corfudb.runtime.proto.service";
 
 import "common.proto";
-
-message ConnectivityMapEntryMsg {
-  string key = 1;
-  string value = 2;
-}
-
-message NodeConnectivityMsg {
-  string endpoint = 1;
-  string connectivity_type = 2; //TODO: Use an enum instead of name()?
-  // List of ConnectivityMapEntryMsg
-  // List connectivity_map = 3;
-  int64 epoch = 4;
-}
+import "workflows.proto";
+import "node_connectivity.proto";
 
 message QueryNodeRequestMsg {
 }
 
 message QueryNodeResponseMsg {
-  // SequencerMetrics sequencer_metrics = 1;
+  SequencerMetricsMsg sequencer_metrics = 1;
   NodeConnectivityMsg node_connectivity = 2;
 }
 
@@ -56,34 +45,6 @@ message HealFailureResponseMsg {
   Type resp_type = 1;
 }
 
-message QueryWorkflowMsg {
-  UuidMsg workflow_id = 1;
-}
-
-message AddNodeWorkflowMsg {
-  string endpoint = 1;
-}
-
-message RemoveNodeWorkflowMsg {
-  string endpoint = 1;
-}
-
-message HealNodeWorkflowMsg {
-  string endpoint = 1;
-  int32 stripe_index = 2;
-  bool layout_server = 3;
-  bool sequencer_server = 4;
-  bool log_unit_server = 5;
-}
-
-message ForceRemoveNodeWorkflowMsg {
-  string endpoint = 1;
-}
-
-message RestoreRedundancyMergeSegmentsWorkflowMsg {
-  string endpoint = 1;
-}
-
 message OrchestratorRequestMsg {
   oneof payload {
     QueryWorkflowMsg query = 1;
@@ -93,14 +54,6 @@ message OrchestratorRequestMsg {
     ForceRemoveNodeWorkflowMsg force_remove_node = 5;
     RestoreRedundancyMergeSegmentsWorkflowMsg restore_redundancy_merge_segments = 6;
   }
-}
-
-message QueriedWorkflowMsg {
-  bool active = 1;
-}
-
-message CreatedWorkflowMsg {
-  UuidMsg workflow_id = 1;
 }
 
 message OrchestratorResponseMsg {

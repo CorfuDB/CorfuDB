@@ -1,67 +1,10 @@
 syntax = "proto3";
 
 package org.corfudb.runtime;
-option java_package = "org.corfudb.runtime.protocol.proto";
+option java_package = "org.corfudb.runtime.proto.service";
 
 import "common.proto";
-
-message DataRankMsg {
-  int64 rank = 1;
-  UuidMsg id = 2;
-}
-
-//TODO: Should we have separate message for each type?
-message LogUnitMetadataMsg {
-  oneof metadata {
-    DataRankMsg data_rank = 1;
-    // List of UUIDToLongPairs
-    // List backpointer_map = 2;
-    int64 global_address = 3;
-    int32 checkpoint_type = 4; //TODO: Use enum instead of integer value?
-    UuidMsg checkpoint_id = 5;
-    UuidMsg checkpointed_stream_id = 6;
-    int64 checkpointed_stream_start_log_address = 7;
-    UuidMsg client_id = 8;
-    UuidMsg thread_id = 9;
-    int64 epoch = 10;
-    int32 codec_type_id = 11; //TODO: Use enum instead of integer value?
-  }
-}
-
-//TODO: Adequate representation for LogData?
-// Types of LogData defined in DataType.java
-// Note: All metadata aware
-
-message LogDataEntryMsg {
-  // ListMsg metadata = 1;
-  bytes data = 2;
-}
-
-message LogDataEmptyMsg {
-  // ListMsg metadata = 1;
-}
-
-message LogDataHoleMsg {
-  // ListMsg metadata = 1;
-}
-
-message LogDataTrimmedMsg {
-  // ListMsg metadata = 1;
-}
-
-message LogDataRankOnlyMsg {
-  // ListMsg metadata = 1;
-}
-
-message LogDataMsg {
-  oneof payload {
-    LogDataEntryMsg log_data_entry = 1;
-    LogDataEmptyMsg log_data_empty = 2;
-    LogDataHoleMsg log_data_hole = 3;
-    LogDataTrimmedMsg log_data_trimmed = 4;
-    LogDataRankOnlyMsg log_data_rank_only = 5;
-  }
-}
+import "log_data.proto";
 
 message WriteLogRequestMsg {
   LogDataMsg log_data = 1;
@@ -71,7 +14,6 @@ message WriteLogResponseMsg {
 }
 
 message RangeWriteLogRequestMsg {
-  // Use ListMsg instead?
   repeated LogDataMsg log_data = 1;
 }
 
@@ -84,8 +26,7 @@ message ReadLogRequestMsg {
 }
 
 message ReadLogResponseMsg {
-  // List of LongToLogData pairs
-  // ListMsg response = 1;
+  repeated ReadResponseMsg response = 1;
 }
 
 message InspectAddressesRequestMsg {
@@ -97,7 +38,7 @@ message InspectAddressesResponseMsg {
 }
 
 message TrimLogRequestMsg {
-  // TokenMsg address = 1;
+  TokenMsg address = 1;
 }
 
 message TrimLogResponseMsg {
@@ -125,8 +66,8 @@ message TailRequestMsg {
 message TailResponseMsg {
   int64 epoch = 1;
   int64 log_tail = 2;
-  // List of UUIDToLongPairs
-  // List stream_tails = 3;
+  // Map of (UUID, Long) pairs
+  MapMsg stream_tails = 3;
 }
 
 message CompactRequestMsg {
@@ -146,8 +87,8 @@ message LogAddressSpaceRequestMsg {
 
 message LogAddressSpaceResponseMsg {
   int64 log_tail = 1;
-  // List of UUIDToStreamAddressPairs
-  // List address_map = 2;
+  // Map of (UUID, StreamAddressSpace) pairs
+  MapMsg address_map = 2;
 }
 
 message KnownAddressRequestMsg {

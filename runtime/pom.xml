@@ -33,6 +33,9 @@
                             <inputDirectories>
                                 <include>proto</include>
                             </inputDirectories>
+                            <includeDirectories>
+                                <include>proto</include>
+                            </includeDirectories>
                             <outputDirectory>
                                 target/generated-sources
                             </outputDirectory>

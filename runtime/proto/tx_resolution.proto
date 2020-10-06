@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto";
+
+import "common.proto";
+
+enum TokenType {
+  TOKEN_TYPE_INVALID = 0;
+  TX_NORMAL = 1;
+  TX_ABORT_CONFLICT = 2;
+  TX_ABORT_NEWSEQ = 3;
+  TX_ABORT_SEQ_OVERFLOW = 4;
+  TX_ABORT_SEQ_TRIM = 5;
+}
+
+message TxResolutionResponseMsg {
+  TokenType token_type = 1;
+  int64 address = 2;
+  bytes conflicting_key = 3;
+  UuidMsg conflicting_stream = 4;
+}
+
+message TxResolutionInfoMsg {
+  UuidMsg tx_id = 1;
+  TokenMsg snapshot_timestamp = 2;
+  MapMsg conflict_set = 3;
+  MapMsg write_conflict_params_set = 4;
+}

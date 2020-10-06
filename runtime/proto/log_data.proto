@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto";
+
+import "common.proto";
+
+message DataRankMsg {
+  int64 rank = 1;
+  UuidMsg id = 2;
+}
+
+enum CheckpointEntryType {
+  CHECKPOINT_ENTRY_TYPE_INVALID = 0;
+  START = 1;
+  CONTINUATION = 2;
+  END = 3;
+}
+
+enum CodecType {
+  CODEC_TYPE_INVALID = 0;
+  NONE = 1;
+  LZ4 = 2;
+  ZSTD = 3;
+}
+
+//TODO: Should we have separate message for each type?
+message LogUnitMetadataMsg {
+  oneof metadata {
+    DataRankMsg data_rank = 1;
+    // Map of (UUID, Long) pairs
+    MapMsg backpointer_map = 2;
+    int64 global_address = 3;
+    CheckpointEntryType checkpoint_type = 4;
+    UuidMsg checkpoint_id = 5;
+    UuidMsg checkpointed_stream_id = 6;
+    int64 checkpointed_stream_start_log_address = 7;
+    UuidMsg client_id = 8;
+    UuidMsg thread_id = 9;
+    int64 epoch = 10;
+    CodecType codec_type_id = 11;
+  }
+}
+
+// Types of LogData defined in DataType.java
+// Note: All metadata aware
+
+message LogDataEntryMsg {
+  repeated LogUnitMetadataMsg metadata = 1;
+  bytes data = 2; //TODO: Adequate representation for LogData payload?
+}
+
+message LogDataEmptyMsg {
+  repeated LogUnitMetadataMsg metadata = 1;
+}
+
+message LogDataHoleMsg {
+  repeated LogUnitMetadataMsg metadata = 1;
+}
+
+message LogDataTrimmedMsg {
+  repeated LogUnitMetadataMsg metadata = 1;
+}
+
+message LogDataRankOnlyMsg {
+  repeated LogUnitMetadataMsg metadata = 1;
+}
+
+message LogDataMsg {
+  oneof payload {
+    LogDataEntryMsg log_data_entry = 1;
+    LogDataEmptyMsg log_data_empty = 2;
+    LogDataHoleMsg log_data_hole = 3;
+    LogDataTrimmedMsg log_data_trimmed = 4;
+    LogDataRankOnlyMsg log_data_rank_only = 5;
+  }
+}
+
+message ReadResponseMsg {
+  int64 address = 1;
+  LogDataMsg log_data = 2;
+}
