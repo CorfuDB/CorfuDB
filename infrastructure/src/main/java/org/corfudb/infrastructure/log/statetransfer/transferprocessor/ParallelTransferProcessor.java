@@ -32,10 +32,23 @@ public class ParallelTransferProcessor {
     /**
      * A number of in-flight requests per one node.
      */
-    private static final int NUM_REQUESTS_PER_NODE = 5;
+    private final int batchesPerNode;
+
+    /**
+     * A Number of addresses per node.
+     */
+    private static final int DEFAULT_THROUGHPUT_PER_NODE = 500;
 
     public ParallelTransferProcessor(StateTransferBatchProcessor stateTransferBatchProcessor) {
         this.stateTransferBatchProcessor = stateTransferBatchProcessor;
+        this.batchesPerNode = 5;
+    }
+
+    public ParallelTransferProcessor(StateTransferBatchProcessor stateTransferBatchProcessor,
+                                     int batchSize) {
+        this.stateTransferBatchProcessor = stateTransferBatchProcessor;
+        verifyBatchSize(batchSize);
+        this.batchesPerNode = DEFAULT_THROUGHPUT_PER_NODE / batchSize;
     }
 
     private CompletableFuture<Void> handleNonTransferException(CompletableFuture<Void> futures,
@@ -43,6 +56,12 @@ public class ParallelTransferProcessor {
         CompletableFuture<Void> failedFuture = new CompletableFuture<>();
         failedFuture.completeExceptionally(ex);
         return CFUtils.allOfOrTerminateExceptionally(futures, failedFuture);
+    }
+
+    private void verifyBatchSize(int batchSize) {
+        if (batchSize <= 0 || batchSize > DEFAULT_THROUGHPUT_PER_NODE) {
+            throw new IllegalArgumentException("Illegal value for transfer batch size: " + batchSize);
+        }
     }
 
     private CompletableFuture<Void> handleBatchRequest(TransferBatchRequest request,
@@ -93,8 +112,8 @@ public class ParallelTransferProcessor {
             allFutures = handleNonTransferException(allFutures,
                     new IllegalArgumentException("Number of nodes should be > 0"));
         } else {
-            // The number of available permits is NUM_REQUESTS_PER_NODE * parFactor.
-            Semaphore semaphore = new Semaphore(parFactor * NUM_REQUESTS_PER_NODE, true);
+            // The number of available permits is batchesPerNode * parFactor.
+            Semaphore semaphore = new Semaphore(parFactor * batchesPerNode, true);
             while (iterator.hasNext() && !allFutures.isCompletedExceptionally()) {
                 try {
                     TransferBatchRequest request = iterator.next();

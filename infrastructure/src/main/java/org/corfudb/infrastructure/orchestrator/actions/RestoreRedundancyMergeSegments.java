@@ -455,7 +455,8 @@ public class RestoreRedundancyMergeSegments extends Action {
 
         // Create a parallel transfer processor for the committed transfer
         ParallelTransferProcessor parallelTransferProcessor =
-                new ParallelTransferProcessor(committedBatchProcessor);
+                new ParallelTransferProcessor(committedBatchProcessor, runtime.getParameters()
+                        .getBulkReadSize());
 
         // Create a state transfer manager
         StateTransferManager transferManager =
