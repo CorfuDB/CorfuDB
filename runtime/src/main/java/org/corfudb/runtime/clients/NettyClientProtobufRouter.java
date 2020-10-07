@@ -436,7 +436,6 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
         // if the main future is not completed.
         final CompletableFuture<T> cfTimeout =
                 CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
-        Request finalRequest = request;
         cfTimeout.exceptionally(e -> {
             // CFUtils.within() can wrap different kinds of exceptions in
             // CompletionException, just dealing with TimeoutException here since
@@ -445,7 +444,7 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
             if (e.getCause() instanceof TimeoutException) {
                 outstandingRequests.remove(thisRequest);
                 log.debug("sendRequestAndGetCompletable: Remove request {} to {} due to timeout! Request:{}",
-                        thisRequest, node, finalRequest.getHeader());
+                        thisRequest, node, request.getHeader());
             }
             return null;
         });
