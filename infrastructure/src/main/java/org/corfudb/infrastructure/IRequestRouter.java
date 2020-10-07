@@ -4,6 +4,7 @@ import io.netty.channel.ChannelHandlerContext;
 import java.util.List;
 import java.util.Optional;
 import org.corfudb.protocols.API;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUID;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
@@ -13,11 +14,14 @@ import org.corfudb.runtime.view.Layout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.corfudb.runtime.proto.service.CorfuMessage.*;
+
 public interface IRequestRouter {
 
     Logger log = LoggerFactory.getLogger(IRequestRouter.class);
 
     void sendResponse(Response response, ChannelHandlerContext ctx);
+    void sendResponse(ResponseMsg response, ChannelHandlerContext ctx);
 
     /**
      * Get the current epoch.
