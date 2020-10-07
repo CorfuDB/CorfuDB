@@ -25,6 +25,10 @@ import static org.corfudb.infrastructure.log.statetransfer.transferprocessor.Tra
 @Slf4j
 public class ParallelTransferProcessor {
     /**
+     * Default number of in-flight requests per node.
+     */
+    private static final int DEFAULT_NUM_INFLIGHT_REQUESTS = 5;
+    /**
      * A state transfer batch processor that performs the batch transfer.
      */
     private final StateTransferBatchProcessor stateTransferBatchProcessor;
@@ -32,36 +36,25 @@ public class ParallelTransferProcessor {
     /**
      * A number of in-flight requests per one node.
      */
-    private final int batchesPerNode;
-
-    /**
-     * A Number of addresses per node.
-     */
-    private static final int DEFAULT_THROUGHPUT_PER_NODE = 500;
+    private final int numberOfConcurrentRequests;
 
     public ParallelTransferProcessor(StateTransferBatchProcessor stateTransferBatchProcessor) {
         this.stateTransferBatchProcessor = stateTransferBatchProcessor;
-        this.batchesPerNode = 5;
+        this.numberOfConcurrentRequests = DEFAULT_NUM_INFLIGHT_REQUESTS;
     }
 
     public ParallelTransferProcessor(StateTransferBatchProcessor stateTransferBatchProcessor,
-                                     int batchSize) {
+                                     int numRequests) {
         this.stateTransferBatchProcessor = stateTransferBatchProcessor;
-        verifyBatchSize(batchSize);
-        this.batchesPerNode = DEFAULT_THROUGHPUT_PER_NODE / batchSize;
+        this.numberOfConcurrentRequests = numRequests;
     }
+
 
     private CompletableFuture<Void> handleNonTransferException(CompletableFuture<Void> futures,
                                                                Throwable ex) {
         CompletableFuture<Void> failedFuture = new CompletableFuture<>();
         failedFuture.completeExceptionally(ex);
         return CFUtils.allOfOrTerminateExceptionally(futures, failedFuture);
-    }
-
-    private void verifyBatchSize(int batchSize) {
-        if (batchSize <= 0 || batchSize > DEFAULT_THROUGHPUT_PER_NODE) {
-            throw new IllegalArgumentException("Illegal value for transfer batch size: " + batchSize);
-        }
     }
 
     private CompletableFuture<Void> handleBatchRequest(TransferBatchRequest request,
@@ -113,7 +106,7 @@ public class ParallelTransferProcessor {
                     new IllegalArgumentException("Number of nodes should be > 0"));
         } else {
             // The number of available permits is batchesPerNode * parFactor.
-            Semaphore semaphore = new Semaphore(parFactor * batchesPerNode, true);
+            Semaphore semaphore = new Semaphore(parFactor * numberOfConcurrentRequests, true);
             while (iterator.hasNext() && !allFutures.isCompletedExceptionally()) {
                 try {
                     TransferBatchRequest request = iterator.next();

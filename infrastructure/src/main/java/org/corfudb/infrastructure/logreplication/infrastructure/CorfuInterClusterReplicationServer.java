@@ -104,7 +104,7 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + " -k <seqcache>, --sequencer-cache-size=<seqcache>                         "
                     + "               The size of the sequencer's cache. [default: 250000].\n    "
                     + " -B <size> --batch-size=<size>                                            "
-                    + "              The read/write batch size used for data transfer operations [default: 100].\n"
+                    + "              The read/write batch size used for data transfer operations [default: 20].\n"
                     + " -R <retention>, --metadata-retention=<retention>                         "
                     + "              Maximum number of system reconfigurations (i.e. layouts)    "
                     + "retained for debugging purposes [default: 1000].\n"
