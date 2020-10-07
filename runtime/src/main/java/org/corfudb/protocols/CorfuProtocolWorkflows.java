@@ -1,5 +1,10 @@
 package org.corfudb.protocols;
 
+import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 import org.corfudb.runtime.proto.Workflows.AddNodeWorkflowMsg;
 import org.corfudb.runtime.proto.Workflows.CreatedWorkflowMsg;
 import org.corfudb.runtime.proto.Workflows.ForceRemoveNodeWorkflowMsg;
@@ -26,10 +31,18 @@ public class CorfuProtocolWorkflows {
                 .build();
     }
 
+    public static AddNodeRequest getAddNodeRequest(AddNodeWorkflowMsg msg) {
+        return new AddNodeRequest(msg.getEndpoint());
+    }
+
     public static RemoveNodeWorkflowMsg getRemoveNodeWorkflowMsg(String endpoint) {
         return RemoveNodeWorkflowMsg.newBuilder()
                 .setEndpoint(endpoint)
                 .build();
+    }
+
+    public static RemoveNodeRequest getRemoveNodeRequest(RemoveNodeWorkflowMsg msg)  {
+        return new RemoveNodeRequest(msg.getEndpoint());
     }
 
     public static HealNodeWorkflowMsg getHealNodeWorkflowMsg(String endpoint, int stripeIndex,
@@ -43,16 +56,33 @@ public class CorfuProtocolWorkflows {
                 .build();
     }
 
+    public static HealNodeRequest getHealNodeRequest(HealNodeWorkflowMsg msg) {
+        return new HealNodeRequest(msg.getEndpoint(),
+                msg.getLayoutServer(),
+                msg.getSequencerServer(),
+                msg.getLogUnitServer(),
+                msg.getStripeIndex());
+    }
+
     public static ForceRemoveNodeWorkflowMsg getForceRemoveNodeWorkflowMsg(String endpoint) {
         return ForceRemoveNodeWorkflowMsg.newBuilder()
                 .setEndpoint(endpoint)
                 .build();
     }
 
+    public static ForceRemoveNodeRequest getForceRemoveNodeRequest(ForceRemoveNodeWorkflowMsg msg) {
+        return new ForceRemoveNodeRequest(msg.getEndpoint());
+    }
+
     public static RestoreRedundancyMergeSegmentsWorkflowMsg getRestoreRedundancyMergeSegmentsWorkflowMsg(String endpoint) {
         return RestoreRedundancyMergeSegmentsWorkflowMsg.newBuilder()
                 .setEndpoint(endpoint)
                 .build();
+    }
+
+    public static RestoreRedundancyMergeSegmentsRequest getRestoreRedundancyMergeSegmentsRequest(
+            RestoreRedundancyMergeSegmentsWorkflowMsg msg) {
+        return new RestoreRedundancyMergeSegmentsRequest(msg.getEndpoint());
     }
 
     public static QueriedWorkflowMsg getQueriedWorkflowMsg(boolean active) {
