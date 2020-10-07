@@ -30,6 +30,7 @@ message RequestPayloadMsg {
     RestartRequestMsg restart_request = 12;
     ResetRequestMsg reset_request = 13;
     SealRequestMsg seal_request = 14;
+    VersionRequestMsg version_request = 15;
 
     // Layout Requests
     LayoutRequestMsg layout_request = 20;
@@ -79,6 +80,7 @@ message ResponsePayloadMsg {
     RestartResponseMsg restart_response = 12;
     ResetResponseMsg reset_response = 13;
     SealResponseMsg seal_response = 14;
+    VersionResponseMsg version_response = 15;
 
     // Layout Responses
     LayoutResponseMsg layout_response = 20;

@@ -27,14 +27,21 @@ message TokenMsg {
   int64 sequence = 2;
 }
 
+/**
+ * Sequencer metrics for a node.
+ */
 message SequencerMetricsMsg {
   enum SequencerStatus {
     INVALID = 0;
+    // Sequencer is in READY state, and can dispatch tokens.
     READY = 1;
+    // Sequencer is in a NOT_READY state.
     NOT_READY = 2;
+    // Unknown state.
     UNKNOWN = 3;
   }
 
+  // Ready state of a sequencer to determine its READY/NOT_READY state.
   SequencerStatus sequencer_status = 1;
 }
 
@@ -43,16 +50,37 @@ message LayoutMsg {
   string layout_json = 1;
 }
 
-//TODO: Why do we need NO_ADDRESSES?
+/**
+ * This class represents the space of all addresses belonging to a stream.
+ *
+ * A stream's address space is defined by:
+ *       1. The collection of all addresses that belong to this stream.
+ *       2. The trim mark (last trimmed address, i.e., an address that is no longer present and that was subsumed by
+ *       a checkpoint).
+ */
 message StreamAddressSpaceMsg {
-  int32 NO_ADDRESSES = 1;
+  //TODO: Why do we need NO_ADDRESSES?
+  int32 NO_ADDRESSES = 1; // For numeric types, the default value is zero.
+
+  // Holds the last trimmed address for this stream.
+  // Note: keeping the last trimmed address is required in order to properly set the stream tail on sequencer resets
+  // when a stream has been checkpointed and trimmed and there are no further updates to this stream.
   uint64 trim_mark = 2;
+
+  // Holds the complete map of addresses for this stream. (of type Roaring64NavigableMap)
   bytes address_map = 3;
 }
 
+/**
+ * This message represents a range of addresses for a stream.
+ * This is used to request the address map of a stream in
+ * a given boundary-- limits given by (end, start].
+ */
 message StreamAddressRangeMsg {
   UuidMsg stream_id = 1;
+  // Start is inclusive
   int64 start = 2;
+  // End is exclusive
   int64 end = 3;
 }
 

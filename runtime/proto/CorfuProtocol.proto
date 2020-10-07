@@ -21,6 +21,7 @@ enum MessageType {
   RESTART = 2;
   RESET = 3;
   SEAL = 4;
+  VERSION = 5;
 
   // Layout Message Types
   GET_LAYOUT = 10;

@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.API;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
@@ -118,6 +119,8 @@ public class BaseServer extends AbstractServer {
     }
 
     /**
+     * Remove this after Protobuf for RPC Completion
+     *
      * Respond to a version request message.
      *
      * @param msg   The incoming message
@@ -129,6 +132,21 @@ public class BaseServer extends AbstractServer {
         VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),
                                          serverContext.getNodeIdBase64());
         r.sendResponse(ctx, msg, new JSONPayloadMsg<>(vi, CorfuMsgType.VERSION_RESPONSE));
+    }
+
+    /**
+     * Respond to a version request message.
+     *
+     * @param req   The incoming message
+     * @param ctx   The channel context
+     * @param r     The server router.
+     */
+    @RequestHandler(type = CorfuProtocol.MessageType.VERSION)
+    private void getVersion(CorfuMessage.RequestMsg req, ChannelHandlerContext ctx, IRequestRouter r) {
+        VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),
+                serverContext.getNodeIdBase64());
+        CorfuMessage.ResponseMsg responseMsg = API.getVersionResponse(req.getHeader(), vi);
+        r.sendResponse(responseMsg, ctx);
     }
 
     /**

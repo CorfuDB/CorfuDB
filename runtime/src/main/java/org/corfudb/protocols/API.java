@@ -1,13 +1,20 @@
 package org.corfudb.protocols;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.Address;
+import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
 import org.corfudb.protocols.wireprotocol.NodeState;
+import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.protocols.wireprotocol.orchestrator.*;
+import org.corfudb.runtime.proto.service.Base;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.OrchestratorResponse;
 import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
@@ -209,6 +216,21 @@ public class API {
                 .setHeader(header)
                 .setError(error)
                 .setSealResponse(sealResponse)
+                .build();
+    }
+
+    public static CorfuMessage.ResponseMsg getVersionResponse(CorfuMessage.HeaderMsg headerMsg, VersionInfo vi){
+        final Gson parser = new GsonBuilder().create();
+        String payload = parser.toJson(vi);
+        Base.VersionResponseMsg versionResponseMsg = Base.VersionResponseMsg.newBuilder()
+                .setJsonPayloadMsg(payload)
+                .build();
+        CorfuMessage.ResponsePayloadMsg responsePayloadMsg = CorfuMessage.ResponsePayloadMsg.newBuilder()
+                .setVersionResponse(versionResponseMsg)
+                .build();
+        return CorfuMessage.ResponseMsg.newBuilder()
+                .setHeader(headerMsg)
+                .setPayload(responsePayloadMsg)
                 .build();
     }
 
