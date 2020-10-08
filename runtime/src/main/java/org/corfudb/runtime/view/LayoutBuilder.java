@@ -10,8 +10,11 @@ import org.corfudb.runtime.view.Layout.LayoutStripe;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A builder that allows us to make modifications to a layout and construct
@@ -328,36 +331,49 @@ public class LayoutBuilder {
 
     /**
      * Moves a responsive server to the top of the sequencer server list.
+     * Tries to avoid electing a log tail node if possible to have better load distribution.
      * If all have failed, throws exception.
      *
-     * @param endpoints a non null set of Strings representing failed endpoints
-     *
+     * @param excludedNodes a non null set of Strings representing excluded endpoints
      * @return this builder
-     *
-     * @throws LayoutModificationException is thrown if none of the sequencers in layout
-     *         can be moved to the top of sequencer server list due to being unresponsive
-     *         or a failed endpoint.
+     * @throws LayoutModificationException if none of the sequencers in the layout can be
+     *                                     moved to the top of sequencer server list due
+     *                                     to being unresponsive or a failed endpoint.
      */
-    public LayoutBuilder assignResponsiveSequencerAsPrimary(@NonNull Set<String> endpoints) {
+    public LayoutBuilder assignResponsiveSequencerAsPrimary(@NonNull Set<String> excludedNodes) {
+        LinkedList<String> modifiedSequencers = new LinkedList<>(layout.getSequencers());
+        Optional<String> primarySequencer = Optional.empty();
 
-        List<String> modifiedSequencerServers = new ArrayList<>(layout.getSequencers());
-        for (int i = 0; i < modifiedSequencerServers.size(); i++) {
-            String sequencerServer = modifiedSequencerServers.get(i);
+        // Consider only tail nodes in the last segment.
+        Set<String> logTails = layout.getLastSegment().getStripes().stream()
+                .map(LayoutStripe::getTailEndpoint)
+                .collect(Collectors.toSet());
 
-            // Add a sequencer server given sequencerServer is not already included in
-            // endpoints AND it is not included in the unresponsive nodes of the layout.
-            if (!endpoints.contains(sequencerServer) &&
-                !layout.getUnresponsiveServers().contains(sequencerServer)) {
-                modifiedSequencerServers.remove(sequencerServer);
-                modifiedSequencerServers.add(0, sequencerServer);
-                layout.setSequencers(modifiedSequencerServers);
-                return this;
+        // Elect a sequencer server as primary given that server is not already included
+        // in excludedNodes AND it is not included in the unresponsive nodes of the layout.
+        // Non log tail servers have high priority to be elected for better load distribution.
+        for (String sequencer : modifiedSequencers) {
+            if (excludedNodes.contains(sequencer) ||
+                    layout.getUnresponsiveServers().contains(sequencer)) {
+                continue;
+            }
+            primarySequencer = Optional.of(sequencer);
+            if (!logTails.contains(sequencer)) {
+                break;
             }
         }
 
+        if (primarySequencer.isPresent()) {
+            modifiedSequencers.remove(primarySequencer.get());
+            modifiedSequencers.addFirst(primarySequencer.get());
+            layout.setSequencers(modifiedSequencers);
+            return this;
+        }
+
         log.warn("Failover to a responsive sequencer server failed. Each of the layout " +
-                 "sequencers:{} is either a failed endpoint or an unresponsive server",
-                 modifiedSequencerServers.toString());
+                        "sequencers:{} is either a failed endpoint or an unresponsive server",
+                modifiedSequencers.toString());
+
         throw new LayoutModificationException("All sequencers failed.");
     }
 
