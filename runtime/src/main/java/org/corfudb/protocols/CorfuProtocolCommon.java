@@ -1,7 +1,9 @@
 package org.corfudb.protocols;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.proto.Common.LayoutMsg;
+import org.corfudb.runtime.proto.Common.TokenMsg;
 import org.corfudb.runtime.proto.Common.UuidMsg;
 import org.corfudb.runtime.view.Layout;
 
@@ -28,5 +30,12 @@ public class CorfuProtocolCommon {
 
     public static Layout getLayout(LayoutMsg layoutMsg) {
         return Layout.fromJSONString(layoutMsg.getLayoutJson());
+    }
+
+    public static TokenMsg getTokenMsg(Token token) {
+        return TokenMsg.newBuilder()
+                .setEpoch(token.getEpoch())
+                .setSequence(token.getSequence())
+                .build();
     }
 }
