@@ -1,11 +1,12 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
+import io.micrometer.core.instrument.Tag;
 import lombok.extern.slf4j.Slf4j;
-
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
@@ -16,7 +17,7 @@ import java.util.UUID;
 /**
  * This class is responsible of managing the transmission of log entries,
  * i.e, reading and sending incremental updates to a remote cluster.
- *
+ * <p>
  * It reads log entries from the datastore through the LogEntryReader, and sends them
  * through LogReplicationSenderBuffer.
  */
@@ -28,9 +29,9 @@ public class LogEntrySender {
      */
     private LogEntryReader logEntryReader;
 
-   /*
-    * Implementation of buffering messages and sending/resending messages
-    */
+    /*
+     * Implementation of buffering messages and sending/resending messages
+     */
     private SenderBufferManager dataSenderBufferManager;
 
     /*
@@ -52,10 +53,10 @@ public class LogEntrySender {
     /**
      * Constructor
      *
-     * @param logEntryReader log entry logreader implementation
-     * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
-     *                   the application callback for data transmission
-     * @param readProcessor post read processing logic
+     * @param logEntryReader    log entry logreader implementation
+     * @param dataSender        implementation of a data sender, both snapshot and log entry, this represents
+     *                          the application callback for data transmission
+     * @param readProcessor     post read processing logic
      * @param logReplicationFSM log replication FSM to insert events upon message acknowledgement
      */
     public LogEntrySender(LogEntryReader logEntryReader, DataSender dataSender,
@@ -100,9 +101,15 @@ public class LogEntrySender {
              */
             try {
                 message = logEntryReader.read(logEntrySyncEventId);
-
                 if (message != null) {
-                    dataSenderBufferManager.sendWithBuffering(message);
+                    if (MeterRegistryProvider.getInstance().isPresent()) {
+                        dataSenderBufferManager.sendWithBuffering(message, "logreplication.sender.duration.seconds",
+                                Tag.of("replication.type", "logentry"));
+                    }
+                    else {
+                        dataSenderBufferManager.sendWithBuffering(message);
+                    }
+
                 } else {
                     /*
                      * If no message is returned we can break out and enqueue a CONTINUE, so other processes can
@@ -137,6 +144,7 @@ public class LogEntrySender {
 
     /**
      * Generate a CancelLogEntrySync Event due to error.
+     *
      * @param error
      * @param transition
      * @param logEntrySyncEventId

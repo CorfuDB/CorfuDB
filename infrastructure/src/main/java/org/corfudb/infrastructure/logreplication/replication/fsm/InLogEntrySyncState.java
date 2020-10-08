@@ -20,7 +20,6 @@ public class InLogEntrySyncState implements LogReplicationState {
      * Log Replication State Machine, used to insert internal events into the queue.
      */
     private final LogReplicationFSM fsm;
-
     /**
      * Log Entry Sender, used to read and send incremental updates.
      */
@@ -149,8 +148,8 @@ public class InLogEntrySyncState implements LogReplicationState {
             if (from.getType() == LogReplicationStateType.WAIT_SNAPSHOT_APPLY) {
                 fsm.getAckReader().markSnapshotSyncInfoCompleted();
             }
-
-            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() -> logEntrySender.send(transitionEventId));
+            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() ->
+                    logEntrySender.send(transitionEventId));
 
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
