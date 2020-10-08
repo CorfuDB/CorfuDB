@@ -1,8 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
-import com.google.common.collect.ImmutableList;
 import io.micrometer.core.instrument.Tag;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
@@ -14,9 +12,7 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.Read
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
-import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * This class is responsible of managing the transmission of log entries,

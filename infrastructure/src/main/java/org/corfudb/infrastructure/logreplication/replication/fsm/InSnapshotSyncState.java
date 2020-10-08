@@ -29,8 +29,6 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     private final Optional<AtomicLong> snapshotSyncAcksCounter;
 
-    private final Optional<Timer> senderTimer;
-
     private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
 
     /**
@@ -71,7 +69,6 @@ public class InSnapshotSyncState implements LogReplicationState {
         this.fsm = logReplicationFSM;
         this.snapshotSender = snapshotSender;
         this.snapshotSyncAcksCounter = configureSnapshotSyncCounter();
-        this.senderTimer = configureTransmitTimer();
     }
 
     @Override
@@ -213,16 +210,8 @@ public class InSnapshotSyncState implements LogReplicationState {
 
     private Optional<AtomicLong> configureSnapshotSyncCounter() {
         return MeterRegistryProvider.getInstance()
-                .map(registry -> registry.gauge("logreplication.completed.count",
-                        ImmutableList.of(Tag.of("replication.type", "snapshot")),
+                .map(registry -> registry.gauge("logreplication.snapshot.completed.count",
                         new AtomicLong(0)));
-    }
-
-    private Optional<Timer> configureTransmitTimer() {
-        return MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder("logreplication.sender.duration.seconds")
-                        .tags("replication.type", "snapshot")
-                        .register(registry));
     }
 
     public void setForcedSnapshotSync(boolean forced) {
