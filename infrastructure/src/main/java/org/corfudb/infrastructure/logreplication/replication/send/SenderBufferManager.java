@@ -1,9 +1,12 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
 import com.google.common.collect.ImmutableList;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
@@ -174,12 +177,33 @@ public abstract class SenderBufferManager {
         return cf;
     }
 
-    public List<CompletableFuture<LogReplicationEntry>> sendWithBuffering(List<LogReplicationEntry> dataToSend) {
+    public CompletableFuture<LogReplicationEntry> sendWithBuffering(LogReplicationEntry message,
+                                                                    String metricName,
+                                                                    Tag replicationTag) {
+        message.getMetadata().setSnapshotSyncSeqNum(snapshotSyncSequenceNumber++);
+        pendingMessages.append(message);
+        Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
+        CompletableFuture<LogReplicationEntry> future = dataSender.send(message);
+        CompletableFuture<LogReplicationEntry> cf = sample.map(s -> timeEntrySend(s, future, metricName, replicationTag))
+                .orElse(future);
+        addCFToAcked(message, cf);
+        return cf;
+    }
+
+    public void sendWithBuffering(List<LogReplicationEntry> dataToSend) {
         if (dataToSend.isEmpty()) {
-            return ImmutableList.of();
+            return;
         }
 
-        return dataToSend.stream().map(this::sendWithBuffering).collect(ImmutableList.toImmutableList());
+        dataToSend.forEach(this::sendWithBuffering);
+    }
+
+    public void sendWithBuffering(List<LogReplicationEntry> dataToSend, String metricName, Tag replicationTag) {
+        if (dataToSend.isEmpty()) {
+            return;
+        }
+
+        dataToSend.stream().forEach(entry -> sendWithBuffering(entry, metricName, replicationTag));
     }
 
     /**
@@ -206,7 +230,7 @@ public abstract class SenderBufferManager {
         }
 
         for (int i = 0; i < pendingMessages.getSize(); i++) {
-            LogReplicationPendingEntry entry  = pendingMessages.getPendingEntries().get(i);
+            LogReplicationPendingEntry entry = pendingMessages.getPendingEntries().get(i);
             if (entry.timeout(msgTimer) || force) {
                 entry.retry();
                 // Update metadata as topologyConfigId could have changed in between resend cycles
@@ -250,5 +274,29 @@ public abstract class SenderBufferManager {
 
     public void updateTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
+    }
+
+    private CompletableFuture<LogReplicationEntry> timeEntrySend(Timer.Sample sample,
+                                                                CompletableFuture<LogReplicationEntry> entryFuture,
+                                                                String metricName, Tag replicationTag) {
+        Tag successTag = Tag.of("status", "success");
+        Tag failedTag = Tag.of("status", "fail");
+        return MeterRegistryProvider
+                .getInstance()
+                .map(registry -> {
+                    CompletableFuture<LogReplicationEntry> future = new CompletableFuture<>();
+                    entryFuture.whenComplete((entry, err) -> {
+                        if (entry != null) {
+                            sample.stop(registry.timer(metricName,
+                                    ImmutableList.of(replicationTag, successTag)));
+                            future.complete(entry);
+                        } else {
+                            sample.stop(registry.timer(metricName,
+                                    ImmutableList.of(replicationTag, failedTag)));
+                            future.completeExceptionally(err);
+                        }
+                    });
+                    return future;
+                }).orElse(entryFuture);
     }
 }

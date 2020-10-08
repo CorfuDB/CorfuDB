@@ -106,11 +106,14 @@ public class LogEntrySender {
             try {
                 message = logEntryReader.read(logEntrySyncEventId);
                 if (message != null) {
-                    Optional<Timer.Sample> sample =
-                            MeterRegistryProvider.getInstance().map(Timer::start);
-                    CompletableFuture<LogReplicationEntry> senderFuture =
-                            dataSenderBufferManager.sendWithBuffering(message);
-                    recordSampleStopWhenFutureCompletes(senderFuture, sample);
+                    if (MeterRegistryProvider.getInstance().isPresent()) {
+                        dataSenderBufferManager.sendWithBuffering(message, "logreplication.sender.duration.seconds",
+                                Tag.of("replication.type", "logentry"));
+                    }
+                    else {
+                        dataSenderBufferManager.sendWithBuffering(message);
+                    }
+
                 } else {
                     /*
                      * If no message is returned we can break out and enqueue a CONTINUE, so other processes can
@@ -167,25 +170,5 @@ public class LogEntrySender {
 
     public void updateTopologyConfigId(long topologyConfigId) {
         dataSenderBufferManager.updateTopologyConfigId(topologyConfigId);
-    }
-
-    void recordSampleStopWhenFutureCompletes(CompletableFuture<LogReplicationEntry> entryFuture,
-                                             Optional<Timer.Sample> sample) {
-        MeterRegistryProvider
-                .getInstance()
-                .ifPresent(registry -> entryFuture.whenComplete((entry, err) ->
-                        sample.ifPresent(s -> {
-                            String metricName = "logreplication.sender.duration.seconds";
-                            Tag logentryTag = Tag.of("replication.type", "logentry");
-                            Tag successTag = Tag.of("status", "success");
-                            Tag failedTag = Tag.of("status", "fail");
-                            if (entry != null) {
-                                s.stop(registry.timer(metricName,
-                                        ImmutableList.of(logentryTag, successTag)));
-                            } else {
-                                s.stop(registry.timer(metricName,
-                                        ImmutableList.of(logentryTag, failedTag)));
-                            }
-                        })));
     }
 }

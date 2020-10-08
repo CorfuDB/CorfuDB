@@ -195,17 +195,15 @@ public class SnapshotSender {
             numMessages++;
         }
 
-        Optional<List<Timer.Sample>> samples = MeterRegistryProvider
-                .getInstance()
-                .map(registry -> IntStream.range(0, logReplicationEntries.size())
-                        .boxed()
-                        .map(i -> Timer.start(registry))
-                        .collect(ImmutableList.toImmutableList()));
 
-        List<CompletableFuture<LogReplicationEntry>> futures =
-                dataSenderBufferManager.sendWithBuffering(logReplicationEntries);
-
-        recordSamplesStopWhenFuturesComplete(futures, samples);
+        if (MeterRegistryProvider.getInstance().isPresent()) {
+            dataSenderBufferManager.sendWithBuffering(logReplicationEntries,
+                    "logreplication.sender.duration.seconds",
+                    Tag.of("replication.type", "snapshot"));
+        }
+        else {
+            dataSenderBufferManager.sendWithBuffering(logReplicationEntries);
+        }
 
         // If Snapshot is complete, add end marker
         if (completed) {
@@ -293,32 +291,5 @@ public class SnapshotSender {
 
     public void updateTopologyConfigId(long topologyConfigId) {
         dataSenderBufferManager.updateTopologyConfigId(topologyConfigId);
-    }
-
-    void recordSamplesStopWhenFuturesComplete(List<CompletableFuture<LogReplicationEntry>> entryFutures,
-                                              Optional<List<Timer.Sample>> samples) {
-        MeterRegistryProvider
-                .getInstance()
-                .ifPresent(registry ->
-                        samples.ifPresent(sampleList -> {
-                            String metricName = "logreplication.sender.duration.seconds";
-                            Tag snapshotTag = Tag.of("replication.type", "snapshot");
-                            Tag successTag = Tag.of("status", "success");
-                            Tag failedTag = Tag.of("status", "fail");
-
-                            IntStream.range(0, entryFutures.size()).boxed().forEach(index -> {
-                                CompletableFuture<LogReplicationEntry> entry = entryFutures.get(index);
-                                Timer.Sample sample = sampleList.get(index);
-                                entry.whenComplete((e, err) -> {
-                                    if (e != null) {
-                                        sample.stop(registry.timer(metricName,
-                                                ImmutableList.of(snapshotTag, successTag)));
-                                    } else {
-                                        sample.stop(registry.timer(metricName,
-                                                ImmutableList.of(snapshotTag, failedTag)));
-                                    }
-                                });
-                            });
-                        }));
     }
 }
