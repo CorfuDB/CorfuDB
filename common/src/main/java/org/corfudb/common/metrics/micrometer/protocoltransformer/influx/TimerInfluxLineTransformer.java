@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
  * and transforms them into the InfluxDb line protocol.
  */
 public class TimerInfluxLineTransformer implements InfluxLineProtocolTransformer {
-    static final String TIMER_PATTERN_STRING =
+    protected static final String TIMER_PATTERN_STRING =
             METRIC_PATTERN_STRING + " (throughput=[\\d]+/s mean=[\\d.]+s max=[\\d.]+s)$";
     private final Pattern timerPattern = Pattern.compile(TIMER_PATTERN_STRING);
     private Optional<Matcher> matched = Optional.empty();

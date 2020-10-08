@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
  * and transforms them into the InfluxDb line protocol.
  */
 public class LongRunningTaskInfluxLineTransformer implements InfluxLineProtocolTransformer {
-    static final String LONG_RUNNING_TASK_PATTERN_STRING =
+    protected static final String LONG_RUNNING_TASK_PATTERN_STRING =
             METRIC_PATTERN_STRING + " (active=1 [a-z]+ duration=[\\d.]+s)$";
     private final Pattern longRunningTaskPattern = Pattern.compile(LONG_RUNNING_TASK_PATTERN_STRING);
     private Optional<Matcher> matched = Optional.empty();

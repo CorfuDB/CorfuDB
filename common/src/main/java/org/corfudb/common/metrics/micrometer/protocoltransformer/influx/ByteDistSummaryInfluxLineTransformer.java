@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  * and transforms them into the InfluxDb line protocol.
  */
 public class ByteDistSummaryInfluxLineTransformer implements InfluxLineProtocolTransformer {
-    static final String BYTE_DIST_SUMMARY_PATTERN_STRING =
+    protected static final String BYTE_DIST_SUMMARY_PATTERN_STRING =
             PatternMatcher.METRIC_PATTERN_STRING +
                     " (throughput=[\\d]+/s mean=[\\d.]+ [KMGTPE]iB max=[\\d.]+ [KMGTPE]iB)$";
     private final Pattern byteDistSummaryPattern = Pattern.compile(BYTE_DIST_SUMMARY_PATTERN_STRING);

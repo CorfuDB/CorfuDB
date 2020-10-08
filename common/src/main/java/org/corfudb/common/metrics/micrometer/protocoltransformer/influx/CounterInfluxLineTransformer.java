@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  * and transforms them into the InfluxDb line protocol.
  */
 public class CounterInfluxLineTransformer implements InfluxLineProtocolTransformer {
-    static final String COUNTER_PATTERN_STRING = PatternMatcher.METRIC_PATTERN_STRING + " (throughput=[\\d]+/s)$";
+    protected static final String COUNTER_PATTERN_STRING = PatternMatcher.METRIC_PATTERN_STRING + " (throughput=[\\d]+/s)$";
     private final Pattern counterPattern = Pattern.compile(COUNTER_PATTERN_STRING);
     private Optional<Matcher> matched = Optional.empty();
 
