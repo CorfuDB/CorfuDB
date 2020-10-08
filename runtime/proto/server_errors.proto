@@ -42,9 +42,8 @@ message BootstrappedErrorMsg {
 message NotBootstrappedErrorMsg {
 }
 
-//TODO: Best representation for Throwable? byte[]? Or something more defined?
 message UnknownErrorMsg {
-
+  bytes throwable = 1;
 }
 
 message ServerErrorMsg {

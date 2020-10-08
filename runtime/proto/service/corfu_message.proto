@@ -11,6 +11,18 @@ import "service/sequencer.proto";
 import "service/management.proto";
 import "server_errors.proto";
 
+//TODO: Reasonable way to determine version?
+enum ProtocolVersion {
+  PROTOCOL_VERSION_INVALID = 0;
+  V0 = 1;
+}
+
+enum PriorityLevel {
+  PRIORITY_LEVEL_INVALID = 0;
+  NORMAL = 1;
+  HIGH = 2;
+}
+
 message HeaderMsg {
   ProtocolVersion version = 1;
   int64 request_id = 2;

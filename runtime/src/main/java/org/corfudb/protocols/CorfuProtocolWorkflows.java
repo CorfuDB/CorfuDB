@@ -1,8 +1,10 @@
 package org.corfudb.protocols;
 
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
+import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
 import org.corfudb.runtime.proto.Workflows.AddNodeWorkflowMsg;
@@ -91,9 +93,17 @@ public class CorfuProtocolWorkflows {
                 .build();
     }
 
+    public static QueryResponse getQueryResponse(QueriedWorkflowMsg msg) {
+        return new QueryResponse(msg.getActive());
+    }
+
     public static CreatedWorkflowMsg getCreatedWorkflowMsg(UUID workflowId) {
         return CreatedWorkflowMsg.newBuilder()
                 .setWorkflowId(getUuidMsg(workflowId))
                 .build();
+    }
+
+    public static CreateWorkflowResponse getCreateWorkflowResponse(CreatedWorkflowMsg msg) {
+        return new CreateWorkflowResponse(getUUID(msg.getWorkflowId()));
     }
 }

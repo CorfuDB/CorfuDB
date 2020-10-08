@@ -5,18 +5,6 @@ option java_package = "org.corfudb.runtime.proto";
 
 import "google/protobuf/any.proto";
 
-//TODO: Reasonable way to determine version?
-enum ProtocolVersion {
-  PROTOCOL_VERSION_INVALID = 0;
-  V0 = 1;
-}
-
-enum PriorityLevel {
-  PRIORITY_LEVEL_INVALID = 0;
-  NORMAL = 1;
-  HIGH = 2;
-}
-
 message UuidMsg {
   int64 lsb = 1;
   int64 msb = 2;
@@ -59,16 +47,13 @@ message LayoutMsg {
  *       a checkpoint).
  */
 message StreamAddressSpaceMsg {
-  //TODO: Why do we need NO_ADDRESSES?
-  int32 NO_ADDRESSES = 1; // For numeric types, the default value is zero.
-
   // Holds the last trimmed address for this stream.
   // Note: keeping the last trimmed address is required in order to properly set the stream tail on sequencer resets
   // when a stream has been checkpointed and trimmed and there are no further updates to this stream.
-  uint64 trim_mark = 2;
+  uint64 trim_mark = 1;
 
   // Holds the complete map of addresses for this stream. (of type Roaring64NavigableMap)
-  bytes address_map = 3;
+  bytes address_map = 2;
 }
 
 /**
@@ -82,16 +67,6 @@ message StreamAddressRangeMsg {
   int64 start = 2;
   // End is exclusive
   int64 end = 3;
-}
-
-// Used to store KVPs -- See pairs below
-message MapMsg {
-  repeated google.protobuf.Any key_value_pair = 1;
-}
-
-message UuidToListOfBytesPairMsg {
-  UuidMsg key = 1;
-  repeated bytes value = 2;
 }
 
 message UuidToLongPairMsg {

@@ -3,14 +3,28 @@ syntax = "proto3";
 package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime.proto";
 
+enum NodeConnectivityType {
+  NODE_CONNECTIVITY_TYPE_INVALID = 0;
+  NOT_READY = 1;
+  CONNECTED = 2;
+  UNAVAILABLE = 3;
+}
+
+enum ConnectionStatus {
+  CONNECTION_STATUS_INVALID = 0;
+  OK = 1;
+  FAILED = 2;
+}
+
 message ConnectivityEntryMsg {
   string node = 1;
-  string status = 2;
+  ConnectionStatus status = 2;
 }
+
 
 message NodeConnectivityMsg {
   string endpoint = 1;
-  string connectivity_type = 2;
+  NodeConnectivityType connectivity_type = 2;
   repeated ConnectivityEntryMsg connectivity_info = 3;
   int64 epoch = 4;
 }

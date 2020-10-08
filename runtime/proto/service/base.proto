@@ -3,7 +3,7 @@ syntax = "proto3";
 package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime.proto.service";
 
-//TODO: Complete handshake (authenticate) and version info message types
+import "common.proto";
 
 message PingRequestMsg {
 }
@@ -12,11 +12,13 @@ message PingResponseMsg {
 }
 
 message AuthenticateRequestMsg {
-
+  UuidMsg client_id = 1;
+  UuidMsg server_id = 2;
 }
 
 message AuthenticateResponseMsg {
-
+  UuidMsg server_id = 1;
+  string corfu_version = 2;
 }
 
 message RestartRequestMsg {
@@ -43,5 +45,5 @@ message VersionRequestMsg {
 }
 
 message VersionResponseMsg {
-    string jsonPayloadMsg = 1;
+    string json_payload_msg = 1;
 }

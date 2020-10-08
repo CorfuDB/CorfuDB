@@ -5,40 +5,9 @@ option java_package = "org.corfudb.runtime.proto";
 
 import "common.proto";
 
-enum TokenType {
-  TOKEN_TYPE_INVALID = 0;
-
-  // Standard token issue by sequencer or a tail-query response
-  TX_NORMAL = 1;
-
-  // Token request for optimistic TX-commit rejected due to conflict
-  TX_ABORT_CONFLICT = 2;
-
-  // Token request for optimistic TX-commit rejected due to a
-  // failover-sequencer lacking conflict-resolution info
-  TX_ABORT_NEWSEQ = 3;
-
-  // Sent when a transaction aborts a transaction due to missing information
-  // (required data evicted from cache)
-  TX_ABORT_SEQ_OVERFLOW = 4;
-
-  // Sent when a transaction aborts because it has an old version (i.e. older than
-  // the trim mark). This is to detect slow transactions
-  TX_ABORT_SEQ_TRIM = 5;
-}
-
-message TxResolutionResponseMsg {
-  /* Response type from the sequencer.*/
-  TokenType token_type = 1;
-
-  /* Optional. In case of a conflict, what was the address at which that conflict occurred. */
-  int64 address = 2;
-
-  /* Optional. In case of a conflict, what was the key that triggered a negative response. */
-  bytes conflicting_key = 3;
-
-  /* Optional. In case of a conflict, what was the stream ID that triggered a negative response. */
-  UuidMsg conflicting_stream = 4;
+message UuidToListOfBytesPairMsg {
+  UuidMsg key = 1;
+  repeated bytes value = 2;
 }
 
 message TxResolutionInfoMsg {
@@ -49,6 +18,6 @@ message TxResolutionInfoMsg {
   TokenMsg snapshot_timestamp = 2;
 
   /** A set of poisoned streams, which have a conflict against all updates. */
-  MapMsg conflict_set = 3;
-  MapMsg write_conflict_params_set = 4;
+  repeated UuidToListOfBytesPairMsg conflict_set = 3;
+  repeated UuidToListOfBytesPairMsg write_conflict_params_set = 4;
 }
