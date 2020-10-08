@@ -43,6 +43,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This class represents the Log Replication Discovery Service.
@@ -136,6 +137,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
 
     private Optional<LongTaskTimer.Sample> lockAcquireSample = Optional.empty();
+
+    private final Map<ClusterRole, AtomicLong> lockAcquisitionsByRole = new HashMap<>();
     /**
      * Callback to Log Replication Server upon topology discovery
      */
@@ -455,6 +458,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 replicationManager.setTopology(topologyDescriptor);
                 replicationManager.start();
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
+                processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;
             case STANDBY:
                 // Standby Site : the LogReplicationServer (server handler) will initiate the LogReplicationSinkManager
@@ -462,6 +466,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 interClusterReplicationService.getLogReplicationServer().getSinkManager().reset();
                 interClusterReplicationService.getLogReplicationServer().setLeadership(true);
                 lockAcquireSample = recordLockAcquire(localClusterDescriptor.getRole());
+                processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;
             default:
                 log.error("Log Replication not started on this cluster. Leader node {} belongs to cluster with {} role.",
@@ -536,7 +541,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         stopLogReplication();
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
         interClusterReplicationService.getLogReplicationServer().setLeadership(false);
-        recordLockRelease(lockAcquireSample);
+        recordLockRelease();
     }
 
     /**
@@ -825,7 +830,23 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                         .start());
     }
 
-    private void recordLockRelease(Optional<LongTaskTimer.Sample> sample) {
-        sample.ifPresent(LongTaskTimer.Sample::stop);
+    private void processCountOnLockAcquire(ClusterRole role) {
+        MeterRegistryProvider.getInstance()
+                .ifPresent(registry -> {
+                    if (!lockAcquisitionsByRole.containsKey(role)) {
+                        AtomicLong numAcquisitions = registry.gauge("logreplication.lock.acquire.count",
+                                ImmutableList.of(Tag.of("cluster.role", role.toString().toLowerCase())),
+                                new AtomicLong(0));
+                        lockAcquisitionsByRole.put(role, numAcquisitions);
+                    }
+                    lockAcquisitionsByRole.computeIfPresent(role, (r, numAcquisitions) -> {
+                        numAcquisitions.getAndIncrement();
+                        return numAcquisitions;
+                    });
+                });
+    }
+
+    private void recordLockRelease() {
+        lockAcquireSample.ifPresent(LongTaskTimer.Sample::stop);
     }
 }

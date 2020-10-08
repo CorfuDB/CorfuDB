@@ -64,7 +64,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private final Optional<DistributionSummary> messageSizeDistributionSummary;
     private final Optional<Counter> deltaCounter;
-
+    private final Optional<Counter> validDeltaCounter;
+    private final Optional<Counter> opaqueEntryCounter;
     @Getter
     @VisibleForTesting
     private OpaqueEntry lastOpaqueEntry = null;
@@ -82,6 +83,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
         this.deltaCounter = configureDeltaCounter();
+        this.validDeltaCounter = configureValidDeltaCounter();
+        this.opaqueEntryCounter = configureOpaqueEntryCounter();
         Set<String> streams = config.getStreamsToReplicate();
 
         streamUUIDs = new HashSet<>();
@@ -205,8 +208,10 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
                 lastOpaqueEntry = txOpaqueStream.next();
                 deltaCounter.ifPresent(Counter::increment);
-
                 lastOpaqueEntryValid = isValidTransactionEntry(lastOpaqueEntry);
+                if (lastOpaqueEntryValid) {
+                    validDeltaCounter.ifPresent(Counter::increment);
+                }
                 currentProcessedEntryMetadata = new StreamIteratorMetadata(txOpaqueStream.txStream.pos(), lastOpaqueEntryValid);
             }
 
@@ -215,6 +220,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
             final double currentMsgSizeSnapshot = currentMsgSize;
 
             messageSizeDistributionSummary.ifPresent(distribution -> distribution.record(currentMsgSizeSnapshot));
+
+            opaqueEntryCounter.ifPresent(counter -> counter.increment(opaqueEntryList.size()));
 
             if (opaqueEntryList.isEmpty()) {
                 return null;
@@ -253,7 +260,17 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
     private Optional<Counter> configureDeltaCounter() {
         return MeterRegistryProvider.getInstance().map(registry ->
-                registry.counter("logreplication.delta.count"));
+                registry.counter("logreplication.opaque.count_total"));
+    }
+
+    private Optional<Counter> configureValidDeltaCounter() {
+        return MeterRegistryProvider.getInstance().map(registry ->
+                registry.counter("logreplication.opaque.count_valid"));
+    }
+
+    private Optional<Counter> configureOpaqueEntryCounter() {
+        return MeterRegistryProvider.getInstance().map(registry ->
+                registry.counter("logreplication.opaque.count_per_message"));
     }
 
     @Override

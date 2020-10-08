@@ -26,11 +26,6 @@ public class InLogEntrySyncState implements LogReplicationState {
      * Log Replication State Machine, used to insert internal events into the queue.
      */
     private final LogReplicationFSM fsm;
-
-
-    private final Optional<AtomicLong> logEntrySinkAcksCounter;
-
-    private final Optional<Timer> senderTimer;
     /**
      * Log Entry Sender, used to read and send incremental updates.
      */
@@ -56,8 +51,6 @@ public class InLogEntrySyncState implements LogReplicationState {
     public InLogEntrySyncState(LogReplicationFSM logReplicationFSM, LogEntrySender logEntrySender) {
         this.fsm = logReplicationFSM;
         this.logEntrySender = logEntrySender;
-        this.logEntrySinkAcksCounter = configureAcksCounter();
-        this.senderTimer = configureSenderTimer();
     }
 
     @Override
@@ -97,7 +90,6 @@ public class InLogEntrySyncState implements LogReplicationState {
                 if (transitionEventId.equals(event.getMetadata().getRequestId())) {
                     log.debug("Log Entry Sync ACK, update last ack timestamp to {}", event.getMetadata().getLastLogEntrySyncedTimestamp());
                     fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
-                    logEntrySinkAcksCounter.ifPresent(AtomicLong::getAndIncrement);
                 }
                 // Do not return a new state as there is no actual transition, the IllegalTransitionException
                 // will allow us to avoid any transition from this state given the event.
@@ -162,15 +154,8 @@ public class InLogEntrySyncState implements LogReplicationState {
             if (from.getType() == LogReplicationStateType.WAIT_SNAPSHOT_APPLY) {
                 fsm.getAckReader().markSnapshotSyncInfoCompleted();
             }
-
-            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() -> logEntrySender.send(transitionEventId));
-            Runnable logEntrySendTask = () -> logEntrySender.send(transitionEventId);
-
-            if (senderTimer.isPresent()) {
-                logEntrySendTask = senderTimer.get().wrap(logEntrySendTask);
-            }
-
-            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(logEntrySendTask);
+            logEntrySyncFuture = fsm.getLogReplicationFSMWorkers().submit(() ->
+                    logEntrySender.send(transitionEventId));
 
         } catch (Throwable t) {
             log.error("Error on entry of InLogEntrySyncState", t);
@@ -190,19 +175,5 @@ public class InLogEntrySyncState implements LogReplicationState {
     @Override
     public LogReplicationStateType getType() {
         return LogReplicationStateType.IN_LOG_ENTRY_SYNC;
-    }
-
-    private Optional<AtomicLong> configureAcksCounter() {
-        return MeterRegistryProvider.getInstance()
-                .map(registry -> registry.gauge("logreplication.messages",
-                        ImmutableList.of(Tag.of("replication.type", "logentry")),
-                        new AtomicLong(0)));
-    }
-
-    private Optional<Timer> configureSenderTimer() {
-        return MeterRegistryProvider.getInstance()
-                .map(registry -> Timer.builder("logreplication.sender.duration.seconds")
-                .tags("replication.type", "logentry")
-                .register(registry));
     }
 }

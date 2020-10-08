@@ -24,7 +24,7 @@ public class MeterRegistryProvider {
     /**
      * Class that initializes the Meter Registry.
      */
-    public static class MeterRegistryInitializer extends MeterRegistryProvider{
+    public static class MeterRegistryInitializer extends MeterRegistryProvider {
         /**
          * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
          * with this meter registry will be exported in the InfluxDB line protocol format

@@ -3,6 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
@@ -27,6 +28,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.IntStream;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
@@ -193,7 +195,17 @@ public class SnapshotSender {
             numMessages++;
         }
 
-        dataSenderBufferManager.sendWithBuffering(logReplicationEntries);
+        Optional<List<Timer.Sample>> samples = MeterRegistryProvider
+                .getInstance()
+                .map(registry -> IntStream.range(0, logReplicationEntries.size())
+                        .boxed()
+                        .map(i -> Timer.start(registry))
+                        .collect(ImmutableList.toImmutableList()));
+
+        List<CompletableFuture<LogReplicationEntry>> futures =
+                dataSenderBufferManager.sendWithBuffering(logReplicationEntries);
+
+        recordSamplesStopWhenFuturesComplete(futures, samples);
 
         // If Snapshot is complete, add end marker
         if (completed) {
@@ -281,5 +293,32 @@ public class SnapshotSender {
 
     public void updateTopologyConfigId(long topologyConfigId) {
         dataSenderBufferManager.updateTopologyConfigId(topologyConfigId);
+    }
+
+    void recordSamplesStopWhenFuturesComplete(List<CompletableFuture<LogReplicationEntry>> entryFutures,
+                                              Optional<List<Timer.Sample>> samples) {
+        MeterRegistryProvider
+                .getInstance()
+                .ifPresent(registry ->
+                        samples.ifPresent(sampleList -> {
+                            String metricName = "logreplication.sender.duration.seconds";
+                            Tag snapshotTag = Tag.of("replication.type", "snapshot");
+                            Tag successTag = Tag.of("status", "success");
+                            Tag failedTag = Tag.of("status", "fail");
+
+                            IntStream.range(0, entryFutures.size()).boxed().forEach(index -> {
+                                CompletableFuture<LogReplicationEntry> entry = entryFutures.get(index);
+                                Timer.Sample sample = sampleList.get(index);
+                                entry.whenComplete((e, err) -> {
+                                    if (e != null) {
+                                        sample.stop(registry.timer(metricName,
+                                                ImmutableList.of(snapshotTag, successTag)));
+                                    } else {
+                                        sample.stop(registry.timer(metricName,
+                                                ImmutableList.of(snapshotTag, failedTag)));
+                                    }
+                                });
+                            });
+                        }));
     }
 }

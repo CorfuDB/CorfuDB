@@ -70,7 +70,7 @@ public class InSnapshotSyncState implements LogReplicationState {
     public InSnapshotSyncState(LogReplicationFSM logReplicationFSM, SnapshotSender snapshotSender) {
         this.fsm = logReplicationFSM;
         this.snapshotSender = snapshotSender;
-        this.snapshotSyncAcksCounter = configureAcksCounter();
+        this.snapshotSyncAcksCounter = configureSnapshotSyncCounter();
         this.senderTimer = configureTransmitTimer();
     }
 
@@ -174,11 +174,8 @@ public class InSnapshotSyncState implements LogReplicationState {
                 snapshotSyncTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
 
             }
-            Runnable snapShotSendTask = () -> snapshotSender.transmit(transitionEventId);
-            if (senderTimer.isPresent()) {
-                snapShotSendTask = senderTimer.get().wrap(snapShotSendTask);
-            }
-            transmitFuture = fsm.getLogReplicationFSMWorkers().submit(snapShotSendTask);
+            transmitFuture = fsm.getLogReplicationFSMWorkers()
+                    .submit(() -> snapshotSender.transmit(transitionEventId));
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
         }
@@ -214,9 +211,9 @@ public class InSnapshotSyncState implements LogReplicationState {
         return LogReplicationStateType.IN_SNAPSHOT_SYNC;
     }
 
-    private Optional<AtomicLong> configureAcksCounter() {
+    private Optional<AtomicLong> configureSnapshotSyncCounter() {
         return MeterRegistryProvider.getInstance()
-                .map(registry -> registry.gauge("logreplication.acks",
+                .map(registry -> registry.gauge("logreplication.completed.count",
                         ImmutableList.of(Tag.of("replication.type", "snapshot")),
                         new AtomicLong(0)));
     }

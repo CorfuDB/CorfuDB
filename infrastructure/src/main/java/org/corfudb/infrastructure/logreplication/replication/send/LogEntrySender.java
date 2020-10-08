@@ -1,22 +1,27 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
+import com.google.common.collect.ImmutableList;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
-
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * This class is responsible of managing the transmission of log entries,
  * i.e, reading and sending incremental updates to a remote cluster.
- *
+ * <p>
  * It reads log entries from the datastore through the LogEntryReader, and sends them
  * through LogReplicationSenderBuffer.
  */
@@ -28,9 +33,9 @@ public class LogEntrySender {
      */
     private LogEntryReader logEntryReader;
 
-   /*
-    * Implementation of buffering messages and sending/resending messages
-    */
+    /*
+     * Implementation of buffering messages and sending/resending messages
+     */
     private SenderBufferManager dataSenderBufferManager;
 
     /*
@@ -52,10 +57,10 @@ public class LogEntrySender {
     /**
      * Constructor
      *
-     * @param logEntryReader log entry logreader implementation
-     * @param dataSender implementation of a data sender, both snapshot and log entry, this represents
-     *                   the application callback for data transmission
-     * @param readProcessor post read processing logic
+     * @param logEntryReader    log entry logreader implementation
+     * @param dataSender        implementation of a data sender, both snapshot and log entry, this represents
+     *                          the application callback for data transmission
+     * @param readProcessor     post read processing logic
      * @param logReplicationFSM log replication FSM to insert events upon message acknowledgement
      */
     public LogEntrySender(LogEntryReader logEntryReader, DataSender dataSender,
@@ -101,7 +106,11 @@ public class LogEntrySender {
             try {
                 message = logEntryReader.read(logEntrySyncEventId);
                 if (message != null) {
-                    dataSenderBufferManager.sendWithBuffering(message);
+                    Optional<Timer.Sample> sample =
+                            MeterRegistryProvider.getInstance().map(Timer::start);
+                    CompletableFuture<LogReplicationEntry> senderFuture =
+                            dataSenderBufferManager.sendWithBuffering(message);
+                    recordSampleStopWhenFutureCompletes(senderFuture, sample);
                 } else {
                     /*
                      * If no message is returned we can break out and enqueue a CONTINUE, so other processes can
@@ -136,6 +145,7 @@ public class LogEntrySender {
 
     /**
      * Generate a CancelLogEntrySync Event due to error.
+     *
      * @param error
      * @param transition
      * @param logEntrySyncEventId
@@ -157,5 +167,25 @@ public class LogEntrySender {
 
     public void updateTopologyConfigId(long topologyConfigId) {
         dataSenderBufferManager.updateTopologyConfigId(topologyConfigId);
+    }
+
+    void recordSampleStopWhenFutureCompletes(CompletableFuture<LogReplicationEntry> entryFuture,
+                                             Optional<Timer.Sample> sample) {
+        MeterRegistryProvider
+                .getInstance()
+                .ifPresent(registry -> entryFuture.whenComplete((entry, err) ->
+                        sample.ifPresent(s -> {
+                            String metricName = "logreplication.sender.duration.seconds";
+                            Tag logentryTag = Tag.of("replication.type", "logentry");
+                            Tag successTag = Tag.of("status", "success");
+                            Tag failedTag = Tag.of("status", "fail");
+                            if (entry != null) {
+                                s.stop(registry.timer(metricName,
+                                        ImmutableList.of(logentryTag, successTag)));
+                            } else {
+                                s.stop(registry.timer(metricName,
+                                        ImmutableList.of(logentryTag, failedTag)));
+                            }
+                        })));
     }
 }

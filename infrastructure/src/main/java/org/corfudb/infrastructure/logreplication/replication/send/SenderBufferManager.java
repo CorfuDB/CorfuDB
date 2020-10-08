@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
+import com.google.common.collect.ImmutableList;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -13,11 +14,13 @@ import java.io.FileReader;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Sender Buffer Manager to store outstanding message that hasn't got an ACK yet.
@@ -71,6 +74,8 @@ public abstract class SenderBufferManager {
 
     private long topologyConfigId;
 
+    private Optional<AtomicLong> ackCounter = Optional.empty();
+
     /*
      * The messages sent to the receiver that have not been ACKed yet.
      */
@@ -101,6 +106,11 @@ public abstract class SenderBufferManager {
         pendingMessages = new SenderPendingMessageQueue(maxBufferSize);
         pendingCompletableFutureForAcks = new HashMap<>();
         this.dataSender = dataSender;
+    }
+
+    public SenderBufferManager(DataSender dataSender, Optional<AtomicLong> counter) {
+        this(dataSender);
+        this.ackCounter = counter;
     }
 
     /**
@@ -146,6 +156,7 @@ public abstract class SenderBufferManager {
 
             if (ack != null) {
                 updateAck(ack);
+                ackCounter.ifPresent(ac -> ac.addAndGet(pendingCompletableFutureForAcks.size()));
                 log.info("Received ack {} total pending log entry acks {} for timestamps {}",
                         ack == null ? "null" : ack.getMetadata(),
                         pendingCompletableFutureForAcks.size(), pendingCompletableFutureForAcks.keySet());
@@ -163,14 +174,12 @@ public abstract class SenderBufferManager {
         return cf;
     }
 
-    public void sendWithBuffering(List<LogReplicationEntry> dataToSend) {
+    public List<CompletableFuture<LogReplicationEntry>> sendWithBuffering(List<LogReplicationEntry> dataToSend) {
         if (dataToSend.isEmpty()) {
-            return;
+            return ImmutableList.of();
         }
 
-        for (LogReplicationEntry message : dataToSend) {
-            sendWithBuffering(message);
-        }
+        return dataToSend.stream().map(this::sendWithBuffering).collect(ImmutableList.toImmutableList());
     }
 
     /**
