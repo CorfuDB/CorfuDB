@@ -28,16 +28,18 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.apache.commons.io.IOUtils;
 import org.corfudb.protocols.API;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.UUID;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.MessageType;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
+import org.corfudb.runtime.proto.Common;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.security.sasl.SaslUtils;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
 import org.corfudb.security.tls.SslContextConstructor;
@@ -98,7 +100,7 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
     /**
      * The handlers registered to this router.
      */
-    public final Map<MessageType, IClient> handlerMap;
+    public final Map<ResponsePayloadMsg.PayloadCase, IClient> handlerMap;
 
     /** The {@link NodeLocator} which represents the remote node this
      *  {@link NettyClientProtobufRouter} connects to.
@@ -146,7 +148,7 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
     /**
      * Timer map for measuring request
      */
-    private final Map<MessageType, String> timerNameCache;
+    private final Map<RequestPayloadMsg.PayloadCase, String> timerNameCache;
 
     /**
      * If true this instance will manage the life-cycle of the event loop.
@@ -191,8 +193,8 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
         this.handlerMap = new ConcurrentHashMap<>();
 
         // Set timer mapping
-        ImmutableMap.Builder<MessageType, String> mapBuilder = ImmutableMap.builder();
-        for (MessageType type : MessageType.values()) {
+        ImmutableMap.Builder<RequestPayloadMsg.PayloadCase, String> mapBuilder = ImmutableMap.builder();
+        for (RequestPayloadMsg.PayloadCase type : RequestPayloadMsg.PayloadCase.values()) {
             mapBuilder.put(type,
                     CorfuComponent.CLIENT_ROUTER.toString() + type.name().toLowerCase());
         }
@@ -363,13 +365,21 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
     /**
      * Send a request message and get a completable future to be fulfilled by the reply.
      *
-     * @param reqBuilder The message builder for the request to send.
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
      * @param <T> The type of completable to return.
      * @return A completable future which will be fulfilled by the reply,
      * or a timeout in the case there is no response.
      */
     @Override
-    public  <T> CompletableFuture<T> sendRequestAndGetCompletable(Request.Builder reqBuilder) {
+    public  <T> CompletableFuture<T> sendRequestAndGetCompletable(RequestPayloadMsg payload,
+                                                                  long epoch, Common.UuidMsg clusterId,
+                                                                  Common.PriorityLevel priority,
+                                                                  boolean ignoreClusterId, boolean ignoreEpoch) {
 
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return a exceptionally completed with the timeout.
@@ -389,25 +399,24 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
         }
 
         // Get the next request ID
-        final long thisRequest = requestID.getAndIncrement();
+        final long thisRequestId = requestID.getAndIncrement();
+        Common.UuidMsg clientId = CorfuProtocolCommon.getUuidMsg(parameters.getClientId());
 
         // Set the base fields for this message.
-        Header header = reqBuilder.getHeaderBuilder()
-                .setClientId(API.getProtoUUID(parameters.getClientId()))
-                .setRequestId(thisRequest)
-                .build();
-        Request request = reqBuilder.setHeader(header).build();
+        HeaderMsg header = CorfuProtocolCommon.getHeaderMsg(thisRequestId, priority, payload.getPayloadCase(),
+                epoch, clusterId, clientId, ignoreClusterId, ignoreEpoch);
+        RequestMsg request = RequestMsg.newBuilder().setHeader(header).setPayload(payload).build();
 
         // Set up the timer and context to measure request
         final Timer roundTripMsgTimer = CorfuRuntime.getDefaultMetrics()
-                .timer(timerNameCache.get(request.getHeader().getType()));
+                .timer(timerNameCache.get(payload.getPayloadCase()));
 
         final Timer.Context roundTripMsgContext = MetricsUtils
                 .getConditionalContext(roundTripMsgTimer);
 
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
-        outstandingRequests.put(thisRequest, cf);
+        outstandingRequests.put(thisRequestId, cf);
 
         // Write this message out on the channel
         ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
@@ -442,9 +451,9 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
             // the router is not aware of it and this::completeExceptionally()
             // takes care of others. This avoids handling same exception twice.
             if (e.getCause() instanceof TimeoutException) {
-                outstandingRequests.remove(thisRequest);
+                outstandingRequests.remove(thisRequestId);
                 log.debug("sendRequestAndGetCompletable: Remove request {} to {} due to timeout! Request:{}",
-                        thisRequest, node, request.getHeader());
+                        thisRequestId, node, request.getHeader());
             }
             return null;
         });
@@ -455,18 +464,24 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
     /**
      * Send a one way message, without adding a completable future.
      *
-     * @param reqBuilder The message builder for the request to send.
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
      */
     @Override
-    public void sendRequest(Request.Builder reqBuilder) {
+    public void sendRequest(RequestPayloadMsg payload, long epoch, Common.UuidMsg clusterId,
+                            Common.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch) {
         // Get the next request ID
-        final long thisRequest = requestID.getAndIncrement();
+        final long thisRequestId = requestID.getAndIncrement();
+        Common.UuidMsg clientId = CorfuProtocolCommon.getUuidMsg(parameters.getClientId());
+
         // Set the base fields for this message.
-        Header header = reqBuilder.getHeaderBuilder()
-                .setClientId(API.getProtoUUID(parameters.getClientId()))
-                .setRequestId(thisRequest)
-                .build();
-        Request request = reqBuilder.setHeader(header).build();
+        HeaderMsg header = CorfuProtocolCommon.getHeaderMsg(thisRequestId, priority, payload.getPayloadCase(),
+                epoch, clusterId, clientId, ignoreClusterId, ignoreEpoch);
+        RequestMsg request = RequestMsg.newBuilder().setHeader(header).setPayload(payload).build();
 
         // Write this message out on the channel
         ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
@@ -492,9 +507,9 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
      * @param clientId The header of incoming message used for validation.
      * @return True, if the clientID is correct, but false otherwise.
      */
-    private boolean validateClientId(UUID clientId) {
+    private boolean validateClientId(Common.UuidMsg clientId) {
         // Check if the message is intended for us. If not, drop the message.
-        if (!clientId.equals(API.getProtoUUID(parameters.getClientId()))) {
+        if (!clientId.equals(CorfuProtocolCommon.getUuidMsg(parameters.getClientId()))) {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!",
                     clientId, parameters.getClientId());
             return false;
@@ -523,14 +538,15 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
         ByteBufInputStream msgInputStream = new ByteBufInputStream(msgBuf);
 
         try {
-            Response response = Response.parseFrom(msgInputStream);
-            Header header = response.getHeader();
+            ResponseMsg response = ResponseMsg.parseFrom(msgInputStream);
+            HeaderMsg header = response.getHeader();
+            ResponsePayloadMsg payload = response.getPayload();
 
             // TODO: New Implementation of handlers
-            IClient handler = handlerMap.get(header.getType());
+            IClient handler = handlerMap.get(payload.getPayloadCase());
             if (handler == null) {
                 // The message was unregistered, we are dropping it.
-                log.warn("Received unregistered message {}, dropping", header.getType());
+                log.warn("Received unregistered message {}, dropping", payload.getPayloadCase());
             } else {
                 if (validateClientId(header.getClientId())) {
                     // Route the message to the handler.
