@@ -365,6 +365,15 @@ public class LogReplicationAckReader {
         }
     }
 
+    public void markSyncStatusNotStarted() {
+        lock.lock();
+        try {
+            metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, LogReplicationMetadata.SyncStatus.NOT_STARTED);
+        } finally {
+            lock.unlock();
+        }
+    }
+
     public void markSyncStatusStopped() {
         lock.lock();
         try {

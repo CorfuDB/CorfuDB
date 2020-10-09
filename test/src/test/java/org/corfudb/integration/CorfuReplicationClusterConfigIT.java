@@ -70,6 +70,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private CorfuTable<String, Integer> mapStandby;
 
     private CorfuStore corfuStore;
+    private CorfuStore standbyCorfuStore;
     private Table<CommonTypes.Uuid, CommonTypes.Uuid, CommonTypes.Uuid> configTable;
 
     @Before
@@ -105,7 +106,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         assertThat(mapStandby.size()).isZero();
 
         corfuStore = new CorfuStore(activeRuntime);
-        CorfuStore standbyCorfuStore = new CorfuStore(standbyRuntime);
+        standbyCorfuStore = new CorfuStore(standbyRuntime);
 
         configTable = corfuStore.openTable(
                 DefaultClusterManager.CONFIG_NAMESPACE, DefaultClusterManager.CONFIG_TABLE_NAME,
@@ -247,6 +248,8 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         }
         assertThat(mapStandby.size()).isEqualTo(thirdBatch);
 
+        sleepUninterruptibly(5);
+
         // Verify Sync Status during the first switchover
         LogReplicationMetadata.ReplicationStatusKey StandbyKey =
                 LogReplicationMetadata.ReplicationStatusKey
@@ -254,8 +257,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                         .setClusterId(DefaultClusterConfig.getActiveClusterId())
                         .build();
         CorfuRecord<LogReplicationMetadata.ReplicationStatusVal, Message> standbyRecord =
-                corfuStore.query(LogReplicationMetadataManager.NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, StandbyKey);
+                standbyCorfuStore.query(LogReplicationMetadataManager.NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, StandbyKey);
         LogReplicationMetadata.ReplicationStatusVal standbyStatusVal = standbyRecord.getPayload();
+
+        CorfuRecord<LogReplicationMetadata.ReplicationStatusVal, Message> oldRecord =
+                standbyCorfuStore.query(LogReplicationMetadataManager.NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
+        assertThat(oldRecord).isNull();
 
         log.info("ReplicationStatusVal: RemainingEntriesToSend: {}, SyncType: {}, Status: {}",
                 standbyStatusVal.getRemainingEntriesToSend(), standbyStatusVal.getSyncType(),
@@ -266,15 +273,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 standbyStatusVal.getSnapshotSyncInfo().getStatus(), standbyStatusVal.getSnapshotSyncInfo().getCompletedTime());
 
         assertThat(standbyStatusVal.getSyncType())
-                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.SNAPSHOT);
+                .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
         assertThat(standbyStatusVal.getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
 
         assertThat(standbyStatusVal.getSnapshotSyncInfo().getType())
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT);
         assertThat(standbyStatusVal.getSnapshotSyncInfo().getStatus())
-                .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
-        assertThat(standbyStatusVal.getSnapshotSyncInfo().getCompletedTime().toString()).isEmpty();
+                .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
 
         // Wait until data is fully replicated again
         waitForReplication(size -> size == thirdBatch, mapActive, thirdBatch);
