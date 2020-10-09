@@ -611,9 +611,5 @@ public class Layout {
         public LayoutStripe(@NonNull List<String> logServers) {
             this.logServers = logServers;
         }
-
-        public String getTailEndpoint() {
-            return logServers.get(logServers.size() - 1);
-        }
     }
 }

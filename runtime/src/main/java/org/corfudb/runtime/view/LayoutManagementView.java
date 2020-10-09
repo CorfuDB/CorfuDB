@@ -269,9 +269,9 @@ public class LayoutManagementView extends AbstractView {
         if (currentLayout.getAllServers().contains(endpoint)) {
             LayoutBuilder builder = new LayoutBuilder(currentLayout);
             newLayout = builder.removeLayoutServer(endpoint)
-                    .removeLogunitServer(endpoint)
                     .removeSequencerServer(endpoint)
                     .assignResponsiveSequencerAsPrimary(Collections.emptySet())
+                    .removeLogunitServer(endpoint)
                     .removeUnresponsiveServer(endpoint)
                     .setEpoch(currentLayout.getEpoch() + 1)
                     .build();
