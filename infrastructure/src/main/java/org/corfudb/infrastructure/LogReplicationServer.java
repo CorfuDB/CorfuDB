@@ -118,9 +118,19 @@ public class LogReplicationServer extends AbstractServer {
                     metadataMgr.getLastProcessedLogEntryTimestamp());
             log.info("Send Metadata response :: {}", response);
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_METADATA_RESPONSE.payloadMsg(response));
+
+            // If a snapshot apply is pending, start (if not started already)
+            if (isSnapshotApplyPending(metadataMgr) && !sinkManager.getOngoingApply().get()) {
+                sinkManager.resumeSnapshotApply();
+            }
         } else {
             log.warn("Dropping metadata request as this node is not the leader.");
         }
+    }
+
+    private boolean isSnapshotApplyPending(LogReplicationMetadataManager metadataMgr) {
+        return (metadataMgr.getLastStartedSnapshotTimestamp() == metadataMgr.getLastTransferredSnapshotTimestamp()) &&
+                metadataMgr.getLastTransferredSnapshotTimestamp() > metadataMgr.getLastAppliedSnapshotTimestamp();
     }
 
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP)

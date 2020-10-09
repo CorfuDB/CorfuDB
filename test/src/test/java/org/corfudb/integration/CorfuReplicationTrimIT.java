@@ -2,7 +2,6 @@ package org.corfudb.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-
 import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
@@ -65,7 +64,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
             // Write Entry's to Active Cluster (while replicator is down)
             log.debug("Write additional entries to active CorfuDB ...");
-            writeToActive((numWrites + (numWrites/2)), numWrites/2);
+            writeToActiveNonUFO((numWrites + (numWrites/2)), numWrites/2);
 
             // Confirm data does exist on Active Cluster
             assertThat(mapA.size()).isEqualTo(numWrites*2);
@@ -80,7 +79,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
             startActiveLogReplicator();
 
             log.debug("Verify Data on Standby ...");
-            verifyDataOnStandby((numWrites*2));
+            verifyDataOnStandbyNonUFO((numWrites*2));
 
             log.debug("Entries :: " + mapAStandby.keySet());
 
@@ -146,7 +145,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
             // Write Entry's to Active Cluster (while replicator is down)
             log.debug("Write additional entries to active CorfuDB ...");
-            writeToActive((numWrites + (numWrites/2)), numWrites/2);
+            writeToActiveNonUFO((numWrites + (numWrites/2)), numWrites/2);
 
             // Confirm data does exist on Active Cluster
             assertThat(mapA.size()).isEqualTo(numWrites*2);
@@ -161,7 +160,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
             // Since we did not checkpoint data should be transferred in delta's
             log.debug("Verify Data on Standby ...");
-            verifyDataOnStandby((numWrites*2));
+            verifyDataOnStandbyNonUFO((numWrites*2));
 
             log.debug("Entries :: " + mapAStandby.keySet());
         } finally {
@@ -197,7 +196,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
             log.debug("Write data to active CorfuDB before LR is started ...");
             // Add Data for Snapshot Sync
-            writeToActive(0, numWrites);
+            writeToActiveNonUFO(0, numWrites);
 
             // Confirm data does exist on Active Cluster
             assertThat(mapA.size()).isEqualTo(numWrites);
@@ -211,7 +210,7 @@ public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
             startLogReplicatorServers();
 
             log.debug("Wait ... Snapshot log replication in progress ...");
-            verifyDataOnStandby(numWrites);
+            verifyDataOnStandbyNonUFO(numWrites);
         } finally {
             executorService.shutdownNow();
 
