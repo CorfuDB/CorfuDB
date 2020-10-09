@@ -11,6 +11,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.Uuid;
@@ -412,6 +413,54 @@ public class CorfuStoreTest extends AbstractViewTest {
         CorfuRecord<EventInfo, ManagedResources> record1 = table.get(key);
         assertThat(record1.getMetadata().getCreateTimestamp()).isEqualTo(timestamp);
         assertThat(record1.getMetadata().getCreateUser()).isEqualTo("CreateUser");
+    }
+
+    /**
+     * Demonstrates how features switches can be extracted from table options.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkTableOptions() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "EventInfo";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, SampleSchema.SampleTableAMsg, Message> table =
+                corfuStore.openTable(
+                        someNamespace,
+                        tableName,
+                        Uuid.class,
+                        SampleSchema.SampleTableAMsg.class,
+                        null,
+                        // TableOptions includes option to choose - Memory/Disk based corfu table.
+                        TableOptions.builder().build());
+
+        String streamTag1 = SampleSchema.SampleTableAMsg.getDescriptor()
+                .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTag(0);
+        String streamTag2 = SampleSchema.SampleTableAMsg.getDescriptor()
+                .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTag(1);
+        assertThat(streamTag1).isEqualTo("searchStreamer");
+        assertThat(streamTag2).isEqualTo("slowStreamer");
+
+        log.debug(streamTag1+","+streamTag2);
+
+        final TableRegistry tableRegistry = corfuRuntime.getTableRegistry();
+        final CorfuStoreMetadata.TableName tableNameProto = CorfuStoreMetadata.TableName.newBuilder()
+                .setNamespace(table.getNamespace()).setTableName(tableName).build();
+
+        assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getStreamTag(0)).isEqualTo(streamTag1);
+        assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getStreamTag(1)).isEqualTo(streamTag2);
     }
 
     /**
