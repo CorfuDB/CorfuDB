@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableDescriptors;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -173,6 +174,9 @@ public class TableRegistry {
 
         TableMetadata.Builder metadataBuilder = TableMetadata.newBuilder();
         metadataBuilder.setDiskBased(tableOptions.getPersistentDataPath().isPresent());
+        metadataBuilder.setTableOptions(defaultValueMessage
+                .getDescriptorForType().getOptions()
+                .getExtension(CorfuOptions.tableSchema));
 
         int numRetries = 9; // Since this is an internal transaction, retry a few times before giving up.
         while (numRetries-- > 0) {
