@@ -218,4 +218,13 @@ public class CorfuReplicationManager {
             standbyRuntime.getSourceManager().startForcedSnapshotSync(event.getEventId());
         }
     }
+
+    /**
+     * Update Replication Status as NOT_STARTED.
+     * Should be called only once in an active lifecycle.
+     */
+    public void updateStatusAsNotStarted() {
+        runtimeToRemoteCluster.values().forEach(corfuLogReplicationRuntime ->
+                corfuLogReplicationRuntime.getSourceManager().getAckReader().markSyncStatusNotStarted());
+    }
 }
