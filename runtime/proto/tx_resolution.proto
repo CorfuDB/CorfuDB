@@ -49,6 +49,6 @@ message TxResolutionInfoMsg {
   TokenMsg snapshot_timestamp = 2;
 
   /** A set of poisoned streams, which have a conflict against all updates. */
-  MapMsg conflict_set = 3;
-  MapMsg write_conflict_params_set = 4;
+  repeated UuidToListOfBytesPairMsg conflict_set = 3;
+  repeated UuidToListOfBytesPairMsg write_conflict_params_set = 4;
 }

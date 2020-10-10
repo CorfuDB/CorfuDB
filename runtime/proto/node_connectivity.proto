@@ -21,6 +21,7 @@ message ConnectivityEntryMsg {
   ConnectionStatus status = 2;
 }
 
+
 message NodeConnectivityMsg {
   string endpoint = 1;
   NodeConnectivityType connectivity_type = 2;

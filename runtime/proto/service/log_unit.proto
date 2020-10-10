@@ -66,8 +66,7 @@ message TailRequestMsg {
 message TailResponseMsg {
   int64 epoch = 1;
   int64 log_tail = 2;
-  // Map of (UUID, Long) pairs
-  MapMsg stream_tails = 3;
+  repeated UuidToLongPairMsg stream_tail = 3;
 }
 
 message CompactRequestMsg {
@@ -87,8 +86,7 @@ message LogAddressSpaceRequestMsg {
 
 message LogAddressSpaceResponseMsg {
   int64 log_tail = 1;
-  // Map of (UUID, StreamAddressSpace) pairs
-  MapMsg address_map = 2;
+  repeated UuidToStreamAddressSpacePairMsg address_map = 2;
 }
 
 message KnownAddressRequestMsg {

@@ -15,18 +15,7 @@ import "tx_resolution.proto";
  */
 message StreamsAddressResponseMsg {
   uint64 log_tail = 1;
-  // Map of (UUID, StreamAddressSpace) pairs
-  MapMsg address_map = 2;
-}
-
-/**
-  proto3 does not support non integer or string keys.
-  This message contains a map of UUID to an array of bytes.
-  The bytes array can be further parsed into a Set of bytes.
- */
-message UUIDToListOfBytesPairMsg {
-  UuidMsg key = 1;
-  repeated bytes value = 2;
+  repeated UuidToStreamAddressSpacePairMsg address_map = 2;
 }
 
 /**
@@ -58,24 +47,12 @@ message TokenRequestMsg {
   TxResolutionInfoMsg txn_resolution = 14;
 }
 
-/**
-  proto3 does not support non integer or string keys.
-  This message contains a map of UUID to an array of bytes.
-  The bytes array can be further parsed into a Set of bytes.
- */
-message UUIDToLongPairMsg {
-  UuidMsg key = 1;
-  int64 value = 2;
-}
-
 message TokenResponseMsg {
   /** the cause/type of response. */
   TokenType resp_type = 1;
 
   // In case of a conflict, signal to the client which key was responsible for the conflict.
   bytes conflict_key = 2;
-
-
 
   // In case of a conflict, signal to the client which stream was responsible for the conflict.
   UuidMsg conflict_stream = 3;
@@ -85,24 +62,16 @@ message TokenResponseMsg {
 
   /**
     The backPointer map, if available.
-    Map of (UUID, Long) pairs
   */
-  MapMsg backpointer_map = 5;
+  repeated UuidToLongPairMsg backpointer_map = 5;
 
-  // Map of (UUID, Long) pairs
-  MapMsg stream_tails = 6;
-}
-
-message UUIDToStreamAddressPairMsg {
-  UuidMsg key = 1;
-  StreamAddressSpaceMsg value = 2;
+  repeated UuidToLongPairMsg stream_tails = 6;
 }
 
 // SequencerRecoveryMsg
 message BootstrapSequencerRequestMsg {
   int64 global_tail = 1;
-  // Map of (UUID, StreamAddressSpace) pairs
-  MapMsg streams_address_map = 2;
+  repeated UuidToStreamAddressSpacePairMsg streams_address_map = 2;
   int64 sequencer_epoch = 3;
 
   /**
