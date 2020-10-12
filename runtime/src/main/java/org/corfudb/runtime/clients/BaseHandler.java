@@ -19,6 +19,9 @@ import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.Base;
+
 /**
  * This is a base client which handles basic Corfu messages such as PING, ACK.
  * This is also responsible for handling unknown server exceptions.
@@ -35,6 +38,14 @@ public class BaseHandler implements IClient {
     @Setter
     public IClientRouter router;
 
+    /**
+     * The protobuf router to use for the client.
+     * For old CorfuMsg, use {@link #router}
+     */
+    @Getter
+    @Setter
+    public IClientProtobufRouter protobufRouter;
+
     /** Public functions which are exposed to clients. */
 
     /**
@@ -42,6 +53,14 @@ public class BaseHandler implements IClient {
      */
     @Getter
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this);
+
+    /**
+     * For old CorfuMsg, use {@link #msgHandler}
+     * The handler and handlers which implement this client.
+     */
+    @Getter
+    public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
             .generateHandlers(MethodHandles.lookup(), this);
 
     /**
@@ -71,6 +90,12 @@ public class BaseHandler implements IClient {
      */
     @ClientHandler(type = CorfuMsgType.PONG)
     private static Object handlePong(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        return true;
+    }
+
+    @ResponseHandler(type = PayloadCase.PING_RESPONSE)
+    private static Object handlePingResponse(Base.PingResponseMsg msg,
+                                             ChannelHandlerContext ctx, IClientProtobufRouter r) {
         return true;
     }
 

@@ -6,7 +6,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.MessageType;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 
 /**
  * Registers the method with the annotation as a client response
@@ -15,10 +15,10 @@ import org.corfudb.runtime.protocol.proto.CorfuProtocol.MessageType;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
-public @interface ClientProtobufHandler {
+public @interface ResponseHandler {
     /**
      * Returns the message type
      * @return the type of Corfu response message
      */
-    MessageType type();
+    PayloadCase type();
 }

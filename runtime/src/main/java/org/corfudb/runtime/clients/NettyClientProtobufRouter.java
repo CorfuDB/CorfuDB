@@ -555,7 +555,7 @@ public class NettyClientProtobufRouter extends ChannelInboundHandlerAdapter
                                 handler.getClass().getSimpleName(), response);
                     }
                     // TODO: New implementation of methods for handling response
-                    // handler.handleMessage(response, ctx);
+                     handler.handleMessage(response, ctx);
                 }
             }
         } catch (Exception e) {
