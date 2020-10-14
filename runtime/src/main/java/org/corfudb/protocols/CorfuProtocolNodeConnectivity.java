@@ -11,14 +11,14 @@ import org.corfudb.runtime.proto.NodeConnectivity.NodeConnectivityType;
 import java.util.stream.Collectors;
 
 public class CorfuProtocolNodeConnectivity {
-    private static EnumBiMap<NodeConnectivity.NodeConnectivityType, NodeConnectivityType> connectivityTypeMap =
+    private static final EnumBiMap<NodeConnectivity.NodeConnectivityType, NodeConnectivityType> connectivityTypeMap =
             EnumBiMap.create(ImmutableMap.of(
                     NodeConnectivity.NodeConnectivityType.NOT_READY, NodeConnectivityType.NOT_READY,
                     NodeConnectivity.NodeConnectivityType.CONNECTED, NodeConnectivityType.CONNECTED,
                     NodeConnectivity.NodeConnectivityType.UNAVAILABLE, NodeConnectivityType.UNAVAILABLE
             ));
 
-    private static EnumBiMap<NodeConnectivity.ConnectionStatus, ConnectionStatus> statusTypeMap =
+    private static final EnumBiMap<NodeConnectivity.ConnectionStatus, ConnectionStatus> statusTypeMap =
             EnumBiMap.create(ImmutableMap.of(
                     NodeConnectivity.ConnectionStatus.OK, ConnectionStatus.OK,
                     NodeConnectivity.ConnectionStatus.FAILED, ConnectionStatus.FAILED
@@ -40,5 +40,16 @@ public class CorfuProtocolNodeConnectivity {
                 .build();
     }
 
-    //TODO: conversion method from NodeConnectivityMsg to NodeConnectivity for client
+    public static NodeConnectivity getNodeConnectivity(NodeConnectivityMsg msg) {
+        ImmutableMap.Builder<String, NodeConnectivity.ConnectionStatus> immutableMapBuilder = ImmutableMap.builder();
+
+        msg.getConnectivityInfoList().forEach(entryMsg -> {
+            immutableMapBuilder.put(entryMsg.getNode(), statusTypeMap.inverse().get(entryMsg.getStatus()));
+        });
+
+        return new NodeConnectivity(msg.getEndpoint(),
+                connectivityTypeMap.inverse().get(msg.getConnectivityType()),
+                immutableMapBuilder.build(),
+                msg.getEpoch());
+    }
 }

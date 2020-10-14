@@ -38,9 +38,14 @@ public class CorfuProtocolManagement {
         return ResponsePayloadMsg.newBuilder()
                 .setQueryNodeResponse(QueryNodeResponseMsg.newBuilder()
                         .setNodeConnectivity(getNodeConnectivityMsg(nodeState.getConnectivity()))
-                        //TODO: .setSequencerMetrics()
+                        .setSequencerMetrics(getSequencerMetricsMsg(nodeState.getSequencerMetrics()))
                         .build())
                 .build();
+    }
+
+    public static NodeState getNodeState(QueryNodeResponseMsg msg) {
+        return new NodeState(getNodeConnectivity(msg.getNodeConnectivity()),
+                getSequencerMetrics(msg.getSequencerMetrics()));
     }
 
     public static RequestPayloadMsg getReportFailureRequestMsg(long epoch, Set<String> failedNodes) {
