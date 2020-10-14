@@ -42,7 +42,6 @@ message BootstrappedErrorMsg {
 message NotBootstrappedErrorMsg {
 }
 
-//TODO: Best representation for Throwable?
 message UnknownErrorMsg {
   bytes throwable = 1;
 }

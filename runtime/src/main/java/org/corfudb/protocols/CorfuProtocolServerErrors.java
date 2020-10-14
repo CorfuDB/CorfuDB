@@ -2,6 +2,7 @@ package org.corfudb.protocols;
 
 import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.proto.Common.UuidMsg;
 import org.corfudb.runtime.proto.ServerErrors.BootstrappedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.DataCorruptionErrorMsg;
@@ -16,8 +17,10 @@ import org.corfudb.runtime.proto.ServerErrors.ValueAdoptedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.WrongClusterErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.WrongEpochErrorMsg;
 
-import java.io.IOException;
+import static org.corfudb.protocols.CorfuProtocolLogData.getReadResponseMsg;
+
 import java.io.ObjectOutputStream;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class CorfuProtocolServerErrors {
@@ -64,9 +67,18 @@ public class CorfuProtocolServerErrors {
                 .build();
     }
 
-    //TODO(Zach): Complete after LogUnit implementation
-    public static ServerErrorMsg getValueAdoptedErrorMsg() {
-        return ServerErrorMsg.getDefaultInstance();
+    public static ServerErrorMsg getValueAdoptedErrorMsg(ReadResponse rr) {
+        return ServerErrorMsg.newBuilder()
+                .setValueAdoptedError(ValueAdoptedErrorMsg.newBuilder()
+                        .addAllResponse(rr.getAddresses()
+                                .entrySet()
+                                .stream()
+                                .map(e -> {
+                                    return getReadResponseMsg(e.getKey(), e.getValue());
+                                })
+                                .collect(Collectors.toList()))
+                        .build())
+                .build();
     }
 
     public static ServerErrorMsg getDataCorruptionErrorMsg(long address) {
@@ -89,7 +101,6 @@ public class CorfuProtocolServerErrors {
                 .build();
     }
 
-    //TODO(Zach): Complete me
     public static ServerErrorMsg getUnknownErrorMsg(Throwable throwable) {
         UnknownErrorMsg.Builder unknownErrorBuilder = UnknownErrorMsg.newBuilder();
 
@@ -98,9 +109,10 @@ public class CorfuProtocolServerErrors {
                 oos.writeObject(throwable);
                 unknownErrorBuilder.setThrowable(bso.toByteString());
             }
-        } catch (IOException ex) {
-
-
+        } catch (Exception ex) {
+            //TODO(Zach): Any other handling?
+            log.error("getUnknownErrorMsg: error=[{}, {}] " +
+                    "while serializing throwable={}", ex, ex.getCause(), throwable);
         }
 
         return ServerErrorMsg.newBuilder()
