@@ -1,6 +1,7 @@
 package org.corfudb.protocols.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.Layout.BootstrapLayoutRequestMsg;
@@ -53,6 +54,10 @@ public class CorfuProtocolLayout {
                         .setLayout(getLayoutMsg(layout))
                         .build())
                 .build();
+    }
+
+    public static LayoutPrepareResponse getLayoutPrepareResponse(PrepareLayoutResponseMsg msg) {
+        return new LayoutPrepareResponse(msg.getRank(), getLayout(msg.getLayout()));
     }
 
     public static RequestPayloadMsg getProposeLayoutRequestMsg(long epoch, long rank, Layout layout) {
