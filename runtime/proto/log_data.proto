@@ -4,6 +4,7 @@ package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime.proto";
 
 import "common.proto";
+import "google/protobuf/wrappers.proto";
 
 message DataRankMsg {
   int64 rank = 1;
@@ -13,48 +14,45 @@ message DataRankMsg {
 message LogUnitMetadataMsg {
   DataRankMsg data_rank = 1;
   repeated UuidToLongPairMsg backpointer_map = 2;
-  int64 global_address = 3;
-  int32 checkpoint_type = 4;
+  google.protobuf.Int64Value global_address = 3;
+  google.protobuf.Int32Value checkpoint_type = 4;
   UuidMsg checkpoint_id = 5;
   UuidMsg checkpointed_stream_id = 6;
-  int64 checkpointed_stream_start_log_address = 7;
+  google.protobuf.Int64Value checkpointed_stream_start_log_address = 7;
   UuidMsg client_id = 8;
-  int64 thread_id = 9;
-  int64 epoch = 10;
-  int32 codec_type_id = 11;
+  google.protobuf.Int64Value thread_id = 9;
+  google.protobuf.Int64Value epoch = 10;
+  google.protobuf.Int32Value codec_type_id = 11;
 }
 
 // Types of LogData defined in DataType.java
 // Note: All metadata aware
 
 message LogDataEntryMsg {
-  LogUnitMetadataMsg metadata = 1;
-  bytes data = 2; //TODO: Adequate representation for LogData payload?
+  bytes data = 1;
 }
 
 message LogDataEmptyMsg {
-  LogUnitMetadataMsg metadata = 1;
 }
 
 message LogDataHoleMsg {
-  LogUnitMetadataMsg metadata = 1;
 }
 
 message LogDataTrimmedMsg {
-  LogUnitMetadataMsg metadata = 1;
 }
 
 message LogDataRankOnlyMsg {
-  LogUnitMetadataMsg metadata = 1;
 }
 
 message LogDataMsg {
+  LogUnitMetadataMsg metadata = 1;
+
   oneof payload {
-    LogDataEntryMsg log_data_entry = 1;
-    LogDataEmptyMsg log_data_empty = 2;
-    LogDataHoleMsg log_data_hole = 3;
-    LogDataTrimmedMsg log_data_trimmed = 4;
-    LogDataRankOnlyMsg log_data_rank_only = 5;
+    LogDataEntryMsg log_data_entry = 11;
+    LogDataEmptyMsg log_data_empty = 12;
+    LogDataHoleMsg log_data_hole = 13;
+    LogDataTrimmedMsg log_data_trimmed = 14;
+    LogDataRankOnlyMsg log_data_rank_only = 15;
   }
 }
 

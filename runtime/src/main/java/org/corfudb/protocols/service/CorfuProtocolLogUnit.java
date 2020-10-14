@@ -3,7 +3,10 @@ package org.corfudb.protocols.service;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.CorfuProtocolLogData;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -23,6 +26,10 @@ import org.corfudb.runtime.proto.service.LogUnit.KnownAddressRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.KnownAddressResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.LogAddressSpaceRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.LogAddressSpaceResponseMsg;
+import org.corfudb.runtime.proto.service.LogUnit.RangeWriteLogRequestMsg;
+import org.corfudb.runtime.proto.service.LogUnit.RangeWriteLogResponseMsg;
+import org.corfudb.runtime.proto.service.LogUnit.ReadLogRequestMsg;
+import org.corfudb.runtime.proto.service.LogUnit.ReadLogResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.ResetLogUnitRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.ResetLogUnitResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.TailRequestMsg;
@@ -33,17 +40,79 @@ import org.corfudb.runtime.proto.service.LogUnit.TrimMarkRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.TrimMarkResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.UpdateCommittedTailRequestMsg;
 import org.corfudb.runtime.proto.service.LogUnit.UpdateCommittedTailResponseMsg;
+import org.corfudb.runtime.proto.service.LogUnit.WriteLogRequestMsg;
+import org.corfudb.runtime.proto.service.LogUnit.WriteLogResponseMsg;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.*;
-
-//TODO(Zach): Implement Read, Write and RangeWrite APIs
+import static org.corfudb.protocols.CorfuProtocolLogData.*;
 
 @Slf4j
 public class CorfuProtocolLogUnit {
+    public static RequestPayloadMsg getReadLogRequestMsg(List<Long> addresses, boolean cacheable) {
+        return RequestPayloadMsg.newBuilder()
+                .setReadLogRequest(ReadLogRequestMsg.newBuilder()
+                        .setCacheResults(cacheable)
+                        .addAllAddress(addresses)
+                        .build())
+                .build();
+    }
+
+    public static ResponsePayloadMsg getReadLogResponseMsg(Map<Long, LogData> addresses) {
+        return ResponsePayloadMsg.newBuilder()
+                .setReadLogResponse(ReadLogResponseMsg.newBuilder()
+                        .addAllResponse(addresses.entrySet()
+                                .stream()
+                                .map(e -> {
+                                    return getReadResponseMsg(e.getKey(), e.getValue());
+                                })
+                                .collect(Collectors.toList()))
+                        .build())
+                .build();
+    }
+
+    public static ReadResponse getReadResponse(ReadLogResponseMsg msg) {
+        ReadResponse rr = new ReadResponse();
+        msg.getResponseList().forEach(e -> {
+            rr.put(e.getAddress(), getLogData(e.getLogData()));
+        });
+
+        return rr;
+    }
+
+    public static RequestPayloadMsg getWriteLogRequestMsg(LogData data) {
+        return RequestPayloadMsg.newBuilder()
+                .setWriteLogRequest(WriteLogRequestMsg.newBuilder()
+                        .setLogData(getLogDataMsg(data))
+                        .build())
+                .build();
+    }
+
+    public static ResponsePayloadMsg getWriteLogResponseMsg() {
+        return ResponsePayloadMsg.newBuilder()
+                .setWriteLogResponse(WriteLogResponseMsg.getDefaultInstance())
+                .build();
+    }
+
+    public static RequestPayloadMsg getRangeWriteLogRequestMsg(List<LogData> range) {
+        return RequestPayloadMsg.newBuilder()
+                .setRangeWriteLogRequest(RangeWriteLogRequestMsg.newBuilder()
+                        .addAllLogData(range.stream()
+                                .map(CorfuProtocolLogData::getLogDataMsg)
+                                .collect(Collectors.toList()))
+                        .build())
+                .build();
+    }
+
+    public static ResponsePayloadMsg getRangeWriteLogResponseMsg() {
+        return ResponsePayloadMsg.newBuilder()
+                .setRangeWriteLogResponse(RangeWriteLogResponseMsg.getDefaultInstance())
+                .build();
+    }
+
     public static RequestPayloadMsg getInspectAddressesRequestMsg(List<Long> addresses) {
         return RequestPayloadMsg.newBuilder()
                 .setInspectAddressesRequest(InspectAddressesRequestMsg.newBuilder()
