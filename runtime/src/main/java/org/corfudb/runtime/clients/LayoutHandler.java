@@ -18,6 +18,11 @@ import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.Layout;
+import org.corfudb.runtime.proto.Common;
+
 /**
  * A client to the layout server.
  * <p>
@@ -31,6 +36,14 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
     @Getter
     IClientRouter router;
 
+    /**
+     * The protobuf router to use for the client.
+     * For old CorfuMsg, use {@link #router}
+     */
+    @Getter
+    @Setter
+    public IClientProtobufRouter protobufRouter;
+
     @Override
     public LayoutClient getClient(long epoch, UUID clusterID) {
         return new LayoutClient(router, epoch, clusterID);
@@ -41,6 +54,14 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
      */
     @Getter
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this);
+
+    /**
+     * For old CorfuMsg, use {@link #msgHandler}
+     * The handler and handlers which implement this client.
+     */
+    @Getter
+    public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
             .generateHandlers(MethodHandles.lookup(), this);
 
 
@@ -84,5 +105,13 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
                                                  ChannelHandlerContext ctx, IClientRouter r)
             throws Exception {
         throw new AlreadyBootstrappedException();
+    }
+
+    @ResponseHandler(type = PayloadCase.LAYOUT_RESPONSE)
+    private static Object handleLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                               IClientProtobufRouter r) {
+        Layout.LayoutResponseMsg layoutResponse = msg.getPayload().getLayoutResponse();
+        Common.LayoutMsg layout = layoutResponse.getLayout();
+
     }
 }

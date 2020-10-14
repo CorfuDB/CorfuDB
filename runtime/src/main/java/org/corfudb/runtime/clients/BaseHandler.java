@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import com.google.gson.Gson;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
@@ -19,6 +20,7 @@ import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.Base;
 
@@ -82,6 +84,8 @@ public class BaseHandler implements IClient {
 
     /**
      * Handle a pong response from the server.
+     * For protobuf, use {@link #handlePingResponse(ResponseMsg,
+     * ChannelHandlerContext, IClientProtobufRouter)}
      *
      * @param msg The ping request message
      * @param ctx The context the message was sent under
@@ -89,13 +93,8 @@ public class BaseHandler implements IClient {
      * @return Always True, since the ping message was successful.
      */
     @ClientHandler(type = CorfuMsgType.PONG)
+    @Deprecated
     private static Object handlePong(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        return true;
-    }
-
-    @ResponseHandler(type = PayloadCase.PING_RESPONSE)
-    private static Object handlePingResponse(Base.PingResponseMsg msg,
-                                             ChannelHandlerContext ctx, IClientProtobufRouter r) {
         return true;
     }
 
@@ -108,6 +107,7 @@ public class BaseHandler implements IClient {
      * @return Always True, since the ACK message was successful.
      */
     @ClientHandler(type = CorfuMsgType.ACK)
+    @Deprecated
     private static Object handleAck(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         return true;
     }
@@ -121,6 +121,7 @@ public class BaseHandler implements IClient {
      * @return Always True, since the ACK message was successful.
      */
     @ClientHandler(type = CorfuMsgType.NACK)
+    @Deprecated
     private static Object handleNack(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         return false;
     }
@@ -148,6 +149,7 @@ public class BaseHandler implements IClient {
      * @return The versioninfo object.
      */
     @ClientHandler(type = CorfuMsgType.VERSION_RESPONSE)
+    @Deprecated
     private static Object handleVersionResponse(JSONPayloadMsg<VersionInfo> msg,
                                                 ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
@@ -184,4 +186,92 @@ public class BaseHandler implements IClient {
         throw new WrongClusterException(wrongClusterMessage.getServerClusterId(),
                 wrongClusterMessage.getClientClusterId());
     }
+
+    // Protobuf region
+
+    /**
+     * Handle a ping response from the server.
+     * For old CorfuMsg, use {@link #handlePong(CorfuMsg, ChannelHandlerContext, IClientRouter)}
+     *
+     * @param msg The ping response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router
+     * @return Always True, since the ping message was successful.
+     */
+    @ResponseHandler(type = PayloadCase.PING_RESPONSE)
+    private static Object handlePingResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                             IClientProtobufRouter r) {
+        return true;
+    }
+
+    @ResponseHandler(type = PayloadCase.AUTHENTICATE_RESPONSE)
+    private static Object handleAuthResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                             IClientProtobufRouter r) {
+        // TODO: add implementation after BaseServer done.
+        return true;
+    }
+
+    /**
+     * Handle a restart response from the server.
+     *
+     * @param msg The ping response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router
+     * @return Always True, since the restart message was successful.
+     */
+    @ResponseHandler(type = PayloadCase.RESTART_RESPONSE)
+    private static Object handleRestartResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                IClientProtobufRouter r) {
+        return true;
+    }
+
+    /**
+     * Handle a reset response from the server.
+     *
+     * @param msg The ping response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router
+     * @return Always True, since the reset message was successful.
+     */
+    @ResponseHandler(type = PayloadCase.RESET_RESPONSE)
+    private static Object handleResetResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                              IClientProtobufRouter r) {
+        return true;
+    }
+
+    /**
+     * Handle a seal response from the server.
+     *
+     * @param msg The ping response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router
+     * @return Always True, since the seal message was successful.
+     */
+    @ResponseHandler(type = PayloadCase.SEAL_RESPONSE)
+    private static Object handleSealResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                             IClientProtobufRouter r) {
+        return true;
+    }
+
+    /**
+     * Handle a version response from the server.
+     * For old CorfuMsg, use {@link #handleVersionResponse(JSONPayloadMsg, ChannelHandlerContext, IClientRouter)}
+     *
+     * @param msg The ping response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router
+     * @return The VersionInfo object fetched from response msg.
+     */
+    @ResponseHandler(type = PayloadCase.VERSION_RESPONSE)
+    private static Object handleVersionResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                IClientProtobufRouter r) {
+        Base.VersionResponseMsg versionResponseMsg = msg.getPayload().getVersionResponse();
+        String jsonPayloadMsg = versionResponseMsg.getJsonPayloadMsg();
+        final Gson parser = new Gson();
+
+        return parser.fromJson(jsonPayloadMsg, VersionInfo.class);
+    }
+
+    // End region
+}
 }
