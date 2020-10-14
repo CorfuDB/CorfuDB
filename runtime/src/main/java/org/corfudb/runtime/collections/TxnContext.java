@@ -260,6 +260,9 @@ public class TxnContext implements AutoCloseable {
         applyWritesForReadOnTable(table);
         CorfuRecord<V, M> record = table.get(key);
         table.getMetrics().incNumGets();
+        if (record == null) {
+            return new CorfuStoreEntry<K, V, M>(key, null, null);
+        }
         return new CorfuStoreEntry<K, V, M>(key, record.getPayload(), record.getMetadata());
     }
 

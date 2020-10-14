@@ -12,6 +12,7 @@ import org.corfudb.test.SampleSchema.ManagedMetadata;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,6 +69,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("abc").build(),
                         user_1)
                 .commit();
+        long tail1 = table.getHighestSequence();
 
         // Take a snapshot to test snapshot isolation transaction
         final CorfuStoreMetadata.Timestamp timestamp = ufoStore.getTimestamp();
@@ -83,6 +85,9 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(entry.getPayload().getName()).isEqualTo("xyz");
             readWriteTxn.commit();
         }
+
+        long tail2 = table.getHighestSequence();
+        assertThat(tail2).isGreaterThan(tail1);
 
         // Try a read followed by write in same txn
         // Start a dirty read transaction
@@ -101,6 +106,63 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             entry = readTxn.getRecord(table, key1);
             assertThat(entry.getPayload().getName()).isEqualTo("abc");
         }
+        log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Simple example to see how secondary indexes work. Please see sample_schema.proto.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testSecondaryIndexes() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim ufoStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "EventInfo";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, EventInfo, ManagedMetadata> table = ufoStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                EventInfo.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
+        Uuid key1 = Uuid.newBuilder()
+                .setMsb(uuid1.getMostSignificantBits()).setLsb(uuid1.getLeastSignificantBits())
+                .build();
+        ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
+
+        final long eventTime = 123L;
+
+        ufoStore.txn(someNamespace)
+                .putRecord(tableName, key1,
+                        EventInfo.newBuilder()
+                                .setName("abc")
+                                .setEventTime(eventTime).build(),
+                        user_1)
+                .commit();
+
+        try (TxnContextShim readWriteTxn = ufoStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, EventInfo, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(table, "event_time", eventTime);
+            assertThat(entries.size()).isEqualTo(1);
+            assertThat(entries.get(0).getPayload().getName()).isEqualTo("abc");
+            readWriteTxn.commit();
+        }
+
         log.debug(table.getMetrics().toString());
     }
 

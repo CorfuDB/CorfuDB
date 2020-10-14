@@ -294,6 +294,15 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     /**
+     * Return the address of the latest updated made in this table.
+     *
+     * @return stream tail of this table.
+     */
+    public long getHighestSequence() {
+        return corfuRuntime.getSequencerView().query(this.streamUUID);
+    }
+
+    /**
      * Scan and filter.
      *
      * @param p Predicate to filter the values.
@@ -386,6 +395,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             Descriptors.FieldDescriptor.Type.SFIXED64
     ));
 
+    @Deprecated
     private M mergeOldAndNewMetadata(@Nonnull M previousMetadata,
                                      @Nullable M userMetadata, boolean isCreate) {
         M.Builder builder = previousMetadata.toBuilder();
@@ -408,6 +418,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         return (M) builder.build();
     }
 
+    @Deprecated
     private void validateVersion(@Nullable M previousMetadata,
                                  @Nullable M userMetadata) {
         // TODO: do a lookup instead of a search if possible

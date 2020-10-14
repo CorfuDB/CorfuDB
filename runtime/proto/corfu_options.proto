@@ -12,7 +12,7 @@ message SchemaOptions {
     // Version number in metadata field.
     optional bool version = 2;
     // Should this table be backed up by Corfu.
-    optional bool needs_backup = 3;
+    optional bool requires_backup_support = 3;
     // Should this table be log replicated over to remote standby site using corfu log replication.
     optional bool is_federated = 4;
     // Tag tables with unique stream listener tags for selectivity in receiving change notifications.
