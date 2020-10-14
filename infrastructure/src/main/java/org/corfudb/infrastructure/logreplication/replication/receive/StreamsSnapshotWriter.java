@@ -47,7 +47,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private long topologyConfigId;
     private long srcGlobalSnapshot; // The source snapshot timestamp
     private long recvSeq;
-    private long shadowStreamStartAddress;
     private Optional<SnapshotSyncStartMarker> snapshotSyncStartMarker;
 
     @Getter
@@ -170,7 +169,6 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         phase = Phase.TRANSFER_PHASE;
         clearTables();
         snapshotSyncStartMarker = Optional.empty();
-        shadowStreamStartAddress = rt.getAddressSpaceView().getLogTail();
     }
 
 
@@ -239,7 +237,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
                 LogReplicationMetadataType.LAST_SNAPSHOT_TRANSFERRED_SEQUENCE_NUMBER);
 
         if (topologyConfigId != persistedTopologyConfigId || srcGlobalSnapshot != persistedSnapshotStart) {
-            log.warn("Skip processing opaque entry. Current topologyConfigId={} srcGlobalSnapshot={}, currentSeqNum={}, " +
+            log.warn("Skip processing opaque entry. Current topologyConfigId={}, srcGlobalSnapshot={}, currentSeqNum={}, " +
                             "persistedTopologyConfigId={}, persistedSnapshotStart={}, persistedLastSequenceNum={}", topologyConfigId,
                     srcGlobalSnapshot, recvSeq, persistedTopologyConfigId, persistedSnapshotStart, persistedSequenceNum);
             return CorfuStoreMetadata.Timestamp.getDefaultInstance();
@@ -306,7 +304,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param snapshot base snapshot timestamp
      */
     private void applyShadowStream(UUID streamId, long snapshot) {
-        log.trace("Apply shadow stream for stream {}, snapshot={}", streamId, snapshot);
+        log.debug("Apply shadow stream for stream {}, snapshot={}", streamId, snapshot);
         UUID shadowStreamId = regularToShadowStreamId.get(streamId);
 
         // In order to avoid data loss as part of a plugin failing to successfully
@@ -331,12 +329,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         Iterator<OpaqueEntry> iterator = shadowStream.iterator();
         while (iterator.hasNext()) {
             OpaqueEntry opaqueEntry = iterator.next();
-            if (opaqueEntry.getVersion() >= shadowStreamStartAddress) {
-                processOpaqueEntry(opaqueEntry.getEntries().get(shadowStreamId), streamId);
-            } else {
-                log.warn("Skipping shadow stream opaque entry {} because it does not fall" +
-                        "in the valid range >= {} for this cycle", opaqueEntry.getVersion(), shadowStreamStartAddress);
-            }
+            processOpaqueEntry(opaqueEntry.getEntries().get(shadowStreamId), streamId);
         }
     }
 
@@ -346,6 +339,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     public void applyShadowStreams() {
         long snapshot = rt.getAddressSpaceView().getLogTail();
         clearTables();
+        log.debug("Apply Shadow Streams, total={}", streamViewMap.size());
         for (UUID uuid : streamViewMap.keySet()) {
             applyShadowStream(uuid, snapshot);
         }

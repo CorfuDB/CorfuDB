@@ -614,7 +614,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         // Skip stale topology notification
         if (event.getTopologyConfig().getTopologyConfigID() < topologyDescriptor.getTopologyConfigId()) {
             log.debug("Stale Topology Change Notification, current={}, received={}",
-                    topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig());
+                    topologyDescriptor.getTopologyConfigId(), event.getTopologyConfig().getTopologyConfigID());
             return;
         }
 
