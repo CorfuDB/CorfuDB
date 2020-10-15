@@ -17,10 +17,15 @@ import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
+import org.corfudb.runtime.view.Layout;
 
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
-import org.corfudb.runtime.proto.service.Layout;
+import org.corfudb.runtime.proto.service.Layout.PrepareLayoutResponseMsg;
+import org.corfudb.runtime.proto.service.Layout.LayoutResponseMsg;
+import org.corfudb.runtime.proto.service.Layout.ProposeLayoutResponseMsg;
+import org.corfudb.runtime.proto.service.Layout.CommitLayoutResponseMsg;
+import org.corfudb.runtime.proto.service.Layout.BootstrapLayoutResponseMsg;
 import org.corfudb.runtime.proto.Common;
 
 /**
@@ -107,11 +112,75 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
         throw new AlreadyBootstrappedException();
     }
 
+    // Protobuf region
+
     @ResponseHandler(type = PayloadCase.LAYOUT_RESPONSE)
     private static Object handleLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                IClientProtobufRouter r) {
-        Layout.LayoutResponseMsg layoutResponse = msg.getPayload().getLayoutResponse();
+        LayoutResponseMsg layoutResponse = msg.getPayload().getLayoutResponse();
         Common.LayoutMsg layout = layoutResponse.getLayout();
 
+        return Layout.fromJSONString(layout.getLayoutJson());
     }
+
+    @ResponseHandler(type = PayloadCase.PREPARE_LAYOUT_RESPONSE)
+    private static Object handlePrepareLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                      IClientProtobufRouter r) {
+        PrepareLayoutResponseMsg prepareLayoutMsg = msg.getPayload().getPrepareLayoutResponse();
+        PrepareLayoutResponseMsg.Type type = prepareLayoutMsg.getRespType();
+        long rank = prepareLayoutMsg.getRank();
+        Layout layout = Layout.fromJSONString(prepareLayoutMsg.getLayout().getLayoutJson());
+
+        switch (type) {
+            case ACK: return new LayoutPrepareResponse(rank, layout);
+            case REJECT: throw new OutrankedException(rank, layout);
+            // TODO for INVALID
+            default: throw new UnsupportedOperationException("Response handler not provided");
+        }
+    }
+
+    @ResponseHandler(type = PayloadCase.PROPOSE_LAYOUT_RESPONSE)
+    private static Object handleProposeLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                      IClientProtobufRouter r) {
+        ProposeLayoutResponseMsg proposeLayoutMsg = msg.getPayload().getProposeLayoutResponse();
+        ProposeLayoutResponseMsg.Type type = proposeLayoutMsg.getRespType();
+        long rank = proposeLayoutMsg.getRank();
+
+        switch (type) {
+            case ACK: return true;
+            case REJECT: throw new OutrankedException(rank);
+            // TODO for INVALID
+            default: throw new UnsupportedOperationException("Response handler not provided");
+        }
+    }
+
+    @ResponseHandler(type = PayloadCase.COMMIT_LAYOUT_RESPONSE)
+    private static Object handleCommitLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                     IClientProtobufRouter r) {
+        CommitLayoutResponseMsg commitLayoutMsg = msg.getPayload().getCommitLayoutResponse();
+        CommitLayoutResponseMsg.Type type = commitLayoutMsg.getRespType();
+
+        switch (type) {
+            case ACK: return true;
+            case NACK: return false;
+            // TODO for INVALID
+            default: throw new UnsupportedOperationException("Response handler not provided");
+        }
+    }
+
+    @ResponseHandler(type = PayloadCase.BOOTSTRAP_LAYOUT_RESPONSE)
+    private static Object handleBootstrapLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                        IClientProtobufRouter r) {
+        BootstrapLayoutResponseMsg bootstrapLayoutMsg =  msg.getPayload().getBootstrapLayoutResponse();
+        BootstrapLayoutResponseMsg.Type type = bootstrapLayoutMsg.getRespType();
+
+        switch (type) {
+            case ACK: return true;
+            case NACK: return false;
+            // TODO for INVALID
+            default: throw new UnsupportedOperationException("Response handler not provided");
+        }
+    }
+
+    // End region
 }

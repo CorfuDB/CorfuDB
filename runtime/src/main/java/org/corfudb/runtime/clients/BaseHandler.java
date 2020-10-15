@@ -142,6 +142,7 @@ public class BaseHandler implements IClient {
 
     /**
      * Handle a Version response from the server.
+     * For protobuf, use {@link #handleVersionResponse(ResponseMsg, ChannelHandlerContext, IClientProtobufRouter)}
      *
      * @param msg The version message
      * @param ctx The context the message was sent under
@@ -273,5 +274,4 @@ public class BaseHandler implements IClient {
     }
 
     // End region
-}
 }
