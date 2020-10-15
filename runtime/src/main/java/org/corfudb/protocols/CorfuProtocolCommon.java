@@ -30,6 +30,11 @@ public class CorfuProtocolCommon {
                     SequencerMetrics.SequencerStatus.NOT_READY, SequencerStatus.NOT_READY,
                     SequencerMetrics.SequencerStatus.UNKNOWN, SequencerStatus.UNKNOWN));
 
+    // Temporary message header markers indicating message type.
+    public static final byte LEGACY_CORFU_MSG_MARK = 0x1;
+    public static final byte PROTO_CORFU_REQUEST_MSG_MARK = 0x2;
+    public static final byte PROTO_CORFU_RESPONSE_MSG_MARK = 0x3;
+
     public static UuidMsg getUuidMsg(UUID uuid) {
         return UuidMsg.newBuilder()
                 .setLsb(uuid.getLeastSignificantBits())

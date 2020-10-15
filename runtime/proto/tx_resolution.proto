@@ -27,18 +27,9 @@ enum TokenType {
   TX_ABORT_SEQ_TRIM = 5;
 }
 
-message TxResolutionResponseMsg {
-  /* Response type from the sequencer.*/
-  TokenType token_type = 1;
-
-  /* Optional. In case of a conflict, what was the address at which that conflict occurred. */
-  int64 address = 2;
-
-  /* Optional. In case of a conflict, what was the key that triggered a negative response. */
-  bytes conflicting_key = 3;
-
-  /* Optional. In case of a conflict, what was the stream ID that triggered a negative response. */
-  UuidMsg conflicting_stream = 4;
+message UuidToListOfBytesPairMsg {
+  UuidMsg key = 1;
+  repeated bytes value = 2;
 }
 
 message TxResolutionInfoMsg {
