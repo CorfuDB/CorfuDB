@@ -4,10 +4,12 @@ import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.proto.Common.LayoutMsg;
 import org.corfudb.runtime.proto.Common.SequencerMetricsMsg;
 import org.corfudb.runtime.proto.Common.SequencerMetricsMsg.SequencerStatus;
+import org.corfudb.runtime.proto.Common.StreamAddressRangeMsg;
 import org.corfudb.runtime.proto.Common.StreamAddressSpaceMsg;
 import org.corfudb.runtime.proto.Common.TokenMsg;
 import org.corfudb.runtime.proto.Common.UuidMsg;
@@ -102,5 +104,13 @@ public class CorfuProtocolCommon {
         }
 
         return new StreamAddressSpace(msg.getTrimMark(), roaring64NavigableMap);
+    }
+
+    public static StreamAddressRangeMsg getStreamAddressRangeMsg(StreamAddressRange streamAddressRange) {
+        return StreamAddressRangeMsg.newBuilder()
+                .setStreamId(getUuidMsg(streamAddressRange.getStreamID()))
+                .setStart(streamAddressRange.getStart())
+                .setEnd(streamAddressRange.getEnd())
+                .build();
     }
 }
