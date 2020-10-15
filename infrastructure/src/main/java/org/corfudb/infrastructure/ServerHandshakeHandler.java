@@ -15,12 +15,16 @@ import javax.net.ssl.SSLHandshakeException;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.API;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeResponse;
 import org.corfudb.protocols.wireprotocol.HandshakeState;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+
+import static org.corfudb.runtime.protocol.proto.CorfuProtocol.*;
 
 /**
  * The ServerHandshakeHandler waits for the handshake message, validates and sends
@@ -62,7 +66,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object m) throws Exception {
-
+        log.warn("ChannelRead: message received - "+ m);
         if (this.state.failed()) {
             return;
         }
@@ -73,36 +77,52 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
             super.channelRead(ctx, m);
             return;
         }
+        UUID clientId = null;
+        UUID serverId = null;
 
-        CorfuPayloadMsg<HandshakeMsg> handshake;
+        if (m instanceof CorfuMsg) {
+            CorfuPayloadMsg<HandshakeMsg> handshake;
+            try {
+                handshake = (CorfuPayloadMsg<HandshakeMsg>) m;
+                log.info("channelRead: Handshake Message received. Removing {} from pipeline.",
+                        READ_TIMEOUT_HANDLER);
+                // Remove the handler from the pipeline. Also remove the reference of the context from
+                // the handler so that it does not disconnect the channel.
+                ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
+            } catch (ClassCastException e) {
+                log.warn("channelRead: Non-handshake message received by handshake handler." +
+                        " Send upstream only if handshake succeeded.");
+                if (this.state.completed()) {
+                    // Only send upstream if handshake is complete.
+                    super.channelRead(ctx, m);
+                } else {
+                    // Otherwise, drop message.
+                    try {
+                        log.info("channelRead: Dropping message: {}", ((CorfuMsg) m).getMsgType().name());
+                    } catch (Exception ex) {
+                        log.error("channelRead: Message received by Server is not a valid " +
+                                "CorfuMsg type.");
+                    }
+                }
+                return;
+            }
 
-        try {
-            handshake = (CorfuPayloadMsg<HandshakeMsg>) m;
-            log.debug("channelRead: Handshake Message received. Removing {} from pipeline.",
-                    READ_TIMEOUT_HANDLER);
-            // Remove the handler from the pipeline. Also remove the reference of the context from
-            // the handler so that it does not disconnect the channel.
-            ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
-        } catch (ClassCastException e) {
-            log.warn("channelRead: Non-handshake message received by handshake handler." +
-                    " Send upstream only if handshake succeeded.");
+            clientId = handshake.getPayload().getClientId();
+            serverId = handshake.getPayload().getServerId();
+        } else if (m instanceof Request) {
+            Request request = ((Request) m);
+            HandshakeRequest handshakeRequest = request.getHandshakeRequest();
+            clientId = API.getJavaUUID(handshakeRequest.getClientId());
+            serverId = API.getJavaUUID(handshakeRequest.getServerId());
+        } else {
             if (this.state.completed()) {
                 // Only send upstream if handshake is complete.
                 super.channelRead(ctx, m);
-            } else {
-                // Otherwise, drop message.
-                try {
-                    log.debug("channelRead: Dropping message: {}", ((CorfuMsg) m).getMsgType().name());
-                } catch (Exception ex) {
-                    log.error("channelRead: Message received by Server is not a valid " +
-                            "CorfuMsg type.");
-                }
             }
-            return;
+            // The message was unregistered, we are dropping it.
+            log.error("channelRead: Received unregistered message {}.", m);
         }
 
-        UUID clientId = handshake.getPayload().getClientId();
-        UUID serverId = handshake.getPayload().getServerId();
 
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
         // which indicates node id matching is not required.
@@ -118,15 +138,24 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         // Store clientID as a channel attribute.
         ctx.channel().attr(clientIdAttrKey).set(clientId);
         log.info("channelRead: Handshake validated by Server.");
-        log.debug("channelRead: Sending handshake response: Node Id: {} Corfu Version: {}",
+        log.info("channelRead: Sending handshake response: Node Id: {} Corfu Version: {}",
                 this.nodeId, this.corfuVersion);
 
-        CorfuMsg handshakeResponse = CorfuMsgType.HANDSHAKE_RESPONSE
-                .payloadMsg(new HandshakeResponse(this.nodeId, this.corfuVersion));
-        ctx.writeAndFlush(handshakeResponse);
+
+        if (m instanceof CorfuMsg){
+            CorfuMsg handshakeResponse = CorfuMsgType.HANDSHAKE_RESPONSE
+                    .payloadMsg(new HandshakeResponse(this.nodeId, this.corfuVersion));
+            ctx.writeAndFlush(handshakeResponse);
+        } else if (m instanceof Request) {
+            // Note: we reuse the request header as the ignore_cluster_id and
+            // ignore_epoch fields are the same in both cases.
+            Response response = API.getHandshakeResponse(((Request) m).getHeader(), this.nodeId, this.corfuVersion);
+            ctx.writeAndFlush(response);
+        }
+
 
         // Flush messages in queue
-        log.debug("channelRead: There are [{}] messages in queue to be flushed.", this.messages.size());
+        log.info("channelRead: There are [{}] messages in queue to be flushed.", this.messages.size());
         while (!messages.isEmpty()) {
             ctx.writeAndFlush(messages.poll());
         }
@@ -159,7 +188,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
      */
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        log.debug("channelInactive: Channel closed.");
+        log.info("channelInactive: Channel closed.");
         if (!this.state.completed()) {
             this.fireHandshakeFailed(ctx);
         }
@@ -180,7 +209,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         if (cause instanceof ReadTimeoutException) {
             // Read timeout: no inbound traffic detected in a period of time.
             if (this.state.failed()) {
-                log.debug("exceptionCaught: Handshake timeout checker: already failed.");
+                log.info("exceptionCaught: Handshake timeout checker: already failed.");
                 return;
             }
 
@@ -188,7 +217,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
                 log.error("exceptionCaught: Handshake timeout checker: timed out. Close Connection.");
                 this.state.set(true, false);
             } else {
-                log.debug("exceptionCaught: Handshake timeout " +
+                log.info("exceptionCaught: Handshake timeout " +
                         "checker: discarded (handshake OK)");
             }
         } else if (cause instanceof SSLHandshakeException) {
@@ -228,7 +257,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         }
 
         if (this.state.completed()) {
-            log.debug("write: Handshake already completed, not appending corfu message to queue");
+            log.info("write: Handshake already completed, not appending corfu message to queue");
             super.write(ctx, msg, promise);
         } else {
             this.messages.offer((CorfuMsg) msg);

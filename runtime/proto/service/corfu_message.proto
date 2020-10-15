@@ -26,7 +26,7 @@ message RequestPayloadMsg {
   oneof payload {
     // Base Requests
     PingRequestMsg ping_request = 10;
-    AuthenticateRequestMsg authenticate_request = 11;
+    HandshakeRequestMsg handshake_request = 11;
     RestartRequestMsg restart_request = 12;
     ResetRequestMsg reset_request = 13;
     SealRequestMsg seal_request = 14;
@@ -76,7 +76,7 @@ message ResponsePayloadMsg {
   oneof payload {
     // Base Responses
     PingResponseMsg ping_response = 10;
-    AuthenticateResponseMsg authenticate_response = 11;
+    HandshakeResponseMsg handshake_response = 11;
     RestartResponseMsg restart_response = 12;
     ResetResponseMsg reset_response = 13;
     SealResponseMsg seal_response = 14;

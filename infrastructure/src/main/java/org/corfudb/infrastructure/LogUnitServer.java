@@ -150,7 +150,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @Override
-    protected void processRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    protected void processRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
@@ -169,7 +169,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.TAIL)
-    public void handleTailRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handleTailRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleTailRequest[{}]: received a tail request {}", req.getHeader().getRequestId(), req);
         batchWriter.<TailsResponse>addTask(BatchWriterOp.Type.TAILS_QUERY, req)
                 .thenAccept(tailsResp -> {
@@ -202,7 +202,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.LOG_ADDRESS_SPACE)
-    public void handleLogAddressSpaceRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handleLogAddressSpaceRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleLogAddressSpaceRequest[{}]: received a log " +
                 "address space request {}", req.getHeader().getRequestId(), req);
         batchWriter.<StreamsAddressResponse>addTask(BatchWriterOp.Type.LOG_ADDRESS_SPACE_QUERY, req)
@@ -228,7 +228,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.TRIM_MARK)
-    public void handleTrimMarkRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handleTrimMarkRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleTrimMarkRequest: received a trim mark request {}", req);
 
         // Note: we reuse the request header as the ignore_cluster_id and
@@ -248,7 +248,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.COMMITTED_TAIL)
-    public void handleCommittedTailRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handleCommittedTailRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleCommittedTailRequest: received a committed log tail request {}", req);
 
         // Note: we reuse the request header as the ignore_cluster_id and
@@ -270,7 +270,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.UPDATE_COMMITTED_TAIL)
-    public void handleUpdateCommittedTailRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handleUpdateCommittedTailRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleUpdateCommittedTailRequest: received request to update committed tail {}", req);
         streamLog.updateCommittedTail(req.getUpdateCommittedTailRequest().getCommittedTail());
 
@@ -369,7 +369,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.TRIM_LOG)
-    private void handleTrimLog(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private void handleTrimLog(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleTrimLog[{}]: trimming prefix to {}",
                 req.getHeader().getRequestId(), req.getTrimLogRequest().getAddress());
 
@@ -437,7 +437,7 @@ public class LogUnitServer extends AbstractServer {
   }
 
   @RequestHandler(type = CorfuProtocol.MessageType.INSPECT_ADDRESSES)
-  public void handleInspectAddressesRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+  public void handleInspectAddressesRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         final List<Long> addresses = req.getInspectAddressesRequest().getAddressesList();
         List<Long> emptyAddresses = new ArrayList<>();
 
@@ -478,7 +478,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.KNOWN_ADDRESS)
-    private void handleKnownAddressRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private void handleKnownAddressRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         try {
             Set<Long> knownAddresses = streamLog.getKnownAddressesInRange(
                     req.getKnownAddressRequest().getStartRange(), req.getKnownAddressRequest().getStartRange());
@@ -500,7 +500,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.COMPACT_LOG)
-    private void handleCompactLogRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private void handleCompactLogRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleCompactLogRequest: received a compact request {}", req);
         streamLog.compact();
 
@@ -518,7 +518,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.FLUSH_CACHE)
-    private void handleFlushCacheRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private void handleFlushCacheRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleFlushCacheRequest: received a cache flush request {}", req);
         dataCache.invalidateAll();
 
@@ -599,7 +599,7 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.RESET_LOG_UNIT)
-    private synchronized void handleResetLogUnit(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private synchronized void handleResetLogUnit(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         // Check if the reset request is with an epoch greater than the last reset epoch seen to
         // prevent multiple reset in the same epoch. and should be equal to the current router
         // epoch to prevent stale reset requests from wiping out the data.

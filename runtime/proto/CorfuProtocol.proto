@@ -17,7 +17,7 @@ enum ProtocolVersion {
 enum MessageType {
   // Base Message Types
   PING = 0;
-  AUTHENTICATE = 1;
+  HANDSHAKE = 1;
   RESTART = 2;
   RESET = 3;
   SEAL = 4;
@@ -114,12 +114,14 @@ message PingRequest {
 message PingResponse {
 }
 
-message AuthenticateRequest {
-
+message HandshakeRequest {
+  UUID client_id = 1;
+  UUID server_id = 2;
 }
 
-message AuthenticateResponse {
-
+message HandshakeResponse {
+  UUID server_id = 1;
+  string corfu_version = 2;
 }
 
 message RestartRequest {
@@ -730,7 +732,7 @@ message Request {
   oneof payload {
     // Base Requests
     PingRequest pingRequest = 10;
-    AuthenticateRequest authenticateRequest = 11;
+    HandshakeRequest handshakeRequest = 11;
     RestartRequest restartRequest = 12;
     ResetRequest resetRequest = 13;
     SealRequest sealRequest = 14;
@@ -781,7 +783,7 @@ message Response {
   oneof payload {
     // Base Responses
     PingResponse pingResponse = 10;
-    AuthenticateResponse authenticateResponse = 11;
+    HandshakeResponse handshakeResponse = 11;
     RestartResponse restartResponse = 12;
     ResetResponse resetResponse = 13;
     SealResponse sealResponse = 14;

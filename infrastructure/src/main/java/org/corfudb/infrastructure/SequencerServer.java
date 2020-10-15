@@ -194,7 +194,7 @@ public class SequencerServer extends AbstractServer {
     }
 
     @Override
-    protected void processRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    protected void processRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
@@ -515,7 +515,7 @@ public class SequencerServer extends AbstractServer {
      * @param r   server router
      */
     private void handleTokenQuery(Request req,
-                                  ChannelHandlerContext ctx, IRequestRouter r) {
+                                  ChannelHandlerContext ctx, IServerRouter r) {
         final CorfuProtocol.TokenRequest tokenRequest = req.getTokenRequest();
         List<CorfuProtocol.UUID> streams = tokenRequest.getStreamsList();
         Map<UUID, Long> streamTails;
@@ -569,7 +569,7 @@ public class SequencerServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.SEQUENCER_TRIM)
-    public void trimCache(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void trimCache(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("trimCache: Starting cache eviction");
         if (trimMark < req.getSequencerTrimRequest().getTrimMark()) {
             // Advance the trim mark, if the new trim request has a higher trim mark.
@@ -690,7 +690,7 @@ public class SequencerServer extends AbstractServer {
      * Service an incoming request to reset the sequencer.
      */
     @RequestHandler(type = CorfuProtocol.MessageType.BOOTSTRAP_SEQUENCER)
-    public void resetServer(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void resetServer(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Reset sequencer server.");
 
         // Converting from addressSpaceProtoMap to java addressSpaceMap as
@@ -808,7 +808,7 @@ public class SequencerServer extends AbstractServer {
      * Service an incoming metrics request with the metrics response.
      */
     @RequestHandler(type = CorfuProtocol.MessageType.SEQUENCER_METRICS)
-    public void handleMetricsRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handleMetricsRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         // Sequencer Ready flag is set to true as this message will be responded to only if the
         // sequencer is in a ready state.
         CorfuProtocol.SequencerMetrics sequencerMetrics =
@@ -860,7 +860,7 @@ public class SequencerServer extends AbstractServer {
      */
     @RequestHandler(type = CorfuProtocol.MessageType.TOKEN)
     public void tokenRequest(Request req,
-                             ChannelHandlerContext ctx, IRequestRouter r) {
+                             ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("Token request. Msg: {}", req);
 
         final CorfuProtocol.TokenRequest tokenRequest = req.getTokenRequest();
@@ -944,7 +944,7 @@ public class SequencerServer extends AbstractServer {
      * @param r   server router
      */
     private void handleRawToken(Request req,
-                                ChannelHandlerContext ctx, IRequestRouter r) {
+                                ChannelHandlerContext ctx, IServerRouter r) {
         final CorfuProtocol.TokenRequest tokenRequest = req.getTokenRequest();
 
         // The global tail points to an open slot, not the last written slot,
@@ -1012,7 +1012,7 @@ public class SequencerServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
-    private void handleTxToken(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private void handleTxToken(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         final CorfuProtocol.TokenRequest tokenRequest = req.getTokenRequest();
 
         // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
@@ -1123,7 +1123,7 @@ public class SequencerServer extends AbstractServer {
      * @param r   server router
      */
     private void handleAllocation(Request req,
-                                  ChannelHandlerContext ctx, IRequestRouter r) {
+                                  ChannelHandlerContext ctx, IServerRouter r) {
         final CorfuProtocol.TokenRequest tokenRequest = req.getTokenRequest();
 
         // extend the tail of the global log by the requested # of tokens
@@ -1236,7 +1236,7 @@ public class SequencerServer extends AbstractServer {
      * The response contains the requested streams address maps and the global log tail.
      */
     @RequestHandler(type = CorfuProtocol.MessageType.STREAMS_ADDRESS)
-    private void handleStreamsAddressRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private void handleStreamsAddressRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         CorfuProtocol.StreamsAddressRequest streamsAddressRequest = req.getStreamsAddressRequest();
         Map<UUID, StreamAddressSpace> streamsAddressMap;
 

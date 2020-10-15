@@ -33,11 +33,11 @@ import static org.mockito.Mockito.when;
 
 @Slf4j
 @RunWith(MockitoJUnitRunner.class)
-public class NettyRequestRouterTest {
+public class NettyServerRouterTest {
 
     private ServerContext serverContext;
     private ImmutableMap<Class, AbstractServer> servers;
-    private NettyRequestRouter requestRouter;
+    private NettyServerRouter router;
     private EmbeddedChannel channel;
 
     private Random generator = new Random();
@@ -108,8 +108,8 @@ public class NettyRequestRouterTest {
         when(servers.get(BaseServer.class).getHandlerMethods()).thenReturn(baseHandlerMethods);
         when(baseHandlerMethods.getHandledTypes()).thenReturn(ImmutableSet.<MessageType>builder().add(MessageType.PING).build());
 
-        requestRouter = new NettyRequestRouter(servers.values().asList(), serverContext);
-        channel = new EmbeddedChannel(requestRouter);
+        router = new NettyServerRouter(servers.values().asList(), serverContext);
+        channel = new EmbeddedChannel(router);
     }
 
     /**
@@ -181,14 +181,14 @@ public class NettyRequestRouterTest {
 
         Request request = API.getPingRequest(header);
         ByteBuf input = UnpooledByteBufAllocator.DEFAULT.buffer();
-        prepareRequest(input, request, API.PROTO_CORFU_MSG_MARK);
+        prepareRequest(input, request, API.PROTO_CORFU_REQUEST_MSG_MARK);
 
         when(serverContext.getCurrentLayout()).thenReturn(null);
 
         channel.writeInbound(input);
 
         ByteBuf output = channel.readOutbound();
-        Response response = parseResponse(output, API.PROTO_CORFU_MSG_MARK);
+        Response response = parseResponse(output, API.PROTO_CORFU_RESPONSE_MSG_MARK);
         assertFalse(output.isReadable());
         output.release();
 
@@ -215,14 +215,14 @@ public class NettyRequestRouterTest {
 
         Request request = API.getPingRequest(headerBadClusterId);
         ByteBuf input = UnpooledByteBufAllocator.DEFAULT.buffer();
-        prepareRequest(input, request, API.PROTO_CORFU_MSG_MARK);
+        prepareRequest(input, request, API.PROTO_CORFU_REQUEST_MSG_MARK);
 
         when(serverContext.getCurrentLayout()).thenReturn(layout);
         when(layout.getClusterId()).thenReturn(clusterId);
 
         channel.writeInbound(input);
         ByteBuf output = channel.readOutbound();
-        Response response = parseResponse(output, API.PROTO_CORFU_MSG_MARK);
+        Response response = parseResponse(output, API.PROTO_CORFU_RESPONSE_MSG_MARK);
         assertFalse(output.isReadable());
         output.release();
 
@@ -242,7 +242,7 @@ public class NettyRequestRouterTest {
      */
     @Test
     public void testInvalidEpochRequest() {
-        final long currentEpoch = requestRouter.getServerEpoch();
+        final long currentEpoch = router.getServerEpoch();
         final long badEpoch = currentEpoch - 1;
 
         Header headerBadEpoch = API.getHeader(generator.nextLong(), CorfuProtocol.Priority.NORMAL,
@@ -250,11 +250,11 @@ public class NettyRequestRouterTest {
 
         Request request = API.getPingRequest(headerBadEpoch);
         ByteBuf input = UnpooledByteBufAllocator.DEFAULT.buffer();
-        prepareRequest(input, request, API.PROTO_CORFU_MSG_MARK);
+        prepareRequest(input, request, API.PROTO_CORFU_REQUEST_MSG_MARK);
 
         channel.writeInbound(input);
         ByteBuf output = channel.readOutbound();
-        Response response = parseResponse(output, API.PROTO_CORFU_MSG_MARK);
+        Response response = parseResponse(output, API.PROTO_CORFU_RESPONSE_MSG_MARK);
         assertFalse(output.isReadable());
         output.release();
 

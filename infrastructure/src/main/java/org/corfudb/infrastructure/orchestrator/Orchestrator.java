@@ -5,7 +5,6 @@ import com.google.common.collect.HashBiMap;
 import com.google.common.collect.Maps;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.infrastructure.IRequestRouter;
 import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.orchestrator.workflows.AddNodeWorkflow;
@@ -143,7 +142,7 @@ public class Orchestrator {
 
     public void handle(@Nonnull CorfuProtocol.Request req,
                        @Nonnull ChannelHandlerContext ctx,
-                       @Nonnull IRequestRouter r) {
+                       @Nonnull IServerRouter r) {
         OrchestratorRequest.ExecuteWorkflow workflowReq = req.getOrchestratorRequest().getExecuteWorkflow();
         IWorkflow workflow;
 
@@ -204,7 +203,7 @@ public class Orchestrator {
                 .payloadMsg(new OrchestratorResponse(resp)));
     }
 
-    void handleQuery(CorfuProtocol.Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    void handleQuery(CorfuProtocol.Request req, ChannelHandlerContext ctx, IServerRouter r) {
         final UUID workflowId = API.getJavaUUID(req.getOrchestratorRequest().getQueryWorkflow().getId());
         boolean isActive = false;
 
@@ -259,7 +258,7 @@ public class Orchestrator {
     synchronized void dispatch(@Nonnull IWorkflow workflow,
                                @Nonnull CorfuProtocol.Request req,
                                @Nonnull ChannelHandlerContext ctx,
-                               @Nonnull IRequestRouter r) {
+                               @Nonnull IServerRouter r) {
         final String endpoint = req.getOrchestratorRequest().getExecuteWorkflow().getEndpoint();
         final UUID id = activeWorkflows.inverse().get(endpoint);
 
