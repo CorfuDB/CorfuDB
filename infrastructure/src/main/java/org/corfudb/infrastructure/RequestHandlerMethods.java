@@ -40,7 +40,7 @@ public class RequestHandlerMethods {
     public interface HandlerMethod {
         void handle(@Nonnull Request req,
                     @Nonnull ChannelHandlerContext ctx,
-                    @Nonnull IRequestRouter r);
+                    @Nonnull IServerRouter r);
     }
 
     /** Get the types of requests this handler will handle.
@@ -63,7 +63,7 @@ public class RequestHandlerMethods {
      * @param r         The server router.
      */
     @SuppressWarnings("unchecked")
-    public void handle(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handle(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         final HandlerMethod handler = handlerMap.get(req.getHeader().getType());
         try {
             handler.handle(req, ctx, r);

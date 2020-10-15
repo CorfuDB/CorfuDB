@@ -11,12 +11,12 @@ message PingRequestMsg {
 message PingResponseMsg {
 }
 
-message AuthenticateRequestMsg {
+message HandshakeRequestMsg {
   UuidMsg client_id = 1;
   UuidMsg server_id = 2;
 }
 
-message AuthenticateResponseMsg {
+message HandshakeResponseMsg {
   UuidMsg server_id = 1;
   string corfu_version = 2;
 }

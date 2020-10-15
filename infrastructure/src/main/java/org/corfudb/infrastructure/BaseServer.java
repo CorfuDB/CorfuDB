@@ -66,7 +66,7 @@ public class BaseServer extends AbstractServer {
     }
 
     @Override
-    protected void processRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    protected void processRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
@@ -96,7 +96,7 @@ public class BaseServer extends AbstractServer {
      * @param r     The server router.
      */
     @RequestHandler(type = CorfuProtocol.MessageType.PING)
-    private void handlePing(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private void handlePing(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.info("handlePing[{}]: Ping message received from {} {}", req.getHeader().getRequestId(),
                 req.getHeader().getClientId().getMsb(), req.getHeader().getClientId().getLsb());
 
@@ -142,7 +142,7 @@ public class BaseServer extends AbstractServer {
      * @param r     The server router.
      */
     @RequestHandler(type = CorfuProtocol.MessageType.VERSION)
-    private void getVersion(CorfuMessage.RequestMsg req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private void getVersion(CorfuMessage.RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),
                 serverContext.getNodeIdBase64());
         CorfuMessage.ResponseMsg responseMsg = API.getVersionResponse(req.getHeader(), vi);
@@ -189,7 +189,7 @@ public class BaseServer extends AbstractServer {
      * @param r The server router.
      */
     @RequestHandler(type = CorfuProtocol.MessageType.SEAL)
-    private synchronized void handleSeal(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private synchronized void handleSeal(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         try {
             final long epoch = req.getSealRequest().getEpoch();
             String remoteHostAddress;
@@ -239,7 +239,7 @@ public class BaseServer extends AbstractServer {
      * @param r The server router.
      */
     @RequestHandler(type = CorfuProtocol.MessageType.RESET)
-    private void handleReset(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private void handleReset(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("handleReset[{}]: Remote reset requested from client {}",
                 req.getHeader().getRequestId(), req.getHeader().getClientId());
 
@@ -275,7 +275,7 @@ public class BaseServer extends AbstractServer {
      * @param r     The server router.
      */
     @RequestHandler(type = CorfuProtocol.MessageType.RESTART)
-    private void handleRestart(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private void handleRestart(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.warn("handleRestart[{}]: Remote restart requested from client {}",
                 req.getHeader().getRequestId(), req.getHeader().getClientId());
 

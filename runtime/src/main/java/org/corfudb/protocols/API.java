@@ -44,7 +44,10 @@ public class API {
 
     // Temporary message header markers indicating message type.
     public static final byte LEGACY_CORFU_MSG_MARK = 0x1;
+    // TODO(Chetan): Remove this.
     public static final byte PROTO_CORFU_MSG_MARK = 0x2;
+    public static final byte PROTO_CORFU_REQUEST_MSG_MARK = 0x2;
+    public static final byte PROTO_CORFU_RESPONSE_MSG_MARK = 0x3;
 
     public static CorfuProtocol.UUID getProtoUUID(UUID uuid) {
         return CorfuProtocol.UUID.newBuilder()
@@ -231,6 +234,29 @@ public class API {
         return CorfuMessage.ResponseMsg.newBuilder()
                 .setHeader(headerMsg)
                 .setPayload(responsePayloadMsg)
+                .build();
+    }
+
+    public static Response getHandshakeResponse(Header header, UUID nodeId, String corfuVersion) {
+        HandshakeResponse handshakeResponse = HandshakeResponse.newBuilder()
+                .setServerId(getProtoUUID(nodeId))
+                .setCorfuVersion(corfuVersion)
+                .build();
+        return Response.newBuilder()
+                .setHeader(header)
+                .setError(getNoServerError())
+                .setHandshakeResponse(handshakeResponse)
+                .build();
+    }
+
+    public static Request getHandshakeRequest(Header header, UUID clientId, UUID nodeId) {
+        HandshakeRequest handshakeRequest = HandshakeRequest.newBuilder()
+                .setClientId(getProtoUUID(clientId))
+                .setServerId(getProtoUUID(nodeId))
+                .build();
+        return Request.newBuilder()
+                .setHeader(header)
+                .setHandshakeRequest(handshakeRequest)
                 .build();
     }
 
@@ -1060,8 +1086,8 @@ public class API {
         switch(request.getHeader().getType()) {
             case PING:
                 return request.hasPingRequest();
-            case AUTHENTICATE:
-                return request.hasAuthenticateRequest();
+            case HANDSHAKE:
+                return request.hasHandshakeRequest();
             case RESTART:
                 return request.hasRestartRequest();
             case RESET:

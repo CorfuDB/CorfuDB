@@ -134,7 +134,7 @@ public class LayoutServer extends AbstractServer {
     }
 
     @Override
-    protected void processRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    protected void processRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
@@ -154,7 +154,7 @@ public class LayoutServer extends AbstractServer {
         return true;
     }
 
-    private boolean isBootstrapped(Header reqHeader, ChannelHandlerContext ctx, IRequestRouter r) {
+    private boolean isBootstrapped(Header reqHeader, ChannelHandlerContext ctx, IServerRouter r) {
         if(getCurrentLayout() == null) {
             r.sendNoBootstrapError(reqHeader, ctx);
             return false;
@@ -196,7 +196,7 @@ public class LayoutServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.GET_LAYOUT)
-    public synchronized void handleGetLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public synchronized void handleGetLayout(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         if(!isBootstrapped(req.getHeader(), ctx, r)) return;
 
         final long payloadEpoch = req.getGetLayoutRequest().getEpoch();
@@ -255,7 +255,7 @@ public class LayoutServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.BOOTSTRAP_LAYOUT)
-    public synchronized void handleBootstrapLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public synchronized void handleBootstrapLayout(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         final Header requestHeader = req.getHeader();
         Header responseHeader;
         Response response;
@@ -342,7 +342,7 @@ public class LayoutServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.PREPARE_LAYOUT)
-    public synchronized void handlePrepareLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public synchronized void handlePrepareLayout(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         final Header requestHeader = req.getHeader();
         if(!isBootstrapped(requestHeader, ctx, r)) return;
 
@@ -465,7 +465,7 @@ public class LayoutServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.PROPOSE_LAYOUT)
-    public synchronized void handleProposeLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public synchronized void handleProposeLayout(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         final Header requestHeader = req.getHeader();
         if(!isBootstrapped(requestHeader, ctx, r)) return;
 
@@ -572,7 +572,7 @@ public class LayoutServer extends AbstractServer {
         r.sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.ACK));
     }
 
-    private synchronized void forceLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private synchronized void forceLayout(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         final long payloadEpoch = req.getCommitLayoutRequest().getEpoch();
         final long serverEpoch = getServerEpoch();
         final Header requestHeader = req.getHeader();
@@ -643,7 +643,7 @@ public class LayoutServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.COMMIT_LAYOUT)
-    public synchronized void handleCommitLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public synchronized void handleCommitLayout(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         if(req.getCommitLayoutRequest().getForced()) {
             forceLayout(req, ctx, r);
             return;

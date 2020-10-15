@@ -1,21 +1,31 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableList;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
+import org.corfudb.protocols.API;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
 import org.corfudb.runtime.view.Layout;
 
+import java.io.IOException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+
+import static org.corfudb.runtime.protocol.proto.CorfuProtocol.*;
 
 
 /**
@@ -33,6 +43,11 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     private final Map<CorfuMsgType, AbstractServer> handlerMap;
 
     /**
+     * This map stores the mapping from message types to server handler.
+     */
+    private final Map<MessageType, AbstractServer> requestTypeHandlerMap;
+
+    /**
      * This node's server context.
      */
     private final ServerContext serverContext;
@@ -43,23 +58,33 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     @Setter
     volatile long serverEpoch;
 
-    /** The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for. */
+    /**
+     * The {@link AbstractServer}s this {@link NettyServerRouter} routes messages for.
+     */
     private final ImmutableList<AbstractServer> servers;
 
-    /** Construct a new {@link NettyServerRouter}.
+    /**
+     * Construct a new {@link NettyServerRouter}.
      *
-     * @param servers   A list of {@link AbstractServer}s this router will route
-     *                  messages for.
+     * @param servers A list of {@link AbstractServer}s this router will route
+     *                messages for.
      */
     public NettyServerRouter(ImmutableList<AbstractServer> servers, ServerContext serverContext) {
         this.serverContext = serverContext;
         this.serverEpoch = serverContext.getServerEpoch();
         this.servers = servers;
         handlerMap = new EnumMap<>(CorfuMsgType.class);
+        requestTypeHandlerMap = new EnumMap<>(MessageType.class);
 
         servers.forEach(server -> {
-            Set<CorfuMsgType> handledTypes = server.getHandler().getHandledTypes();
-            handledTypes.forEach(handledType -> handlerMap.put(handledType, server));
+            if (server.getHandler() != null){
+                Set<CorfuMsgType> handledTypes = server.getHandler().getHandledTypes();
+                handledTypes.forEach(handledType -> handlerMap.put(handledType, server));
+            }
+            if (server.getHandlerMethods() != null){
+                Set<MessageType> protoHandledTypes = server.getHandlerMethods().getHandledTypes();
+                protoHandledTypes.forEach(handledType -> requestTypeHandlerMap.put(handledType, server));
+            }
         });
     }
 
@@ -89,6 +114,8 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     }
 
     /**
+     * Remove this after Protobuf for RPC Completion
+     * <p>
      * Send a netty message through this router, setting the fields in the outgoing message.
      *
      * @param ctx    Channel handler context to use.
@@ -99,6 +126,50 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         outMsg.copyBaseFields(inMsg);
         ctx.writeAndFlush(outMsg, ctx.voidPromise());
         log.trace("Sent response: {}", outMsg);
+    }
+
+    /**
+     * Send a response message through this router.
+     *
+     * @param response The response message to send.
+     * @param ctx      The context of the channel handler.
+     */
+    public void sendResponse(Response response, ChannelHandlerContext ctx) {
+        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+        ByteBufOutputStream responseOutputStream = new ByteBufOutputStream(outBuf);
+
+        try {
+            responseOutputStream.writeByte(API.PROTO_CORFU_RESPONSE_MSG_MARK);
+            response.writeTo(responseOutputStream);
+            ctx.writeAndFlush(outBuf, ctx.voidPromise());
+        } catch (IOException e) {
+            log.warn("sendResponse[{}]: Exception occurred when sending response {}, caused by {}",
+                    response.getHeader().getRequestId(), response.getHeader(), e.getCause(), e);
+        } finally {
+            IOUtils.closeQuietly(responseOutputStream);
+        }
+    }
+
+    /**
+     * Send a response message through this router.
+     *
+     * @param response The response message to send.
+     * @param ctx      The context of the channel handler.
+     */
+    public void sendResponse(CorfuMessage.ResponseMsg response, ChannelHandlerContext ctx) {
+        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+        ByteBufOutputStream responseOutputStream = new ByteBufOutputStream(outBuf);
+
+        try {
+            responseOutputStream.writeByte(API.PROTO_CORFU_RESPONSE_MSG_MARK);
+            response.writeTo(responseOutputStream);
+            ctx.writeAndFlush(outBuf, ctx.voidPromise());
+        } catch (IOException e) {
+            log.warn("sendResponse[{}]: Exception occurred when sending response {}, caused by {}",
+                    response.getHeader().getRequestId(), response.getHeader(), e.getCause(), e);
+        } finally {
+            IOUtils.closeQuietly(responseOutputStream);
+        }
     }
 
     @Override
@@ -115,35 +186,64 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         try {
-            // The incoming message should have been transformed to a CorfuMsg earlier in the
-            // pipeline.
-            CorfuMsg m = ((CorfuMsg) msg);
-            // We get the handler for this message from the map
-            AbstractServer handler = handlerMap.get(m.getMsgType());
-            if (handler == null) {
-                // The message was unregistered, we are dropping it.
-                log.warn("Received unregistered message {}, dropping", m);
-            } else {
-                if (messageIsValid(m, ctx)) {
-                    // Route the message to the handler.
-                    if (log.isTraceEnabled()) {
-                        log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
-                    }
+            if (msg instanceof CorfuMsg) {
 
-                    try {
-                        handler.handleMessage(m, ctx, this);
-                    } catch (Throwable t) {
-                        log.error("channelRead: Handling {} failed due to {}:{}",
-                                m != null ? m.getMsgType() : "UNKNOWN",
-                                t.getClass().getSimpleName(),
-                                t.getMessage(),
-                                t);
+                // The incoming message should have been transformed to a CorfuMsg earlier in the
+                // pipeline.
+                CorfuMsg m = ((CorfuMsg) msg);
+                // We get the handler for this message from the map
+                AbstractServer handler = handlerMap.get(m.getMsgType());
+                if (handler == null) {
+                    // The message was unregistered, we are dropping it.
+                    log.warn("Received unregistered message {}, dropping", m);
+                } else {
+                    if (messageIsValid(m, ctx)) {
+                        // Route the message to the handler.
+                        if (log.isTraceEnabled()) {
+                            log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
+                        }
+
+                        try {
+                            handler.handleMessage(m, ctx, this);
+                        } catch (Throwable t) {
+                            log.error("channelRead: Handling {} failed due to {}:{}",
+                                    m != null ? m.getMsgType() : "UNKNOWN",
+                                    t.getClass().getSimpleName(),
+                                    t.getMessage(),
+                                    t);
+                        }
+                    }
+                }
+            } else if (msg instanceof Request) {
+                Request request = ((Request) msg);
+                Header header = request.getHeader();
+
+                if (log.isDebugEnabled()) {
+                    log.debug("channelRead: Request {} from {}", header.getType(), ctx.channel().remoteAddress());
+                }
+
+                AbstractServer handler = requestTypeHandlerMap.get(header.getType());
+                if (handler == null) {
+                    log.warn("channelRead: Received unregistered request {}, dropping", header.getType());
+                } else {
+                    if (requestIsValid(request, ctx)) {
+                        if (log.isTraceEnabled()) {
+                            log.trace("channelRead: Request routed to {}: {}", handler.getClass().getSimpleName(), request);
+                        }
+
+                        try {
+                            handler.handleRequest(request, ctx, this);
+                        } catch (Throwable t) {
+                            log.error("channelRead: Handling {} failed due to {}:{}",
+                                    header.getType(), t.getClass().getSimpleName(), t.getMessage(), t);
+                        }
                     }
                 }
             }
         } catch (Exception e) {
             log.error("Exception during read!", e);
         }
+
     }
 
     @Override

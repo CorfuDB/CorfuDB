@@ -7,10 +7,14 @@ import io.netty.handler.timeout.ReadTimeoutException;
 import io.netty.handler.timeout.ReadTimeoutHandler;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.API;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
 
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.UUID;
+
+import static org.corfudb.runtime.protocol.proto.CorfuProtocol.*;
 
 /**
  * The ClientHandshakeHandler initiates the handshake upon socket connection.
@@ -84,35 +88,54 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             return;
         }
 
-        CorfuPayloadMsg<HandshakeResponse> handshakeResponse;
+        UUID serverId = null;
+        String corfuVersion = null;
 
-        try {
-            handshakeResponse = (CorfuPayloadMsg<HandshakeResponse>) m;
-            log.info("channelRead: Handshake Response received. Removing {} from pipeline.",
-                    READ_TIMEOUT_HANDLER);
-            // Remove the handler from the pipeline. Also remove the reference of the context from
-            // the handler so that it does not disconnect the channel.
-            ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
-        } catch (ClassCastException e) {
-            log.warn("channelRead: Non-handshake message received by handshake handler. " +
-                    "Send upstream only if handshake succeeded.", e);
+        if (m instanceof CorfuMsg) {
+
+            CorfuPayloadMsg<HandshakeResponse> handshakeResponse;
+
+            try {
+                handshakeResponse = (CorfuPayloadMsg<HandshakeResponse>) m;
+                log.info("channelRead: Handshake Response received. Removing {} from pipeline.",
+                        READ_TIMEOUT_HANDLER);
+                // Remove the handler from the pipeline. Also remove the reference of the context from
+                // the handler so that it does not disconnect the channel.
+                ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
+            } catch (ClassCastException e) {
+                log.warn("channelRead: Non-handshake message received by handshake handler. " +
+                        "Send upstream only if handshake succeeded.", e);
+                if (this.handshakeState.completed()) {
+                    // Only send upstream if handshake is complete.
+                    super.channelRead(ctx, m);
+                } else {
+                    // Otherwise, drop message.
+                    try {
+                        CorfuMsg msg = (CorfuMsg) m;
+                        log.debug("channelRead: Dropping message: {}", msg.getMsgType().name());
+                    } catch (Exception ex) {
+                        log.error("channelRead: Message received is not a valid CorfuMsg type.");
+                    }
+                }
+                return;
+            }
+
+            serverId = handshakeResponse.getPayload().getServerId();
+            corfuVersion = handshakeResponse.getPayload().getCorfuVersion();
+        } else if (m instanceof Response){
+            Response response = ((Response) m);
+            CorfuProtocol.HandshakeResponse handshakeResponse = response.getHandshakeResponse();
+            corfuVersion = handshakeResponse.getCorfuVersion();
+            serverId = API.getJavaUUID(handshakeResponse.getServerId());
+        } else {
             if (this.handshakeState.completed()) {
                 // Only send upstream if handshake is complete.
                 super.channelRead(ctx, m);
-            } else {
-                // Otherwise, drop message.
-                try {
-                    CorfuMsg msg = (CorfuMsg) m;
-                    log.debug("channelRead: Dropping message: {}", msg.getMsgType().name());
-                } catch (Exception ex) {
-                    log.error("channelRead: Message received is not a valid CorfuMsg type.");
-                }
             }
-            return;
+            // The message was unregistered, we are dropping it.
+            log.error("channelRead: Received unregistered message {}.", m);
         }
 
-        UUID serverId = handshakeResponse.getPayload().getServerId();
-        String corfuVersion = handshakeResponse.getPayload().getCorfuVersion();
 
         // Validate handshake, but first verify if node identifier is set to default (all 0's)
         // which indicates node id matching is not required.
@@ -152,12 +175,29 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         throws Exception {
         log.info("channelActive: Outgoing connection established to: {} from id={}", ctx.channel().remoteAddress(), ctx.channel().localAddress());
 
-        // Write the handshake & add a timeout listener.
-        CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE
-            .payloadMsg(new HandshakeMsg(this.clientId, this.nodeId));
 
-        log.debug("channelActive: Initiate handshake. Send handshake message.");
-        ctx.writeAndFlush(handshake);
+         // ********** Corfu java Handshake Initiate Message ***********
+         // Remove this after Protobuf for RPC Completion
+         // Write the handshake & add a timeout listener.
+        /*
+         CorfuMsg handshake = CorfuMsgType.HANDSHAKE_INITIATE
+           .payloadMsg(new HandshakeMsg(this.clientId, this.nodeId));
+         log.debug("channelActive: Initiate handshake. Send handshake message.");
+
+         //Remove this after Protobuf for RPC Completion
+         ctx.writeAndFlush(handshake);
+        */
+
+        // ********** Corfu Protobuf Handshake Initiate Message ***********
+        // TODO(Chetan/Chris/Zach): Verify arguments
+        // Write the handshake & add a timeout listener.
+        Header header = API.getHeader
+                (0, Priority.NORMAL, MessageType.HANDSHAKE, 0,
+                API.DEFAULT_UUID, this.clientId, false, true);
+        Request request = API.getHandshakeRequest(header, this.clientId, this.nodeId);
+
+        ctx.writeAndFlush(request);
+
         log.debug("channelActive: Add {} to channel pipeline.", READ_TIMEOUT_HANDLER);
         ctx.pipeline().addBefore(ctx.name(), READ_TIMEOUT_HANDLER, new ReadTimeoutHandler(this.handshakeTimeout));
     }

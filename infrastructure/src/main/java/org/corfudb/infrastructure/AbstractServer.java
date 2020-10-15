@@ -78,7 +78,7 @@ public abstract class AbstractServer {
      * @param ctx The channel handler context.
      * @param r The router that took in the request.
      */
-    protected void processRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    protected void processRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         getHandlerMethods().handle(req, ctx, r);
     }
 
@@ -111,7 +111,7 @@ public abstract class AbstractServer {
      * @param ctx The channel handler context.
      * @param r   The router that took in the request message.
      */
-    public final void handleRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public final void handleRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         if (getState() == ServerState.SHUTDOWN) {
             log.warn("handleRequest[{}]: Server received {} but is already shutdown.",
                     req.getHeader().getRequestId(), req.getHeader().getType().toString());

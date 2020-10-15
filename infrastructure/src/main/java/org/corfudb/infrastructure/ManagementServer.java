@@ -139,7 +139,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     @Override
-    protected void processRequest(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    protected void processRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         if(req.getHeader().getType().equals(CorfuProtocol.MessageType.QUERY_NODE)) {
             getHandlerMethods().handle(req, ctx, r);
         } else {
@@ -226,7 +226,7 @@ public class ManagementServer extends AbstractServer {
         return true;
     }
 
-    private boolean isBootstrapped(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    private boolean isBootstrapped(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         if(serverContext.getManagementLayout() == null) {
             r.sendNoBootstrapError(req.getHeader(), ctx);
             return false;
@@ -251,7 +251,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.ORCHESTRATOR)
-    public synchronized void handleOrchestratorMsg(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public synchronized void handleOrchestratorMsg(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleOrchestratorMsg: Received an orchestrator request {}", req);
         orchestrator.handle(req, ctx, r);
     }
@@ -288,7 +288,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.BOOTSTRAP_MANAGEMENT)
-    public synchronized  void handleManagementBootstrap(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public synchronized  void handleManagementBootstrap(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         final Layout layout = API.fromProtobufLayout(req.getBootstrapManagementRequest().getLayout());
         Header responseHeader;
         Response response;
@@ -388,7 +388,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.REPORT_FAILURE)
-    public void handleReportFailure(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handleReportFailure(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         // If the server isn't bootstrapped yet, ignore the request
         if(!isBootstrapped(req, ctx, r)) return;
 
@@ -512,7 +512,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.HEAL_FAILURE)
-    public void handleHealFailure(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handleHealFailure(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         // If the server isn't bootstrapped yet, ignore the request
         if(!isBootstrapped(req, ctx, r)) return;
 
@@ -656,7 +656,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     @RequestHandler(type = CorfuProtocol.MessageType.GET_MANAGEMENT_LAYOUT)
-    public void handleGetManagementLayout(Request req, ChannelHandlerContext ctx, IRequestRouter r) {
+    public void handleGetManagementLayout(Request req, ChannelHandlerContext ctx, IServerRouter r) {
         if(!isBootstrapped(req, ctx, r)) return;
 
         Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
