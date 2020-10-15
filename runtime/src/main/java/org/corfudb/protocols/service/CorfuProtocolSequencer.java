@@ -5,6 +5,9 @@ import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.Common.UuidToStreamAddressSpacePairMsg;
 import org.corfudb.runtime.proto.service.Sequencer.BootstrapSequencerRequestMsg;
 import org.corfudb.runtime.proto.service.Sequencer.BootstrapSequencerResponseMsg;
@@ -14,8 +17,9 @@ import org.corfudb.runtime.proto.service.Sequencer.SequencerTrimRequestMsg;
 import org.corfudb.runtime.proto.service.Sequencer.SequencerTrimResponseMsg;
 import org.corfudb.runtime.proto.service.Sequencer.StreamsAddressRequestMsg;
 import org.corfudb.runtime.proto.service.Sequencer.StreamsAddressResponseMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+import org.corfudb.runtime.proto.service.Sequencer.TokenRequestMsg;
+import org.corfudb.runtime.proto.service.Sequencer.TokenRequestMsg.TokenRequestType;
+import org.corfudb.runtime.proto.service.Sequencer.TokenResponseMsg;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
 import java.util.List;
@@ -24,9 +28,33 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.*;
+import static org.corfudb.protocols.CorfuProtocolTxResolution.*;
 
 @Slf4j
 public class CorfuProtocolSequencer {
+    private static RequestPayloadMsg getTokenRequestMsg(long numTokens, List<UUID> streams,
+                                                       TxResolutionInfo conflictInfo, TokenRequestType type) {
+        return RequestPayloadMsg.newBuilder()
+                .setTokenRequest(TokenRequestMsg.newBuilder()
+                        .setRequestType(type)
+                        .setNumTokens(numTokens)
+                        .setTxnResolution(getTxResolutionInfoMsg(conflictInfo))
+                        .addAllStreams(streams.stream()
+                                .map(CorfuProtocolCommon::getUuidMsg)
+                                .collect(Collectors.toList()))
+                        .build())
+                .build();
+    }
+
+    public static RequestPayloadMsg getTokenRequestMsg(long numTokens, List<UUID> streams,
+                                                       TxResolutionInfo conflictInfo) {
+        return getTokenRequestMsg(numTokens, streams, conflictInfo, TokenRequestType.TK_TX);
+    }
+
+    /* public static RequestPayloadMsg getTokenRequestMsg(long numTokens, List<UUID> streams) {
+
+    } */
+
     public static RequestPayloadMsg getSequencerMetricsRequestMsg() {
         return RequestPayloadMsg.newBuilder()
                 .setSequencerMetricsRequest(SequencerMetricsRequestMsg.getDefaultInstance())

@@ -5,28 +5,6 @@ option java_package = "org.corfudb.runtime.proto";
 
 import "common.proto";
 
-enum TokenType {
-  TOKEN_TYPE_INVALID = 0;
-
-  // Standard token issue by sequencer or a tail-query response
-  TX_NORMAL = 1;
-
-  // Token request for optimistic TX-commit rejected due to conflict
-  TX_ABORT_CONFLICT = 2;
-
-  // Token request for optimistic TX-commit rejected due to a
-  // failover-sequencer lacking conflict-resolution info
-  TX_ABORT_NEWSEQ = 3;
-
-  // Sent when a transaction aborts a transaction due to missing information
-  // (required data evicted from cache)
-  TX_ABORT_SEQ_OVERFLOW = 4;
-
-  // Sent when a transaction aborts because it has an old version (i.e. older than
-  // the trim mark). This is to detect slow transactions
-  TX_ABORT_SEQ_TRIM = 5;
-}
-
 message UuidToListOfBytesPairMsg {
   UuidMsg key = 1;
   repeated bytes value = 2;
