@@ -792,7 +792,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, nettyPluginPath);
         log.info("Replication servers started, and replication is in progress...");
 
-
         // Wait until data is fully replicated
         waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
 
@@ -886,7 +885,6 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.ReplicationStatusVal.SyncType.LOG_ENTRY);
         assertThat(replicationStatusVal.getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.ONGOING);
-
         assertThat(replicationStatusVal.getSnapshotSyncInfo().getType())
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED);
         assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())

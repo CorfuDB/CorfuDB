@@ -59,7 +59,9 @@ public class LogReplicationMetadataManager {
 
     public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
         this.runtime = rt;
-        this.corfuStore = new CorfuStore(runtime);
+        // LR does not require transaction logging as we don't want data change notifications on the replicated data
+        // this runtime is reused by the LogEntryWriter and SnapshotWriter
+        this.corfuStore = new CorfuStore(runtime, false);
         metadataTableName = getPersistedWriterMetadataTableName(localClusterId);
         try {
             this.corfuStore.openTable(NAMESPACE,
@@ -351,26 +353,26 @@ public class LogReplicationMetadataManager {
                 LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED :
                 LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT;
 
-            LogReplicationMetadata.SnapshotSyncInfo syncInfo = LogReplicationMetadata.SnapshotSyncInfo.newBuilder()
-                    .setType(syncType)
-                    .setStatus(LogReplicationMetadata.SyncStatus.ONGOING)
-                    .setSnapshotRequestId(eventId.toString())
-                    .setBaseSnapshot(baseVersion)
-                    .build();
+        LogReplicationMetadata.SnapshotSyncInfo syncInfo = LogReplicationMetadata.SnapshotSyncInfo.newBuilder()
+                .setType(syncType)
+                .setStatus(LogReplicationMetadata.SyncStatus.ONGOING)
+                .setSnapshotRequestId(eventId.toString())
+                .setBaseSnapshot(baseVersion)
+                .build();
 
-            ReplicationStatusVal status = ReplicationStatusVal.newBuilder()
-                    .setRemainingEntriesToSend(remainingEntries)
-                    .setSyncType(ReplicationStatusVal.SyncType.SNAPSHOT)
-                    .setStatus(LogReplicationMetadata.SyncStatus.ONGOING)
-                    .setSnapshotSyncInfo(syncInfo)
-                    .build();
+        ReplicationStatusVal status = ReplicationStatusVal.newBuilder()
+                .setRemainingEntriesToSend(remainingEntries)
+                .setSyncType(ReplicationStatusVal.SyncType.SNAPSHOT)
+                .setStatus(LogReplicationMetadata.SyncStatus.ONGOING)
+                .setSnapshotSyncInfo(syncInfo)
+                .build();
 
-            corfuStore.tx(NAMESPACE)
-                    .update(REPLICATION_STATUS_TABLE, key, status, null)
-                    .commit();
+        corfuStore.tx(NAMESPACE)
+                .update(REPLICATION_STATUS_TABLE, key, status, null)
+                .commit();
 
-            log.debug("updateSnapshotSyncInfo as ongoing: clusterId: {}, syncInfo: {}",
-                    clusterId, syncInfo);
+        log.debug("updateSnapshotSyncInfo as ongoing: clusterId: {}, syncInfo: {}",
+                clusterId, syncInfo);
     }
 
     /**
