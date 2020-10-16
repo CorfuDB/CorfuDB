@@ -2,6 +2,11 @@ package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.proto.Sample;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.logprotocol.MultiSMREntry;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -9,15 +14,25 @@ import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Sleep;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -31,6 +46,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT {
 
     private static final int SLEEP_DURATION = 5;
+
+    private AtomicBoolean replicationEnded = new AtomicBoolean(false);
 
     /**
      * Sets the plugin path before starting any test
@@ -175,6 +192,88 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             if (standbyReplicationServer != null) {
                 standbyReplicationServer.destroy();
+            }
+        }
+    }
+
+    /**
+     * Validate that no data is written into the Standby's Transaction Log during replication
+     * of 5K objects.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testStandbyTransactionLogging() throws Exception {
+        final long timeout = 30;
+
+        replicationEnded.set(false);
+
+        // (1) Subscribe Client to Standby Transaction Log
+        log.debug(">>> (1) Subscribe to Transaction Stream on Standby");
+        Future<Boolean> consumerState = subscribeTransactionStream();
+
+        // (2) Snapshot and Log Entry Sync
+        log.debug(">>> (2) Start Snapshot and Log Entry Sync");
+        testEndToEndSnapshotAndLogEntrySync();
+
+        replicationEnded.set(true);
+
+        Boolean txStreamEmpty = consumerState.get(timeout, TimeUnit.SECONDS);
+        assertThat(txStreamEmpty).isTrue();
+    }
+
+    private Future<Boolean>  subscribeTransactionStream() {
+
+        ExecutorService consumer = Executors.newSingleThreadExecutor();
+        List<CorfuRuntime> consumerRts = new ArrayList<>();
+
+        // A thread that starts and consumes transaction updates via the Transaction Stream.
+        return consumer.submit(() -> {
+
+            CorfuRuntime consumerRt = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters
+                    .builder()
+                    .build())
+                    .parseConfigurationString(standbyEndpoint)
+                    .connect();
+
+            consumerRts.add(consumerRt);
+
+            IStreamView txStream = consumerRt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
+
+            int counter = 0;
+
+            // Stop polling only when all updates (from all writers) have
+            // been consumed.
+            while (!replicationEnded.get()) {
+                List<ILogData> entries = txStream.remaining();
+
+                if (!entries.isEmpty()) {
+                    log.error("Transaction Log Entry Found. Entries={}", entries);
+                    counter++;
+                }
+            }
+
+            System.out.println("Total Transaction Stream updates, count=" + counter);
+            log.info("Total Tx Stream updates = {}", counter);
+            return counter == 0;
+        });
+    }
+
+    /**
+     *
+     * Extract the updates from the MultiObjectSMREntry and updates the counters map
+     */
+    private void ConsumeDelta(Map<UUID, Integer> map, List<ILogData> deltas) {
+        for (ILogData ld : deltas) {
+            MultiObjectSMREntry multiObjSmr = (MultiObjectSMREntry) ld.getPayload(null);
+            for (Map.Entry<UUID, MultiSMREntry> multiSMREntry : multiObjSmr.getEntryMap().entrySet()) {
+                for (SMREntry update : multiSMREntry.getValue().getUpdates()) {
+                    int key = (int) update.getSMRArguments()[0];
+                    int val = (int) update.getSMRArguments()[1];
+                    assertThat(key).isEqualTo(val);
+                    int newVal = map.getOrDefault(multiSMREntry.getKey(), 0) + key;
+                    map.put(multiSMREntry.getKey(), newVal);
+                }
             }
         }
     }
