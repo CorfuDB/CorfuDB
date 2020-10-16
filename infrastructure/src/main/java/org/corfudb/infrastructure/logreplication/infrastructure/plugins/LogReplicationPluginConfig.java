@@ -67,6 +67,11 @@ public class LogReplicationPluginConfig {
     @Getter
     private String snapshotSyncPluginCanonicalName;
 
+    // nodeId file format:
+    // node_id=99F30C42-F96D-A0A7-5531-468E52926A01
+    @Getter
+    private String nodeIdFilePath;
+
     public LogReplicationPluginConfig(String filepath) {
         try (InputStream input = new FileInputStream(filepath)) {
             Properties prop = new Properties();
@@ -83,6 +88,8 @@ public class LogReplicationPluginConfig {
 
             this.topologyManagerAdapterJARPath = prop.getProperty("topology_manager_adapter_JAR_path");
             this.topologyManagerAdapterName = prop.getProperty("topology_manager_adapter_class_name");
+
+            this.nodeIdFilePath = prop.getProperty("local_node_id_path");
         } catch (IOException e) {
             log.warn("Plugin configuration not found {}. Default configuration will be used.", filepath);
 
@@ -99,6 +106,8 @@ public class LogReplicationPluginConfig {
 
             this.topologyManagerAdapterJARPath = getParentDir() + DEFAULT_JAR_PATH;
             this.topologyManagerAdapterName = DEFAULT_CLUSTER_MANAGER_CLASSNAME;
+
+            this.nodeIdFilePath = null;
         }
 
         log.debug("{} ", this);
