@@ -16,19 +16,20 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.MessageType;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 
+
 @Slf4j
 public class RequestHandlerMethods {
 
-    private final Map<MessageType, String> timerNameCache = new HashMap<>();
+    private final Map<RequestPayloadMsg.PayloadCase, String> timerNameCache = new HashMap<>();
 
     /** The handler map. */
-    private final Map<MessageType, HandlerMethod> handlerMap;
+    private final Map<RequestPayloadMsg.PayloadCase, HandlerMethod> handlerMap;
 
     /**
      * A functional interface for server request handlers. Server request handlers should
@@ -38,7 +39,7 @@ public class RequestHandlerMethods {
      */
     @FunctionalInterface
     public interface HandlerMethod {
-        void handle(@Nonnull Request req,
+        void handle(@Nonnull RequestMsg req,
                     @Nonnull ChannelHandlerContext ctx,
                     @Nonnull IServerRouter r);
     }
@@ -47,13 +48,13 @@ public class RequestHandlerMethods {
      *
      * @return  A set containing the types of requests this handler will handle.
      */
-    public Set<MessageType> getHandledTypes() {
+    public Set<RequestPayloadMsg.PayloadCase> getHandledTypes() {
         return handlerMap.keySet();
     }
 
     /** Construct a new instance of RequestHandlerMethods. */
     public RequestHandlerMethods() {
-        handlerMap = new EnumMap<>(MessageType.class);
+        handlerMap = new EnumMap<>(RequestPayloadMsg.PayloadCase.class);
     }
 
     /** Handle an incoming Corfu request message.
@@ -63,13 +64,13 @@ public class RequestHandlerMethods {
      * @param r         The server router.
      */
     @SuppressWarnings("unchecked")
-    public void handle(Request req, ChannelHandlerContext ctx, IServerRouter r) {
-        final HandlerMethod handler = handlerMap.get(req.getHeader().getType());
+    public void handle(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        final HandlerMethod handler = handlerMap.get(req.getPayload().getPayloadCase());
         try {
             handler.handle(req, ctx, r);
         } catch(Exception e) {
             log.error("handle[{}]: Unhandled exception processing {} request",
-                    req.getHeader().getRequestId(), req.getHeader().getType(), e);
+                    req.getHeader().getRequestId(), req.getPayload().getPayloadCase(), e);
             //TODO(Zach): Send exception/error response
         }
     }
@@ -124,7 +125,7 @@ public class RequestHandlerMethods {
         }
     }
 
-    private HandlerMethod generateConditionalHandler(@NonNull final MessageType type,
+    private HandlerMethod generateConditionalHandler(@NonNull final RequestPayloadMsg.PayloadCase type,
                                                      @NonNull final HandlerMethod handler) {
         // Generate a timer based on the Corfu request type
         final Timer timer = getTimer(type);
@@ -138,7 +139,7 @@ public class RequestHandlerMethods {
         };
     }
 
-    private Timer getTimer(@Nonnull MessageType type) {
+    private Timer getTimer(@Nonnull RequestPayloadMsg.PayloadCase type) {
         timerNameCache.computeIfAbsent(type,
                 aType -> (CorfuComponent.INFRA_MSG_HANDLER + aType.name().toLowerCase()));
         return ServerContext.getMetrics().timer(timerNameCache.get(type));

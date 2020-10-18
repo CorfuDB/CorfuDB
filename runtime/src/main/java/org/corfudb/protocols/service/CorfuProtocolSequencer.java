@@ -213,9 +213,11 @@ public class CorfuProtocolSequencer {
                 .build();
     }
 
-    public static ResponsePayloadMsg getBootstrapSequencerResponseMsg() {
+    public static ResponsePayloadMsg getBootstrapSequencerResponseMsg(BootstrapSequencerResponseMsg.Type type) {
         return ResponsePayloadMsg.newBuilder()
-                .setBootstrapSequencerResponse(BootstrapSequencerResponseMsg.getDefaultInstance())
+                .setBootstrapSequencerResponse(BootstrapSequencerResponseMsg.newBuilder()
+                        .setRespType(type)
+                        .build())
                 .build();
     }
 }

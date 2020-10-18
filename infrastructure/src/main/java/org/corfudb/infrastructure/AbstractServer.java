@@ -1,15 +1,16 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.API;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
-import java.util.concurrent.atomic.AtomicReference;
+import static org.corfudb.protocols.CorfuProtocolServerErrors.getNotReadyErrorMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.*;
 
 /**
  * Created by mwei on 12/4/15.
@@ -23,6 +24,7 @@ public abstract class AbstractServer {
     private final AtomicReference<ServerState> state = new AtomicReference<>(ServerState.READY);
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * Get the message handler for this instance.
      *
      * @return A message handler.
@@ -48,19 +50,21 @@ public abstract class AbstractServer {
         // Overridden in log unit to flush operations stamped with an old epoch
     }
 
+    // [RM] Remove this after Protobuf for RPC Completion
     public abstract boolean isServerReadyToHandleMsg(CorfuMsg msg);
 
     /**
      * Determine if the server is ready to handle a request.
-     * @param requestHeader The incoming request message header.
+     * @param request The incoming request message.
      * @return True if the server is ready to handle this request, and false otherwise.
      */
-    public boolean isServerReadyToHandleReq(Header requestHeader) {
+    public boolean isServerReadyToHandleReq(RequestMsg request) {
         //TODO: Make abstract once other servers are implemented
         return false;
     }
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * A stub that handlers can override to manage their threading, otherwise
      * the requests will be executed on the IO threads
      * @param msg
@@ -78,12 +82,13 @@ public abstract class AbstractServer {
      * @param ctx The channel handler context.
      * @param r The router that took in the request.
      */
-    protected void processRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         getHandlerMethods().handle(req, ctx, r);
     }
 
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * Handle a incoming Netty message.
      *
      * @param msg An incoming message.
@@ -111,14 +116,14 @@ public abstract class AbstractServer {
      * @param ctx The channel handler context.
      * @param r   The router that took in the request message.
      */
-    public final void handleRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    public final void handleRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         if (getState() == ServerState.SHUTDOWN) {
             log.warn("handleRequest[{}]: Server received {} but is already shutdown.",
-                    req.getHeader().getRequestId(), req.getHeader().getType().toString());
+                    req.getHeader().getRequestId(), req.getPayload().getPayloadCase().toString());
             return;
         }
 
-        if(!isServerReadyToHandleReq(req.getHeader())) {
+        if(!isServerReadyToHandleReq(req)) {
             r.sendResponse(getNotReadyError(req.getHeader()), ctx);
             return;
         }
@@ -126,9 +131,9 @@ public abstract class AbstractServer {
         processRequest(req, ctx, r);
     }
 
-    private Response getNotReadyError(Header requestHeader) {
-        return API.getErrorResponseNoPayload(API.generateResponseHeader(requestHeader, false, true),
-                API.getNotReadyServerError());
+    private ResponseMsg getNotReadyError(HeaderMsg requestHeader) {
+        HeaderMsg responseHeader = getHeaderMsg(requestHeader, false, true);
+        return getResponseMsg(responseHeader, getNotReadyErrorMsg());
     }
 
     /**

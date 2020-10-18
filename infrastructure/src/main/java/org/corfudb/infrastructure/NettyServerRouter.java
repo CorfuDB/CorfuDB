@@ -11,11 +11,13 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
-import org.corfudb.protocols.API;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.view.Layout;
 
 import java.io.IOException;
@@ -24,9 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-
-import static org.corfudb.runtime.protocol.proto.CorfuProtocol.*;
-
 
 /**
  * The netty server router routes incoming messages to registered roles using
@@ -38,6 +37,7 @@ import static org.corfudb.runtime.protocol.proto.CorfuProtocol.*;
 public class NettyServerRouter extends ChannelInboundHandlerAdapter implements IServerRouter {
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * This map stores the mapping from message type to netty server handler.
      */
     private final Map<CorfuMsgType, AbstractServer> handlerMap;
@@ -45,7 +45,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     /**
      * This map stores the mapping from message types to server handler.
      */
-    private final Map<MessageType, AbstractServer> requestTypeHandlerMap;
+    private final Map<RequestPayloadMsg.PayloadCase, AbstractServer> requestTypeHandlerMap;
 
     /**
      * This node's server context.
@@ -74,15 +74,16 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         this.serverEpoch = serverContext.getServerEpoch();
         this.servers = servers;
         handlerMap = new EnumMap<>(CorfuMsgType.class);
-        requestTypeHandlerMap = new EnumMap<>(MessageType.class);
+        requestTypeHandlerMap = new EnumMap<>(RequestPayloadMsg.PayloadCase.class);
 
         servers.forEach(server -> {
             if (server.getHandler() != null){
                 Set<CorfuMsgType> handledTypes = server.getHandler().getHandledTypes();
                 handledTypes.forEach(handledType -> handlerMap.put(handledType, server));
             }
+
             if (server.getHandlerMethods() != null){
-                Set<MessageType> protoHandledTypes = server.getHandlerMethods().getHandledTypes();
+                Set<RequestPayloadMsg.PayloadCase> protoHandledTypes = server.getHandlerMethods().getHandledTypes();
                 protoHandledTypes.forEach(handledType -> requestTypeHandlerMap.put(handledType, server));
             }
         });
@@ -114,7 +115,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     }
 
     /**
-     * Remove this after Protobuf for RPC Completion
+     * [RM] Remove this after Protobuf for RPC Completion
      * <p>
      * Send a netty message through this router, setting the fields in the outgoing message.
      *
@@ -134,34 +135,12 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
      * @param response The response message to send.
      * @param ctx      The context of the channel handler.
      */
-    public void sendResponse(Response response, ChannelHandlerContext ctx) {
+    public void sendResponse(ResponseMsg response, ChannelHandlerContext ctx) {
         ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
         ByteBufOutputStream responseOutputStream = new ByteBufOutputStream(outBuf);
 
         try {
-            responseOutputStream.writeByte(API.PROTO_CORFU_RESPONSE_MSG_MARK);
-            response.writeTo(responseOutputStream);
-            ctx.writeAndFlush(outBuf, ctx.voidPromise());
-        } catch (IOException e) {
-            log.warn("sendResponse[{}]: Exception occurred when sending response {}, caused by {}",
-                    response.getHeader().getRequestId(), response.getHeader(), e.getCause(), e);
-        } finally {
-            IOUtils.closeQuietly(responseOutputStream);
-        }
-    }
-
-    /**
-     * Send a response message through this router.
-     *
-     * @param response The response message to send.
-     * @param ctx      The context of the channel handler.
-     */
-    public void sendResponse(CorfuMessage.ResponseMsg response, ChannelHandlerContext ctx) {
-        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        ByteBufOutputStream responseOutputStream = new ByteBufOutputStream(outBuf);
-
-        try {
-            responseOutputStream.writeByte(API.PROTO_CORFU_RESPONSE_MSG_MARK);
+            responseOutputStream.writeByte(CorfuProtocolCommon.PROTO_CORFU_RESPONSE_MSG_MARK);
             response.writeTo(responseOutputStream);
             ctx.writeAndFlush(outBuf, ctx.voidPromise());
         } catch (IOException e) {
@@ -187,20 +166,18 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         try {
             if (msg instanceof CorfuMsg) {
-
-                // The incoming message should have been transformed to a CorfuMsg earlier in the
-                // pipeline.
+                // The incoming message should have been transformed to a CorfuMsg earlier in the pipeline.
                 CorfuMsg m = ((CorfuMsg) msg);
                 // We get the handler for this message from the map
                 AbstractServer handler = handlerMap.get(m.getMsgType());
                 if (handler == null) {
                     // The message was unregistered, we are dropping it.
-                    log.warn("Received unregistered message {}, dropping", m);
+                    log.warn("channelRead: Received unregistered message {}, dropping", m);
                 } else {
                     if (messageIsValid(m, ctx)) {
                         // Route the message to the handler.
                         if (log.isTraceEnabled()) {
-                            log.trace("Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
+                            log.trace("channelRead: Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
                         }
 
                         try {
@@ -214,17 +191,21 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
                         }
                     }
                 }
-            } else if (msg instanceof Request) {
-                Request request = ((Request) msg);
-                Header header = request.getHeader();
+            } else if (msg instanceof RequestMsg) {
+                RequestMsg request = ((RequestMsg) msg);
+                RequestPayloadMsg payload = request.getPayload();
+                HeaderMsg header = request.getHeader();
 
                 if (log.isDebugEnabled()) {
-                    log.debug("channelRead: Request {} from {}", header.getType(), ctx.channel().remoteAddress());
+                    log.debug("channelRead: Request {} from {}",
+                            payload.getPayloadCase().toString(), ctx.channel().remoteAddress());
                 }
 
-                AbstractServer handler = requestTypeHandlerMap.get(header.getType());
+
+                AbstractServer handler = requestTypeHandlerMap.get(payload.getPayloadCase());
                 if (handler == null) {
-                    log.warn("channelRead: Received unregistered request {}, dropping", header.getType());
+                    log.warn("channelRead: Received unregistered request {}, dropping",
+                            payload.getPayloadCase().toString());
                 } else {
                     if (requestIsValid(request, ctx)) {
                         if (log.isTraceEnabled()) {
@@ -235,13 +216,14 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
                             handler.handleRequest(request, ctx, this);
                         } catch (Throwable t) {
                             log.error("channelRead: Handling {} failed due to {}:{}",
-                                    header.getType(), t.getClass().getSimpleName(), t.getMessage(), t);
+                                    payload.getPayloadCase().toString(),
+                                    t.getClass().getSimpleName(), t.getMessage(), t);
                         }
                     }
                 }
             }
         } catch (Exception e) {
-            log.error("Exception during read!", e);
+            log.error("channelRead: Exception during read!", e);
         }
 
     }

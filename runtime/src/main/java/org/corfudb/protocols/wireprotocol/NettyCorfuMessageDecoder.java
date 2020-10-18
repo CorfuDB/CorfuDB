@@ -7,8 +7,12 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.API;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+
+import static org.corfudb.protocols.CorfuProtocolCommon.LEGACY_CORFU_MSG_MARK;
+import static org.corfudb.protocols.CorfuProtocolCommon.PROTO_CORFU_REQUEST_MSG_MARK;
+import static org.corfudb.protocols.CorfuProtocolCommon.PROTO_CORFU_RESPONSE_MSG_MARK;
 
 /**
  * Created by mwei on 10/1/15.
@@ -22,35 +26,31 @@ public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {
         // Check the type of message based on first byte
         byte msgMark = byteBuf.readByte();
 
-        if (msgMark == API.LEGACY_CORFU_MSG_MARK) {
+        if (msgMark == LEGACY_CORFU_MSG_MARK) {
             list.add(CorfuMsg.deserialize(byteBuf));
-        } else if (msgMark == API.PROTO_CORFU_REQUEST_MSG_MARK){
+        } else if (msgMark == PROTO_CORFU_REQUEST_MSG_MARK){
             ByteBufInputStream msgInputStream = new ByteBufInputStream(byteBuf);
             try {
-                CorfuProtocol.Request request = CorfuProtocol.Request.parseFrom(msgInputStream);
+                RequestMsg request = RequestMsg.parseFrom(msgInputStream);
                 list.add(request);
             } catch (Exception e) {
                 log.error("decode: An exception occurred during parsing request from ByteBufInputStream of byteBuf.", e);
             } finally {
                 msgInputStream.close();
-//                byteBuf.release();
             }
-        } else if (msgMark == API.PROTO_CORFU_RESPONSE_MSG_MARK){
+        } else if (msgMark == PROTO_CORFU_RESPONSE_MSG_MARK){
             ByteBufInputStream msgInputStream = new ByteBufInputStream(byteBuf);
             try {
-                CorfuProtocol.Response response = CorfuProtocol.Response.parseFrom(msgInputStream);
+                ResponseMsg response = ResponseMsg.parseFrom(msgInputStream);
                 list.add(response);
             } catch (Exception e) {
                 log.error("decode: An exception occurred during parsing response from ByteBufInputStream.", e);
             } finally {
                 msgInputStream.close();
-//                byteBuf.release();
             }
         } else {
             throw new IllegalStateException("decode: Received an incorrectly marked message.");
         }
-
-
     }
 
     @Override

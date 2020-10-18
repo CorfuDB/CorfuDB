@@ -8,13 +8,12 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
-import org.corfudb.protocols.API;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.clients.TestChannelContext;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol;
 import org.corfudb.runtime.view.Layout;
 
 import java.io.IOException;
@@ -92,34 +91,12 @@ public class TestServerRouter implements IServerRouter {
      * @param response The response message to send.
      * @param ctx      The context of the channel handler.
      */
-    public void sendResponse(CorfuProtocol.Response response, ChannelHandlerContext ctx) {
-        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        ByteBufOutputStream responseOutputStream = new ByteBufOutputStream(outBuf);
-
-        try {
-            responseOutputStream.writeByte(API.PROTO_CORFU_RESPONSE_MSG_MARK);
-            response.writeTo(responseOutputStream);
-            ctx.writeAndFlush(outBuf, ctx.voidPromise());
-        } catch (IOException e) {
-            log.warn("sendResponse[{}]: Exception occurred when sending response {}, caused by {}",
-                    response.getHeader().getRequestId(), response.getHeader(), e.getCause(), e);
-        } finally {
-            IOUtils.closeQuietly(responseOutputStream);
-        }
-    }
-
-    /**
-     * Send a response message through this router.
-     *
-     * @param response The response message to send.
-     * @param ctx      The context of the channel handler.
-     */
     public void sendResponse(CorfuMessage.ResponseMsg response, ChannelHandlerContext ctx) {
         ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
         ByteBufOutputStream responseOutputStream = new ByteBufOutputStream(outBuf);
 
         try {
-            responseOutputStream.writeByte(API.PROTO_CORFU_RESPONSE_MSG_MARK);
+            responseOutputStream.writeByte(CorfuProtocolCommon.PROTO_CORFU_RESPONSE_MSG_MARK);
             response.writeTo(responseOutputStream);
             ctx.writeAndFlush(outBuf, ctx.voidPromise());
         } catch (IOException e) {

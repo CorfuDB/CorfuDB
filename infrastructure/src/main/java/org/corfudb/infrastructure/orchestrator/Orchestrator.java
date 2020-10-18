@@ -12,7 +12,6 @@ import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RemoveNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RestoreRedundancyMergeSegmentsWorkflow;
-import org.corfudb.protocols.API;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
@@ -30,9 +29,10 @@ import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSeg
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.OrchestratorRequest;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.Management.OrchestratorRequestMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -46,6 +46,12 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
+import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
+import static org.corfudb.protocols.CorfuProtocolWorkflows.*;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.*;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getCreatedWorkflowResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getQueriedWorkflowResponseMsg;
 
 /**
  * The orchestrator is a stateless service that runs on all management servers and its purpose
@@ -140,44 +146,45 @@ public class Orchestrator {
         }
     }
 
-    public void handle(@Nonnull CorfuProtocol.Request req,
+    public void handle(@Nonnull RequestMsg req,
                        @Nonnull ChannelHandlerContext ctx,
                        @Nonnull IServerRouter r) {
-        OrchestratorRequest.ExecuteWorkflow workflowReq = req.getOrchestratorRequest().getExecuteWorkflow();
+        OrchestratorRequestMsg msg = req.getPayload().getOrchestratorRequest();
         IWorkflow workflow;
 
-        switch(req.getOrchestratorRequest().getReqType()) {
-            case QUERY_WORKFLOW:
+        switch(msg.getPayloadCase()) {
+            case QUERY:
                 handleQuery(req, ctx, r);
                 break;
             case ADD_NODE:
-                workflow = new AddNodeWorkflow(API.getJavaAddNodeRequest(workflowReq));
-                dispatch(workflow, req, ctx, r);
+                workflow = new AddNodeWorkflow(getAddNodeRequest(msg.getAddNode()));
+                dispatch(workflow, req, ctx, r, msg.getAddNode().getEndpoint());
                 break;
             case REMOVE_NODE:
-                workflow = new RemoveNodeWorkflow(API.getJavaRemoveNodeRequest(workflowReq));
-                dispatch(workflow, req, ctx, r);
+                workflow = new RemoveNodeWorkflow(getRemoveNodeRequest(msg.getRemoveNode()));
+                dispatch(workflow, req, ctx, r, msg.getRemoveNode().getEndpoint());
                 break;
             case FORCE_REMOVE_NODE:
-                workflow = new ForceRemoveWorkflow(API.getJavaForceRemoveNodeRequest(workflowReq));
-                dispatch(workflow, req, ctx, r);
+                workflow = new ForceRemoveWorkflow(getForceRemoveNodeRequest(msg.getForceRemoveNode()));
+                dispatch(workflow, req, ctx, r, msg.getForceRemoveNode().getEndpoint());
                 break;
             case HEAL_NODE:
-                workflow = new HealNodeWorkflow(API.getJavaHealNodeRequest(workflowReq));
-                dispatch(workflow, req, ctx, r);
+                workflow = new HealNodeWorkflow(getHealNodeRequest(msg.getHealNode()));
+                dispatch(workflow, req, ctx, r, msg.getHealNode().getEndpoint());
                 break;
             case RESTORE_REDUNDANCY_MERGE_SEGMENTS:
                 workflow = new RestoreRedundancyMergeSegmentsWorkflow(
-                        API.getJavaRestoreRedundancyMergeSegmentsRequest(workflowReq));
-                dispatch(workflow, req, ctx, r);
+                        getRestoreRedundancyMergeSegmentsRequest(msg.getRestoreRedundancyMergeSegments()));
+                dispatch(workflow, req, ctx, r, msg.getRestoreRedundancyMergeSegments().getEndpoint());
                 break;
             default:
                 log.error("handle[{}]: Unknown Orchestrator request type {}",
-                        req.getHeader().getRequestId(), req.getOrchestratorRequest().getReqType());
+                        req.getHeader().getRequestId(), msg.getPayloadCase());
         }
     }
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * Query a workflow id.
      * <p>
      * Queries a workflow id and returns true if this orchestrator is still
@@ -203,8 +210,18 @@ public class Orchestrator {
                 .payloadMsg(new OrchestratorResponse(resp)));
     }
 
-    void handleQuery(CorfuProtocol.Request req, ChannelHandlerContext ctx, IServerRouter r) {
-        final UUID workflowId = API.getJavaUUID(req.getOrchestratorRequest().getQueryWorkflow().getId());
+    /**
+     * Query a workflow id.
+     * <p>
+     * Queries a workflow id and returns true if this orchestrator is still
+     * executing the workflow, otherwise return false.
+     *
+     * @param req corfu message containing the query request
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    void handleQuery(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        final UUID workflowId = getUUID(req.getPayload().getOrchestratorRequest().getQuery().getWorkflowId());
         boolean isActive = false;
 
         if(activeWorkflows.containsKey(workflowId)) isActive = true;
@@ -212,12 +229,13 @@ public class Orchestrator {
         log.trace("handleQuery[{}]: isActive={} for workflowId={}",
                 req.getHeader().getRequestId(), isActive, workflowId);
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        CorfuProtocol.Response response = API.getQueryWorkflowResponse(responseHeader, isActive);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        ResponseMsg response = getResponseMsg(responseHeader, getQueriedWorkflowResponseMsg(isActive));
         r.sendResponse(response, ctx);
     }
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * Run a workflow on this orchestrator, if there is an existing workflow
      * that is executing on the same endpoint, then just return the corresponding
      * workflow id. Dispatch is the only place where workflows are executed based
@@ -255,24 +273,37 @@ public class Orchestrator {
         }
     }
 
+    /**
+     * Run a workflow on this orchestrator, if there is an existing workflow
+     * that is executing on the same endpoint, then just return the corresponding
+     * workflow id. Dispatch is the only place where workflows are executed based
+     * on reading activeWorkflows and therefore needs to be synchronized to prevent
+     * launching multiple workflows for the same endpoint concurrently.
+     *
+     * @param workflow  the workflow to execute
+     * @param req       request message containing the create workflow request
+     * @param ctx       netty ChannelHandlerContext
+     * @param r         server router
+     * @param endpoint  the endpoint parameter from the workflow request
+     */
     synchronized void dispatch(@Nonnull IWorkflow workflow,
-                               @Nonnull CorfuProtocol.Request req,
+                               @Nonnull RequestMsg req,
                                @Nonnull ChannelHandlerContext ctx,
-                               @Nonnull IServerRouter r) {
-        final String endpoint = req.getOrchestratorRequest().getExecuteWorkflow().getEndpoint();
+                               @Nonnull IServerRouter r,
+                               @Nonnull String endpoint) {
         final UUID id = activeWorkflows.inverse().get(endpoint);
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        CorfuProtocol.Response response;
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        ResponseMsg response;
 
         if(id != null) {
             // A workflow is already executing for this endpoint, return existing workflow id.
-            response = API.getCreateWorkflowResponse(responseHeader, id);
+            response = getResponseMsg(responseHeader, getCreatedWorkflowResponseMsg(id));
         } else {
             // Create a new workflow for this endpoint and return a new workflow id.
             activeWorkflows.put(workflow.getId(), endpoint);
             executor.execute(() -> run(workflow, ACTION_RETRY));
-            response = API.getCreateWorkflowResponse(responseHeader, workflow.getId());
+            response = getResponseMsg(responseHeader, getCreatedWorkflowResponseMsg(workflow.getId()));
         }
 
         r.sendResponse(response, ctx);

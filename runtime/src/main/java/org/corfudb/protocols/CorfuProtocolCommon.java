@@ -5,6 +5,7 @@ import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.proto.Common.LayoutMsg;
 import org.corfudb.runtime.proto.Common.SequencerMetricsMsg;
@@ -13,6 +14,7 @@ import org.corfudb.runtime.proto.Common.StreamAddressRangeMsg;
 import org.corfudb.runtime.proto.Common.StreamAddressSpaceMsg;
 import org.corfudb.runtime.proto.Common.TokenMsg;
 import org.corfudb.runtime.proto.Common.UuidMsg;
+import org.corfudb.runtime.proto.Common.UuidToStreamAddressSpacePairMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
@@ -20,7 +22,9 @@ import org.roaringbitmap.longlong.Roaring64NavigableMap;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class CorfuProtocolCommon {
@@ -43,7 +47,7 @@ public class CorfuProtocolCommon {
     }
 
     public static UUID getUUID(UuidMsg uuidMsg) {
-        return new UUID(uuidMsg.getLsb(), uuidMsg.getMsb());
+        return new UUID(uuidMsg.getMsb(), uuidMsg.getLsb());
     }
 
     public static LayoutMsg getLayoutMsg(Layout layout) {
@@ -56,11 +60,15 @@ public class CorfuProtocolCommon {
         return Layout.fromJSONString(layoutMsg.getLayoutJson());
     }
 
-    public static TokenMsg getTokenMsg(Token token) {
+    public static TokenMsg getTokenMsg(long epoch, long sequence) {
         return TokenMsg.newBuilder()
-                .setEpoch(token.getEpoch())
-                .setSequence(token.getSequence())
+                .setEpoch(epoch)
+                .setSequence(sequence)
                 .build();
+    }
+
+    public static TokenMsg getTokenMsg(Token token) {
+        return getTokenMsg(token.getEpoch(), token.getSequence());
     }
 
     public static SequencerMetricsMsg getSequencerMetricsMsg(SequencerMetrics metrics) {
@@ -117,5 +125,13 @@ public class CorfuProtocolCommon {
                 .setStart(streamAddressRange.getStart())
                 .setEnd(streamAddressRange.getEnd())
                 .build();
+    }
+
+    public static StreamsAddressResponse getStreamsAddressResponse(long tail, List<UuidToStreamAddressSpacePairMsg> map) {
+        return new StreamsAddressResponse(tail, map.stream()
+                .collect(Collectors.<UuidToStreamAddressSpacePairMsg, UUID, StreamAddressSpace>toMap(
+                        e -> getUUID(e.getKey()),
+                        e -> getStreamAddressSpace(e.getValue()))
+                ));
     }
 }

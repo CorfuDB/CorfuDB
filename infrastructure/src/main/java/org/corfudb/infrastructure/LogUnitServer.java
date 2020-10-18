@@ -1,14 +1,5 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
-
-
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.MethodHandles;
@@ -24,7 +15,6 @@ import org.corfudb.infrastructure.log.InMemoryStreamLog;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.protocols.API;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -50,12 +40,22 @@ import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
+
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.*;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.*;
 
 
 /**
@@ -137,6 +137,8 @@ public class LogUnitServer extends AbstractServer {
         }
 
         dataCache = new LogUnitServerCache(config, streamLog);
+
+        //TODO: Use useAltOpsQueue=true to use Protobuf BatchWriter
         batchWriter = new BatchProcessor(streamLog, serverContext.getServerEpoch(), !config.isNoSync());
 
         logCleaner = new StreamLogCompaction(streamLog, 10, 45, TimeUnit.MINUTES, ServerContext.SHUTDOWN_TIMER);
@@ -150,12 +152,13 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @Override
-    protected void processRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
     /**
      * Service an incoming request for maximum global address the log unit server has written.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
     public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
@@ -168,15 +171,18 @@ public class LogUnitServer extends AbstractServer {
                 });
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.TAIL)
-    public void handleTailRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     * Service an incoming request for maximum global address the log unit server has written.
+     */
+    @RequestHandler(type = PayloadCase.TAIL_REQUEST)
+    public void handleTailRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleTailRequest[{}]: received a tail request {}", req.getHeader().getRequestId(), req);
         batchWriter.<TailsResponse>addTask(BatchWriterOp.Type.TAILS_QUERY, req)
                 .thenAccept(tailsResp -> {
                     // Note: we reuse the request header as the ignore_cluster_id and
                     // ignore_epoch fields are the same in both cases.
-                    r.sendResponse(API.getTailResponse(req.getHeader(), tailsResp.getEpoch(),
-                            tailsResp.getLogTail(), tailsResp.getStreamTails()), ctx);
+                    r.sendResponse(getResponseMsg(req.getHeader(), getTailResponseMsg(
+                            tailsResp.getEpoch(), tailsResp.getLogTail(), tailsResp.getStreamTails())), ctx);
                 }).exceptionally(ex -> {
                     //TODO(Zach): handleException(ex, ctx, req, r);
                     return null;
@@ -186,6 +192,7 @@ public class LogUnitServer extends AbstractServer {
     /**
      * Service an incoming request for log address space, i.e., the map of addresses for every stream in the log.
      * This is used on sequencer bootstrap to provide the address maps for initialization.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @ServerHandler(type = CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST)
     public void handleLogAddressSpaceRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
@@ -201,16 +208,20 @@ public class LogUnitServer extends AbstractServer {
                 });
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.LOG_ADDRESS_SPACE)
-    public void handleLogAddressSpaceRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     * Service an incoming request for log address space, i.e., the map of addresses for every stream in the log.
+     * This is used on sequencer bootstrap to provide the address maps for initialization.
+     */
+    @RequestHandler(type = PayloadCase.LOG_ADDRESS_SPACE_REQUEST)
+    public void handleLogAddressSpaceRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleLogAddressSpaceRequest[{}]: received a log " +
                 "address space request {}", req.getHeader().getRequestId(), req);
         batchWriter.<StreamsAddressResponse>addTask(BatchWriterOp.Type.LOG_ADDRESS_SPACE_QUERY, req)
                 .thenAccept(resp -> {
                     // Note: we reuse the request header as the ignore_cluster_id and
                     // ignore_epoch fields are the same in both cases.
-                    r.sendResponse(API.getLogAddressSpaceResponse(req.getHeader(),
-                            resp.getLogTail(), resp.getAddressMap()), ctx);
+                    r.sendResponse(getResponseMsg(req.getHeader(),
+                            getLogAddressSpaceResponseMsg(resp.getLogTail(), resp.getAddressMap())), ctx);
                 }).exceptionally(ex -> {
                     //TODO(Zach): handleException(ex, ctx, req, r);
                     return null;
@@ -227,13 +238,16 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.TRIM_MARK_RESPONSE.payloadMsg(streamLog.getTrimMark()));
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.TRIM_MARK)
-    public void handleTrimMarkRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     * Service an incoming request to retrieve the starting address of this logging unit.
+     */
+    @RequestHandler(type = PayloadCase.TRIM_MARK_REQUEST)
+    public void handleTrimMarkRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleTrimMarkRequest: received a trim mark request {}", req);
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        Response response = API.getTrimMarkResponse(req.getHeader(), streamLog.getTrimMark());
+        ResponseMsg response = getResponseMsg(req.getHeader(), getTrimMarkResponseMsg(streamLog.getTrimMark()));
         r.sendResponse(response, ctx);
     }
 
@@ -247,13 +261,18 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.COMMITTED_TAIL_RESPONSE.payloadMsg(streamLog.getCommittedTail()));
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.COMMITTED_TAIL)
-    public void handleCommittedTailRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     * Service an incoming query for the committed tail on this log unit server.
+     */
+    @RequestHandler(type = PayloadCase.COMMITTED_TAIL_REQUEST)
+    public void handleCommittedTailRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("handleCommittedTailRequest: received a committed log tail request {}", req);
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        Response response = API.getCommittedTailResponse(req.getHeader(), streamLog.getCommittedTail());
+        ResponseMsg response = getResponseMsg(req.getHeader(),
+                getCommittedTailResponseMsg(streamLog.getCommittedTail()));
+
         r.sendResponse(response, ctx);
     }
 
@@ -269,13 +288,17 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.UPDATE_COMMITTED_TAIL)
-    public void handleUpdateCommittedTailRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
-        log.trace("handleUpdateCommittedTailRequest: received request to update committed tail {}", req);
-        streamLog.updateCommittedTail(req.getUpdateCommittedTailRequest().getCommittedTail());
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        Response response = API.getUpdateCommittedTailResponse(responseHeader);
+    /**
+     * Service an incoming request to update the current committed tail.
+     */
+    @RequestHandler(type = PayloadCase.UPDATE_COMMITTED_TAIL_REQUEST)
+    public void handleUpdateCommittedTailRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("handleUpdateCommittedTailRequest: received request to update committed tail {}", req);
+        streamLog.updateCommittedTail(req.getPayload().getUpdateCommittedTailRequest().getCommittedTail());
+
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        ResponseMsg response = getResponseMsg(responseHeader, getUpdateCommittedTailResponseMsg());
         r.sendResponse(response, ctx);
     }
 
@@ -305,8 +328,11 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
+    //TODO(Zach): handleException(), and WRITE, RANGE_WRITE and READ server handlers, sealServerWithEpoch
+
     /**
      * Service an incoming write request.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @ServerHandler(type = CorfuMsgType.WRITE)
     public void write(CorfuPayloadMsg<WriteRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
@@ -333,6 +359,7 @@ public class LogUnitServer extends AbstractServer {
 
     /**
      * Services incoming range write calls.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @ServerHandler(type = CorfuMsgType.RANGE_WRITE)
     public void rangeWrite(CorfuPayloadMsg<RangeWriteMsg> msg,
@@ -355,6 +382,7 @@ public class LogUnitServer extends AbstractServer {
      * might be old. Hence, we use the msg epoch to perform the trim. This should be safe provided that the
      * trim is performed only on the token provided by the CheckpointWriter which ensures that the checkpoint
      * was persisted. Using any other address to perform a trim can cause data loss.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @ServerHandler(type = CorfuMsgType.PREFIX_TRIM)
     private void prefixTrim(CorfuPayloadMsg<TrimRequest> msg, ChannelHandlerContext ctx,
@@ -368,15 +396,22 @@ public class LogUnitServer extends AbstractServer {
                 });
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.TRIM_LOG)
-    private void handleTrimLog(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     * Perform a prefix trim (trim log).
+     * Here the token is not used to perform the trim as the epoch at which the checkpoint was completed
+     * might be old. Hence, we use the msg epoch to perform the trim. This should be safe provided that the
+     * trim is performed only on the token provided by the CheckpointWriter which ensures that the checkpoint
+     * was persisted. Using any other address to perform a trim can cause data loss.
+     */
+    @RequestHandler(type = PayloadCase.TRIM_LOG_REQUEST)
+    private void handleTrimLog(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleTrimLog[{}]: trimming prefix to {}",
-                req.getHeader().getRequestId(), req.getTrimLogRequest().getAddress());
+                req.getHeader().getRequestId(), req.getPayload().getTrimLogRequest().getAddress());
 
         batchWriter.addTask(BatchWriterOp.Type.PREFIX_TRIM, req)
                 .thenRun(() -> {
-                    Header header = API.generateResponseHeader(req.getHeader(), false, true);
-                    r.sendResponse(API.getTrimLogResponse(header), ctx);
+                    HeaderMsg header = getHeaderMsg(req.getHeader(), false, true);
+                    r.sendResponse(getResponseMsg(header, getTrimLogResponseMsg()), ctx);
                 })
                 .exceptionally(ex -> {
                     //TODO(Zach): handleException(ex, ctx, req, r);
@@ -384,6 +419,7 @@ public class LogUnitServer extends AbstractServer {
                 });
     }
 
+    // [RM] Remove this after Protobuf for RPC Completion
   @ServerHandler(type = CorfuMsgType.READ_REQUEST)
   public void read(CorfuPayloadMsg<ReadRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
     boolean cacheable = msg.getPayload().isCacheReadResult();
@@ -413,6 +449,7 @@ public class LogUnitServer extends AbstractServer {
     r.sendResponse(ctx, msg, CorfuMsgType.READ_RESPONSE.payloadMsg(rr));
   }
 
+  // [RM] Remove this after Protobuf for RPC Completion
   @ServerHandler(type = CorfuMsgType.INSPECT_ADDRESSES_REQUEST)
   public void inspectAddresses(
       CorfuPayloadMsg<InspectAddressesRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
@@ -436,9 +473,9 @@ public class LogUnitServer extends AbstractServer {
     r.sendResponse(ctx, msg, CorfuMsgType.INSPECT_ADDRESSES_RESPONSE.payloadMsg(inspectResponse));
   }
 
-  @RequestHandler(type = CorfuProtocol.MessageType.INSPECT_ADDRESSES)
-  public void handleInspectAddressesRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
-        final List<Long> addresses = req.getInspectAddressesRequest().getAddressesList();
+  @RequestHandler(type = PayloadCase.INSPECT_ADDRESSES_REQUEST)
+  public void handleInspectAddressesRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        final List<Long> addresses = req.getPayload().getInspectAddressesRequest().getAddressList();
         List<Long> emptyAddresses = new ArrayList<>();
 
         log.trace("handleInspectAddressesRequest[{}]: addresses {}", req.getHeader().getRequestId(), addresses);
@@ -454,13 +491,14 @@ public class LogUnitServer extends AbstractServer {
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        Response response = API.getInspectAddressesResponse(req.getHeader(), emptyAddresses);
+        ResponseMsg response = getResponseMsg(req.getHeader(), getInspectAddressesResponseMsg(emptyAddresses));
         r.sendResponse(response, ctx);
   }
 
     /**
      * Handles requests for known entries in specified range.
      * This is used by state transfer to catch up only the remainder of the segment.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @ServerHandler(type = CorfuMsgType.KNOWN_ADDRESS_REQUEST)
     private void getKnownAddressesInRange(CorfuPayloadMsg<KnownAddressRequest> msg,
@@ -477,21 +515,27 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.KNOWN_ADDRESS)
-    private void handleKnownAddressRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     * Handles requests for known entries in specified range.
+     * This is used by state transfer to catch up only the remainder of the segment.
+     */
+    @RequestHandler(type = PayloadCase.KNOWN_ADDRESS_REQUEST)
+    private void handleKnownAddressRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         try {
             Set<Long> knownAddresses = streamLog.getKnownAddressesInRange(
-                    req.getKnownAddressRequest().getStartRange(), req.getKnownAddressRequest().getStartRange());
+                    req.getPayload().getKnownAddressRequest().getStartRange(),
+                    req.getPayload().getKnownAddressRequest().getStartRange());
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases.
-            Response response = API.getKnownAddressResponse(req.getHeader(), knownAddresses);
+            ResponseMsg response = getResponseMsg(req.getHeader(), getKnownAddressResponseMsg(knownAddresses));
             r.sendResponse(response, ctx);
         } catch (Exception e) {
             //TODO(Zach): handleException(e, ctx, req, r);
         }
     }
 
+    // [RM] Remove this after Protobuf for RPC Completion
     @ServerHandler(type = CorfuMsgType.COMPACT_REQUEST)
     private void handleCompactRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleCompactRequest: received a compact request {}", msg);
@@ -499,17 +543,18 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.COMPACT_LOG)
-    private void handleCompactLogRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    @RequestHandler(type = PayloadCase.COMPACT_REQUEST)
+    private void handleCompactLogRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleCompactLogRequest: received a compact request {}", req);
         streamLog.compact();
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        Response response = API.getCompactLogResponse(req.getHeader());
+        ResponseMsg response = getResponseMsg(req.getHeader(), getCompactResponseMsg());
         r.sendResponse(response, ctx);
     }
 
+    // [RM] Remove this after Protobuf for RPC Completion
     @ServerHandler(type = CorfuMsgType.FLUSH_CACHE)
     private void handleFlushCacheRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleFlushCacheRequest: received a cache flush request {}", msg);
@@ -517,14 +562,14 @@ public class LogUnitServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.FLUSH_CACHE)
-    private void handleFlushCacheRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    @RequestHandler(type = PayloadCase.FLUSH_CACHE_REQUEST)
+    private void handleFlushCacheRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleFlushCacheRequest: received a cache flush request {}", req);
         dataCache.invalidateAll();
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        Response response = API.getFlushCacheResponse(req.getHeader());
+        ResponseMsg response = getResponseMsg(req.getHeader(), getFlushCacheResponseMsg());
         r.sendResponse(response, ctx);
     }
 
@@ -535,6 +580,7 @@ public class LogUnitServer extends AbstractServer {
      * in the queue before this operation.
      * - All operations after this operation but stamped with an older epoch will be failed.
      */
+    //TODO(Zach): Update
     @Override
     public void sealServerWithEpoch(long epoch) {
         CorfuPayloadMsg<Long> msg = new CorfuPayloadMsg<>();
@@ -559,10 +605,9 @@ public class LogUnitServer extends AbstractServer {
     }
 
     @Override
-    public boolean isServerReadyToHandleReq(Header requestHeader) {
+    public boolean isServerReadyToHandleReq(RequestMsg request) {
         return getState() == ServerState.READY;
     }
-
 
     /**
      * Resets the log unit server via the BatchProcessor.
@@ -572,6 +617,7 @@ public class LogUnitServer extends AbstractServer {
      * same epoch.
      * - After this the reset operation is inserted which resets and clears all data.
      * - Finally the cache is invalidated to purge the existing entries.
+     * [RM] Remove this after Protobuf for RPC Completion
      */
     @ServerHandler(type = CorfuMsgType.RESET_LOGUNIT)
     private synchronized void resetLogUnit(CorfuPayloadMsg<Long> msg,
@@ -598,20 +644,29 @@ public class LogUnitServer extends AbstractServer {
         }
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.RESET_LOG_UNIT)
-    private synchronized void handleResetLogUnit(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     * Resets the log unit server via the BatchProcessor.
+     * Warning: Clears all data.
+     * <p>
+     * - The epochWaterMark is set to prevent resetting log unit multiple times during
+     * same epoch.
+     * - After this the reset operation is inserted which resets and clears all data.
+     * - Finally the cache is invalidated to purge the existing entries.
+     */
+    @RequestHandler(type = PayloadCase.RESET_LOG_UNIT_REQUEST)
+    private synchronized void handleResetLogUnit(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         // Check if the reset request is with an epoch greater than the last reset epoch seen to
         // prevent multiple reset in the same epoch. and should be equal to the current router
         // epoch to prevent stale reset requests from wiping out the data.
 
-        if(req.getResetLogUnitRequest().getEpoch() > serverContext.getLogUnitEpochWaterMark() &&
-                req.getResetLogUnitRequest().getEpoch() == serverContext.getServerEpoch()) {
-            serverContext.setLogUnitEpochWaterMark(req.getResetLogUnitRequest().getEpoch());
+        if(req.getPayload().getResetLogUnitRequest().getEpoch() > serverContext.getLogUnitEpochWaterMark() &&
+                req.getPayload().getResetLogUnitRequest().getEpoch() == serverContext.getServerEpoch()) {
+            serverContext.setLogUnitEpochWaterMark(req.getPayload().getResetLogUnitRequest().getEpoch());
             batchWriter.addTask(BatchWriterOp.Type.RESET, req)
                     .thenRun(() -> {
                         dataCache.invalidateAll();
                         log.info("handleResetLogUnit: LogUnit server reset.");
-                        r.sendResponse(API.getResetLogUnitResponse(req.getHeader()), ctx);
+                        r.sendResponse(getResponseMsg(req.getHeader(), getResetLogUnitResponseMsg()), ctx);
                     }).exceptionally(ex -> {
                 //TODO(Zach): handleException(ex, ctx, req, r);
                 return null;
@@ -621,7 +676,7 @@ public class LogUnitServer extends AbstractServer {
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases. The same above.
-            r.sendResponse(API.getResetLogUnitResponse(req.getHeader()), ctx);
+            r.sendResponse(getResponseMsg(req.getHeader(), getResetLogUnitResponseMsg()), ctx);
         }
     }
 

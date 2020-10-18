@@ -231,32 +231,20 @@ public class CorfuProtocolLogUnit {
                 .build();
     }
 
-    public static ResponsePayloadMsg getLogAddressSpaceResponseMsg(StreamsAddressResponse response) {
+    public static ResponsePayloadMsg getLogAddressSpaceResponseMsg(long tail, Map<UUID, StreamAddressSpace> addressMap) {
         return ResponsePayloadMsg.newBuilder()
                 .setLogAddressSpaceResponse(
                         LogAddressSpaceResponseMsg.newBuilder()
-                                .setLogTail(response.getLogTail())
-                                .addAllAddressMap(response.getAddressMap()
-                                        .entrySet()
+                                .setLogTail(tail)
+                                .addAllAddressMap(addressMap.entrySet()
                                         .stream()
-                                        .map(e -> {
-                                            return UuidToStreamAddressSpacePairMsg.newBuilder()
-                                                    .setKey(getUuidMsg(e.getKey()))
-                                                    .setValue(getStreamAddressSpaceMsg(e.getValue()))
-                                                    .build();
-                                        })
+                                        .map(e -> UuidToStreamAddressSpacePairMsg.newBuilder()
+                                                .setKey(getUuidMsg(e.getKey()))
+                                                .setValue(getStreamAddressSpaceMsg(e.getValue()))
+                                                .build())
                                         .collect(Collectors.toList()))
                                 .build())
                 .build();
-    }
-
-    public static StreamsAddressResponse getStreamsAddressResponse(LogAddressSpaceResponseMsg msg) {
-        return new StreamsAddressResponse(msg.getLogTail(),
-                msg.getAddressMapList().stream()
-                        .collect(Collectors.<UuidToStreamAddressSpacePairMsg, UUID, StreamAddressSpace>toMap(
-                                e -> getUUID(e.getKey()),
-                                e -> getStreamAddressSpace(e.getValue())
-                        )));
     }
 
     public static RequestPayloadMsg getKnownAddressRequestMsg(long startRange, long endRange) {

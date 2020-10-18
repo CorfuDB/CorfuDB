@@ -9,25 +9,25 @@ import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
-import org.corfudb.protocols.API;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.DetectorMsg;
-import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
+import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.BootstrapManagementResponse;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Header;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.HealFailureResponse;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.ReportFailureResponse;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Response;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.ServerError;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.Management.BootstrapManagementResponseMsg;
+import org.corfudb.runtime.proto.service.Management.HealFailureRequestMsg;
+import org.corfudb.runtime.proto.service.Management.HealFailureResponseMsg;
+import org.corfudb.runtime.proto.service.Management.ReportFailureRequestMsg;
+import org.corfudb.runtime.proto.service.Management.ReportFailureResponseMsg;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -43,6 +43,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+
+import static org.corfudb.protocols.CorfuProtocolCommon.getLayout;
+import static org.corfudb.protocols.CorfuProtocolServerErrors.getBootstrappedErrorMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.*;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.*;
 
 
 /**
@@ -123,7 +128,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     @Override
-    public boolean isServerReadyToHandleReq(Header requestHeader) {
+    public boolean isServerReadyToHandleReq(RequestMsg request) {
         return getState() == ServerState.READY;
     }
 
@@ -139,8 +144,8 @@ public class ManagementServer extends AbstractServer {
     }
 
     @Override
-    protected void processRequest(Request req, ChannelHandlerContext ctx, IServerRouter r) {
-        if(req.getHeader().getType().equals(CorfuProtocol.MessageType.QUERY_NODE)) {
+    protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        if(req.getPayload().getPayloadCase().equals(PayloadCase.QUERY_NODE_REQUEST)) {
             getHandlerMethods().handle(req, ctx, r);
         } else {
             executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
@@ -226,7 +231,7 @@ public class ManagementServer extends AbstractServer {
         return true;
     }
 
-    private boolean isBootstrapped(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    private boolean isBootstrapped(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         if(serverContext.getManagementLayout() == null) {
             r.sendNoBootstrapError(req.getHeader(), ctx);
             return false;
@@ -236,6 +241,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * Forward an orchestrator request to the orchestrator service.
      *
      * @param msg corfu message containing ORCHESTRATOR_REQUEST
@@ -250,13 +256,21 @@ public class ManagementServer extends AbstractServer {
         orchestrator.handle(msg, ctx, r);
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.ORCHESTRATOR)
-    public synchronized void handleOrchestratorMsg(Request req, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("handleOrchestratorMsg: Received an orchestrator request {}", req);
+    /**
+     * Forward an orchestrator request to the orchestrator service.
+     *
+     * @param req corfu message containing ORCHESTRATOR_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    @RequestHandler(type = PayloadCase.ORCHESTRATOR_REQUEST)
+    public synchronized void handleOrchestratorRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        log.debug("handleOrchestratorRequest: Received an orchestrator request {}", req);
         orchestrator.handle(req, ctx, r);
     }
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * Bootstraps the management server.
      * The msg contains the layout to be bootstrapped.
      *
@@ -287,34 +301,43 @@ public class ManagementServer extends AbstractServer {
         }
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.BOOTSTRAP_MANAGEMENT)
-    public synchronized  void handleManagementBootstrap(Request req, ChannelHandlerContext ctx, IServerRouter r) {
-        final Layout layout = API.fromProtobufLayout(req.getBootstrapManagementRequest().getLayout());
-        Header responseHeader;
-        Response response;
+    /**
+     * Bootstraps the management server.
+     * The msg contains the layout to be bootstrapped.
+     *
+     * @param req corfu message containing BOOTSTRAP_MANAGEMENT_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    @RequestHandler(type = PayloadCase.BOOTSTRAP_MANAGEMENT_REQUEST)
+    public synchronized  void handleBootstrapManagementRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        final Layout layout = getLayout(req.getPayload().getBootstrapManagementRequest().getLayout());
+        HeaderMsg responseHeader;
+        ResponseMsg response;
 
         if(serverContext.getManagementLayout() != null) {
-            log.warn("handleManagementBootstrap[{}]: Got a request to bootstrap a server, with layout " +
+            log.warn("handleBootstrapManagementRequest[{}]: Got a request to bootstrap a server, with layout " +
                     "{}, which is already bootstrapped... Rejecting!", req.getHeader().getRequestId(), layout);
 
-            responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-            response = API.getErrorResponseNoPayload(responseHeader, API.getBootstrappedServerError());
+            responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            response = getResponseMsg(responseHeader, getBootstrappedErrorMsg());
         } else {
-            log.info("handleManagementBootstrap[{}]: Received bootstrap " +
+            log.info("handleBootstrapManagementRequest[{}]: Received bootstrap " +
                     "layout {}", req.getHeader().getRequestId(), layout);
 
             if(layout.getClusterId() == null) {
-                log.warn("handleManagementBootstrap[{}]: clusterId " +
+                log.warn("handleBootstrapManagementRequest[{}]: clusterId " +
                         "for the layout is not present", req.getHeader().getRequestId());
 
-                responseHeader = API.generateResponseHeader(req.getHeader(), false, false);
-                response = API.getBootstrapManagementResponse(responseHeader, BootstrapManagementResponse.Type.NACK);
-
+                responseHeader = getHeaderMsg(req.getHeader(), false, false);
+                response = getResponseMsg(responseHeader,
+                        getBootstrapManagementResponseMsg(BootstrapManagementResponseMsg.Type.NACK));
             } else {
                 serverContext.saveManagementLayout(layout);
 
-                responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-                response = API.getBootstrapManagementResponse(responseHeader, BootstrapManagementResponse.Type.ACK);
+                responseHeader = getHeaderMsg(req.getHeader(), false, true);
+                response = getResponseMsg(responseHeader,
+                        getBootstrapManagementResponseMsg(BootstrapManagementResponseMsg.Type.ACK));
             }
         }
 
@@ -322,6 +345,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * Triggers the failure handler.
      * The msg contains the failed/defected nodes.
      *
@@ -387,30 +411,53 @@ public class ManagementServer extends AbstractServer {
         }
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.REPORT_FAILURE)
-    public void handleReportFailure(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     * Triggers the failure handler.
+     * The msg contains the failed/defected nodes.
+     *
+     * @param req corfu message containing REPORT_FAILURE_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    @RequestHandler(type = PayloadCase.REPORT_FAILURE_REQUEST)
+    public void handleReportFailureRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         // If the server isn't bootstrapped yet, ignore the request
         if(!isBootstrapped(req, ctx, r)) return;
 
-        log.info("handleReportFailure[{}]: Received report failure request {}", req.getHeader().getRequestId(), req);
+        log.info("handleReportFailureRequest[{}]: Received report failure request {}", req.getHeader().getRequestId(), req);
         Layout layout = serverContext.copyManagementLayout();
-        Header responseHeader;
-        Response response;
+        HeaderMsg responseHeader;
+        ResponseMsg response;
 
+        final ReportFailureRequestMsg payload = req.getPayload().getReportFailureRequest();
+
+        // If this message is stamped with an older epoch which indicates the polling was
+        // conducted in an old epoch. This message cannot be considered and is discarded.
+        if(layout.getEpoch() != payload.getDetectorEpoch()) {
+            log.error("handleReportFailureRequest: Discarding stale detector message received. "
+                    + "detectorEpoch:{} latestLayout epoch:{}", payload.getDetectorEpoch(), layout.getEpoch());
+
+            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            response = getResponseMsg(responseHeader, getReportFailureResponseMsg(ReportFailureResponseMsg.Type.NACK));
+            r.sendResponse(response, ctx);
+        }
+
+        // Collecting the failed nodes in the message that are amongst the responsive nodes in the layout
         final Set<String> allActiveServers = layout.getAllActiveServers();
-        final Set<String> responsiveFailedNodes = req.getReportFailureRequest()
-                .getFailedNodesList()
+        final Set<String> responsiveFailedNodes = payload.getFailedNodeList()
                 .stream()
                 .filter(allActiveServers::contains)
                 .collect(Collectors.toSet());
 
-        if(!req.getReportFailureRequest().getFailedNodesList().isEmpty() && responsiveFailedNodes.isEmpty()) {
-            log.warn("handleReportFailure[{}]: No action taken as none of the failed nodes are responsive. " +
+        // If it is not an out of phase and there is no need to update the layout, return without
+        // any reconfiguration
+        if(!payload.getFailedNodeList().isEmpty() && responsiveFailedNodes.isEmpty()) {
+            log.warn("handleReportFailureRequest[{}]: No action taken as none of the failed nodes are responsive. " +
                     "failedNodes:{} responsiveLayoutNodes:{}, latestLayoutEpoch:{}", req.getHeader().getRequestId(),
-                    req.getReportFailureRequest().getFailedNodesList(), allActiveServers, layout.getEpoch());
+                    payload.getFailedNodeList(), allActiveServers, layout.getEpoch());
 
-            responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-            response = API.getReportFailureResponse(responseHeader, ReportFailureResponse.Type.ACK);
+            responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            response = getResponseMsg(responseHeader, getReportFailureResponseMsg(ReportFailureResponseMsg.Type.ACK));
             r.sendResponse(response, ctx);
             return;
         }
@@ -422,18 +469,19 @@ public class ManagementServer extends AbstractServer {
                 responsiveFailedNodes);
 
         if(result) {
-            responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-            response = API.getReportFailureResponse(responseHeader, ReportFailureResponse.Type.ACK);
+            responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            response = getResponseMsg(responseHeader, getReportFailureResponseMsg(ReportFailureResponseMsg.Type.ACK));
         } else {
-            log.error("handleReportFailure[{}]: failure handling unsuccessful.", req.getHeader().getRequestId());
-            responseHeader = API.generateResponseHeader(req.getHeader(), false, false);
-            response = API.getReportFailureResponse(responseHeader, ReportFailureResponse.Type.NACK);
+            log.error("handleReportFailureRequest[{}]: failure handling unsuccessful.", req.getHeader().getRequestId());
+            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            response = getResponseMsg(responseHeader, getReportFailureResponseMsg(ReportFailureResponseMsg.Type.NACK));
         }
 
         r.sendResponse(response, ctx);
     }
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * Triggers the healing handler.
      * The msg contains the healed nodes.
      *
@@ -511,42 +559,51 @@ public class ManagementServer extends AbstractServer {
         }
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.HEAL_FAILURE)
-    public void handleHealFailure(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     * Triggers the healing handler.
+     * The msg contains the healed nodes.
+     *
+     * @param req corfu message containing HEAL_FAILURE_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    @RequestHandler(type = PayloadCase.HEAL_FAILURE_REQUEST)
+    public void handleHealFailureRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         // If the server isn't bootstrapped yet, ignore the request
         if(!isBootstrapped(req, ctx, r)) return;
 
-        log.info("handleHealFailure[{}]: Received heal failure request {}", req.getHeader().getRequestId(), req);
+        log.info("handleHealFailureRequest[{}]: Received heal failure request {}", req.getHeader().getRequestId(), req);
         Layout layout = serverContext.copyManagementLayout();
-        Header responseHeader;
-        Response response;
+        HeaderMsg responseHeader;
+        ResponseMsg response;
+
+        final HealFailureRequestMsg payload = req.getPayload().getHealFailureRequest();
 
         // If this message is stamped with an older epoch which indicates the polling was
         // conducted in an old epoch. This message cannot be considered and is discarded.
-        if(req.getHealFailureRequest().getDetectorEpoch() != layout.getEpoch()) {
-            log.error("handleHealFailure[{}]: Discarding request received... detectorEpoch:{} latestLayoutEpoch:{}",
-                    req.getHeader().getRequestId(), req.getHealFailureRequest().getDetectorEpoch(), layout.getEpoch());
+        if(payload.getDetectorEpoch() != layout.getEpoch()) {
+            log.error("handleHealFailureRequest[{}]: Discarding request received... detectorEpoch:{} latestLayoutEpoch:{}",
+                    req.getHeader().getRequestId(), payload.getDetectorEpoch(), layout.getEpoch());
 
-            responseHeader = API.generateResponseHeader(req.getHeader(), false, false);
-            response = API.getHealFailureResponse(responseHeader, HealFailureResponse.Type.NACK);
+            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            response = getResponseMsg(responseHeader, getHealFailureResponseMsg(HealFailureResponseMsg.Type.NACK));
             r.sendResponse(response, ctx);
             return;
         }
 
         final List<String> unresponsiveServers = layout.getUnresponsiveServers();
-        final Set<String> unresponsiveHealedNodes = req.getHealFailureRequest()
-                .getHealedNodesList()
+        final Set<String> unresponsiveHealedNodes = payload.getHealedNodeList()
                 .stream()
                 .filter(unresponsiveServers::contains)
                 .collect(Collectors.toSet());
 
-        if(!req.getHealFailureRequest().getHealedNodesList().isEmpty() && unresponsiveHealedNodes.isEmpty()) {
-            log.warn("handleHealFailure[{}]: No action taken as none of the healed nodes are unresponsive. " +
+        if(!payload.getHealedNodeList().isEmpty() && unresponsiveHealedNodes.isEmpty()) {
+            log.warn("handleHealFailureRequest[{}]: No action taken as none of the healed nodes are unresponsive. " +
                     "healedNodes:{} unresponsiveLayoutNodes:{}, latestLayoutEpoch:{}", req.getHeader().getRequestId(),
-                    req.getHealFailureRequest().getHealedNodesList(), unresponsiveServers, layout.getEpoch());
+                    payload.getHealedNodeList(), unresponsiveServers, layout.getEpoch());
 
-            responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-            response = API.getHealFailureResponse(responseHeader, HealFailureResponse.Type.ACK);
+            responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            response = getResponseMsg(responseHeader, getHealFailureResponseMsg(HealFailureResponseMsg.Type.ACK));
             r.sendResponse(response, ctx);
             return;
         }
@@ -554,7 +611,7 @@ public class ManagementServer extends AbstractServer {
         boolean result;
         if (healingLock.tryLock()) {
             try {
-                log.info("handleHealFailure[{}]: Acquired healing lock. Performing healing for nodes: {}",
+                log.info("handleHealFailureRequest[{}]: Acquired healing lock. Performing healing for nodes: {}",
                         req.getHeader().getRequestId(), unresponsiveHealedNodes);
 
                 final Duration retryWorkflowQueryTimeout = Duration.ofSeconds(1L);
@@ -566,28 +623,29 @@ public class ManagementServer extends AbstractServer {
                 healingLock.unlock();
             }
         } else {
-            log.info("handleHealFailure[{}]: healing handling " +
+            log.info("handleHealFailureRequest[{}]: healing handling " +
                     "already in progress... Skipping.", req.getHeader().getRequestId());
 
-            responseHeader = API.generateResponseHeader(req.getHeader(), false, false);
-            response = API.getHealFailureResponse(responseHeader, HealFailureResponse.Type.NACK);
+            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            response = getResponseMsg(responseHeader, getHealFailureResponseMsg(HealFailureResponseMsg.Type.NACK));
             r.sendResponse(response, ctx);
             return;
         }
 
         if(result) {
-            responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-            response = API.getHealFailureResponse(responseHeader, HealFailureResponse.Type.ACK);
+            responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            response = getResponseMsg(responseHeader, getHealFailureResponseMsg(HealFailureResponseMsg.Type.ACK));
         } else {
-            log.error("handleHealFailure[{}]: healing handling unsuccessful.", req.getHeader().getRequestId());
-            responseHeader = API.generateResponseHeader(req.getHeader(), false, false);
-            response = API.getHealFailureResponse(responseHeader, HealFailureResponse.Type.NACK);
+            log.error("handleHealFailureRequest[{}]: healing handling unsuccessful.", req.getHeader().getRequestId());
+            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            response = getResponseMsg(responseHeader, getHealFailureResponseMsg(HealFailureResponseMsg.Type.NACK));
         }
 
         r.sendResponse(response, ctx);
     }
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * Returns current {@link NodeState} provided by failure detector.
      * The detector periodically collects current cluster state and saves it in {@link ClusterStateContext}.
      * Servers periodically inspect cluster and ask each other of the connectivity/node state
@@ -610,6 +668,32 @@ public class ManagementServer extends AbstractServer {
         r.sendResponse(ctx, msg, CorfuMsgType.NODE_STATE_RESPONSE.payloadMsg(nodeState));
     }
 
+    /**
+     * Returns current {@link NodeState} provided by failure detector.
+     * The detector periodically collects current cluster state and saves it in {@link ClusterStateContext}.
+     * Servers periodically inspect cluster and ask each other of the connectivity/node state
+     * (connection status between current node and all the others).
+     * The node provides its current node state.
+     *
+     * Default NodeState has been providing unless the node is not bootstrapped.
+     * Failure detector updates ClusterNodeState by current state then current NodeState can be provided to other nodes.
+     *
+     * @param req corfu message containing QUERY_NODE_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    @RequestHandler(type = PayloadCase.QUERY_NODE_REQUEST)
+    public void handleQueryNodeRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        NodeState nodeState = clusterContext.getClusterView()
+                .getNode(serverContext.getLocalEndpoint())
+                .orElseGet(this::buildDefaultNodeState);
+
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        ResponseMsg response = getResponseMsg(responseHeader, getQueryNodeResponseMsg(nodeState));
+        r.sendResponse(response, ctx);
+    }
+
+    //TODO(Zach): Is this used? Do we need a Protobuf analogue?
     @ServerHandler(type = CorfuMsgType.FAILURE_DETECTOR_METRICS_REQUEST)
     public void handleFailureDetectorMetricsRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         FailureDetectorMetrics metrics = serverContext.getFailureDetectorMetrics();
@@ -638,6 +722,7 @@ public class ManagementServer extends AbstractServer {
     }
 
     /**
+     * [RM] Remove this after Protobuf for RPC Completion
      * Handles the Management layout request.
      *
      * @param msg corfu message containing MANAGEMENT_LAYOUT_REQUEST
@@ -655,12 +740,21 @@ public class ManagementServer extends AbstractServer {
                 CorfuMsgType.LAYOUT_RESPONSE.payloadMsg(serverContext.getManagementLayout()));
     }
 
-    @RequestHandler(type = CorfuProtocol.MessageType.GET_MANAGEMENT_LAYOUT)
-    public void handleGetManagementLayout(Request req, ChannelHandlerContext ctx, IServerRouter r) {
+    /**
+     * Handles the Management layout request.
+     *
+     * @param req corfu message containing MANAGEMENT_LAYOUT_REQUEST
+     * @param ctx netty ChannelHandlerContext
+     * @param r   server router
+     */
+    @RequestHandler(type = PayloadCase.MANAGEMENT_LAYOUT_REQUEST)
+    public void handleManagementLayoutMsg(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         if(!isBootstrapped(req, ctx, r)) return;
 
-        Header responseHeader = API.generateResponseHeader(req.getHeader(), false, true);
-        Response response = API.getGetManagementLayoutResponse(responseHeader, serverContext.getManagementLayout());
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        ResponseMsg response = getResponseMsg(responseHeader,
+                getManagementLayoutResponseMsg(serverContext.getManagementLayout()));
+
         r.sendResponse(response, ctx);
     }
 }

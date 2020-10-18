@@ -6,15 +6,15 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.MessageType;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 public @interface RequestHandler {
     /**
-     * Returns the message type
+     * Returns the message payload type
      * @return the type of Corfu message request
      */
-    MessageType type();
+    RequestPayloadMsg.PayloadCase type();
 }

@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.util.LinkedList;
@@ -12,14 +11,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
 import javax.annotation.Nonnull;
-
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.protocols.API;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
@@ -28,8 +25,8 @@ import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Request;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol.Priority;
+import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -96,6 +93,7 @@ public class BatchProcessor implements AutoCloseable {
     }
 
     /**
+     * [RM] Temporary: remove after Protobuf for RPC
      * Add a task to the processor.
      * @param type The request type
      * @param msg The request message
@@ -107,7 +105,13 @@ public class BatchProcessor implements AutoCloseable {
         return operation.getFutureResult();
     }
 
-    public <T> CompletableFuture<T> addTask(@Nonnull BatchWriterOp.Type type, @Nonnull Request req) {
+    /**
+     * Add a task to the processor.
+     * @param type The request type
+     * @param req The request message
+     * @return returns a future result for the request, if it expects one
+     */
+    public <T> CompletableFuture<T> addTask(@Nonnull BatchWriterOp.Type type, @Nonnull RequestMsg req) {
         BatchWriterOp<T> op = new BatchWriterOp<>(type, req);
         opsQueue.add(op);
         return op.getFutureResult();
@@ -278,17 +282,17 @@ public class BatchProcessor implements AutoCloseable {
                     streamLog.sync(true);
                     break;
                 } else if(streamLog.quotaExceeded() &&
-                        (currentOp.getRequest().getHeader().getPriority() != Priority.HIGH)) {
+                        (currentOp.getRequest().getHeader().getPriority() != CorfuMessage.PriorityLevel.HIGH)) {
                     currentOp.getFutureResult().completeExceptionally(
                             new QuotaExceededException("Quota of " + streamLog.quotaLimitInBytes() + " bytes"));
 
                     log.warn("batchWriteProcessor: quota exceeded, dropping request {}", currentOp.getRequest());
                 } else if(currentOp.getType() == BatchWriterOp.Type.SEAL &&
-                        (currentOp.getRequest().getSealRequest().getEpoch() >= sealEpoch)) {
+                        (currentOp.getRequest().getPayload().getSealRequest().getEpoch() >= sealEpoch)) {
                     log.info("batchWriteProcessor: updating epoch from {} to {}",
-                            sealEpoch, currentOp.getRequest().getSealRequest().getEpoch());
+                            sealEpoch, currentOp.getRequest().getPayload().getSealRequest().getEpoch());
 
-                    sealEpoch = currentOp.getRequest().getSealRequest().getEpoch();
+                    sealEpoch = currentOp.getRequest().getPayload().getSealRequest().getEpoch();
                     res.add(currentOp);
                     numProcessed++;
                     lastOp = currentOp;
@@ -305,7 +309,9 @@ public class BatchProcessor implements AutoCloseable {
                         //TODO(Zach): complete implementations
                         switch (currentOp.getType()) {
                             case PREFIX_TRIM:
-                                final long addr = currentOp.getRequest().getTrimLogRequest().getAddress().getSequence();
+                                final long addr = currentOp.getRequest().getPayload()
+                                        .getTrimLogRequest().getAddress().getSequence();
+
                                 streamLog.prefixTrim(addr);
                                 break;
                             case WRITE:
@@ -318,16 +324,17 @@ public class BatchProcessor implements AutoCloseable {
                             case TAILS_QUERY:
                                 final TailsResponse tails;
 
-                                switch (currentOp.getRequest().getTailRequest().getReqType()) {
+                                switch (currentOp.getRequest().getPayload().getTailRequest().getReqType()) {
                                     case LOG_TAIL:
                                         tails = new TailsResponse(streamLog.getLogTail());
                                         break;
                                     case STREAMS_TAILS:
                                         tails = streamLog.getTails(currentOp.getRequest()
+                                                .getPayload()
                                                 .getTailRequest()
-                                                .getStreamsList()
+                                                .getStreamList()
                                                 .stream()
-                                                .map(API::getJavaUUID)
+                                                .map(CorfuProtocolCommon::getUUID)
                                                 .collect(Collectors.toList()));
                                         break;
                                     default:

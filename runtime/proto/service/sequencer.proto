@@ -105,7 +105,13 @@ message BootstrapSequencerRequestMsg {
 }
 
 message BootstrapSequencerResponseMsg {
+  enum Type {
+    INVALID = 0;
+    ACK = 1;
+    NACK = 2;
+  }
 
+  Type resp_type = 1;
 }
 
 message SequencerTrimRequestMsg {

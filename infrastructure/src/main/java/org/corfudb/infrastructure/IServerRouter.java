@@ -1,13 +1,14 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-import org.corfudb.protocols.API;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.WrongClusterMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.protocol.proto.CorfuProtocol;
+import org.corfudb.runtime.proto.Common.UuidMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.view.Layout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,11 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.CorfuProtocolServerErrors.*;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.*;
+
 
 /**
  * Created by mwei on 12/13/15.
@@ -24,8 +30,10 @@ public interface IServerRouter {
     // Lombok annotations are not allowed for the interfaces.
     Logger log = LoggerFactory.getLogger(IServerRouter.class);
 
-    // Remove this after Protobuf for RPC Completion
+    // [RM] Remove this after Protobuf for RPC Completion
     void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg);
+
+    void sendResponse(ResponseMsg response, ChannelHandlerContext ctx);
 
     /**
      * Get the current epoch.
@@ -60,7 +68,7 @@ public interface IServerRouter {
     void setServerContext(ServerContext serverContext);
 
     /**
-     * Remove this after Protobuf for RPC Completion
+     * [RM] Remove this after Protobuf for RPC Completion
      *
      * Send WRONG_EPOCH message.
      *
@@ -75,7 +83,7 @@ public interface IServerRouter {
     }
 
     /**
-     * Remove this after Protobuf for RPC Completion
+     * [RM] Remove this after Protobuf for RPC Completion
      *
      * Send LAYOUT_NOBOOTSTRAP message.
      *
@@ -88,7 +96,7 @@ public interface IServerRouter {
     }
 
     /**
-     * Remove this after Protobuf for RPC Completion
+     * [RM] Remove this after Protobuf for RPC Completion
      *
      * Send WRONG_CLUSTER_ID message.
      *
@@ -104,7 +112,7 @@ public interface IServerRouter {
     }
 
     /**
-     * Remove this after Protobuf for RPC Completion
+     * [RM] Remove this after Protobuf for RPC Completion
      *
      * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
      * the server is in the wrong epoch. Ignored if the message type is reset (which
@@ -124,7 +132,7 @@ public interface IServerRouter {
     }
 
     /**
-     * Remove this after Protobuf for RPC Completion
+     * [RM] Remove this after Protobuf for RPC Completion
      *
      * Validate that the message's cluster ID is equal to the cluster ID of a bootstrapped layout.
      *
@@ -146,7 +154,7 @@ public interface IServerRouter {
     }
 
     /**
-     * Remove this after Protobuf for RPC Completion
+     * [RM] Remove this after Protobuf for RPC Completion
      *
      * Validate the incoming message. The message is valid if:
      * 1) The flag ignoreEpoch is set to true or it's set to false, and the epoch is valid for all the messages.
@@ -175,7 +183,7 @@ public interface IServerRouter {
     }
 
     /**
-     * Remove this after Protobuf for RPC Completion
+     * [RM] Remove this after Protobuf for RPC Completion
      *
      * Send Response through a generic transport layer (not Netty-specific)
      *
@@ -194,16 +202,16 @@ public interface IServerRouter {
      * @param ctx The context of the channel handler.
      * @param correctEpoch The current epoch.
      */
-    default void sendWrongEpochError(CorfuProtocol.Header requestHeader, ChannelHandlerContext ctx, long correctEpoch) {
-        CorfuProtocol.Header responseHeader = API.generateResponseHeader(requestHeader, false, true);
-        CorfuProtocol.Response response = API.getErrorResponseNoPayload(responseHeader, API.getWrongEpochServerError(correctEpoch));
+    default void sendWrongEpochError(HeaderMsg requestHeader, ChannelHandlerContext ctx, long correctEpoch) {
+        HeaderMsg responseHeader = getHeaderMsg(requestHeader, false, true);
+        ResponseMsg response = getResponseMsg(responseHeader, getWrongEpochErrorMsg(correctEpoch));
         sendResponse(response, ctx);
 
         log.trace("sendWrongEpochError[{}]: Incoming request received with wrong epoch, got {}, expected {}, " +
                 "request was {}", requestHeader.getRequestId(), requestHeader.getEpoch(), correctEpoch, requestHeader);
     }
 
-    default void sendWrongEpochError(CorfuProtocol.Header requestHeader, ChannelHandlerContext ctx) {
+    default void sendWrongEpochError(HeaderMsg requestHeader, ChannelHandlerContext ctx) {
         sendWrongEpochError(requestHeader, ctx, getServerEpoch());
     }
 
@@ -212,9 +220,9 @@ public interface IServerRouter {
      * @param requestHeader The header of the incoming request.
      * @param ctx The context of the channel handler.
      */
-    default void sendNoBootstrapError(CorfuProtocol.Header requestHeader, ChannelHandlerContext ctx) {
-        CorfuProtocol.Header responseHeader = API.generateResponseHeader(requestHeader, false, true);
-        CorfuProtocol.Response response = API.getErrorResponseNoPayload(responseHeader, API.getNotBootstrappedServerError());
+    default void sendNoBootstrapError(HeaderMsg requestHeader, ChannelHandlerContext ctx) {
+        HeaderMsg responseHeader = getHeaderMsg(requestHeader, false, true);
+        ResponseMsg response = getResponseMsg(responseHeader, getNotBootstrappedErrorMsg());
         sendResponse(response, ctx);
 
         log.trace("sendNoBootstrapError[{}]: Received request but not bootstrapped! Request was {}",
@@ -227,10 +235,11 @@ public interface IServerRouter {
      * @param ctx The context of the channel handler.
      * @param clusterId The current cluster id.
      */
-    default void sendWrongClusterError(CorfuProtocol.Header requestHeader, ChannelHandlerContext ctx, CorfuProtocol.UUID clusterId) {
-        CorfuProtocol.Header responseHeader = API.generateResponseHeader(requestHeader, false, true);
-        CorfuProtocol.ServerError wrongClusterError = API.getWrongClusterServerError(clusterId, requestHeader.getClusterId());
-        CorfuProtocol.Response response = API.getErrorResponseNoPayload(responseHeader, wrongClusterError);
+    default void sendWrongClusterError(HeaderMsg requestHeader, ChannelHandlerContext ctx, UuidMsg clusterId) {
+        HeaderMsg responseHeader = getHeaderMsg(requestHeader, false, true);
+        ResponseMsg response = getResponseMsg(responseHeader,
+                getWrongClusterErrorMsg(clusterId, requestHeader.getClusterId()));
+
         sendResponse(response, ctx);
 
         log.trace("sendWrongClusterError[{}]: Incoming request with a wrong cluster id, got {}, expected {}, " +
@@ -244,7 +253,7 @@ public interface IServerRouter {
      * @param ctx The context of the channel handler.
      * @return True, if the epoch is correct, but false otherwise.
      */
-    default boolean epochIsValid(CorfuProtocol.Header requestHeader, ChannelHandlerContext ctx) {
+    default boolean epochIsValid(HeaderMsg requestHeader, ChannelHandlerContext ctx) {
         final long serverEpoch = getServerEpoch();
         if(requestHeader.getEpoch() != serverEpoch) {
             sendWrongEpochError(requestHeader, ctx);
@@ -262,8 +271,8 @@ public interface IServerRouter {
      * @param layout The layout a server was bootstrapped with.
      * @return True, if the cluster ID of the request matches the cluster ID of the layout, but false otherwise.
      */
-    default boolean clusterIdIsValid(CorfuProtocol.Header requestHeader, ChannelHandlerContext ctx, Layout layout) {
-        CorfuProtocol.UUID currentClusterID = API.getProtoUUID(layout.getClusterId());
+    default boolean clusterIdIsValid(HeaderMsg requestHeader, ChannelHandlerContext ctx, Layout layout) {
+        UuidMsg currentClusterID = getUuidMsg(layout.getClusterId());
         boolean match = requestHeader.getClusterId().equals(currentClusterID);
 
         if(!match) {
@@ -275,9 +284,8 @@ public interface IServerRouter {
 
     /**
      * Validate the incoming request. The request is valid if:
-     *    1) If the request message has the appropriate payload given the request type.
-     *    2) The flag ignoreEpoch is set to true, or it's set to false and the epoch is valid.
-     *    3) Also, if the flag ignoreClusterId is set to false,
+     *    1) The flag ignoreEpoch is set to true, or it's set to false and the epoch is valid.
+     *    2) Also, if the flag ignoreClusterId is set to false,
      *           a. The current layout server should be bootstrapped and
      *           b. the request's cluster ID should be equal to the bootstrapped layout's cluster ID.
      *
@@ -285,13 +293,8 @@ public interface IServerRouter {
      * @param ctx The context of the channel handler.
      * @return True if the request is valid, and false otherwise.
      */
-    default boolean requestIsValid(CorfuProtocol.Request req, ChannelHandlerContext ctx) {
-        CorfuProtocol.Header requestHeader = req.getHeader();
-
-        if(!API.validateRequestPayloadType(req)) {
-            // TODO(Zach): What error response to send here, if any?
-            return false;
-        }
+    default boolean requestIsValid(RequestMsg req, ChannelHandlerContext ctx) {
+        HeaderMsg requestHeader = req.getHeader();
 
         if(!requestHeader.getIgnoreEpoch() && epochIsValid(requestHeader, ctx)) { return false; }
         if(!requestHeader.getIgnoreClusterId()) {
@@ -313,9 +316,7 @@ public interface IServerRouter {
      * avoid empty implementations on CorfuServer.
      *
      * @param response
-     * @param ctx
      */
-    void sendResponse(CorfuProtocol.Response response, ChannelHandlerContext ctx);
-    void sendResponse(CorfuMessage.ResponseMsg response, ChannelHandlerContext ctx);
-
+    //TODO(Zach): Needed for LR?
+    //void sendResponse(ResponseMsg response);
 }
