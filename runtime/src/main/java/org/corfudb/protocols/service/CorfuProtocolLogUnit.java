@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.CorfuProtocolLogData;
+import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -199,6 +200,13 @@ public class CorfuProtocolLogUnit {
                         .collect(Collectors.<UuidToLongPairMsg, UUID, Long>toMap(
                                 e -> { return getUUID(e.getKey()); },
                                 UuidToLongPairMsg::getValue)));
+    }
+
+    public static InspectAddressesResponse getInspectAddressesResponse(InspectAddressesResponseMsg msg) {
+        InspectAddressesResponse ir = new InspectAddressesResponse();
+        msg.getEmptyAddressList().forEach(ir::add);
+
+        return ir;
     }
 
     public static RequestPayloadMsg getCompactRequestMsg() {
