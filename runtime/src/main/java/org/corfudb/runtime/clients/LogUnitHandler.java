@@ -48,14 +48,6 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     @Getter
     IClientRouter router;
 
-    /**
-     * The protobuf router to use for the client.
-     * For old CorfuMsg, use {@link #router}
-     */
-    @Getter
-    @Setter
-    public IClientProtobufRouter protobufRouter;
-
     @Override
     public LogUnitClient getClient(long epoch, UUID clusterID) {
         return new LogUnitClient(router, epoch, clusterID);
@@ -306,7 +298,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.WRITE_LOG_RESPONSE)
     private static Object handleWriteLogResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                 IClientProtobufRouter r) {
+                                                 IClientRouter r) {
         return true;
     }
 
@@ -320,7 +312,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.RANGE_WRITE_LOG_RESPONSE)
     private static Object handleRangeWriteLogResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                      IClientProtobufRouter r) {
+                                                      IClientRouter r) {
         return true;
     }
 
@@ -334,7 +326,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.READ_LOG_RESPONSE)
     private static Object handleReadLogResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                IClientProtobufRouter r) {
+                                                IClientRouter r) {
         ReadLogResponseMsg responseMsg = msg.getPayload().getReadLogResponse();
 
         return CorfuProtocolLogUnit.getReadResponse(responseMsg);
@@ -350,7 +342,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.INSPECT_ADDRESSES_RESPONSE)
     private static Object handleInspectResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                IClientProtobufRouter r) {
+                                                IClientRouter r) {
         InspectAddressesResponseMsg responseMsg = msg.getPayload().getInspectAddressesResponse();
 
         return CorfuProtocolLogUnit.getInspectAddressesResponse(responseMsg);
@@ -366,7 +358,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.TRIM_LOG_RESPONSE)
     private static Object handleTrimLogResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                IClientProtobufRouter r) {
+                                                IClientRouter r) {
         return true;
     }
 
@@ -380,7 +372,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.TRIM_MARK_RESPONSE)
     private static Object handleTrimMarkResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                 IClientProtobufRouter r) {
+                                                 IClientRouter r) {
         TrimMarkResponseMsg responseMsg = msg.getPayload().getTrimMarkResponse();
 
         return responseMsg.getTrimMark();
@@ -396,7 +388,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.TAIL_RESPONSE)
     private static Object handleTailResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                             IClientProtobufRouter r) {
+                                             IClientRouter r) {
         TailResponseMsg responseMsg = msg.getPayload().getTailResponse();
 
         return CorfuProtocolLogUnit.getTailsResponse(responseMsg);
@@ -412,7 +404,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.COMPACT_RESPONSE)
     private static Object handleCompactResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                IClientProtobufRouter r) {
+                                                IClientRouter r) {
         return true;
     }
 
@@ -426,7 +418,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.FLUSH_CACHE_RESPONSE)
     private static Object handleFlushCacheResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                   IClientProtobufRouter r) {
+                                                   IClientRouter r) {
         return true;
     }
 
@@ -440,7 +432,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.LOG_ADDRESS_SPACE_RESPONSE)
     private static Object handleLogAddressSpaceResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                        IClientProtobufRouter r) {
+                                                        IClientRouter r) {
         LogAddressSpaceResponseMsg responseMsg = msg.getPayload().getLogAddressSpaceResponse();
 
         return CorfuProtocolCommon.getStreamsAddressResponse(responseMsg.getLogTail(), responseMsg.getAddressMapList());
@@ -456,7 +448,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.KNOWN_ADDRESS_RESPONSE)
     private static Object handleKnownAddressResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                     IClientProtobufRouter r) {
+                                                     IClientRouter r) {
         KnownAddressResponseMsg responseMsg = msg.getPayload().getKnownAddressResponse();
 
         return CorfuProtocolLogUnit.getKnownAddressResponse(responseMsg);
@@ -472,7 +464,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.COMMITTED_TAIL_RESPONSE)
     private static Object handleCommittedTailResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                      IClientProtobufRouter r) {
+                                                      IClientRouter r) {
         CommittedTailResponseMsg responseMsg = msg.getPayload().getCommittedTailResponse();
 
         return  responseMsg.getCommittedTail();
@@ -488,7 +480,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.UPDATE_COMMITTED_TAIL_RESPONSE)
     private static Object handleUpdateCommittedTailResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                            IClientProtobufRouter r) {
+                                                            IClientRouter r) {
         return true;
     }
 
@@ -502,7 +494,7 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @ResponseHandler(type = PayloadCase.RESET_LOG_UNIT_RESPONSE)
     private static Object handleResetLogUnitResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                     IClientProtobufRouter r) {
+                                                     IClientRouter r) {
         return true;
     }
 

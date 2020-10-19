@@ -42,14 +42,6 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
     @Getter
     IClientRouter router;
 
-    /**
-     * The protobuf router to use for the client.
-     * For old CorfuMsg, use {@link #router}
-     */
-    @Getter
-    @Setter
-    public IClientProtobufRouter protobufRouter;
-
     @Override
     public LayoutClient getClient(long epoch, UUID clusterID) {
         return new LayoutClient(router, epoch, clusterID);
@@ -125,7 +117,7 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
      */
     @ResponseHandler(type = PayloadCase.LAYOUT_RESPONSE)
     private static Object handleLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                               IClientProtobufRouter r) {
+                                               IClientRouter r) {
         LayoutResponseMsg layoutResponse = msg.getPayload().getLayoutResponse();
         Common.LayoutMsg layoutMsg = layoutResponse.getLayout();
 
@@ -142,7 +134,7 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
      */
     @ResponseHandler(type = PayloadCase.PREPARE_LAYOUT_RESPONSE)
     private static Object handlePrepareLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                      IClientProtobufRouter r) {
+                                                      IClientRouter r) {
         PrepareLayoutResponseMsg prepareLayoutMsg = msg.getPayload().getPrepareLayoutResponse();
         PrepareLayoutResponseMsg.Type type = prepareLayoutMsg.getRespType();
         long rank = prepareLayoutMsg.getRank();
@@ -166,7 +158,7 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
      */
     @ResponseHandler(type = PayloadCase.PROPOSE_LAYOUT_RESPONSE)
     private static Object handleProposeLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                      IClientProtobufRouter r) {
+                                                      IClientRouter r) {
         ProposeLayoutResponseMsg proposeLayoutMsg = msg.getPayload().getProposeLayoutResponse();
         ProposeLayoutResponseMsg.Type type = proposeLayoutMsg.getRespType();
         long rank = proposeLayoutMsg.getRank();
@@ -189,7 +181,7 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
      */
     @ResponseHandler(type = PayloadCase.COMMIT_LAYOUT_RESPONSE)
     private static Object handleCommitLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                     IClientProtobufRouter r) {
+                                                     IClientRouter r) {
         CommitLayoutResponseMsg commitLayoutMsg = msg.getPayload().getCommitLayoutResponse();
         CommitLayoutResponseMsg.Type type = commitLayoutMsg.getRespType();
 
@@ -211,7 +203,7 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
      */
     @ResponseHandler(type = PayloadCase.BOOTSTRAP_LAYOUT_RESPONSE)
     private static Object handleBootstrapLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                        IClientProtobufRouter r) {
+                                                        IClientRouter r) {
         BootstrapLayoutResponseMsg bootstrapLayoutMsg =  msg.getPayload().getBootstrapLayoutResponse();
         BootstrapLayoutResponseMsg.Type type = bootstrapLayoutMsg.getRespType();
 

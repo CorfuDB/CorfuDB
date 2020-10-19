@@ -40,14 +40,6 @@ public class BaseHandler implements IClient {
     @Setter
     public IClientRouter router;
 
-    /**
-     * The protobuf router to use for the client.
-     * For old CorfuMsg, use {@link #router}
-     */
-    @Getter
-    @Setter
-    public IClientProtobufRouter protobufRouter;
-
     /** Public functions which are exposed to clients. */
 
     /**
@@ -85,7 +77,7 @@ public class BaseHandler implements IClient {
     /**
      * Handle a pong response from the server.
      * For protobuf, use {@link #handlePingResponse(ResponseMsg,
-     * ChannelHandlerContext, IClientProtobufRouter)}
+     * ChannelHandlerContext, IClientRouter)}
      *
      * @param msg The ping request message
      * @param ctx The context the message was sent under
@@ -142,7 +134,7 @@ public class BaseHandler implements IClient {
 
     /**
      * Handle a Version response from the server.
-     * For protobuf, use {@link #handleVersionResponse(ResponseMsg, ChannelHandlerContext, IClientProtobufRouter)}
+     * For protobuf, use {@link #handleVersionResponse(ResponseMsg, ChannelHandlerContext, IClientRouter)}
      *
      * @param msg The version message
      * @param ctx The context the message was sent under
@@ -201,13 +193,13 @@ public class BaseHandler implements IClient {
      */
     @ResponseHandler(type = PayloadCase.PING_RESPONSE)
     private static Object handlePingResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                             IClientProtobufRouter r) {
+                                             IClientRouter r) {
         return true;
     }
 
     @ResponseHandler(type = PayloadCase.HANDSHAKE_RESPONSE)
     private static Object handleHandshakeResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                             IClientProtobufRouter r) {
+                                             IClientRouter r) {
         // TODO: add implementation after BaseServer done.
         return true;
     }
@@ -222,7 +214,7 @@ public class BaseHandler implements IClient {
      */
     @ResponseHandler(type = PayloadCase.RESTART_RESPONSE)
     private static Object handleRestartResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                IClientProtobufRouter r) {
+                                                IClientRouter r) {
         return true;
     }
 
@@ -236,7 +228,7 @@ public class BaseHandler implements IClient {
      */
     @ResponseHandler(type = PayloadCase.RESET_RESPONSE)
     private static Object handleResetResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                              IClientProtobufRouter r) {
+                                              IClientRouter r) {
         return true;
     }
 
@@ -250,7 +242,7 @@ public class BaseHandler implements IClient {
      */
     @ResponseHandler(type = PayloadCase.SEAL_RESPONSE)
     private static Object handleSealResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                             IClientProtobufRouter r) {
+                                             IClientRouter r) {
         return true;
     }
 
@@ -265,7 +257,7 @@ public class BaseHandler implements IClient {
      */
     @ResponseHandler(type = PayloadCase.VERSION_RESPONSE)
     private static Object handleVersionResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                IClientProtobufRouter r) {
+                                                IClientRouter r) {
         Base.VersionResponseMsg versionResponseMsg = msg.getPayload().getVersionResponse();
         String jsonPayloadMsg = versionResponseMsg.getJsonPayloadMsg();
         final Gson parser = new Gson();

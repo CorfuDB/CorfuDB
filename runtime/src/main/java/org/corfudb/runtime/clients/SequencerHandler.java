@@ -38,14 +38,6 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
     @Getter
     IClientRouter router;
 
-    /**
-     * The protobuf router to use for the client.
-     * For old CorfuMsg, use {@link #router}
-     */
-    @Getter
-    @Setter
-    public IClientProtobufRouter protobufRouter;
-
     @Override
     public SequencerClient getClient(long epoch, UUID clusterID) {
         return new SequencerClient(router, epoch, clusterID);
@@ -96,7 +88,7 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
      */
     @ResponseHandler(type = PayloadCase.TOKEN_RESPONSE)
     private static Object handleTokenResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                              IClientProtobufRouter r) {
+                                              IClientRouter r) {
         TokenResponseMsg responseMsg = msg.getPayload().getTokenResponse();
 
         return CorfuProtocolSequencer.getTokenResponse(responseMsg);
@@ -112,7 +104,7 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
      */
     @ResponseHandler(type = PayloadCase.BOOTSTRAP_SEQUENCER_RESPONSE)
     private static Object handleBootstrapSequencerResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                           IClientProtobufRouter r) {
+                                                           IClientRouter r) {
         BootstrapSequencerResponseMsg responseMsg = msg.getPayload().getBootstrapSequencerResponse();
         BootstrapSequencerResponseMsg.Type type = responseMsg.getRespType();
 
@@ -134,7 +126,7 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
      */
     @ResponseHandler(type = PayloadCase.SEQUENCER_TRIM_RESPONSE)
     private static Object handleSequencerTrimResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                      IClientProtobufRouter r) {
+                                                      IClientRouter r) {
         return true;
     }
 
@@ -148,7 +140,7 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
      */
     @ResponseHandler(type = PayloadCase.SEQUENCER_METRICS_RESPONSE)
     private static Object handleSequencerMetricsResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                      IClientProtobufRouter r) {
+                                                      IClientRouter r) {
         SequencerMetricsResponseMsg responseMsg = msg.getPayload().getSequencerMetricsResponse();
         SequencerMetricsMsg sequencerMetricsMsg = responseMsg.getSequencerMetrics();
 
@@ -165,7 +157,7 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
      */
     @ResponseHandler(type = PayloadCase.STREAMS_ADDRESS_RESPONSE)
     private static Object handleStreamsAddressResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                       IClientProtobufRouter r) {
+                                                       IClientRouter r) {
         StreamsAddressResponseMsg responseMsg = msg.getPayload().getStreamsAddressResponse();
 
         return CorfuProtocolCommon.getStreamsAddressResponse(responseMsg.getLogTail(), responseMsg.getAddressMapList());

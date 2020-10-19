@@ -40,14 +40,6 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
     @Getter
     IClientRouter router;
 
-    /**
-     * The protobuf router to use for the client.
-     * For old CorfuMsg, use {@link #router}
-     */
-    @Getter
-    @Setter
-    public IClientProtobufRouter protobufRouter;
-
     @Override
     public ManagementClient getClient(long epoch, UUID clusterID) {
         return new ManagementClient(router, epoch, clusterID);
@@ -113,7 +105,7 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
      */
     @ResponseHandler(type = PayloadCase.QUERY_NODE_RESPONSE)
     private static Object handleQueryNodeResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                  IClientProtobufRouter r) {
+                                                  IClientRouter r) {
         QueryNodeResponseMsg responseMsg = msg.getPayload().getQueryNodeResponse();
 
         return CorfuProtocolManagement.getNodeState(responseMsg);
@@ -129,7 +121,7 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
      */
     @ResponseHandler(type = PayloadCase.REPORT_FAILURE_RESPONSE)
     private static Object handleReportFailureResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                      IClientProtobufRouter r) {
+                                                      IClientRouter r) {
         ReportFailureResponseMsg responseMsg = msg.getPayload().getReportFailureResponse();
         ReportFailureResponseMsg.Type type = responseMsg.getRespType();
 
@@ -151,7 +143,7 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
      */
     @ResponseHandler(type = PayloadCase.HEAL_FAILURE_RESPONSE)
     private static Object handleHealFailureResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                    IClientProtobufRouter r) {
+                                                    IClientRouter r) {
         HealFailureResponseMsg responseMsg = msg.getPayload().getHealFailureResponse();
         HealFailureResponseMsg.Type type = responseMsg.getRespType();
 
@@ -165,7 +157,7 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
 
     @ResponseHandler(type = PayloadCase.ORCHESTRATOR_RESPONSE)
     private static Object handleOrchestratorResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                     IClientProtobufRouter r) {
+                                                     IClientRouter r) {
         // TODO
 
         return null;
@@ -181,7 +173,7 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
      */
     @ResponseHandler(type = PayloadCase.BOOTSTRAP_MANAGEMENT_RESPONSE)
     private static Object handleBootstrapManagementResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                            IClientProtobufRouter r) {
+                                                            IClientRouter r) {
         BootstrapManagementResponseMsg responseMsg = msg.getPayload().getBootstrapManagementResponse();
         BootstrapManagementResponseMsg.Type type = responseMsg.getRespType();
 
@@ -203,7 +195,7 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
      */
     @ResponseHandler(type = PayloadCase.MANAGEMENT_LAYOUT_RESPONSE)
     private static Object handleManagementLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                                         IClientProtobufRouter r) {
+                                                         IClientRouter r) {
         LayoutMsg layoutMsg = msg.getPayload().getManagementLayoutResponse().getLayout();
 
         return CorfuProtocolCommon.getLayout(layoutMsg);
