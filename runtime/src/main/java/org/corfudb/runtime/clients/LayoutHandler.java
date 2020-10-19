@@ -114,6 +114,14 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
 
     // Protobuf region
 
+    /**
+     * Handle a layout response from the server.
+     *
+     * @param msg The layout response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router.
+     * @return {@link Layout} sent back from server.
+     */
     @ResponseHandler(type = PayloadCase.LAYOUT_RESPONSE)
     private static Object handleLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                IClientProtobufRouter r) {
@@ -123,6 +131,14 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
         return Layout.fromJSONString(layout.getLayoutJson());
     }
 
+    /**
+     * Handle a prepare layout response from the server.
+     *
+     * @param msg The prepare layout response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router.
+     * @return {@link LayoutPrepareResponse} if ACK, throw an {@link OutrankedException} if REJECT.
+     */
     @ResponseHandler(type = PayloadCase.PREPARE_LAYOUT_RESPONSE)
     private static Object handlePrepareLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                       IClientProtobufRouter r) {
@@ -139,6 +155,14 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
         }
     }
 
+    /**
+     * Handle a propose layout response from the server.
+     *
+     * @param msg The propose layout response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router.
+     * @return True if ACK, throw an {@link OutrankedException} if REJECT.
+     */
     @ResponseHandler(type = PayloadCase.PROPOSE_LAYOUT_RESPONSE)
     private static Object handleProposeLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                       IClientProtobufRouter r) {
@@ -154,6 +178,14 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
         }
     }
 
+    /**
+     * Handle a propose layout response from the server.
+     *
+     * @param msg The propose layout response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router.
+     * @return True if ACK, throw an {@link OutrankedException} if REJECT.
+     */
     @ResponseHandler(type = PayloadCase.COMMIT_LAYOUT_RESPONSE)
     private static Object handleCommitLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                      IClientProtobufRouter r) {
@@ -168,6 +200,14 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
         }
     }
 
+    /**
+     * Handle a bootstrap layout response from the server.
+     *
+     * @param msg The propose layout response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router.
+     * @return True if ACK, false if NACK.
+     */
     @ResponseHandler(type = PayloadCase.BOOTSTRAP_LAYOUT_RESPONSE)
     private static Object handleBootstrapLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                         IClientProtobufRouter r) {
