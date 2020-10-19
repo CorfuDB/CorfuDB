@@ -7,10 +7,13 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.service.CorfuProtocolBase;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 
 /**
  * This is a base client which sends basic messages.
@@ -83,6 +86,11 @@ public class BaseClient implements IClient {
     public CompletableFuture<Boolean> ping() {
         return router.sendMessageAndGetCompletable(
                 new CorfuMsg(CorfuMsgType.PING).setEpoch(epoch).setClusterID(clusterId));
+    }
+
+    public CompletableFuture<Boolean> pingProto() {
+        return router.sendRequestAndGetCompletable(CorfuProtocolBase.getPingRequestMsg(), epoch,
+                CorfuProtocolCommon.getUuidMsg(clusterId), CorfuMessage.PriorityLevel.NORMAL, true, true);
     }
 
     /**

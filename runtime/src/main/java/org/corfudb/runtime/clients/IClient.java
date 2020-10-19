@@ -25,14 +25,6 @@ public interface IClient {
     void setRouter(IClientRouter router);
 
     /**
-     * Set the protobuf router used by the Netty client.
-     * For old CorfuMsg, use {@link #setRouter(IClientRouter)}
-     *
-     * @param router The protobuf router to be used by the Netty client.
-     */
-    void setProtobufRouter(IClientProtobufRouter router);
-
-    /**
      * Set the priority level of messages sent by this client
      * @param level
      */
@@ -52,12 +44,6 @@ public interface IClient {
      */
     IClientRouter getRouter();
 
-    /**
-     * For old CorfuMsg, use {@link #getRouter()}
-     *
-     * @return The client side protobuf router used by the Netty Client.
-     */
-    IClientProtobufRouter getProtobufRouter();
 
     default ClientMsgHandler getMsgHandler() {
         throw new UnsupportedOperationException("Message handler not provided, "

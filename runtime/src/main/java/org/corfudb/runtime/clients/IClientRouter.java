@@ -4,6 +4,9 @@ import java.util.concurrent.CompletableFuture;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 
+import org.corfudb.runtime.proto.Common;
+import org.corfudb.runtime.proto.service.CorfuMessage;
+
 /**
  * This is an interface in which all client routers must implement.
  * Client routers are classes which talk to server routers. Clients are registered
@@ -33,11 +36,41 @@ public interface IClientRouter {
     <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message);
 
     /**
+     * Send a request message and get a completable future to be fulfilled by the reply.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     * @param <T> The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply,
+     * or a timeout in the case there is no response.
+     */
+    <T> CompletableFuture<T> sendRequestAndGetCompletable(CorfuMessage.RequestPayloadMsg payload, long epoch,
+                                                          Common.UuidMsg clusterId, CorfuMessage.PriorityLevel priority,
+                                                          boolean ignoreClusterId, boolean ignoreEpoch);
+
+    /**
      * Send a one way message, without adding a completable future.
      *
      * @param message The message to send.
      */
     void sendMessage(CorfuMsg message);
+
+    /**
+     * Send a one way message, without adding a completable future.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     */
+    void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch, Common.UuidMsg clusterId,
+                     CorfuMessage.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch);
 
     /**
      * Complete a given outstanding request with a completion value.

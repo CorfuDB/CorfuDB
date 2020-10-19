@@ -205,8 +205,8 @@ public class BaseHandler implements IClient {
         return true;
     }
 
-    @ResponseHandler(type = PayloadCase.AUTHENTICATE_RESPONSE)
-    private static Object handleAuthResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+    @ResponseHandler(type = PayloadCase.HANDSHAKE_RESPONSE)
+    private static Object handleHandshakeResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                              IClientProtobufRouter r) {
         // TODO: add implementation after BaseServer done.
         return true;
