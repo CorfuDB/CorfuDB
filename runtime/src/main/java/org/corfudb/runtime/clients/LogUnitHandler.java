@@ -8,6 +8,7 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
 
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -15,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.OutOfSpaceException;
@@ -26,6 +28,7 @@ import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.protocols.service.CorfuProtocolLogUnit;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.LogUnit.LogAddressSpaceResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.ReadLogResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.InspectAddressesResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.TrimMarkResponseMsg;
@@ -348,12 +351,9 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     @ResponseHandler(type = PayloadCase.INSPECT_ADDRESSES_RESPONSE)
     private static Object handleInspectResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                 IClientProtobufRouter r) {
-        // TODO move to CorfuProtocolLogUnit?
         InspectAddressesResponseMsg responseMsg = msg.getPayload().getInspectAddressesResponse();
-        InspectAddressesResponse ir = new InspectAddressesResponse();
-        responseMsg.getEmptyAddressList().forEach(ir::add);
 
-        return ir;
+        return CorfuProtocolLogUnit.getInspectAddressesResponse(responseMsg);
     }
 
     /**
@@ -436,14 +436,14 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      * @param msg The log address space response message.
      * @param ctx The context the message was sent under.
      * @param r A reference to the router.
-     * @return {@link TailsResponse} sent back from server.
+     * @return {@link StreamsAddressResponse} sent back from server.
      */
     @ResponseHandler(type = PayloadCase.LOG_ADDRESS_SPACE_RESPONSE)
     private static Object handleLogAddressSpaceResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                         IClientProtobufRouter r) {
-        // TODO
+        LogAddressSpaceResponseMsg responseMsg = msg.getPayload().getLogAddressSpaceResponse();
 
-        return null;
+        return CorfuProtocolCommon.getStreamsAddressResponse(responseMsg.getLogTail(), responseMsg.getAddressMapList());
     }
 
     /**

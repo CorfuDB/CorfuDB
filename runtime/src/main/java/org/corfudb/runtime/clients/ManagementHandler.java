@@ -177,7 +177,7 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
      * @param msg The management layout response message.
      * @param ctx The context the message was sent under.
      * @param r A reference to the router.
-     * @return {@link Layout} sent back from server.
+     * @return True if ACK, false if NACK.
      */
     @ResponseHandler(type = PayloadCase.BOOTSTRAP_MANAGEMENT_RESPONSE)
     private static Object handleBootstrapManagementResponse(ResponseMsg msg, ChannelHandlerContext ctx,
@@ -209,4 +209,5 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
         return CorfuProtocolCommon.getLayout(layoutMsg);
     }
 
+    // End region
 }
