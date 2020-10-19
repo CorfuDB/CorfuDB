@@ -19,6 +19,7 @@ import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.Layout.PrepareLayoutResponseMsg;
@@ -126,9 +127,9 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
     private static Object handleLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                IClientProtobufRouter r) {
         LayoutResponseMsg layoutResponse = msg.getPayload().getLayoutResponse();
-        Common.LayoutMsg layout = layoutResponse.getLayout();
+        Common.LayoutMsg layoutMsg = layoutResponse.getLayout();
 
-        return Layout.fromJSONString(layout.getLayoutJson());
+        return CorfuProtocolCommon.getLayout(layoutMsg);
     }
 
     /**
@@ -145,7 +146,7 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
         PrepareLayoutResponseMsg prepareLayoutMsg = msg.getPayload().getPrepareLayoutResponse();
         PrepareLayoutResponseMsg.Type type = prepareLayoutMsg.getRespType();
         long rank = prepareLayoutMsg.getRank();
-        Layout layout = Layout.fromJSONString(prepareLayoutMsg.getLayout().getLayoutJson());
+        Layout layout = CorfuProtocolCommon.getLayout(prepareLayoutMsg.getLayout());
 
         switch (type) {
             case ACK: return new LayoutPrepareResponse(rank, layout);

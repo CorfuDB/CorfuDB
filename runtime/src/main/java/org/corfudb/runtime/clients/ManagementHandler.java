@@ -14,6 +14,20 @@ import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 
+import org.corfudb.protocols.service.CorfuProtocolManagement;
+import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.Management.QueryNodeResponseMsg;
+import org.corfudb.runtime.proto.service.Management.ReportFailureResponseMsg;
+import org.corfudb.runtime.proto.service.Management.HealFailureResponseMsg;
+import org.corfudb.runtime.proto.service.Management.BootstrapManagementResponseMsg;
+import org.corfudb.runtime.proto.Common.LayoutMsg;
+import org.corfudb.runtime.view.Layout;
+
+
+
+
 /**
  * A client to handle the responses from the Management Server.
  * Handles orchestrator responses as well.
@@ -26,6 +40,14 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
     @Getter
     IClientRouter router;
 
+    /**
+     * The protobuf router to use for the client.
+     * For old CorfuMsg, use {@link #router}
+     */
+    @Getter
+    @Setter
+    public IClientProtobufRouter protobufRouter;
+
     @Override
     public ManagementClient getClient(long epoch, UUID clusterID) {
         return new ManagementClient(router, epoch, clusterID);
@@ -36,6 +58,14 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
      */
     @Getter
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this);
+
+    /**
+     * For old CorfuMsg, use {@link #msgHandler}
+     * The handler and handlers which implement this client.
+     */
+    @Getter
+    public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
             .generateHandlers(MethodHandles.lookup(), this);
 
 
@@ -70,4 +100,113 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
                                                   ChannelHandlerContext ctx, IClientRouter r) {
         return msg.getPayload();
     }
+
+    // Protobuf region
+
+    /**
+     * Handle a query node response from the server.
+     *
+     * @param msg The query node response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router.
+     * @return {@link NodeState} sent back from server.
+     */
+    @ResponseHandler(type = PayloadCase.QUERY_NODE_RESPONSE)
+    private static Object handleQueryNodeResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                  IClientProtobufRouter r) {
+        QueryNodeResponseMsg responseMsg = msg.getPayload().getQueryNodeResponse();
+
+        return CorfuProtocolManagement.getNodeState(responseMsg);
+    }
+
+    /**
+     * Handle a report failure response from the server.
+     *
+     * @param msg The report failure response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router.
+     * @return True if ACK, false if NACK.
+     */
+    @ResponseHandler(type = PayloadCase.REPORT_FAILURE_RESPONSE)
+    private static Object handleReportFailureResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                      IClientProtobufRouter r) {
+        ReportFailureResponseMsg responseMsg = msg.getPayload().getReportFailureResponse();
+        ReportFailureResponseMsg.Type type = responseMsg.getRespType();
+
+        switch (type) {
+            case ACK:   return true;
+            case NACK:  return false;
+            // TODO INVALID
+            default:    throw new UnsupportedOperationException("Response handler not provided");
+        }
+    }
+
+    /**
+     * Handle a heal failure response from the server.
+     *
+     * @param msg The heal failure response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router.
+     * @return True if ACK, false if NACK.
+     */
+    @ResponseHandler(type = PayloadCase.HEAL_FAILURE_RESPONSE)
+    private static Object handleHealFailureResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                    IClientProtobufRouter r) {
+        HealFailureResponseMsg responseMsg = msg.getPayload().getHealFailureResponse();
+        HealFailureResponseMsg.Type type = responseMsg.getRespType();
+
+        switch (type) {
+            case ACK:   return true;
+            case NACK:  return false;
+            // TODO INVALID
+            default:    throw new UnsupportedOperationException("Response handler not provided");
+        }
+    }
+
+    @ResponseHandler(type = PayloadCase.ORCHESTRATOR_RESPONSE)
+    private static Object handleOrchestratorResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                     IClientProtobufRouter r) {
+        // TODO
+
+        return null;
+    }
+
+    /**
+     * Handle a management layout response from the server.
+     *
+     * @param msg The management layout response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router.
+     * @return {@link Layout} sent back from server.
+     */
+    @ResponseHandler(type = PayloadCase.BOOTSTRAP_MANAGEMENT_RESPONSE)
+    private static Object handleBootstrapManagementResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                            IClientProtobufRouter r) {
+        BootstrapManagementResponseMsg responseMsg = msg.getPayload().getBootstrapManagementResponse();
+        BootstrapManagementResponseMsg.Type type = responseMsg.getRespType();
+
+        switch (type) {
+            case ACK:   return true;
+            case NACK:  return false;
+            // TODO INVALID
+            default:    throw new UnsupportedOperationException("Response handler not provided");
+        }
+    }
+
+    /**
+     * Handle a management layout response from the server.
+     *
+     * @param msg The management layout response message.
+     * @param ctx The context the message was sent under.
+     * @param r A reference to the router.
+     * @return {@link Layout} sent back from server.
+     */
+    @ResponseHandler(type = PayloadCase.MANAGEMENT_LAYOUT_RESPONSE)
+    private static Object handleManagementLayoutResponse(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                         IClientProtobufRouter r) {
+        LayoutMsg layoutMsg = msg.getPayload().getManagementLayoutResponse().getLayout();
+
+        return CorfuProtocolCommon.getLayout(layoutMsg);
+    }
+
 }

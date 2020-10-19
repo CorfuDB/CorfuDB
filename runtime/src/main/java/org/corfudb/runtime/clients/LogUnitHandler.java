@@ -32,8 +32,6 @@ import org.corfudb.runtime.proto.service.LogUnit.TrimMarkResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.TailResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.KnownAddressResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.CommittedTailResponseMsg;
-import org.corfudb.runtime.proto.service.LogUnit;
-
 
 /**
  * A client to a LogUnit.
