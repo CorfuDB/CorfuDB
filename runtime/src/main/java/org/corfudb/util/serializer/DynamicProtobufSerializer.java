@@ -125,7 +125,7 @@ public class DynamicProtobufSerializer implements ISerializer {
      * @return Protobuf Serializer.
      */
     private ISerializer createProtobufSerializer() {
-        Map<String, Class<? extends Message>> classMap = new ConcurrentHashMap<>();
+        ConcurrentMap<String, Class<? extends Message>> classMap = new ConcurrentHashMap<>();
 
         // Register the schemas of TableName, TableDescriptors & TableMetadata
         // to be able to understand registry table.

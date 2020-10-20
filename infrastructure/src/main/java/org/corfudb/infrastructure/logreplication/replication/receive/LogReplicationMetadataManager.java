@@ -58,17 +58,21 @@ public class LogReplicationMetadataManager {
     private final String localClusterId;
 
     public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
+
+        // LR does not require transaction logging enabled as we don't want to trigger subscriber's logic
+        // on replicated data which could eventually lead to overwrites
+        this.runtime = rt;
+        this.corfuStore = new CorfuStore(runtime, false);
+
+        // This special runtime with transaction logging enabled is required for the REPLICATION_EVENT_TABLE
+        // which is a table used to communicate events between lead and non-lead nodes in LR (e.g., notify
+        // force snapshot sync from a non-lead to the lead node)
         CorfuRuntime.CorfuRuntimeParameters params = rt.getParameters();
         this.runtimeTxLogging = CorfuRuntime.fromParameters(params)
                 .setTransactionLogging(true)
                 .parseConfigurationString(rt.getLayoutServers().get(0))
                 .connect();
         this.corfuStoreTxLogging = new CorfuStore(runtimeTxLogging);
-
-        this.runtime = rt;
-        // LR does not require transaction logging as we don't want data change notifications on the replicated data
-        // this runtime is reused by the LogEntryWriter and SnapshotWriter
-        this.corfuStore = new CorfuStore(runtime, false);
 
         metadataTableName = getPersistedWriterMetadataTableName(localClusterId);
         try {
@@ -701,6 +705,12 @@ public class LogReplicationMetadataManager {
      */
     public void unsubscribeReplicationEventTable(StreamListener listener) {
         corfuStore.unsubscribe(listener);
+    }
+
+    public void shutdown() {
+        if (runtimeTxLogging != null) {
+            runtimeTxLogging.shutdown();
+        }
     }
 
     public enum LogReplicationMetadataType {

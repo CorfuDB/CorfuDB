@@ -828,6 +828,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (lockClient != null) {
             lockClient.shutdown();
         }
+
+        if (logReplicationMetadataManager != null) {
+            logReplicationMetadataManager.shutdown();
+        }
     }
 
     /**
