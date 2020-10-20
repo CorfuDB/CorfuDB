@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -130,6 +131,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         Assert.assertEquals(browser.dropTable(namespace, tableName), 1);
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
+        // TODO: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -151,6 +154,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
         Assert.assertEquals(browser.loadTable(namespace, tableName, numItems, batchSize, itemSize), batchSize);
+        runtime.shutdown();
+        // TODO: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -216,6 +222,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 UnknownFieldSet.newBuilder().build(),
                 record.getPayload().getUnknownFields());
         }
+        runtime.shutdown();
+        // TODO: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -276,6 +285,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         // Invoke listTables and verify table count
         Assert.assertEquals(2, browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
         TableRegistry.REGISTRY_TABLE_NAME));
+        // Todo: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -328,6 +339,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 .build();
         TxnContext tx = store.txn(namespace);
         tx.put(table, uuidKey, uuidVal, metadata).commit();
+        // Todo: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -337,5 +350,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         final CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime, tempDir);
         // Verify table count
         Assert.assertEquals(1, browser.printTable(namespace, tableName));
+
+        // Todo: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
+        runtime.shutdown();
     }
 }
