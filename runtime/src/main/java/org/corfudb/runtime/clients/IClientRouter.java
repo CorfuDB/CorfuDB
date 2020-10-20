@@ -48,9 +48,12 @@ public interface IClientRouter {
      * @return A completable future which will be fulfilled by the reply,
      * or a timeout in the case there is no response.
      */
-    <T> CompletableFuture<T> sendRequestAndGetCompletable(CorfuMessage.RequestPayloadMsg payload, long epoch,
+    default  <T> CompletableFuture<T> sendRequestAndGetCompletable(CorfuMessage.RequestPayloadMsg payload, long epoch,
                                                           Common.UuidMsg clusterId, CorfuMessage.PriorityLevel priority,
-                                                          boolean ignoreClusterId, boolean ignoreEpoch);
+                                                          boolean ignoreClusterId, boolean ignoreEpoch) {
+        // no-op
+        return null;
+    }
 
     /**
      * Send a one way message, without adding a completable future.
@@ -69,8 +72,10 @@ public interface IClientRouter {
      * @param ignoreClusterId
      * @param ignoreEpoch
      */
-    void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch, Common.UuidMsg clusterId,
-                     CorfuMessage.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch);
+     default void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch, Common.UuidMsg clusterId,
+                     CorfuMessage.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch) {
+        // no-op
+    }
 
     /**
      * Complete a given outstanding request with a completion value.

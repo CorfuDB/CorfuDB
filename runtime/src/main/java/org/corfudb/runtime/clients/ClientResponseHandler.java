@@ -94,44 +94,30 @@ public class ClientResponseHandler {
                                                   @NonNull final Object o) {
         // TODO
         Arrays.stream(o.getClass().getDeclaredMethods())
-                .filter(x -> x.isAnnotationPresent(ResponseHandler.class))
-                .forEach(x -> {
-                    ResponseHandler a = x.getAnnotation(ResponseHandler.class);
-                    if (!x.getParameterTypes()[0]
-                            .isAssignableFrom(a.type().messageType.getRawType())) {
+                .filter(method -> method.isAnnotationPresent(ResponseHandler.class))
+                .forEach(method -> {
+                    ResponseHandler handler = method.getAnnotation(ResponseHandler.class);
+                    // TODO: this if clause could be avoided?
+                    if (!method.getParameterTypes()[0]
+                            .isAssignableFrom(ResponseMsg.class)) {
                         throw new RuntimeException("Incorrect message type, expected "
-                                + a.type().messageType.getRawType() + " but provided "
-                                + x.getParameterTypes()[0]);
+                                + ResponseMsg.class + " but provided "
+                                + method.getParameterTypes()[0]);
                     }
-                    if (handlerMap.containsKey(a.type())) {
-                        throw new RuntimeException("Handler for " + a.type()
+                    if (handlerMap.containsKey(handler.type())) {
+                        throw new RuntimeException("Handler for " + handler.type()
                                 + " already registered!");
                     }
                     // convert the method into a Java8 Lambda for maximum execution speed...
                     try {
-                        if (Modifier.isStatic(x.getModifiers())) {
-                            MethodHandle mh = caller.unreflect(x);
-                            MethodType mt = mh.type().changeParameterType(0, CorfuMsg.class);
-                            handlerMap.put(a.type(), (ClientMsgHandler.Handler) LambdaMetafactory
+                        if (Modifier.isStatic(method.getModifiers())) {
+                            MethodHandle mh = caller.unreflect(method);
+                            MethodType mt = mh.type().changeParameterType(0, ResponseMsg.class);
+                            handlerMap.put(handler.type(), (ClientResponseHandler.Handler) LambdaMetafactory
                                     .metafactory(caller, "handle",
-                                            MethodType.methodType(ClientMsgHandler.Handler.class),
+                                            MethodType.methodType(ClientResponseHandler.Handler.class),
                                             mt, mh, mh.type())
                                     .getTarget().invokeExact());
-                        } else {
-                            // instance method, so we need to capture the type.
-                            MethodType mt = MethodType
-                                    .methodType(x.getReturnType(), x.getParameterTypes());
-                            MethodHandle mh = caller.findVirtual(o.getClass(), x.getName(), mt);
-                            MethodType mtGeneric = mh.type()
-                                    .changeParameterType(1, CorfuMsg.class)
-                                    .changeReturnType(Object.class);
-                            handlerMap.put(a.type(), (ClientMsgHandler.Handler) LambdaMetafactory
-                                    .metafactory(caller, "handle",
-                                            MethodType.methodType(ClientMsgHandler.Handler.class,
-                                                    o.getClass()),
-                                            mtGeneric.dropParameterTypes(0, 1), mh, mh.type()
-                                                    .dropParameterTypes(0, 1))
-                                    .getTarget().bindTo(o).invoke());
                         }
                     } catch (Throwable e) {
                         log.error("Exception during incoming message handling", e);

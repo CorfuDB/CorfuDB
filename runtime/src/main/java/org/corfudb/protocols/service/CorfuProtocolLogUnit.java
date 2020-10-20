@@ -193,7 +193,7 @@ public class CorfuProtocolLogUnit {
                 .build();
     }
 
-    public TailsResponse getTailsResponse(TailResponseMsg msg) {
+    public static TailsResponse getTailsResponse(TailResponseMsg msg) {
         return new TailsResponse(msg.getEpoch(), msg.getLogTail(),
                 msg.getStreamTailList()
                         .stream()

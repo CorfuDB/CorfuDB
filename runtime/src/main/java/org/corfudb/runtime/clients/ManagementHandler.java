@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.protocols.CorfuProtocolWorkflows;
 import org.corfudb.protocols.wireprotocol.*;
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
 
@@ -16,8 +17,11 @@ import org.corfudb.runtime.exceptions.NoBootstrapException;
 
 import org.corfudb.protocols.service.CorfuProtocolManagement;
 import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.runtime.proto.Workflows.QueriedWorkflowMsg;
+import org.corfudb.runtime.proto.Workflows.CreatedWorkflowMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.Management.OrchestratorResponseMsg;
 import org.corfudb.runtime.proto.service.Management.QueryNodeResponseMsg;
 import org.corfudb.runtime.proto.service.Management.ReportFailureResponseMsg;
 import org.corfudb.runtime.proto.service.Management.HealFailureResponseMsg;
@@ -158,7 +162,17 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
     @ResponseHandler(type = PayloadCase.ORCHESTRATOR_RESPONSE)
     private static Object handleOrchestratorResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                      IClientRouter r) {
-        // TODO
+        OrchestratorResponseMsg responseMsg = msg.getPayload().getOrchestratorResponse();
+
+        if (responseMsg.getPayloadCase().equals(OrchestratorResponseMsg.PayloadCase.QUERY_RESULT)) {
+            QueriedWorkflowMsg qMsg = responseMsg.getQueryResult();
+            return CorfuProtocolWorkflows.getQueryResponse(qMsg);
+        }
+
+        if (responseMsg.getPayloadCase().equals(OrchestratorResponseMsg.PayloadCase.WORKFLOW_CREATED)) {
+            CreatedWorkflowMsg cMsg = responseMsg.getWorkflowCreated();
+            return CorfuProtocolWorkflows.getCreateWorkflowResponse(cMsg);
+        }
 
         return null;
     }
