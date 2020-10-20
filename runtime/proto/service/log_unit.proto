@@ -6,6 +6,14 @@ option java_package = "org.corfudb.runtime.proto.service";
 import "common.proto";
 import "log_data.proto";
 
+/**
+ * Protobuf definitions for the LogUnit server RPCs. These
+ * include request and response payloads for: WRITE, RANGE_WRITE,
+ * READ, INSPECT_ADDRESSES, TRIM_LOG (PREFIX_TRIM), TRIM_MARK,
+ * TAIL, COMPACT, FLUSH_CACHE, LOG_ADDRESS_SPACE, KNOWN_ADDRESS,
+ * COMMITTED_TAIL, UPDATE_COMMITTED_TAIL, and RESET_LOG_UNIT.
+ */
+
 message WriteLogRequestMsg {
   LogDataMsg log_data = 1;
 }
@@ -29,6 +37,8 @@ message ReadLogResponseMsg {
   repeated ReadResponseMsg response = 1;
 }
 
+// A request to inspect a list of addresses,
+// which checks if any address is not committed.
 message InspectAddressesRequestMsg {
   repeated int64 address = 1;
 }
@@ -51,6 +61,14 @@ message TrimMarkResponseMsg {
   int64 trim_mark = 1;
 }
 
+/**
+ * A tail request can be specific to the following types:
+ * - Global log tail.
+ * - Tails for specific streams (uniquely identified).
+ * - Tails for all available streams.
+ * Whenever tails are requested for streams (specific or all),
+ * the global log tail is sent along the response.
+ */
 message TailRequestMsg {
   enum Type {
     INVALID = 0;
@@ -89,6 +107,8 @@ message LogAddressSpaceResponseMsg {
   repeated UuidToStreamAddressSpacePairMsg address_map = 2;
 }
 
+// Request for known addresses in the log unit
+// server for a specified range.
 message KnownAddressRequestMsg {
   int64 start_range = 1;
   int64 end_range = 2;

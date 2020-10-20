@@ -5,6 +5,12 @@ option java_package = "org.corfudb.runtime.proto.service";
 
 import "common.proto";
 
+/**
+ * Protobuf definitions for the Layout server RPCs. These
+ * include request and response payloads for: LAYOUT, PREPARE_LAYOUT,
+ * PROPOSE_LAYOUT, COMMIT_LAYOUT, and BOOTSTRAP_LAYOUT.
+ */
+
 // Retrieve layout
 message LayoutRequestMsg {
   int64 epoch = 1;

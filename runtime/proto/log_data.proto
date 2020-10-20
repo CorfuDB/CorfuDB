@@ -6,10 +6,17 @@ option java_package = "org.corfudb.runtime.proto";
 import "common.proto";
 import "google/protobuf/wrappers.proto";
 
+/**
+ * LogData and related Protobuf definitions.
+ * Used by the LogUnit RPCs and ValueAdoptedErrorMsg.
+ */
+
 message DataRankMsg {
   int64 rank = 1;
   UuidMsg id = 2;
 }
+
+// Types of metadata defined in IMetadata.java (LogUnitMetadataType).
 
 message LogUnitMetadataMsg {
   DataRankMsg data_rank = 1;
@@ -26,7 +33,8 @@ message LogUnitMetadataMsg {
 }
 
 // Types of LogData defined in DataType.java
-// Note: All metadata aware
+// Note: All metadata aware.
+// Note: Currently, only DATA carries a payload.
 
 message LogDataEntryMsg {
   bytes data = 1;

@@ -3,6 +3,11 @@ syntax = "proto3";
 package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime.proto";
 
+/**
+ * NodeConnectivity and related Protobuf definitions.
+ * Used by the Management RPCs.
+ */
+
 enum NodeConnectivityType {
   NODE_CONNECTIVITY_TYPE_INVALID = 0;
   NOT_READY = 1;
@@ -21,7 +26,7 @@ message ConnectivityEntryMsg {
   ConnectionStatus status = 2;
 }
 
-
+// Represents the number of connections a node has to other nodes.
 message NodeConnectivityMsg {
   string endpoint = 1;
   NodeConnectivityType connectivity_type = 2;

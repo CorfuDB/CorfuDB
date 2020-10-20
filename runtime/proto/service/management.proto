@@ -7,6 +7,13 @@ import "common.proto";
 import "workflows.proto";
 import "node_connectivity.proto";
 
+/**
+ * Protobuf definitions for the Management server RPCs. These
+ * include request and response payloads for: QUERY_NODE,
+ * REPORT_FAILURE, HEAL_FAILURE, ORCHESTRATOR, BOOTSTRAP_MANAGEMENT,
+ * and MANAGEMENT_LAYOUT.
+ */
+
 message QueryNodeRequestMsg {
 }
 
@@ -15,6 +22,7 @@ message QueryNodeResponseMsg {
   NodeConnectivityMsg node_connectivity = 2;
 }
 
+// Trigger sent to the management server with the failures detected.
 message ReportFailureRequestMsg {
   int64 detector_epoch = 1;
   repeated string failed_node = 2;
@@ -45,6 +53,7 @@ message HealFailureResponseMsg {
   Type resp_type = 1;
 }
 
+// A message container that encapsulates all the orchestrator's requests.
 message OrchestratorRequestMsg {
   oneof payload {
     QueryWorkflowMsg query = 1;
@@ -56,6 +65,7 @@ message OrchestratorRequestMsg {
   }
 }
 
+// A message container that encapsulates all the orchestrator's responses.
 message OrchestratorResponseMsg {
   oneof payload {
     QueriedWorkflowMsg query_result = 1;

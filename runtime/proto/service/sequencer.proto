@@ -7,16 +7,10 @@ import "common.proto";
 import "tx_resolution.proto";
 
 /**
- * Represents the response sent by the sequencer when streams address maps are requested
- * (i.e. StreamsAddressRequest)
- *
- * It contains a per stream map with its corresponding address space
- * (composed of the addresses of this stream and trim mark)
+ * Protobuf definitions for the Sequencer server RPCs. These
+ * include request and response payloads for: TOKEN, BOOTSTRAP_SEQUENCER,
+ * SEQUENCER_TRIM, SEQUENCER_METRICS, and STREAMS_ADDRESS.
  */
-message StreamsAddressResponseMsg {
-  uint64 log_tail = 1;
-  repeated UuidToStreamAddressSpacePairMsg address_map = 2;
-}
 
 /**
  * A token request is at the heart of the Corfu log protocol.
@@ -70,7 +64,7 @@ message TokenResponseMsg {
     TX_ABORT_SEQ_TRIM = 5;
   }
 
-  /** the cause/type of response. */
+  // The cause/type of response.
   TokenType resp_type = 1;
 
   // In case of a conflict, signal to the client which key was responsible for the conflict.
@@ -79,12 +73,10 @@ message TokenResponseMsg {
   // In case of a conflict, signal to the client which stream was responsible for the conflict.
   UuidMsg conflict_stream = 3;
 
-  /** The current token or global log tail in the case of stream tails query */
+  // The current token or global log tail in the case of stream tails query.
   TokenMsg token = 4;
 
-  /**
-    The backPointer map, if available.
-  */
+  // The backPointer map, if available.
   repeated UuidToLongPairMsg backpointer_map = 5;
 
   repeated UuidToLongPairMsg stream_tails = 6;
@@ -119,11 +111,9 @@ message SequencerTrimRequestMsg {
 }
 
 message SequencerTrimResponseMsg {
-
 }
 
 message SequencerMetricsRequestMsg {
-
 }
 
 message SequencerMetricsResponseMsg {
@@ -144,4 +134,16 @@ message StreamsAddressRequestMsg {
   /** The type of request, one of the above. */
   Type req_type = 1;
   repeated StreamAddressRangeMsg stream_range = 2;
+}
+
+/**
+ * Represents the response sent by the sequencer when streams address maps are
+ * requested (i.e. StreamsAddressRequest)
+ *
+ * It contains a per stream map with its corresponding address space
+ * (composed of the addresses of this stream and trim mark)
+ */
+message StreamsAddressResponseMsg {
+  uint64 log_tail = 1;
+  repeated UuidToStreamAddressSpacePairMsg address_map = 2;
 }

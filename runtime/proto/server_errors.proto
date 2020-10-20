@@ -6,6 +6,11 @@ option java_package = "org.corfudb.runtime.proto";
 import "common.proto";
 import "log_data.proto";
 
+/**
+ * Protobuf definitions for various server errors
+ * sent to clients.
+ */
+
 message WrongEpochErrorMsg {
   int64 correct_epoch = 1;
 }

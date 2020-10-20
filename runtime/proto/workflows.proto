@@ -5,6 +5,11 @@ option java_package = "org.corfudb.runtime.proto";
 
 import "common.proto";
 
+/**
+ * Protobuf definitions for various workflows used by
+ * the Orchestrator. Used by Management RPCs.
+ */
+
 message QueryWorkflowMsg {
   UuidMsg workflow_id = 1;
 }

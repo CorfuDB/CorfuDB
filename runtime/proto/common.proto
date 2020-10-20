@@ -3,11 +3,17 @@ syntax = "proto3";
 package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime.proto";
 
+/**
+ * Common Protobuf definitions used by several RPCs.
+ */
+
 message UuidMsg {
   int64 lsb = 1;
   int64 msb = 2;
 }
 
+// Token returned by the sequencer is a combination of the
+// sequence number and the epoch at which it was acquired.
 message TokenMsg {
   int64 epoch = 1;
   int64 sequence = 2;
@@ -31,18 +37,16 @@ message SequencerMetricsMsg {
   SequencerStatus sequencer_status = 1;
 }
 
-//TODO: Consider alternate representations of a Layout?
+// Representation of a Layout as a JSON string.
 message LayoutMsg {
   string layout_json = 1;
 }
 
 /**
- * This class represents the space of all addresses belonging to a stream.
- *
  * A stream's address space is defined by:
  *       1. The collection of all addresses that belong to this stream.
- *       2. The trim mark (last trimmed address, i.e., an address that is no longer present and that was subsumed by
- *       a checkpoint).
+ *       2. The trim mark (last trimmed address, i.e., an address that is
+ *       no longer present and that was subsumed by a checkpoint).
  */
 message StreamAddressSpaceMsg {
   // Holds the last trimmed address for this stream.
@@ -50,7 +54,8 @@ message StreamAddressSpaceMsg {
   // when a stream has been checkpointed and trimmed and there are no further updates to this stream.
   uint64 trim_mark = 1;
 
-  // Holds the complete map of addresses for this stream. (of type Roaring64NavigableMap)
+  // Holds the complete map of addresses for this stream.
+  // Note: currently of type Roaring64NavigableMap.
   bytes address_map = 2;
 }
 

@@ -26,8 +26,15 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+/**
+ * This class provides methods for creating and converting between the Protobuf
+ * objects defined in common.proto and their Java counterparts. These are used
+ * by the majority of the service RPCs.
+ */
+
 @Slf4j
 public class CorfuProtocolCommon {
+
     private static final EnumMap<SequencerMetrics.SequencerStatus, SequencerStatus> sequencerStatusTypeMap =
             new EnumMap<>(ImmutableMap.of(
                     SequencerMetrics.SequencerStatus.READY, SequencerStatus.READY,
@@ -39,6 +46,11 @@ public class CorfuProtocolCommon {
     public static final byte PROTO_CORFU_REQUEST_MSG_MARK = 0x2;
     public static final byte PROTO_CORFU_RESPONSE_MSG_MARK = 0x3;
 
+    /**
+     * Returns the Protobuf representation of a UUID.
+     *
+     * @param uuid   the desired (Java) UUID
+     */
     public static UuidMsg getUuidMsg(UUID uuid) {
         return UuidMsg.newBuilder()
                 .setLsb(uuid.getLeastSignificantBits())
@@ -46,20 +58,42 @@ public class CorfuProtocolCommon {
                 .build();
     }
 
-    public static UUID getUUID(UuidMsg uuidMsg) {
-        return new UUID(uuidMsg.getMsb(), uuidMsg.getLsb());
+    /**
+     * Returns a UUID object from its Protobuf representation.
+     *
+     * @param msg   the Protobuf UUID message
+     */
+    public static UUID getUUID(UuidMsg msg) {
+        return new UUID(msg.getMsb(), msg.getLsb());
     }
 
+    /**
+     * Returns the Protobuf representation of a Layout.
+     *
+     * @param layout   the desired (Java) Layout
+     */
     public static LayoutMsg getLayoutMsg(Layout layout) {
         return LayoutMsg.newBuilder()
                 .setLayoutJson(layout.asJSONString())
                 .build();
     }
 
-    public static Layout getLayout(LayoutMsg layoutMsg) {
-        return Layout.fromJSONString(layoutMsg.getLayoutJson());
+    /**
+     * Returns a Layout object from its Protobuf representation.
+     *
+     * @param msg   the Protobuf Layout message
+     */
+    public static Layout getLayout(LayoutMsg msg) {
+        return Layout.fromJSONString(msg.getLayoutJson());
     }
 
+    /**
+     * Returns the Protobuf representation of a Token, given
+     * its epoch and sequence.
+     *
+     * @param epoch      the epoch of the token
+     * @param sequence   the sequencer number of the token
+     */
     public static TokenMsg getTokenMsg(long epoch, long sequence) {
         return TokenMsg.newBuilder()
                 .setEpoch(epoch)
@@ -67,16 +101,31 @@ public class CorfuProtocolCommon {
                 .build();
     }
 
+    /**
+     * Returns the Protobuf representation of a Token.
+     *
+     * @param token   the desired (Java) Token
+     */
     public static TokenMsg getTokenMsg(Token token) {
         return getTokenMsg(token.getEpoch(), token.getSequence());
     }
 
+    /**
+     * Returns the Protobuf representation of a SequencerMetrics object.
+     *
+     * @param metrics   the desired (Java) SequencerMetrics
+     */
     public static SequencerMetricsMsg getSequencerMetricsMsg(SequencerMetrics metrics) {
         return SequencerMetricsMsg.newBuilder()
                 .setSequencerStatus(sequencerStatusTypeMap.get(metrics.getSequencerStatus()))
                 .build();
     }
 
+    /**
+     * Returns a SequencerMetrics object from its Protobuf representation.
+     *
+     * @param msg   the Protobuf SequencerMetrics message
+     */
     public static SequencerMetrics getSequencerMetrics(SequencerMetricsMsg msg) {
         switch(msg.getSequencerStatus()) {
             case READY: return SequencerMetrics.READY;
@@ -85,10 +134,15 @@ public class CorfuProtocolCommon {
             default:
         }
 
-        //TODO(Zach): Return null or SequencerMetrics.UNKNOWN?
+        //TODO: Revisit for rolling-upgrades?
         return null;
     }
 
+    /**
+     * Returns the Protobuf representation of a StreamAddressSpace object.
+     *
+     * @param addressSpace   the desired (Java) StreamAddressSpace
+     */
     public static StreamAddressSpaceMsg getStreamAddressSpaceMsg(StreamAddressSpace addressSpace) {
         StreamAddressSpaceMsg.Builder addressSpaceMsgBuilder = StreamAddressSpaceMsg.newBuilder();
         addressSpaceMsgBuilder.setTrimMark(addressSpace.getTrimMark());
@@ -106,6 +160,11 @@ public class CorfuProtocolCommon {
         return addressSpaceMsgBuilder.build();
     }
 
+    /**
+     * Returns a StreamAddressSpace object from its Protobuf representation.
+     *
+     * @param msg   the Protobuf StreamAddressSpace message
+     */
     public static StreamAddressSpace getStreamAddressSpace(StreamAddressSpaceMsg msg) {
         Roaring64NavigableMap roaring64NavigableMap = new Roaring64NavigableMap();
 
@@ -119,6 +178,11 @@ public class CorfuProtocolCommon {
         return new StreamAddressSpace(msg.getTrimMark(), roaring64NavigableMap);
     }
 
+    /**
+     * Returns the Protobuf representation of a StreamAddressRange object.
+     *
+     * @param streamAddressRange   the desired (Java) StreamAddressRange
+     */
     public static StreamAddressRangeMsg getStreamAddressRangeMsg(StreamAddressRange streamAddressRange) {
         return StreamAddressRangeMsg.newBuilder()
                 .setStreamId(getUuidMsg(streamAddressRange.getStreamID()))
@@ -127,6 +191,14 @@ public class CorfuProtocolCommon {
                 .build();
     }
 
+    /**
+     * Returns a StreamAddressResponse object from its log tail and List
+     * of address map entries, each consisting of a UUID and a StreamAddressSpace,
+     * represented in Protobuf.
+     *
+     * @param tail   the log tail
+     * @param map    a list of address map entries represented in Protobuf
+     */
     public static StreamsAddressResponse getStreamsAddressResponse(long tail, List<UuidToStreamAddressSpacePairMsg> map) {
         return new StreamsAddressResponse(tail, map.stream()
                 .collect(Collectors.<UuidToStreamAddressSpacePairMsg, UUID, StreamAddressSpace>toMap(
