@@ -8,7 +8,6 @@ import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.proto.Common.UuidToLongPairMsg;
@@ -67,9 +66,7 @@ public class CorfuProtocolLogUnit {
                 .setReadLogResponse(ReadLogResponseMsg.newBuilder()
                         .addAllResponse(addresses.entrySet()
                                 .stream()
-                                .map(e -> {
-                                    return getReadResponseMsg(e.getKey(), e.getValue());
-                                })
+                                .map(e -> getReadResponseMsg(e.getKey(), e.getValue()))
                                 .collect(Collectors.toList()))
                         .build())
                 .build();
@@ -193,12 +190,12 @@ public class CorfuProtocolLogUnit {
                 .build();
     }
 
-    public TailsResponse getTailsResponse(TailResponseMsg msg) {
+    public static TailsResponse getTailsResponse(TailResponseMsg msg) {
         return new TailsResponse(msg.getEpoch(), msg.getLogTail(),
                 msg.getStreamTailList()
                         .stream()
                         .collect(Collectors.<UuidToLongPairMsg, UUID, Long>toMap(
-                                e -> { return getUUID(e.getKey()); },
+                                e -> getUUID(e.getKey()),
                                 UuidToLongPairMsg::getValue)));
     }
 

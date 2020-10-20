@@ -102,24 +102,24 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             ResponseMsg response = ((ResponseMsg) m);
 
             //TODO: Why does calling .hasHandshakeResponse() produce an exception? This needs to be checked
-            //if(response.getPayload().hasHandshakeResponse()) {
-            log.info("channelRead: Handshake Response received. Removing {} from pipeline.",
-                    READ_TIMEOUT_HANDLER);
+            if(response.getPayload().hasHandshakeResponse()) {
+                log.info("channelRead: Handshake Response received. Removing {} from pipeline.",
+                        READ_TIMEOUT_HANDLER);
 
-            HandshakeResponseMsg handshakeResponse = response.getPayload().getHandshakeResponse();
-            corfuVersion = handshakeResponse.getCorfuVersion();
-            serverId = getUUID(handshakeResponse.getServerId());
+                HandshakeResponseMsg handshakeResponse = response.getPayload().getHandshakeResponse();
+                corfuVersion = handshakeResponse.getCorfuVersion();
+                serverId = getUUID(handshakeResponse.getServerId());
 
-            // Remove the handler from the pipeline. Also remove the reference of the context from
-            // the handler so that it does not disconnect the channel.
-            ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
-            //} else {
-            //    log.warn("chanelRead: Non-Handshake Response received {}", response);
-            //    if (this.handshakeState.completed()) {
+                // Remove the handler from the pipeline. Also remove the reference of the context from
+                // the handler so that it does not disconnect the channel.
+                ctx.pipeline().remove(READ_TIMEOUT_HANDLER).handlerRemoved(ctx);
+            } else {
+                log.warn("chanelRead: Non-Handshake Response received {}", response);
+                if (this.handshakeState.completed()) {
                     // Only send upstream if handshake is complete.
-            //        super.channelRead(ctx, m);
-            //    }
-            //}
+                    super.channelRead(ctx, m);
+                }
+            }
         } else {
             try {
                 CorfuMsg msg = (CorfuMsg) m;
@@ -184,6 +184,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         HeaderMsg header = getHeaderMsg(0, CorfuMessage.PriorityLevel.NORMAL, 0,
                 UUID.fromString("00000000-0000-0000-0000-000000000000"), this.clientId, false, true);
         RequestMsg request = getRequestMsg(header, getHandshakeRequestMsg(this.clientId, this.nodeId));
+
         ctx.writeAndFlush(request);
 
         log.debug("channelActive: Add {} to channel pipeline.", READ_TIMEOUT_HANDLER);
