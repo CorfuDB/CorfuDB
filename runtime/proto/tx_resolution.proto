@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto";
+
+import "rpc_common.proto";
+
+/**
+ * Protobuf definition for TxResolutionInfo.
+ * Used by the Sequencer RPCs.
+ */
+
+message UuidToListOfBytesPairMsg {
+  UuidMsg key = 1;
+  repeated bytes value = 2;
+}
+
+message TxResolutionInfoMsg {
+  // Transaction ID, mostly for debugging purposes.
+  UuidMsg tx_id = 1;
+
+  // Snapshot timestamp of the txn.
+  TokenMsg snapshot_timestamp = 2;
+
+  // A set of poisoned streams, which have a conflict against all updates.
+  repeated UuidToListOfBytesPairMsg conflict_set = 3;
+  repeated UuidToListOfBytesPairMsg write_conflict_params_set = 4;
+}
