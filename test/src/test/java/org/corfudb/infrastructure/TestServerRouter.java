@@ -92,19 +92,8 @@ public class TestServerRouter implements IServerRouter {
      * @param ctx      The context of the channel handler.
      */
     public void sendResponse(CorfuMessage.ResponseMsg response, ChannelHandlerContext ctx) {
-        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        ByteBufOutputStream responseOutputStream = new ByteBufOutputStream(outBuf);
-
-        try {
-            responseOutputStream.writeByte(CorfuProtocolCommon.PROTO_CORFU_RESPONSE_MSG_MARK);
-            response.writeTo(responseOutputStream);
-            ctx.writeAndFlush(outBuf, ctx.voidPromise());
-        } catch (IOException e) {
-            log.warn("sendResponse[{}]: Exception occurred when sending response {}, caused by {}",
-                    response.getHeader().getRequestId(), response.getHeader(), e.getCause(), e);
-        } finally {
-            IOUtils.closeQuietly(responseOutputStream);
-        }
+        ctx.writeAndFlush(response, ctx.voidPromise());
+        log.trace("Sent message - {}", response);
     }
 
     @Override

@@ -574,21 +574,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         outstandingRequests.put(thisRequestId, cf);
 
         // Write this message out on the channel
-        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(outBuf);
-
-        try {
-            // Mark this message as Protobuf message (temporarily)
-            requestOutputStream.writeByte(CorfuProtocolCommon.PROTO_CORFU_REQUEST_MSG_MARK);
-            request.writeTo(requestOutputStream);
-            channel.writeAndFlush(outBuf, channel.voidPromise());
-            log.trace("Sent request message: {}", request.getHeader());
-        } catch (IOException e) {
-            log.warn("sendRequestAndGetCompletable[{}]: Exception occurred when sending request {}, caused by {}",
-                    request.getHeader().getRequestId(), request.getHeader(), e.getCause(), e);
-        } finally {
-            IOUtils.closeQuietly(requestOutputStream);
-        }
+        channel.writeAndFlush(request, channel.voidPromise());
+        log.trace("Sent request message: {}", request.getHeader());
 
         // Generate a benchmarked future to measure the underlying request
         final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
@@ -656,21 +643,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
                 .setPayload(payload).build();
 
         // Write this message out on the channel
+        channel.writeAndFlush(request, channel.voidPromise());
+        log.trace("Sent one-way request message: {}", request.getHeader());
         ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
         ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(outBuf);
-
-        try {
-            // Mark this message as Protobuf message (temporarily)
-            requestOutputStream.writeByte(CorfuProtocolCommon.PROTO_CORFU_REQUEST_MSG_MARK);
-            request.writeTo(requestOutputStream);
-            channel.writeAndFlush(outBuf, channel.voidPromise());
-            log.trace("Sent one-way request message: {}", request.getHeader());
-        } catch (IOException e) {
-            log.warn("sendRequest[{}]: Exception occurred when sending request {}, caused by {}",
-                    request.getHeader().getRequestId(), request.getHeader(), e.getCause(), e);
-        } finally {
-            IOUtils.closeQuietly(requestOutputStream);
-        }
     }
 
     /**
