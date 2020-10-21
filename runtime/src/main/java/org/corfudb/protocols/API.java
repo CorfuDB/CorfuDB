@@ -44,8 +44,6 @@ public class API {
 
     // Temporary message header markers indicating message type.
     public static final byte LEGACY_CORFU_MSG_MARK = 0x1;
-    // TODO(Chetan): Remove this.
-    public static final byte PROTO_CORFU_MSG_MARK = 0x2;
     public static final byte PROTO_CORFU_REQUEST_MSG_MARK = 0x2;
     public static final byte PROTO_CORFU_RESPONSE_MSG_MARK = 0x3;
 

@@ -2,6 +2,8 @@ package org.corfudb.runtime.clients;
 
 import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
@@ -9,10 +11,14 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestServerRouter;
+import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.proto.Common;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
@@ -218,6 +224,28 @@ public class TestClientRouter implements IClientRouter {
         return cfTimeout;
     }
 
+    /**
+     * Send a request message and get a completable future to be fulfilled by the reply.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     * @param <T> The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply,
+     * or a timeout in the case there is no response.
+     */
+    @Override
+    public  <T> CompletableFuture<T> sendRequestAndGetCompletable(CorfuMessage.RequestPayloadMsg payload,
+                                                                  long epoch, Common.UuidMsg clusterId,
+                                                                  CorfuMessage.PriorityLevel priority,
+                                                                  boolean ignoreClusterId, boolean ignoreEpoch) {
+        // TODO(Chetan): empty stub?
+        return null;
+    }
+
     // Create a timer using appropriate cached timer names
     private Timer getTimer(@NonNull CorfuMsg message) {
         if (!timerNameCache.containsKey(message.getMsgType())) {
@@ -247,6 +275,22 @@ public class TestClientRouter implements IClientRouter {
             // Write the message out to the channel.
                 routeMessage(message);
         }
+    }
+
+    /**
+     * Send a one way message, without adding a completable future.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     */
+    @Override
+    public void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch, Common.UuidMsg clusterId,
+                            CorfuMessage.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch) {
+        // TODO(Chetan): empty stub?
     }
 
     /**

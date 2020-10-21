@@ -92,12 +92,10 @@ public class ClientResponseHandler {
 
     public ClientResponseHandler generateHandlers(@NonNull final MethodHandles.Lookup caller,
                                                   @NonNull final Object o) {
-        // TODO
         Arrays.stream(o.getClass().getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(ResponseHandler.class))
                 .forEach(method -> {
                     ResponseHandler handler = method.getAnnotation(ResponseHandler.class);
-                    // TODO: this if clause could be avoided?
                     if (!method.getParameterTypes()[0]
                             .isAssignableFrom(ResponseMsg.class)) {
                         throw new RuntimeException("Incorrect message type, expected "
@@ -113,11 +111,26 @@ public class ClientResponseHandler {
                         if (Modifier.isStatic(method.getModifiers())) {
                             MethodHandle mh = caller.unreflect(method);
                             MethodType mt = mh.type().changeParameterType(0, ResponseMsg.class);
-                            handlerMap.put(handler.type(), (ClientResponseHandler.Handler) LambdaMetafactory
+                            handlerMap.put(handler.type(), (Handler) LambdaMetafactory
                                     .metafactory(caller, "handle",
-                                            MethodType.methodType(ClientResponseHandler.Handler.class),
+                                            MethodType.methodType(Handler.class),
                                             mt, mh, mh.type())
                                     .getTarget().invokeExact());
+                        } else {
+                            // instance method, so we need to capture the type.
+                            MethodType mt = MethodType
+                                    .methodType(method.getReturnType(), method.getParameterTypes());
+                            MethodHandle mh = caller.findVirtual(o.getClass(), method.getName(), mt);
+                            MethodType mtGeneric = mh.type()
+                                    .changeParameterType(1, ResponseMsg.class)
+                                    .changeReturnType(Object.class);
+                            handlerMap.put(handler.type(), (Handler) LambdaMetafactory
+                                    .metafactory(caller, "handle",
+                                            MethodType.methodType(Handler.class,
+                                                    o.getClass()),
+                                            mtGeneric.dropParameterTypes(0, 1), mh, mh.type()
+                                                    .dropParameterTypes(0, 1))
+                                    .getTarget().bindTo(o).invoke());
                         }
                     } catch (Throwable e) {
                         log.error("Exception during incoming message handling", e);

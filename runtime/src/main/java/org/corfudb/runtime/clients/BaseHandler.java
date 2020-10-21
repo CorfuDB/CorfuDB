@@ -194,6 +194,7 @@ public class BaseHandler implements IClient {
     @ResponseHandler(type = PayloadCase.PING_RESPONSE)
     private static Object handlePingResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                              IClientRouter r) {
+        log.info("Received PING_RESPONSE from the server - {}", msg);
         return true;
     }
 
@@ -229,6 +230,7 @@ public class BaseHandler implements IClient {
     @ResponseHandler(type = PayloadCase.RESET_RESPONSE)
     private static Object handleResetResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                               IClientRouter r) {
+        log.info("Received RESET_RESPONSE from the server - {}", msg);
         return true;
     }
 

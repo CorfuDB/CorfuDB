@@ -1,16 +1,24 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
+import com.codahale.metrics.Timer;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufOutputStream;
+import io.netty.buffer.PooledByteBufAllocator;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.apache.commons.io.IOUtils;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverterUtils;
+import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -19,10 +27,13 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
+import org.corfudb.runtime.proto.Common;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.MetricsUtils;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
@@ -237,6 +248,107 @@ public class LogReplicationClientRouter implements IClientRouter {
     }
 
     /**
+     * Send a request message and get a completable future to be fulfilled by the reply.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     * @param <T> The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply,
+     * or a timeout in the case there is no response.
+     */
+    @Override
+    public  <T> CompletableFuture<T> sendRequestAndGetCompletable(org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg payload,
+                                                                  long epoch, Common.UuidMsg clusterId,
+                                                                  org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
+                                                                  boolean ignoreClusterId, boolean ignoreEpoch) {
+        // TODO(Chetan): Ask sundar's opinion
+        return null;
+        // Check the connection future. If connected, continue with sending the message.
+        // If timed out, return a exceptionally completed with the timeout.
+//        try {
+//            connectionFuture
+//                    .get(parameters.getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
+//        } catch (InterruptedException e) {
+//            throw new UnrecoverableCorfuInterruptedError(e);
+//        } catch (TimeoutException te) {
+//            CompletableFuture<T> f = new CompletableFuture<>();
+//            f.completeExceptionally(te);
+//            return f;
+//        } catch (ExecutionException ee) {
+//            CompletableFuture<T> f = new CompletableFuture<>();
+//            f.completeExceptionally(ee.getCause());
+//            return f;
+//        }
+//
+//        // Get the next request ID
+//        final long thisRequestId = requestID.getAndIncrement();
+//        Common.UuidMsg clientId = CorfuProtocolCommon.getUuidMsg(parameters.getClientId());
+//
+//        // Set the base fields for this message.
+//        org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg header = CorfuProtocolMessage.getHeaderMsg(thisRequestId, priority,
+//                epoch, clusterId, clientId, ignoreClusterId, ignoreEpoch);
+//        org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg request = org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg.newBuilder().setHeader(header)
+//                .setPayload(payload).build();
+//
+//        // Set up the timer and context to measure request
+//        final Timer roundTripMsgTimer = CorfuRuntime.getDefaultMetrics()
+//                .timer(protoTimerNameCache.get(payload.getPayloadCase()));
+//
+//        final Timer.Context roundTripMsgContext = MetricsUtils
+//                .getConditionalContext(roundTripMsgTimer);
+//
+//        // Generate a future and put it in the completion table.
+//        final CompletableFuture<T> cf = new CompletableFuture<>();
+//        outstandingRequests.put(thisRequestId, cf);
+//
+//        // Write this message out on the channel
+//        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+//        ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(outBuf);
+//
+//        try {
+//            // Mark this message as Protobuf message (temporarily)
+//            requestOutputStream.writeByte(CorfuProtocolCommon.PROTO_CORFU_REQUEST_MSG_MARK);
+//            request.writeTo(requestOutputStream);
+//            channel.writeAndFlush(outBuf, channel.voidPromise());
+//            log.trace("Sent request message: {}", request.getHeader());
+//        } catch (IOException e) {
+//            log.warn("sendRequestAndGetCompletable[{}]: Exception occurred when sending request {}, caused by {}",
+//                    request.getHeader().getRequestId(), request.getHeader(), e.getCause(), e);
+//        } finally {
+//            IOUtils.closeQuietly(requestOutputStream);
+//        }
+//
+//        // Generate a benchmarked future to measure the underlying request
+//        final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
+//            MetricsUtils.stopConditionalContext(roundTripMsgContext);
+//            return x;
+//        });
+//
+//        // Generate a timeout future, which will complete exceptionally
+//        // if the main future is not completed.
+//        final CompletableFuture<T> cfTimeout =
+//                CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
+//        cfTimeout.exceptionally(e -> {
+//            // CFUtils.within() can wrap different kinds of exceptions in
+//            // CompletionException, just dealing with TimeoutException here since
+//            // the router is not aware of it and this::completeExceptionally()
+//            // takes care of others. This avoids handling same exception twice.
+//            if (e.getCause() instanceof TimeoutException) {
+//                outstandingRequests.remove(thisRequestId);
+//                log.debug("sendRequestAndGetCompletable: Remove request {} to {} due to timeout! Request:{}",
+//                        thisRequestId, node, request.getHeader());
+//            }
+//            return null;
+//        });
+//
+//        return cfTimeout;
+    }
+
+    /**
      * Send a one way message, without adding a completable future.
      *
      * @param message The message to send.
@@ -254,6 +366,48 @@ public class LogReplicationClientRouter implements IClientRouter {
             log.error("Leader not found to remote cluster {}, dropping {}", remoteClusterId, message.getMsgType());
             runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
         }
+    }
+
+    /**
+     * Send a one way message, without adding a completable future.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     */
+    @Override
+    public void sendRequest(org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg payload, long epoch, Common.UuidMsg clusterId,
+                            org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch) {
+        // TODO(Chetan): Ask sundar's opinion
+//        // Get the next request ID
+//        final long thisRequestId = requestID.getAndIncrement();
+//        Common.UuidMsg clientId = CorfuProtocolCommon.getUuidMsg(parameters.getClientId());
+//
+//        // Set the base fields for this message.
+//        org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg header = CorfuProtocolMessage.getHeaderMsg(thisRequestId, priority,
+//                epoch, clusterId, clientId, ignoreClusterId, ignoreEpoch);
+//        org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg request = org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg.newBuilder().setHeader(header)
+//                .setPayload(payload).build();
+//
+//        // Write this message out on the channel
+//        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
+//        ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(outBuf);
+//
+//        try {
+//            // Mark this message as Protobuf message (temporarily)
+//            requestOutputStream.writeByte(CorfuProtocolCommon.PROTO_CORFU_REQUEST_MSG_MARK);
+//            request.writeTo(requestOutputStream);
+//            channel.writeAndFlush(outBuf, channel.voidPromise());
+//            log.trace("Sent one-way request message: {}", request.getHeader());
+//        } catch (IOException e) {
+//            log.warn("sendRequest[{}]: Exception occurred when sending request {}, caused by {}",
+//                    request.getHeader().getRequestId(), request.getHeader(), e.getCause(), e);
+//        } finally {
+//            IOUtils.closeQuietly(requestOutputStream);
+//        }
     }
 
     @Override

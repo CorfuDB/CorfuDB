@@ -178,9 +178,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         log.info("channelActive: Outgoing connection established to: {} from id={}", ctx.channel().remoteAddress(), ctx.channel().localAddress());
 
         // ********** Corfu Protobuf Handshake Initiate Message ***********
-        // TODO(Chetan/Chris/Zach): Verify arguments
         // Write the handshake & add a timeout listener.
-
         HeaderMsg header = getHeaderMsg(0, CorfuMessage.PriorityLevel.NORMAL, 0,
                 UUID.fromString("00000000-0000-0000-0000-000000000000"), this.clientId, false, true);
         RequestMsg request = getRequestMsg(header, getHandshakeRequestMsg(this.clientId, this.nodeId));
