@@ -793,11 +793,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
 
         UUID forceSyncId = UUID.randomUUID();
-        log.info("Received the forceSnapshotSync command for standby cluster {}, forced sync id {}",
+        log.info("Received forceSnapshotSync command for standby cluster {}, forced sync id {}",
                 clusterId, forceSyncId);
 
-        // Write an force sync event to the logReplicationEventTable
-        ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(System.currentTimeMillis() + " "+ clusterId).build();
+        // Write a force sync event to the logReplicationEventTable
+        ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(System.currentTimeMillis() + " " + clusterId).build();
         ReplicationEvent event = ReplicationEvent.newBuilder()
                 .setClusterId(clusterId)
                 .setEventId(forceSyncId.toString())
@@ -827,6 +827,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         if (lockClient != null) {
             lockClient.shutdown();
+        }
+
+        if (logReplicationMetadataManager != null) {
+            logReplicationMetadataManager.shutdown();
         }
     }
 
