@@ -31,13 +31,12 @@ public final class LogReplicationEventListener implements StreamListener {
         // If the current node is not a leader, ignore the notifications.
         synchronized (discoveryService) {
             if (!discoveryService.getIsLeader().get()) {
-                log.info("The onNext call  with {} will be skipped as the current node as it is not the leader.", results);
+                log.info("The onNext call with {} will be skipped as the current node as it is not the leader.", results);
                 return;
             }
 
             log.info("LogReplicationEventListener onNext {} will be processed at node {} in the cluster {}",
                     results, discoveryService.getLocalNodeDescriptor(), discoveryService.getLocalClusterDescriptor());
-
 
             // If the current node is the leader, it generates a discovery event and put it into the discovery service event queue.
             for (List<CorfuStreamEntry> entryList : results.getEntries().values()) {

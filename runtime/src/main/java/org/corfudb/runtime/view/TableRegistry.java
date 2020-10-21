@@ -31,6 +31,7 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -74,12 +75,6 @@ public class TableRegistry {
     private StreamManager streamManager;
 
     /**
-     * Stores the schemas of the Key, Value and Metadata.
-     * A reference of this map is held by the {@link ProtobufSerializer} to serialize and deserialize the objects.
-     */
-    private final ConcurrentMap<String, Class<? extends Message>> classMap;
-
-    /**
      * Cache of tables allowing the user to fetch a table by fullyQualified table name without the other options.
      */
     private final ConcurrentMap<String, Table<Message, Message, Message>> tableMap;
@@ -96,11 +91,25 @@ public class TableRegistry {
     private final CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>> registryTable;
 
     public TableRegistry(CorfuRuntime runtime) {
+        ConcurrentMap<String, Class<? extends Message>> classMapTmp;
         this.runtime = runtime;
-        this.classMap = new ConcurrentHashMap<>();
         this.tableMap = new ConcurrentHashMap<>();
-        this.protobufSerializer = new ProtobufSerializer(classMap);
-        Serializers.registerSerializer(this.protobufSerializer);
+        ISerializer protoSerializer;
+        try {
+            // If protobuf serializer is already registered, reference static/global class map so schemas
+            // are shared across all runtime's and not overwritten (if multiple runtime's exist).
+            // This aims to overcome a current design limitation where the serializers are static and not
+            // per runtime (to be changed).
+            ProtobufSerializer registeredSerializer = (ProtobufSerializer)Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE);
+            classMapTmp = registeredSerializer.getClassMap();
+            protoSerializer = registeredSerializer;
+        } catch (SerializerException se) {
+            // This means the protobuf serializer had not been registered yet
+            classMapTmp = new ConcurrentHashMap<>();
+            protoSerializer = new ProtobufSerializer(classMapTmp);
+            Serializers.registerSerializer(protoSerializer);
+        }
+        this.protobufSerializer = protoSerializer;
         this.registryTable = this.runtime.getObjectsView().build()
                 .setTypeToken(new TypeToken<CorfuTable<TableName, CorfuRecord<TableDescriptors, TableMetadata>>>() {
                 })
@@ -283,9 +292,8 @@ public class TableRegistry {
     private <T extends Message> void addTypeToClassMap(T msg) {
         String typeUrl = getTypeUrl(msg.getDescriptorForType());
         // Register the schemas to schema table.
-        if (!classMap.containsKey(typeUrl)) {
-            classMap.put(typeUrl, msg.getClass());
-        }
+        ((ProtobufSerializer)Serializers.getSerializer(ProtobufSerializer.PROTOBUF_SERIALIZER_CODE))
+                .getClassMap().put(typeUrl, msg.getClass());
     }
 
     /**

@@ -37,9 +37,19 @@ public class CorfuStore {
      */
     @Nonnull
     public CorfuStore(@Nonnull final CorfuRuntime runtime) {
-        runtime.setTransactionLogging(true);
-        this.runtime = runtime;
+        this(runtime, true);
     }
+
+    /**
+     * Creates a new CorfuStore.
+     *
+     * @param runtime Connected instance of the Corfu Runtime.
+     * @param enableTxLogging
+     */
+    @Nonnull
+    public CorfuStore(@Nonnull final CorfuRuntime runtime, boolean enableTxLogging) {
+        runtime.setTransactionLogging(enableTxLogging);
+        this.runtime = runtime;    }
 
     /**
      * Fetches the latest logical timestamp (global tail) in Corfu's distributed log.

@@ -221,6 +221,7 @@ public class CorfuStoreIT extends AbstractIT {
 
         runtime.getAddressSpaceView().prefixTrim(trimPoint);
         runtime.getAddressSpaceView().gc();
+        Serializers.clearCustomSerializers();
         runtime.shutdown();
 
         // PHASE 3

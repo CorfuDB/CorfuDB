@@ -11,10 +11,13 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
 import org.corfudb.runtime.CorfuRuntime;
@@ -30,10 +33,11 @@ import org.corfudb.utils.lock.LockClient;
 import org.corfudb.utils.lock.LockListener;
 import org.corfudb.utils.lock.states.HasLeaseState;
 import org.corfudb.utils.lock.states.LockState;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEventKey;
-import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationEvent;
 
 import javax.annotation.Nonnull;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -115,6 +119,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * Current node's endpoint
      */
     private final String localEndpoint;
+
+    /**
+     * Current node's id
+     */
+    private Optional<String> localNodeId = Optional.empty();
 
     /**
      * Current node information
@@ -271,6 +280,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private void startDiscovery() {
         log.info("Start Log Replication Discovery Service");
+        setupLocalNodeId();
         connectToClusterManager();
         fetchTopologyFromClusterManager();
         processDiscoveredTopology(topologyDescriptor, true);
@@ -363,11 +373,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @param update   indicates if the discovered topology should immediately be reflected as current (cached)
      */
     private boolean clusterPresentInTopology(TopologyDescriptor topology, boolean update) {
-        ClusterDescriptor tmpClusterDescriptor = topology.getClusterDescriptor(localEndpoint);
+        ClusterDescriptor tmpClusterDescriptor = topology.getClusterDescriptor(localEndpoint, localNodeId);
         NodeDescriptor tmpNodeDescriptor = null;
 
         if (tmpClusterDescriptor != null) {
-            tmpNodeDescriptor = tmpClusterDescriptor.getNode(localEndpoint);
+            tmpNodeDescriptor = tmpClusterDescriptor.getNode(localEndpoint, localNodeId);
 
             if (update) {
                 localClusterDescriptor = tmpClusterDescriptor;
@@ -477,8 +487,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 processCountOnLockAcquire(localClusterDescriptor.getRole());
                 break;
             default:
-                log.error("Log Replication not started on this cluster. Leader node {} belongs to cluster with {} role.",
-                        localEndpoint, localClusterDescriptor.getRole());
+                log.error("Log Replication not started on this cluster. Leader node {} id {} belongs to cluster with {} role.",
+                        localEndpoint, localNodeId, localClusterDescriptor.getRole());
                 break;
         }
     }
@@ -643,7 +653,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private boolean clusterRoleChanged(TopologyDescriptor discoveredTopology) {
         if (localClusterDescriptor != null) {
-            return localClusterDescriptor.getRole() != discoveredTopology.getClusterDescriptor(localEndpoint).getRole();
+            return localClusterDescriptor.getRole() !=
+                    discoveredTopology.getClusterDescriptor(localEndpoint, localNodeId).getRole();
         }
 
         return false;
@@ -682,7 +693,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private boolean processDiscoveredTopology(TopologyDescriptor topology, boolean update) {
         // Health check - confirm this node belongs to a cluster in the topology
         if (topology != null && clusterPresentInTopology(topology, update)) {
-            log.info("Node[{}] belongs to cluster, descriptor={}, topology={}", localEndpoint, localClusterDescriptor, topology);
+            log.info("Node[{}/{}] belongs to cluster, descriptor={}, topology={}", localEndpoint, localNodeId, localClusterDescriptor, topology);
             if (!serverStarted) {
                 bootstrapLogReplicationService();
                 registerToLogReplicationLock();
@@ -692,8 +703,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         // If a cluster descriptor is not found, this node does not belong to any cluster in the topology
         // wait for updates to the topology config to start, if this cluster ever becomes part of the topology
-        log.warn("Node[{}] does not belong to any cluster provided by the discovery service, topology={}", localEndpoint,
-                topology);
+        log.warn("Node[{}/{}] does not belong to any cluster provided by the discovery service, topology={}",
+                localEndpoint, localNodeId, topology);
         return false;
     }
 
@@ -702,10 +713,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         topologyDescriptor = newConfig;
 
         // Update local cluster descriptor
-        localClusterDescriptor = topologyDescriptor.getClusterDescriptor(localEndpoint);
+        localClusterDescriptor = topologyDescriptor.getClusterDescriptor(localEndpoint, localNodeId);
 
         // Update local node descriptor
-        localNodeDescriptor = localClusterDescriptor.getNode(localEndpoint);
+        localNodeDescriptor = localClusterDescriptor.getNode(localEndpoint, localNodeId);
     }
 
     private void updateReplicationManagerTopology(TopologyDescriptor newConfig) {
@@ -782,11 +793,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         }
 
         UUID forceSyncId = UUID.randomUUID();
-        log.info("Received the forceSnapshotSync command for standby cluster {}, forced sync id {}",
+        log.info("Received forceSnapshotSync command for standby cluster {}, forced sync id {}",
                 clusterId, forceSyncId);
 
-        // Write an force sync event to the logReplicationEventTable
-        ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(System.currentTimeMillis() + " "+ clusterId).build();
+        // Write a force sync event to the logReplicationEventTable
+        ReplicationEventKey key = ReplicationEventKey.newBuilder().setKey(System.currentTimeMillis() + " " + clusterId).build();
         ReplicationEvent event = ReplicationEvent.newBuilder()
                 .setClusterId(clusterId)
                 .setEventId(forceSyncId.toString())
@@ -816,6 +827,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
 
         if (lockClient != null) {
             lockClient.shutdown();
+        }
+
+        if (logReplicationMetadataManager != null) {
+            logReplicationMetadataManager.shutdown();
         }
     }
 
@@ -862,6 +877,24 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         if (!statusFlag) {
             replicationManager.updateStatusAsNotStarted();
             statusFlag = true;
+        }
+    }
+
+    private void setupLocalNodeId() {
+        // Retrieve system-specific node id
+        LogReplicationPluginConfig config = new LogReplicationPluginConfig(serverContext.getPluginConfigFilePath());
+        String nodeIdFilePath = config.getNodeIdFilePath();
+        if (nodeIdFilePath != null) {
+            File nodeIdFile = new File(nodeIdFilePath);
+            try (BufferedReader bufferedReader = new BufferedReader(new FileReader(nodeIdFile))) {
+                String line = bufferedReader.readLine();
+                localNodeId = Optional.of(line.split("=")[1].trim().toLowerCase());
+                log.info("setupLocalNodeId succeeded, node id is {}", localNodeId);
+            } catch (Exception e) {
+                log.warn("setupLocalNodeId failed", e);
+            }
+        } else {
+            log.warn("setupLocalNodeId failed, because nodeId file path is missing!");
         }
     }
 }

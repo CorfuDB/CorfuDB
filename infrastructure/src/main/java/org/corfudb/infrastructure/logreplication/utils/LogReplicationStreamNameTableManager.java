@@ -37,9 +37,12 @@ public class LogReplicationStreamNameTableManager {
 
     private String pluginConfigFilePath;
 
+    private CorfuStore corfuStore;
+
     public LogReplicationStreamNameTableManager(CorfuRuntime runtime, String pluginConfigFilePath) {
         this.pluginConfigFilePath = pluginConfigFilePath;
         this.corfuRuntime = runtime;
+        corfuStore = new CorfuStore(corfuRuntime, false);
 
         initStreamNameFetcherPlugin();
     }
@@ -94,7 +97,6 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private boolean verifyTableExists(String tableName) {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         try {
             corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, tableName);
         } catch (NoSuchElementException e) {
@@ -105,7 +107,6 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private void openExistingTable(String tableName) {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         try {
             if (Objects.equals(tableName, LOG_REPLICATION_STREAMS_NAME_TABLE)) {
                 corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, tableName, LogReplicationStreams.TableInfo.class,
@@ -120,7 +121,6 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private boolean tableVersionMatchesPlugin() {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE);
         LogReplicationStreams.VersionString versionString = LogReplicationStreams.VersionString.newBuilder().setName("VERSION").build();
         Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
@@ -135,7 +135,6 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private void deleteExistingStreamNameAndVersionTables() {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         try {
             corfuStore.deleteTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_STREAMS_NAME_TABLE);
             corfuStore.deleteTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_PLUGIN_VERSION_TABLE);
@@ -146,7 +145,6 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private void createStreamNameAndVersionTables(Map<String, String> streams) {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         try {
             corfuStore.openTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_STREAMS_NAME_TABLE, LogReplicationStreams.TableInfo.class,
                     LogReplicationStreams.Namespace.class, CommonTypes.Uuid.class, TableOptions.builder().build());
@@ -174,7 +172,6 @@ public class LogReplicationStreamNameTableManager {
     }
 
     private Set<String> readStreamsToReplicateFromTable() {
-        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
         corfuStore.getTable(CORFU_SYSTEM_NAMESPACE, LOG_REPLICATION_STREAMS_NAME_TABLE);
         Query q = corfuStore.query(CORFU_SYSTEM_NAMESPACE);
         Set<LogReplicationStreams.TableInfo> tables = q.keySet(LOG_REPLICATION_STREAMS_NAME_TABLE, null);
