@@ -12,11 +12,20 @@ public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfig
 
     private Map<String, String> streamsNamespaceMap;
 
+    private final int totalMapCount = 10;
+    private static final String TABLE_PREFIX = "Table00";
+    private static final String NAMESPACE = "LR-Test";
+
     public DefaultLogReplicationConfigAdapter() {
         streamsNamespaceMap = new HashMap<>();
-        streamsNamespaceMap.put("Table001", "testNamespace");
-        streamsNamespaceMap.put("Table002", "testNamespace");
-        streamsNamespaceMap.put("Table003", "testNamespace");
+        streamsNamespaceMap.put("Table001", NAMESPACE);
+        streamsNamespaceMap.put("Table002", NAMESPACE);
+        streamsNamespaceMap.put("Table003", NAMESPACE);
+
+        // Support for UFO
+        for(int i=1; i<=totalMapCount; i++) {
+            streamsNamespaceMap.put(NAMESPACE + "$" + TABLE_PREFIX + i, NAMESPACE);
+        }
     }
 
     @Override

@@ -1,8 +1,10 @@
 package org.corfudb.samples;
 
+import com.google.protobuf.Message;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
@@ -62,19 +64,19 @@ public class CorfuStoreSample {
         String namespace = "credentials";
         String tableName = "profile";
 
-        corfuStore.openTable(namespace,
+        Table<Name, Car, Message> table = corfuStore.openTable(namespace,
                 tableName,
                 Name.class,
                 Car.class,
                 null,
                 TableOptions.builder().build());
 
-        corfuStore.tx(namespace)
-                .create(tableName,
+        corfuStore.txn(namespace)
+                .put(table,
                         Name.newBuilder().setFirstName("a").setLastName("x").build(),
                         Car.newBuilder().setColor("red").build(),
                         null)
-                .create(tableName,
+                .put(table,
                     Name.newBuilder().setFirstName("b").setLastName("y").build(),
                     Car.newBuilder().setColor("blue").build(),
                     null)
@@ -86,8 +88,8 @@ public class CorfuStoreSample {
                         Name.newBuilder().setFirstName("a").setLastName("x").build());
         System.out.println("Car = " + record.getPayload());
 
-        corfuStore.tx(namespace)
-                .update(tableName,
+        corfuStore.txn(namespace)
+                .put(table,
                         Name.newBuilder().setFirstName("a").setLastName("x").build(),
                         Car.newBuilder().setColor("silver").build(),
                         null)

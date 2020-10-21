@@ -1,6 +1,7 @@
 package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
@@ -235,6 +236,12 @@ public class CorfuRuntime {
          */
         private Codec.Type codecType = Codec.Type.ZSTD;
 
+        /**
+         * Application specified registry to hook up Corfu metrics into an existing
+         * scraping/reporting mechanism.
+         */
+        private MetricRegistry metricRegistry;
+
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
             int maxWriteSize = Integer.MAX_VALUE;
             int bulkReadSize = 10;
@@ -261,6 +268,7 @@ public class CorfuRuntime {
             int invalidateRetry = 5;
             private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
             private Codec.Type codecType = Codec.Type.ZSTD;
+            private MetricRegistry metricRegistry = null;
 
             public CorfuRuntimeParametersBuilder tlsEnabled(boolean tlsEnabled) {
                 super.tlsEnabled(tlsEnabled);
@@ -517,6 +525,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder metricRegistry(MetricRegistry metricRegistry) {
+                this.metricRegistry = metricRegistry;
+                return this;
+            }
+
             public CorfuRuntimeParameters build() {
                 CorfuRuntimeParameters corfuRuntimeParameters = new CorfuRuntimeParameters();
                 corfuRuntimeParameters.setTlsEnabled(tlsEnabled);
@@ -570,6 +583,14 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setInvalidateRetry(invalidateRetry);
                 corfuRuntimeParameters.setPriorityLevel(priorityLevel);
                 corfuRuntimeParameters.setCodecType(codecType);
+                if (metricRegistry == null) {
+                    try {
+                        metricRegistry = SharedMetricRegistries.setDefault("default");
+                    } catch (IllegalStateException illegalStateException) { // If JVM already had this set
+                        metricRegistry = SharedMetricRegistries.getDefault();
+                    }
+                }
+                corfuRuntimeParameters.setMetricRegistry(metricRegistry);
                 return corfuRuntimeParameters;
             }
         }

@@ -51,15 +51,29 @@ public class LogReplicationMetadataManager {
 
     private final Table<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal> replicationStatusTable;
 
-    @Getter
-    private final Table<ReplicationEventKey, ReplicationEvent, ReplicationEventKey> replicationEventTable;
+    private final CorfuRuntime runtimeTxLogging;
+    private final CorfuStore corfuStoreTxLogging;
 
     private final CorfuRuntime runtime;
     private final String localClusterId;
 
     public LogReplicationMetadataManager(CorfuRuntime rt, long topologyConfigId, String localClusterId) {
+
+        // LR does not require transaction logging enabled as we don't want to trigger subscriber's logic
+        // on replicated data which could eventually lead to overwrites
         this.runtime = rt;
-        this.corfuStore = new CorfuStore(runtime);
+        this.corfuStore = new CorfuStore(runtime, false);
+
+        // This special runtime with transaction logging enabled is required for the REPLICATION_EVENT_TABLE
+        // which is a table used to communicate events between lead and non-lead nodes in LR (e.g., notify
+        // force snapshot sync from a non-lead to the lead node)
+        CorfuRuntime.CorfuRuntimeParameters params = rt.getParameters();
+        this.runtimeTxLogging = CorfuRuntime.fromParameters(params)
+                .setTransactionLogging(true)
+                .parseConfigurationString(rt.getLayoutServers().get(0))
+                .connect();
+        this.corfuStoreTxLogging = new CorfuStore(runtimeTxLogging);
+
         metadataTableName = getPersistedWriterMetadataTableName(localClusterId);
         try {
             this.corfuStore.openTable(NAMESPACE,
@@ -68,6 +82,7 @@ public class LogReplicationMetadataManager {
                             LogReplicationMetadataVal.class,
                             null,
                             TableOptions.builder().build());
+
             this.replicationStatusTable = this.corfuStore.openTable(NAMESPACE,
                             REPLICATION_STATUS_TABLE,
                             ReplicationStatusKey.class,
@@ -75,7 +90,7 @@ public class LogReplicationMetadataManager {
                             null,
                             TableOptions.builder().build());
 
-            replicationEventTable = this.corfuStore.openTable(NAMESPACE,
+            this.corfuStoreTxLogging.openTable(NAMESPACE,
                     REPLICATION_EVENT_TABLE_NAME,
                     ReplicationEventKey.class,
                     ReplicationEvent.class,
@@ -351,26 +366,26 @@ public class LogReplicationMetadataManager {
                 LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED :
                 LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.DEFAULT;
 
-            LogReplicationMetadata.SnapshotSyncInfo syncInfo = LogReplicationMetadata.SnapshotSyncInfo.newBuilder()
-                    .setType(syncType)
-                    .setStatus(LogReplicationMetadata.SyncStatus.ONGOING)
-                    .setSnapshotRequestId(eventId.toString())
-                    .setBaseSnapshot(baseVersion)
-                    .build();
+        LogReplicationMetadata.SnapshotSyncInfo syncInfo = LogReplicationMetadata.SnapshotSyncInfo.newBuilder()
+                .setType(syncType)
+                .setStatus(LogReplicationMetadata.SyncStatus.ONGOING)
+                .setSnapshotRequestId(eventId.toString())
+                .setBaseSnapshot(baseVersion)
+                .build();
 
-            ReplicationStatusVal status = ReplicationStatusVal.newBuilder()
-                    .setRemainingEntriesToSend(remainingEntries)
-                    .setSyncType(ReplicationStatusVal.SyncType.SNAPSHOT)
-                    .setStatus(LogReplicationMetadata.SyncStatus.ONGOING)
-                    .setSnapshotSyncInfo(syncInfo)
-                    .build();
+        ReplicationStatusVal status = ReplicationStatusVal.newBuilder()
+                .setRemainingEntriesToSend(remainingEntries)
+                .setSyncType(ReplicationStatusVal.SyncType.SNAPSHOT)
+                .setStatus(LogReplicationMetadata.SyncStatus.ONGOING)
+                .setSnapshotSyncInfo(syncInfo)
+                .build();
 
-            corfuStore.tx(NAMESPACE)
-                    .update(REPLICATION_STATUS_TABLE, key, status, null)
-                    .commit();
+        corfuStore.tx(NAMESPACE)
+                .update(REPLICATION_STATUS_TABLE, key, status, null)
+                .commit();
 
-            log.debug("updateSnapshotSyncInfo as ongoing: clusterId: {}, syncInfo: {}",
-                    clusterId, syncInfo);
+        log.debug("updateSnapshotSyncInfo as ongoing: clusterId: {}, syncInfo: {}",
+                clusterId, syncInfo);
     }
 
     /**
@@ -548,6 +563,7 @@ public class LogReplicationMetadataManager {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build();
         ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
                 .setDataConsistent(isConsistent)
+                .setStatus(LogReplicationMetadata.SyncStatus.UNAVAILABLE)
                 .build();
         TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
         txBuilder.update(REPLICATION_STATUS_TABLE, key, val, null);
@@ -668,7 +684,7 @@ public class LogReplicationMetadataManager {
      */
     public void updateLogReplicationEventTable(ReplicationEventKey key, ReplicationEvent event) {
         log.info("UpdateReplicationEvent {} with event {}", REPLICATION_EVENT_TABLE_NAME, event);
-        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
+        TxBuilder txBuilder = corfuStoreTxLogging.tx(NAMESPACE);
         txBuilder.update(REPLICATION_EVENT_TABLE_NAME, key, event, null);
         txBuilder.commit();
     }
@@ -679,7 +695,7 @@ public class LogReplicationMetadataManager {
      */
     public void subscribeReplicationEventTable(StreamListener listener) {
         log.info("LogReplication start listener for table {}", REPLICATION_EVENT_TABLE_NAME);
-        corfuStore.subscribe(listener, NAMESPACE,
+        corfuStoreTxLogging.subscribe(listener, NAMESPACE,
                 Collections.singletonList(new TableSchema(REPLICATION_EVENT_TABLE_NAME, ReplicationEventKey.class, ReplicationEvent.class, null)), null);
     }
 
@@ -689,6 +705,12 @@ public class LogReplicationMetadataManager {
      */
     public void unsubscribeReplicationEventTable(StreamListener listener) {
         corfuStore.unsubscribe(listener);
+    }
+
+    public void shutdown() {
+        if (runtimeTxLogging != null) {
+            runtimeTxLogging.shutdown();
+        }
     }
 
     public enum LogReplicationMetadataType {

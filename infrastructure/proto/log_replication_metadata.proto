@@ -86,6 +86,7 @@ enum SyncStatus {
   ERROR = 2;
   NOT_STARTED = 3;
   STOPPED = 4;
+  UNAVAILABLE = 5;
 }
 
 message ReplicationEventKey {

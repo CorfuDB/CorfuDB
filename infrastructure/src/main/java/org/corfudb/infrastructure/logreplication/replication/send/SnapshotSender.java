@@ -1,13 +1,16 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.DataSender;
-import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
+import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
@@ -19,25 +22,27 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
 
 /**
- *  This class is responsible of transmitting a consistent view of the data at a given timestamp,
- *  i.e, reading and sending a snapshot of the data for the requested streams.
- *
- *  It reads log entries from the data-store through the SnapshotReader, and hands it to the
- *  DataSender (the application specific callback for sending data to the remote cluster).
- *
- *  The SnapshotReader has a default implementation based on reads at the stream layer
- *  (no serialization/deserialization) required.
- *
- *  DataSender is implemented by the application, as communication channels between sites are out of the scope
- *  of CorfuDB.
+ * This class is responsible of transmitting a consistent view of the data at a given timestamp,
+ * i.e, reading and sending a snapshot of the data for the requested streams.
+ * <p>
+ * It reads log entries from the data-store through the SnapshotReader, and hands it to the
+ * DataSender (the application specific callback for sending data to the remote cluster).
+ * <p>
+ * The SnapshotReader has a default implementation based on reads at the stream layer
+ * (no serialization/deserialization) required.
+ * <p>
+ * DataSender is implemented by the application, as communication channels between sites are out of the scope
+ * of CorfuDB.
  */
 @Slf4j
 public class SnapshotSender {
@@ -61,6 +66,8 @@ public class SnapshotSender {
     // For testing purposes, used to count the number of messages sent in order to interrupt snapshot sync
     private ObservableValue observedCounter = new ObservableValue(0);
 
+    private final Optional<AtomicLong> messageCounter;
+
     private volatile boolean stopSnapshotSync = false;
 
     public SnapshotSender(CorfuRuntime runtime, SnapshotReader snapshotReader, DataSender dataSender,
@@ -70,6 +77,10 @@ public class SnapshotSender {
         this.fsm = fsm;
         this.maxNumSnapshotMsgPerBatch = snapshotSyncBatchSize <= 0 ? DEFAULT_MAX_NUM_MSG_PER_BATCH : snapshotSyncBatchSize;
         this.dataSenderBufferManager = new SnapshotSenderBufferManager(dataSender, fsm.getAckReader());
+        this.messageCounter = MeterRegistryProvider.getInstance().map(registry ->
+                registry.gauge("logreplication.messages",
+                        ImmutableList.of(Tag.of("replication.type", "snapshot")),
+                        new AtomicLong(0)));
     }
 
     private CompletableFuture<LogReplicationEntry> snapshotSyncAck;
@@ -87,8 +98,8 @@ public class SnapshotSender {
         boolean completed = false;  // Flag indicating the snapshot sync is completed
         boolean cancel = false;     // Flag indicating snapshot sync needs to be canceled
         int messagesSent = 0;       // Limit the number of messages to maxNumSnapshotMsgPerBatch. The reason we need to limit
-                                    // is because by design several state machines can share the same thread pool,
-                                    // therefore, we need to hand the thread for other workers to execute.
+        // is because by design several state machines can share the same thread pool,
+        // therefore, we need to hand the thread for other workers to execute.
         SnapshotReadMessage snapshotReadMessage;
 
         // Skip if no data is present in the log
@@ -117,6 +128,8 @@ public class SnapshotSender {
                 }
 
                 messagesSent += processReads(snapshotReadMessage.getMessages(), snapshotSyncEventId, completed);
+                final long  messagesSentSnapshot = messagesSent;
+                messageCounter.ifPresent(counter -> counter.addAndGet(messagesSentSnapshot));
                 observedCounter.setValue(messagesSent);
             }
 
@@ -180,7 +193,15 @@ public class SnapshotSender {
             numMessages++;
         }
 
-        dataSenderBufferManager.sendWithBuffering(logReplicationEntries);
+
+        if (MeterRegistryProvider.getInstance().isPresent()) {
+            dataSenderBufferManager.sendWithBuffering(logReplicationEntries,
+                    "logreplication.sender.duration.seconds",
+                    Tag.of("replication.type", "snapshot"));
+        }
+        else {
+            dataSenderBufferManager.sendWithBuffering(logReplicationEntries);
+        }
 
         // If Snapshot is complete, add end marker
         if (completed) {
@@ -229,7 +250,7 @@ public class SnapshotSender {
      * Cancel Snapshot Sync due to an error.
      *
      * @param snapshotSyncEventId unique identifier for the snapshot sync task
-     * @param error specific error cause
+     * @param error               specific error cause
      */
     private void snapshotSyncCancel(UUID snapshotSyncEventId, LogReplicationError error) {
         // Report error to the application through the dataSender

@@ -4,7 +4,6 @@ import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
 
 import java.util.*;
-import java.util.Map.Entry;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -48,7 +47,16 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     private final String fullyQualifiedTableName;
 
     @Getter
+    private final UUID streamUUID;
+
+    @Getter
     private final MetadataOptions metadataOptions;
+
+    /**
+     * List of Metrics captured on this table
+     */
+    @Getter
+    private final TableMetrics metrics;
 
     /**
      * Returns a Table instance backed by a CorfuTable.
@@ -72,6 +80,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         this.corfuRuntime = corfuRuntime;
         this.namespace = namespace;
         this.fullyQualifiedTableName = fullyQualifiedTableName;
+        this.streamUUID = CorfuRuntime.getStreamID(this.fullyQualifiedTableName);
         this.metadataOptions = Optional.ofNullable(metadataSchema)
                 .map(schema -> MetadataOptions.builder()
                         .metadataEnabled(true)
@@ -85,6 +94,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setSerializer(serializer)
                 .setArguments(new ProtobufIndexer(valueSchema), streamingMapSupplier, versionPolicy)
                 .open();
+        this.metrics = new TableMetrics(this.fullyQualifiedTableName, corfuRuntime.getParameters().getMetricRegistry());
     }
 
     /**
@@ -96,7 +106,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         }
         corfuRuntime.getObjectsView()
                 .TXBuild()
-                .type(TransactionType.OPTIMISTIC)
+                .type(TransactionType.WRITE_AFTER_WRITE)
                 .build()
                 .begin();
         return true;
@@ -118,6 +128,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @return Previously stored record if any.
      */
     @Nullable
+    @Deprecated
     CorfuRecord<V, M> create(@Nonnull final K key,
                              @Nullable final V value,
                              @Nullable final M metadata) {
@@ -164,6 +175,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @return Previously stored value for the provided key.
      */
     @Nullable
+    @Deprecated
     CorfuRecord<V, M> update(@Nonnull final K key,
                              @Nonnull final V value,
                              @Nullable final M metadata) {
@@ -196,12 +208,27 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     /**
+     * Update an existing key with the provided value. Create if it does not exist.
+     *
+     * @param key      Key.
+     * @param value    Value.
+     * @param metadata Metadata.
+     * @return Previously stored value for the provided key - null if create.
+     */
+    CorfuRecord<V, M> put(@Nonnull final K key,
+                          @Nonnull final V value,
+                          @Nullable final M metadata) {
+        return corfuTable.put(key, new CorfuRecord<>(value, metadata));
+    }
+
+    /**
      * Delete a record mapped to the specified key.
      *
      * @param key Key.
      * @return Previously stored Corfu Record.
      */
     @Nullable
+    @Deprecated
     CorfuRecord<V, M> delete(@Nonnull final K key) {
         boolean beganNewTxn = false;
         try {
@@ -215,13 +242,32 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     /**
+     * Delete a record mapped to the specified key.
+     *
+     * @param key Key.
+     * @return Previously stored Corfu Record.
+     */
+    @Nullable
+    CorfuRecord<V, M> deleteRecord(@Nonnull final K key) {
+        return corfuTable.remove(key);
+    }
+
+    /**
+     * Clear All table entries.
+     */
+    void clearAll() {
+       corfuTable.clear();
+    }
+
+    /**
      * Clears the table.
      */
+    @Deprecated
     public void clear() {
         boolean beganNewTxn = false;
         try {
             beganNewTxn = TxBegin();
-            corfuTable.clear();
+            clearAll();
         } finally {
             if (beganNewTxn) {
                 TxEnd();
@@ -298,15 +344,34 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     /**
      * Get by secondary index.
      *
+     * @param <I>       Type of index key.
      * @param indexName Index name.
      * @param indexKey  Index key.
+     * @return Collection of entries filtered by the secondary index.
+     */
+    @Nonnull
+    <I extends Comparable<I>>
+    List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull final String indexName,
+                    @Nonnull final I indexKey) {
+        return corfuTable.getByIndex(() -> indexName, indexKey).stream()
+                .map(entry -> new CorfuStoreEntry<K, V, M>(entry.getKey(),
+                        entry.getValue().getPayload(),
+                        entry.getValue().getMetadata()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get by secondary index.
+     *
      * @param <I>       Type of index key.
+     * @param indexName Index name.
+     * @param indexKey  Index key.
      * @return Collection of entries filtered by the secondary index.
      */
     @Nonnull
     protected <I extends Comparable<I>>
-    Collection<Entry<K, V>> getByIndex(@Nonnull final String indexName,
-                                       @Nonnull final I indexKey) {
+    Collection<Map.Entry<K, V>> getByIndexAsQueryResult(@Nonnull final String indexName,
+                                                        @Nonnull final I indexKey) {
         return corfuTable.getByIndex(() -> indexName, indexKey).stream()
                 .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(), entry.getValue().getPayload()))
                 .collect(Collectors.toList());

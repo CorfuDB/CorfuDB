@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package org.corfudb.infrastructure.logreplication.proto;
+
+message StringKey {
+    string key = 1;
+}
+
+message IntValue {
+    int32 value = 2;
+}
+
+message Metadata {
+    string metadata = 3;
+}

@@ -35,10 +35,13 @@ then
     CLASSPATH=`cygpath -wp "$CLASSPATH"`
 fi
 
+if [ "$METRICS_CONFIG_FILE" != "" ]; then
+  LOGBACK_CONFIGURATION="-Dlogback.configurationFile=${METRICS_CONFIG_FILE}"
+  JAVA="$JAVA $LOGBACK_CONFIGURATION"
+fi
 
 # default heap for corfudb
 CORFUDB_HEAP="${CORFUDB_HEAP:-2000}"
 export JVMFLAGS="-Xmx${CORFUDB_HEAP}m $SERVER_JVMFLAGS"
 
-
-"$JAVA" -cp "$CLASSPATH" $JVMFLAGS org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer $*
+$JAVA -cp "$CLASSPATH" $JVMFLAGS org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer $*

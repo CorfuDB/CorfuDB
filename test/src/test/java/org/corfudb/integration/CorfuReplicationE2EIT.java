@@ -1,5 +1,6 @@
 package org.corfudb.integration;
 
+import lombok.extern.slf4j.Slf4j;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -10,6 +11,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+@Slf4j
 @RunWith(Parameterized.class)
 public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
 
@@ -55,6 +57,13 @@ public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
     @Test
     public void testLogReplicationEndToEnd() throws Exception {
         System.out.println("\n Using plugin :: " + pluginConfigFilePath);
-        testEndToEndSnapshotAndLogEntrySync();
+        testEndToEndSnapshotAndLogEntrySyncUFO();
+    }
+
+    @Test
+    public void testSnapshotSyncMultipleTables() throws Exception {
+        System.out.println("\n Using plugin :: " + pluginConfigFilePath);
+        final int totalNumMaps = 3;
+        testEndToEndSnapshotAndLogEntrySyncUFO(totalNumMaps);
     }
 }

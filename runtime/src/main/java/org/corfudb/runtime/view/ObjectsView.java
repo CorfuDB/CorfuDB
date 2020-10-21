@@ -49,7 +49,6 @@ public class ObjectsView extends AbstractView {
     @Setter
     boolean transactionLogging = false;
 
-
     @Getter
     Map<ObjectID, Object> objectCache = new ConcurrentHashMap<>();
 

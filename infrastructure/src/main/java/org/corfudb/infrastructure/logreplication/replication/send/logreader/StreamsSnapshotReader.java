@@ -1,8 +1,10 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
+import io.micrometer.core.instrument.DistributionSummary;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.replication.send.IllegalSnapshotEntrySizeException;
@@ -23,6 +25,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.UUID;
@@ -44,7 +47,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
      * The max size of data for SMR entries in data message.
      */
     private final int maxDataSizePerMsg;
-
+    private final Optional<DistributionSummary> messageSizeDistributionSummary;
     private long snapshotTimestamp;
     private Set<String> streams;
     private PriorityQueue<String> streamsToSend;
@@ -69,6 +72,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
         this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.streams = config.getStreamsToReplicate();
+        this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
     }
 
     /**
@@ -178,6 +182,8 @@ public class StreamsSnapshotReader implements SnapshotReader {
         log.info("Successfully generate a snapshot message for stream {} with snapshotTimestamp={}, numEntries={}, " +
                         "entriesBytes={}, streamId={}", stream.name, snapshotTimestamp,
                 entryList.getSmrEntries().size(), entryList.getSizeInBytes(), stream.uuid);
+        messageSizeDistributionSummary
+                .ifPresent(distribution -> distribution.record(entryList.getSizeInBytes()));
         return txMsg;
     }
 
@@ -275,6 +281,14 @@ public class StreamsSnapshotReader implements SnapshotReader {
     @Override
     public void setTopologyConfigId(long topologyConfigId) {
         this.topologyConfigId = topologyConfigId;
+    }
+
+    private Optional<DistributionSummary> configureMessageSizeDistributionSummary() {
+        return MeterRegistryProvider.getInstance().map(registry ->
+                DistributionSummary.builder("logreplication.message.size.bytes")
+                        .baseUnit("bytes")
+                        .tags("replication.type", "snapshot")
+                        .register(registry));
     }
 
     /**

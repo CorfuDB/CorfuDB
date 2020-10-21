@@ -10,7 +10,9 @@ import io.netty.buffer.ByteBufOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
 
+import lombok.Getter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Record;
 import org.corfudb.runtime.collections.CorfuRecord;
@@ -35,9 +37,10 @@ public class ProtobufSerializer implements ISerializer {
 
     public static final byte PROTOBUF_SERIALIZER_CODE = (byte) 25;
 
-    private final Map<String, Class<? extends Message>> classMap;
+    @Getter
+    private final ConcurrentMap<String, Class<? extends Message>> classMap;
 
-    public ProtobufSerializer(Map<String, Class<? extends Message>> classMap) {
+    public ProtobufSerializer(ConcurrentMap<String, Class<? extends Message>> classMap) {
         this.type = PROTOBUF_SERIALIZER_CODE;
         this.classMap = classMap;
     }

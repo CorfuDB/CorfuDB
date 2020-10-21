@@ -9,6 +9,7 @@ import java.util.List;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -18,7 +19,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
  *
  * Key APIs exposed are:
- *   o-> TxBuilder() for CRUD operations
+ *   o-> TxnContext() for CRUD operations
  *   o-> getTimestamp() for database snapshots
  *   o-> table lifecycle management
  *
@@ -26,6 +27,7 @@ import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
  */
 public class CorfuStore {
 
+    @Getter
     private final CorfuRuntime runtime;
 
     /**
@@ -35,9 +37,19 @@ public class CorfuStore {
      */
     @Nonnull
     public CorfuStore(@Nonnull final CorfuRuntime runtime) {
-        runtime.setTransactionLogging(true);
-        this.runtime = runtime;
+        this(runtime, true);
     }
+
+    /**
+     * Creates a new CorfuStore.
+     *
+     * @param runtime Connected instance of the Corfu Runtime.
+     * @param enableTxLogging
+     */
+    @Nonnull
+    public CorfuStore(@Nonnull final CorfuRuntime runtime, boolean enableTxLogging) {
+        runtime.setTransactionLogging(enableTxLogging);
+        this.runtime = runtime;    }
 
     /**
      * Fetches the latest logical timestamp (global tail) in Corfu's distributed log.
@@ -94,8 +106,8 @@ public class CorfuStore {
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    Table<K, V, M> openTable(@Nonnull final String namespace,
-                             @Nonnull final String tableName) {
+    Table<K, V, M> getTable(@Nonnull final String namespace,
+                            @Nonnull final String tableName) {
         return runtime.getTableRegistry().getTable(namespace, tableName);
     }
 
@@ -122,19 +134,53 @@ public class CorfuStore {
     }
 
     /**
-     * Start appending mutations to a transaction.
-     * The transaction does not begin until a commit is invoked.
-     * On a commit the latest available snapshot will be used to resolve the transaction.
+     * Start a transaction with snapshot isolation level at the latest available corfu snapshot.
+     * The transaction does not begin until either a commit is invoked or a read happens.
      *
      * @param namespace Namespace of the tables involved in the transaction.
      * @return Returns a transaction builder instance.
      */
     @Nonnull
+    @Deprecated
     public TxBuilder tx(@Nonnull final String namespace) {
         return new TxBuilder(
                 this.runtime.getObjectsView(),
                 this.runtime.getTableRegistry(),
                 namespace);
+    }
+
+    /**
+     * Start a transaction with snapshot isolation level at the latest available snapshot.
+     *
+     * @param namespace Namespace of the tables involved in the transaction.
+     * @return Returns a Transaction context.
+     */
+    @Nonnull
+    public TxnContext txn(@Nonnull final String namespace) {
+        return new TxnContext(
+                this.runtime.getObjectsView(),
+                this.runtime.getTableRegistry(),
+                namespace,
+                IsolationLevel.snapshot());
+    }
+
+    /**
+     * Start appending mutations to a transaction.
+     * The transaction does not begin until either a commit or the first read is invoked.
+     * On read or commit the latest available snapshot will be used to resolve the transaction
+     * unless the isolation level has a snapshot timestamp value specified.
+     *
+     * @param namespace Namespace of the tables involved in the transaction.
+     * @param isolationLevel Snapshot (latest or specific) at which the transaction must execute.
+     * @return Returns a transaction context instance.
+     */
+    @Nonnull
+    public TxnContext txn(@Nonnull final String namespace, IsolationLevel isolationLevel) {
+        return new TxnContext(
+                this.runtime.getObjectsView(),
+                this.runtime.getTableRegistry(),
+                namespace,
+                isolationLevel);
     }
 
     /**
@@ -144,6 +190,7 @@ public class CorfuStore {
      * @return Query implementation.
      */
     @Nonnull
+    @Deprecated
     public Query query(@Nonnull final String namespace) {
         return new Query(
                 this.runtime.getTableRegistry(),

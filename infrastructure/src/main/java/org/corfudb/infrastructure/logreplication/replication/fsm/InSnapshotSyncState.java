@@ -1,12 +1,16 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This class represents the InSnapshotSync state of the Log Replication State Machine.
@@ -21,14 +25,18 @@ public class InSnapshotSyncState implements LogReplicationState {
      */
     private final LogReplicationFSM fsm;
 
-    /**
-     Uniquely identifies the event that caused the transition to this state.
-     This identifier is hold in order to send it back to the application through the DataSender
-     callback, so it can be correlated to the process that triggered the request.
+    private final Optional<AtomicLong> snapshotSyncAcksCounter;
 
-     This is required in the case that a snapshot sync is canceled and another snapshot sync is requested,
-     so the application can discard messages received for the previous snapshot sync, until the new
-     request (event) is handled.
+    private Optional<Timer.Sample> snapshotSyncTimerSample = Optional.empty();
+
+    /**
+     * Uniquely identifies the event that caused the transition to this state.
+     * This identifier is hold in order to send it back to the application through the DataSender
+     * callback, so it can be correlated to the process that triggered the request.
+     * <p>
+     * This is required in the case that a snapshot sync is canceled and another snapshot sync is requested,
+     * so the application can discard messages received for the previous snapshot sync, until the new
+     * request (event) is handled.
      */
     private UUID transitionEventId;
 
@@ -53,11 +61,12 @@ public class InSnapshotSyncState implements LogReplicationState {
      * Constructor
      *
      * @param logReplicationFSM log replication state machine
-     * @param snapshotSender snapshot sync send (read and send)
+     * @param snapshotSender    snapshot sync send (read and send)
      */
     public InSnapshotSyncState(LogReplicationFSM logReplicationFSM, SnapshotSender snapshotSender) {
         this.fsm = logReplicationFSM;
         this.snapshotSender = snapshotSender;
+        this.snapshotSyncAcksCounter = configureSnapshotSyncCounter();
     }
 
     @Override
@@ -103,6 +112,14 @@ public class InSnapshotSyncState implements LogReplicationState {
                 waitSnapshotApplyState.setBaseSnapshotTimestamp(snapshotSender.getBaseSnapshotTimestamp());
                 fsm.setBaseSnapshot(event.getMetadata().getLastTransferredBaseSnapshot());
                 fsm.setAckedTimestamp(event.getMetadata().getLastLogEntrySyncedTimestamp());
+                snapshotSyncAcksCounter.ifPresent(AtomicLong::getAndIncrement);
+                snapshotSyncTimerSample
+                        .flatMap(sample -> MeterRegistryProvider.getInstance()
+                                .map(registry -> {
+                                    Timer timer = registry.timer("logreplication.snapshot" +
+                                            ".duration.seconds");
+                                    return sample.stop(timer);
+                                }));
                 return waitSnapshotApplyState;
             case SYNC_CANCEL:
                 // If cancel was intended for current snapshot sync task, cancel and transition to new state
@@ -126,8 +143,8 @@ public class InSnapshotSyncState implements LogReplicationState {
                 /*
                   Cancel snapshot sync if still in progress.
                  */
-                 cancelSnapshotSync("of a request to stop replication.");
-                 return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
+                cancelSnapshotSync("of a request to stop replication.");
+                return fsm.getStates().get(LogReplicationStateType.INITIALIZED);
             case REPLICATION_SHUTDOWN:
                 /*
                   Cancel snapshot send if still in progress.
@@ -149,9 +166,11 @@ public class InSnapshotSyncState implements LogReplicationState {
             if (from != this) {
                 snapshotSender.reset();
                 fsm.getAckReader().markSnapshotSyncInfoOngoing(forcedSnapshotSync, transitionEventId);
-            }
+                snapshotSyncTimerSample = MeterRegistryProvider.getInstance().map(Timer::start);
 
-            transmitFuture = fsm.getLogReplicationFSMWorkers().submit(() -> snapshotSender.transmit(transitionEventId));
+            }
+            transmitFuture = fsm.getLogReplicationFSMWorkers()
+                    .submit(() -> snapshotSender.transmit(transitionEventId));
         } catch (Throwable t) {
             log.error("Error on entry of InSnapshotSyncState.", t);
         }
@@ -185,6 +204,12 @@ public class InSnapshotSyncState implements LogReplicationState {
     @Override
     public LogReplicationStateType getType() {
         return LogReplicationStateType.IN_SNAPSHOT_SYNC;
+    }
+
+    private Optional<AtomicLong> configureSnapshotSyncCounter() {
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> registry.gauge("logreplication.snapshot.completed.count",
+                        new AtomicLong(0)));
     }
 
     public void setForcedSnapshotSync(boolean forced) {

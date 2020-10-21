@@ -6,7 +6,9 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Paths;
 
+import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.serializer.Serializers;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -16,7 +18,7 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.test.SampleAppliance;
 import org.corfudb.test.SampleSchema;
 
@@ -79,13 +81,13 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
         CorfuStore store = new CorfuStore(runtime);
 
-        store.openTable(
-            namespace,
-            tableName,
-            SampleSchema.Uuid.class,
-            SampleSchema.Uuid.class,
-            SampleSchema.Uuid.class,
-            TableOptions.builder().build());
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table1 = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                SampleSchema.Uuid.class,
+                TableOptions.builder().build());
 
         final long keyUuid = 1L;
         final long valueUuid = 3L;
@@ -103,9 +105,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
             .setMsb(metadataUuid)
             .setLsb(metadataUuid)
             .build();
-        TxBuilder tx = store.tx(namespace);
-        tx.create(tableName, uuidKey, uuidVal, metadata)
-            .update(tableName, uuidKey, uuidVal, metadata)
+        TxnContext tx = store.txn(namespace);
+        tx.put(table1, uuidKey, uuidVal, metadata)
             .commit();
         runtime.shutdown();
 
@@ -130,6 +131,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         Assert.assertEquals(browser.dropTable(namespace, tableName), 1);
         // Invoke tableInfo and verify size
         Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
+        // TODO: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -151,6 +154,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
         Assert.assertEquals(browser.loadTable(namespace, tableName, numItems, batchSize, itemSize), batchSize);
+        runtime.shutdown();
+        // TODO: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -180,13 +186,13 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         final long ruleIdVal = 50L;
         final long metaUuid = 100L;
 
-        store.openTable(
-            namespace,
-            tableName,
-            SampleSchema.Uuid.class,
-            SampleSchema.FirewallRule.class,
-            SampleSchema.Uuid.class,
-            TableOptions.builder().build());
+        final Table<SampleSchema.Uuid, SampleSchema.FirewallRule, SampleSchema.Uuid> table = store.openTable(
+                namespace,
+                tableName,
+                SampleSchema.Uuid.class,
+                SampleSchema.FirewallRule.class,
+                SampleSchema.Uuid.class,
+                TableOptions.builder().build());
 
         SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder().setLsb(keyUuid)
             .setMsb(keyUuid).build();
@@ -199,24 +205,26 @@ public class CorfuStoreBrowserIT extends AbstractIT {
             .build();
         SampleSchema.Uuid uuidMeta = SampleSchema.Uuid.newBuilder().setLsb(metaUuid)
             .setMsb(metaUuid).build();
-        TxBuilder tx = store.tx(namespace);
-        tx.create(tableName, uuidKey, firewallRuleVal, uuidMeta)
-            .update(tableName, uuidKey, firewallRuleVal, uuidMeta)
+        TxnContext tx = store.txn(namespace);
+        tx.put(table, uuidKey, firewallRuleVal, uuidMeta)
             .commit();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
-        CorfuTable table = browser.getTable(namespace, tableName);
+        CorfuTable table2 = browser.getTable(namespace, tableName);
         browser.printTable(namespace, tableName);
-        Assert.assertEquals(1, table.size());
+        Assert.assertEquals(1, table2.size());
 
-        for(Object obj : table.values()) {
+        for(Object obj : table2.values()) {
             CorfuDynamicRecord record = (CorfuDynamicRecord)obj;
             Assert.assertEquals(
                 UnknownFieldSet.newBuilder().build(),
                 record.getPayload().getUnknownFields());
         }
+        runtime.shutdown();
+        // TODO: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -243,7 +251,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
         CorfuStore store = new CorfuStore(runtime);
 
-        store.openTable(
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table = store.openTable(
                 namespace,
                 tableName,
                 SampleSchema.Uuid.class,
@@ -267,9 +275,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 .setMsb(metadataUuid)
                 .setLsb(metadataUuid)
                 .build();
-        TxBuilder tx = store.tx(namespace);
-        tx.create(tableName, uuidKey, uuidVal, metadata)
-                .update(tableName, uuidKey, uuidVal, metadata)
+        TxnContext tx = store.txn(namespace);
+        tx.put(table, uuidKey, uuidVal, metadata)
                 .commit();
         runtime.shutdown();
 
@@ -278,6 +285,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         // Invoke listTables and verify table count
         Assert.assertEquals(2, browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
         TableRegistry.REGISTRY_TABLE_NAME));
+        // Todo: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
     }
 
     /**
@@ -304,7 +313,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
         CorfuStore store = new CorfuStore(runtime);
 
-        store.openTable(
+        final Table<SampleSchema.Uuid, SampleSchema.Uuid, SampleSchema.Uuid> table = store.openTable(
                 namespace,
                 tableName,
                 SampleSchema.Uuid.class,
@@ -328,10 +337,10 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 .setMsb(metadataUuid)
                 .setLsb(metadataUuid)
                 .build();
-        TxBuilder tx = store.tx(namespace);
-        tx.create(tableName, uuidKey, uuidVal, metadata)
-                .update(tableName, uuidKey, uuidVal, metadata)
-                .commit();
+        TxnContext tx = store.txn(namespace);
+        tx.put(table, uuidKey, uuidVal, metadata).commit();
+        // Todo: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -341,5 +350,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         final CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime, tempDir);
         // Verify table count
         Assert.assertEquals(1, browser.printTable(namespace, tableName));
+
+        // Todo: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
+        runtime.shutdown();
     }
 }
