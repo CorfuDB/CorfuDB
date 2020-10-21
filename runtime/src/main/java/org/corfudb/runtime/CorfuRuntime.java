@@ -584,11 +584,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setPriorityLevel(priorityLevel);
                 corfuRuntimeParameters.setCodecType(codecType);
                 if (metricRegistry == null) {
-                    try {
-                        metricRegistry = SharedMetricRegistries.setDefault("default");
-                    } catch (IllegalStateException illegalStateException) { // If JVM already had this set
-                        metricRegistry = SharedMetricRegistries.getDefault();
-                    }
+                    metricRegistry = SharedMetricRegistries.getOrCreate("default");
                 }
                 corfuRuntimeParameters.setMetricRegistry(metricRegistry);
                 return corfuRuntimeParameters;
