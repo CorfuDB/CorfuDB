@@ -75,7 +75,7 @@ public class TransactionalContext {
      * @return          The context which was added to the transaction stack.
      */
     public static AbstractTransactionalContext newContext(AbstractTransactionalContext context) {
-        log.debug("TX begin[{}]", context);
+        log.debug("New TransactionalContext created: [{}]", context);
         getTransactionStack().addFirst(context);
         return context;
     }
@@ -85,13 +85,15 @@ public class TransactionalContext {
      * @return          The context which was removed from the transaction stack.
      */
     public static AbstractTransactionalContext removeContext() {
-        AbstractTransactionalContext r = getTransactionStack().pollFirst();
+        AbstractTransactionalContext context = getTransactionStack().pollFirst();
+        log.debug("TransactionalContext removed: [{}]", context);
+
         if (getTransactionStack().isEmpty()) {
             synchronized (getTransactionStack()) {
                 getTransactionStack().notifyAll();
             }
         }
-        return r;
+        return context;
     }
 
     /**
