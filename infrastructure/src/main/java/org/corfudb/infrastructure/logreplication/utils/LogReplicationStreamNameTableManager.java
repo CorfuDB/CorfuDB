@@ -47,7 +47,7 @@ public class LogReplicationStreamNameTableManager {
     public LogReplicationStreamNameTableManager(CorfuRuntime runtime, String pluginConfigFilePath) {
         this.pluginConfigFilePath = pluginConfigFilePath;
         this.corfuRuntime = runtime;
-        corfuStore = new CorfuStore(corfuRuntime, false);
+        corfuStore = new CorfuStore(corfuRuntime);
 
         initStreamNameFetcherPlugin();
     }
