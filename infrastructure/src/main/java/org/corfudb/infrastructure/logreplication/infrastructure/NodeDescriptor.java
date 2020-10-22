@@ -22,21 +22,27 @@ public class NodeDescriptor {
     @Getter
     private final String clusterId;
 
+    // TODO: rename to connectionIdentifier (clean up nodeId and realNodeId) not changing to not break upper layers
     @Getter
-    private final UUID nodeId;        // Connection Identifier (APH UUID in the case of NSX)
+    private final UUID nodeId;            // Connection Identifier (APH UUID in the case of NSX, used by IClientChannelAdapter)
 
-    public NodeDescriptor(String host, String port, String siteId, UUID nodeId) {
+    @Getter
+    private final UUID realNodeId;        // Represents the node's identifier as tracked by the Topology Provider
+
+    public NodeDescriptor(String host, String port, String siteId, UUID nodeId, UUID realNodeId) {
         this.host = host;
         this.port = port;
         this.clusterId = siteId;
         this.nodeId = nodeId;
+        this.realNodeId = realNodeId;
     }
 
     public NodeConfigurationMsg convertToMessage() {
         NodeConfigurationMsg nodeConfig = NodeConfigurationMsg.newBuilder()
                 .setAddress(host)
                 .setPort(Integer.parseInt(port))
-                .setUuid(nodeId.toString()).build();
+                .setUuid(nodeId.toString())
+                .setNodeId(realNodeId.toString()).build();
         return nodeConfig;
     }
 
@@ -46,7 +52,7 @@ public class NodeDescriptor {
 
     @Override
     public String toString() {
-        return String.format("Node: %s, %s", nodeId, getEndpoint());
+        return String.format("Node: %s, %s", realNodeId, getEndpoint());
     }
 
 }

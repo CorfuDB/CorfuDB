@@ -174,7 +174,7 @@ public class TopologyDescriptor {
         } else {
             for(ClusterDescriptor cluster : clusters) {
                 for (NodeDescriptor node : cluster.getNodesDescriptors()) {
-                    if (node.getNodeId().toString().equals(nodeId.get())) {
+                    if (node.getRealNodeId().toString().equals(nodeId.get())) {
                         return cluster;
                     }
                 }
