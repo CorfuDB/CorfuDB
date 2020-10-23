@@ -84,6 +84,12 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
     private void initializeShadowStreams(LogReplicationConfig config) {
         // For every stream create a shadow stream which name is unique based
         // on the original stream and a suffix.
+        if (config.getStreamsToReplicate() != null && config.getStreamsToReplicate().isEmpty()) {
+            log.info("npe-track :: streams to replicate is EMPTY");
+        } else if (config.getStreamsToReplicate() == null) {
+            log.info("npe-track :: streams to replicate is NULL");
+        }
+
         for (String streamName : config.getStreamsToReplicate()) {
             String shadowStreamName = streamName + SHADOW_STREAM_SUFFIX;
             UUID streamId = CorfuRuntime.getStreamID(streamName);
@@ -92,7 +98,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             regularToShadowStreamId.put(shadowStreamId, streamId);
             streamViewMap.put(streamId, streamName);
 
-            log.trace("Shadow stream=[{}] for regular stream=[{}] name=({})", shadowStreamId, streamId, streamName);
+            log.info("Shadow stream=[{}] for regular stream=[{}] name=({})", shadowStreamId, streamId, streamName);
         }
     }
 
@@ -200,6 +206,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param shadowStreamUuid
      */
     private void processOpaqueEntry(List<SMREntry> smrEntries, Long currentSeqNum, UUID shadowStreamUuid, UUID snapshotSyncId) {
+        log.info("npe-tracker :: processOpaqueEntry shadowStreamId={}", shadowStreamUuid);
         TxBuilder txBuilder = logReplicationMetadataManager.getTxBuilder();
         CorfuStoreMetadata.Timestamp timestamp = processOpaqueEntryShadowStream(txBuilder, smrEntries, currentSeqNum, shadowStreamUuid);
 
@@ -228,6 +235,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
          * @param shadowStreamUuid
          */
     private CorfuStoreMetadata.Timestamp processOpaqueEntry(TxBuilder txBuilder, List<SMREntry> smrEntries, UUID shadowStreamUuid) {
+        log.info("npe-track :: innerProcessOpaqueEntry, shadowStreamId={}", shadowStreamUuid);
         CorfuStoreMetadata.Timestamp timestamp = logReplicationMetadataManager.getTimestamp();
         long persistedTopologyConfigId = logReplicationMetadataManager.query(timestamp,
                 LogReplicationMetadataType.TOPOLOGY_CONFIG_ID);
@@ -284,6 +292,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
             return;
         }
         UUID uuid = opaqueEntry.getEntries().keySet().stream().findFirst().get();
+        log.info("npe-track :: Opaque Entry Stream (regular) Id={}, shadow stream id={}", uuid, regularToShadowStreamId.get(uuid));
+        log.info("npe-track :: Regular to Shadow Stream Map, size={}, map={}", regularToShadowStreamId.size(), regularToShadowStreamId);
         processOpaqueEntry(opaqueEntry.getEntries().get(uuid), message.getMetadata().getSnapshotSyncSeqNum(),
                 regularToShadowStreamId.get(uuid), message.getMetadata().getSyncRequestId());
         recvSeq++;

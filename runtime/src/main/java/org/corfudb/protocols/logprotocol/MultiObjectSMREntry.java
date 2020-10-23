@@ -61,6 +61,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
      */
     public void addTo(UUID streamID, SMREntry updateEntry) {
         checkState(streamBuffers.isEmpty(), "Shouldn't be called on a deserialized object");
+        log.info("npe-tracker :: addTo streamId={}, streamUpdatesIds={}", streamID, streamUpdates.keySet());
         MultiSMREntry multiSMREntry = streamUpdates.computeIfAbsent(streamID, k -> new MultiSMREntry());
         multiSMREntry.addTo(updateEntry);
     }

@@ -206,6 +206,8 @@ public class StreamsLogEntryReader implements LogEntryReader {
                     break;
                 }
 
+                // LOOK IF DELTA'S CORRESPOND 1:1 TO DELTA'S ON STANDBY (BATCH)
+
                 lastOpaqueEntry = txOpaqueStream.next();
                 deltaCounter.ifPresent(Counter::increment);
                 lastOpaqueEntryValid = isValidTransactionEntry(lastOpaqueEntry);

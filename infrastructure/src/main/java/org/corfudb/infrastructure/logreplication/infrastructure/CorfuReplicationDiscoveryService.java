@@ -92,6 +92,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * System exit error code called by the Corfu Runtime systemDownHandler
      */
     private static final int SYSTEM_EXIT_ERROR_CODE = -3;
+
     /**
      * Used by the active cluster to initiate Log Replication
      */
@@ -143,7 +144,6 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * A queue of Discovery Service events
      */
     private final LinkedBlockingQueue<DiscoveryServiceEvent> eventQueue = new LinkedBlockingQueue<>();
-
 
     private Optional<LongTaskTimer.Sample> lockAcquireSample = Optional.empty();
 
