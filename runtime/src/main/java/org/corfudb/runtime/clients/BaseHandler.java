@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.google.gson.Gson;
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
@@ -9,6 +8,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.service.CorfuProtocolBase;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -167,9 +167,10 @@ public class BaseHandler implements IClient {
 
     /**
      * Handle a wrong cluster id exception.
+     *
      * @param msg Wrong cluster id exception message.
      * @param ctx A context the message was sent under.
-     * @param r A reference to the router.
+     * @param r   A reference to the router.
      * @return None, throw a wrong cluster id exception.
      */
     @ClientHandler(type = CorfuMsgType.WRONG_CLUSTER_ID)
@@ -188,7 +189,7 @@ public class BaseHandler implements IClient {
      *
      * @param msg The ping response message.
      * @param ctx The context the message was sent under.
-     * @param r A reference to the router
+     * @param r   A reference to the router
      * @return Always True, since the ping message was successful.
      */
     @ResponseHandler(type = PayloadCase.PING_RESPONSE)
@@ -200,7 +201,7 @@ public class BaseHandler implements IClient {
 
     @ResponseHandler(type = PayloadCase.HANDSHAKE_RESPONSE)
     private static Object handleHandshakeResponse(ResponseMsg msg, ChannelHandlerContext ctx,
-                                             IClientRouter r) {
+                                                  IClientRouter r) {
         // TODO: add implementation after BaseServer done.
         return true;
     }
@@ -210,7 +211,7 @@ public class BaseHandler implements IClient {
      *
      * @param msg The ping response message.
      * @param ctx The context the message was sent under.
-     * @param r A reference to the router
+     * @param r   A reference to the router
      * @return Always True, since the restart message was successful.
      */
     @ResponseHandler(type = PayloadCase.RESTART_RESPONSE)
@@ -224,7 +225,7 @@ public class BaseHandler implements IClient {
      *
      * @param msg The ping response message.
      * @param ctx The context the message was sent under.
-     * @param r A reference to the router
+     * @param r   A reference to the router
      * @return Always True, since the reset message was successful.
      */
     @ResponseHandler(type = PayloadCase.RESET_RESPONSE)
@@ -239,7 +240,7 @@ public class BaseHandler implements IClient {
      *
      * @param msg The ping response message.
      * @param ctx The context the message was sent under.
-     * @param r A reference to the router
+     * @param r   A reference to the router
      * @return Always True, since the seal message was successful.
      */
     @ResponseHandler(type = PayloadCase.SEAL_RESPONSE)
@@ -254,17 +255,15 @@ public class BaseHandler implements IClient {
      *
      * @param msg The ping response message.
      * @param ctx The context the message was sent under.
-     * @param r A reference to the router
+     * @param r   A reference to the router
      * @return The VersionInfo object fetched from response msg.
      */
     @ResponseHandler(type = PayloadCase.VERSION_RESPONSE)
     private static Object handleVersionResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                 IClientRouter r) {
         Base.VersionResponseMsg versionResponseMsg = msg.getPayload().getVersionResponse();
-        String jsonPayloadMsg = versionResponseMsg.getJsonPayloadMsg();
-        final Gson parser = new Gson();
 
-        return parser.fromJson(jsonPayloadMsg, VersionInfo.class);
+        return CorfuProtocolBase.getVersionInfo(versionResponseMsg);
     }
 
     // End region

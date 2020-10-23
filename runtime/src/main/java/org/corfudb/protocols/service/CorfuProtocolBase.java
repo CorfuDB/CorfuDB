@@ -92,7 +92,12 @@ public class CorfuProtocolBase {
                 .build();
     }
 
-    //TODO(Zach): add getVersionInfo(VersionResponseMsg msg) method for client
+    public static VersionInfo getVersionInfo(VersionResponseMsg msg) {
+        String jsonPayloadMsg = msg.getJsonPayloadMsg();
+        final Gson parser = new Gson();
+
+        return parser.fromJson(jsonPayloadMsg, VersionInfo.class);
+    }
 
     public static RequestPayloadMsg getHandshakeRequestMsg(UUID clientId, UUID nodeId) {
         return RequestPayloadMsg.newBuilder()

@@ -37,10 +37,13 @@ public class BaseClient implements IClient {
 
     private final UUID clusterId;
 
+    private final CorfuMessage.PriorityLevel priority;
+
     public BaseClient(IClientRouter router, long epoch, UUID clusterId) {
         this.router = router;
         this.epoch = epoch;
         this.clusterId = clusterId;
+        this.priority = CorfuMessage.PriorityLevel.NORMAL;
     }
 
     /**
@@ -88,11 +91,6 @@ public class BaseClient implements IClient {
                 new CorfuMsg(CorfuMsgType.PING).setEpoch(epoch).setClusterID(clusterId));
     }
 
-    public CompletableFuture<Boolean> pingProto() {
-        return router.sendRequestAndGetCompletable(CorfuProtocolBase.getPingRequestMsg(), epoch,
-                CorfuProtocolCommon.getUuidMsg(clusterId), CorfuMessage.PriorityLevel.NORMAL, true, true);
-    }
-
     /**
      * Reset the endpoint, asynchronously.
      * WARNING: ALL EXISTING DATA ON THIS NODE WILL BE LOST.
@@ -115,4 +113,63 @@ public class BaseClient implements IClient {
         return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESTART)
                 .setEpoch(epoch).setClusterID(clusterId));
     }
+
+    // Protobuf region
+
+    /**
+     * Ping the endpoint, asynchronously.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint is reachable, otherwise False or exceptional completion.
+     */
+    public CompletableFuture<Boolean> protoPing() {
+        return router.sendRequestAndGetCompletable(CorfuProtocolBase.getPingRequestMsg(), epoch,
+                CorfuProtocolCommon.getUuidMsg(clusterId), priority, true, true);
+    }
+
+    /**
+     * Restart the endpoint, asynchronously.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint restarts successfully, otherwise False or exceptional completion.
+     */
+    public CompletableFuture<Boolean> protoRestart() {
+        return router.sendRequestAndGetCompletable(CorfuProtocolBase.getRestartRequestMsg(), epoch,
+                CorfuProtocolCommon.getUuidMsg(clusterId), priority, true, true);
+    }
+
+    /**
+     * Reset the endpoint, asynchronously.
+     * WARNING: ALL EXISTING DATA ON THIS NODE WILL BE LOST.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint resets successfully, otherwise False or exceptional completion.
+     */
+    public CompletableFuture<Boolean> protoReset() {
+        return router.sendRequestAndGetCompletable(CorfuProtocolBase.getResetRequestMsg(), epoch,
+                CorfuProtocolCommon.getUuidMsg(clusterId), priority, true, true);
+    }
+
+    /**
+     * Sets the epoch on client router and on the target layout server.
+     *
+     * @param newEpoch New Epoch to be set
+     * @return Completable future which returns true on successful epoch set.
+     */
+    public CompletableFuture<Boolean> protoSeal(long newEpoch) {
+        return router.sendRequestAndGetCompletable(CorfuProtocolBase.getSealRequestMsg(newEpoch), epoch,
+                CorfuProtocolCommon.getUuidMsg(clusterId), priority, false, true);
+    }
+
+    /**
+     * Get the version info from the target layout server.
+     *
+     * @return Completable future which returns {@link VersionInfo} object.
+     */
+    public CompletableFuture<VersionInfo> protoGetVersionInfo() {
+        return router.sendRequestAndGetCompletable(CorfuProtocolBase.getVersionRequestMsg(), epoch,
+                CorfuProtocolCommon.getUuidMsg(clusterId), priority, true, true);
+    }
+
+    // End region
 }

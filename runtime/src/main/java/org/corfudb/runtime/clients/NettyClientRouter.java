@@ -6,9 +6,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufOutputStream;
-import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
@@ -24,7 +21,6 @@ import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.handler.timeout.IdleStateHandler;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,7 +41,6 @@ import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
-import org.apache.commons.io.IOUtils;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
@@ -75,7 +70,6 @@ import org.corfudb.util.Sleep;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.Common;
-
 
 
 /**
@@ -145,20 +139,21 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
      */
     public volatile boolean shutdown;
 
-    /** The {@link NodeLocator} which represents the remote node this
-     *  {@link NettyClientRouter} connects to.
+    /**
+     * The {@link NodeLocator} which represents the remote node this {@link NettyClientRouter}
+     * connects to.
      */
     @Getter
     private final NodeLocator node;
 
-    /** The {@link CorfuRuntimeParameters} used to configure the
-     *  router.
+    /**
+     * The {@link CorfuRuntimeParameters} used to configure the router.
      */
     private final RuntimeParameters parameters;
 
-    /** A {@link CompletableFuture} which is completed when a connection,
-     *  including a successful handshake completes and messages can be sent
-     *  to the remote node.
+    /**
+     * A {@link CompletableFuture} which is completed when a connection, including a successful
+     * handshake completes and messages can be sent to the remote node.
      */
     @Getter
     volatile CompletableFuture<Void> connectionFuture;
@@ -173,9 +168,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
     private final Map<RequestPayloadMsg.PayloadCase, String> protoTimerNameCache;
 
     /**
-     * If true this instance will manage the life-cycle of the event loop.
-     * For example, when the router is stopped the event loop will be released
-     * for GC.
+     * If true this instance will manage the life-cycle of the event loop. For example, when the
+     * router is stopped the event loop will be released for GC.
      */
     private final boolean manageEventLoop;
 
@@ -185,9 +179,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
     private final EventLoopGroup eventLoopGroup;
 
     /**
-     * Creates a new NettyClientRouter connected to the specified host and port with the
-     * specified tls and sasl options. The new {@link this} will attempt connection to
-     * the node until {@link this#stop()} is called.
+     * Creates a new NettyClientRouter connected to the specified host and port with the specified tls
+     * and sasl options. The new {@link this} will attempt connection to the node until {@link
+     * this#stop()} is called.
      *
      * @param node           The node to connect to.
      * @param eventLoopGroup The {@link EventLoopGroup} for servicing I/O.
@@ -198,6 +192,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
                              @Nonnull RuntimeParameters parameters) {
         this(node, eventLoopGroup, parameters, false);
     }
+
     public NettyClientRouter(@Nonnull NodeLocator node,
                              @Nonnull EventLoopGroup eventLoopGroup,
                              @Nonnull RuntimeParameters parameters,
@@ -220,7 +215,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         timerNameCache = mapBuilder.build();
 
         // Set timer mapping for protobuf messages
-        ImmutableMap.Builder<RequestPayloadMsg.PayloadCase, String> protoMapBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<RequestPayloadMsg.PayloadCase, String> protoMapBuilder = ImmutableMap
+                .builder();
         for (RequestPayloadMsg.PayloadCase type : RequestPayloadMsg.PayloadCase.values()) {
             protoMapBuilder.put(type,
                     CorfuComponent.CLIENT_ROUTER.toString() + type.name().toLowerCase());
@@ -231,7 +227,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         timeoutConnect = parameters.getConnectionTimeout().toMillis();
         timeoutResponse = parameters.getRequestTimeout().toMillis();
         timeoutRetry = parameters.getConnectionRetryRate().toMillis();
-
 
         clientList = new ArrayList<>();
         requestID = new AtomicLong();
@@ -277,18 +272,18 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         client.setRouter(this);
 
         // Iterate through all types of CorfuMsgType, registering the handler
-        client.getHandledTypes().stream()
-            .forEach(x -> {
-                handlerMap.put(x, client);
-                log.trace("Registered {} to handle messages of type {}", client, x);
-            });
+        client.getHandledTypes()
+                .forEach(x -> {
+                    handlerMap.put(x, client);
+                    log.trace("Registered {} to handle messages of type {}", client, x);
+                });
 
         if (!client.getHandledCases().isEmpty()) {
-            client.getHandledCases().stream()
-                .forEach(x -> {
-                    responseHandlerMap.put(x, client);
-                    log.trace("Registered {} to handle protobuf messages of type {}", client, x);
-                });
+            client.getHandledCases()
+                    .forEach(x -> {
+                        responseHandlerMap.put(x, client);
+                        log.trace("Registered {} to handle protobuf messages of type {}", client, x);
+                    });
         }
 
         // Register this type
@@ -315,11 +310,12 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
     @SuppressWarnings("unchecked")
     public <T extends IClient> T getClient(Class<T> clientType) {
         return (T) clientList.stream()
-            .filter(clientType::isInstance)
-            .findFirst().get();
+                .filter(clientType::isInstance)
+                .findFirst().get();
     }
 
-    /** Get the {@link ChannelInitializer} used for initializing the Netty channel pipeline.
+    /**
+     * Get the {@link ChannelInitializer} used for initializing the Netty channel pipeline.
      *
      * @return A {@link ChannelInitializer} which initializes the pipeline.
      */
@@ -334,18 +330,18 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
                 }
                 ch.pipeline().addLast(new LengthFieldPrepender(4));
                 ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
-                    0, 4, 0,
-                    4));
+                        0, 4, 0,
+                        4));
                 if (parameters.isSaslPlainTextEnabled()) {
                     PlainTextSaslNettyClient saslNettyClient =
-                        SaslUtils.enableSaslPlainText(parameters.getUsernameFile(),
-                            parameters.getPasswordFile());
+                            SaslUtils.enableSaslPlainText(parameters.getUsernameFile(),
+                                    parameters.getPasswordFile());
                     ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
                 }
                 ch.pipeline().addLast(new NettyCorfuMessageDecoder());
                 ch.pipeline().addLast(new NettyCorfuMessageEncoder());
                 ch.pipeline().addLast(new ClientHandshakeHandler(parameters.getClientId(),
-                    node.getNodeId(), parameters.getHandshakeTimeout()));
+                        node.getNodeId(), parameters.getHandshakeTimeout()));
 
                 // If parameters include message filters, add corresponding filter handler
                 if (parameters.getNettyClientInboundMsgFilters() != null) {
@@ -358,13 +354,14 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         };
     }
 
-    /** Add a future which reconnects the server.
+    /**
+     * Add a future which reconnects the server.
      *
-     * @param channel       The channel to use
-     * @param bootstrap     The channel bootstrap to use
+     * @param channel   The channel to use
+     * @param bootstrap The channel bootstrap to use
      */
     private void addReconnectionOnCloseFuture(@Nonnull Channel channel,
-            @Nonnull Bootstrap bootstrap) {
+                                              @Nonnull Bootstrap bootstrap) {
         channel.closeFuture().addListener((r) -> {
             log.debug("addReconnectionOnCloseFuture[{}]: disconnected", node);
             // Remove the current completion future, forcing clients to wait for reconnection.
@@ -373,8 +370,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
             outstandingRequests.forEach((reqId, reqCompletableFuture) -> {
                 reqCompletableFuture.completeExceptionally(
                         new NetworkException("Disconnected", node));
-            // And also remove them.
-            outstandingRequests.remove(reqId);
+                // And also remove them.
+                outstandingRequests.remove(reqId);
             });
             // If we aren't shutdown, reconnect.
             if (!shutdown) {
@@ -402,10 +399,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));
     }
 
-    /** Handle when a channel is connected.
+    /**
+     * Handle when a channel is connected.
      *
-     * @param future        The future that is completed when the channel is connected/
-     * @param bootstrap     The bootstrap to connect a new channel (used on reconnect).
+     * @param future    The future that is completed when the channel is connected/
+     * @param bootstrap The bootstrap to connect a new channel (used on reconnect).
      */
     private void channelConnectionFutureHandler(@Nonnull ChannelFuture future,
                                                 @Nonnull Bootstrap bootstrap) {
@@ -445,8 +443,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
      *
      * @param message The message to send.
      * @param <T>     The type of completable to return.
-     * @return A completable future which will be fulfilled by the reply,
-     *     or a timeout in the case there is no response.
+     * @return A completable future which will be fulfilled by the reply, or a timeout in the case
+     * there is no response.
      */
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(@NonNull CorfuMsg message) {
 
@@ -454,7 +452,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         // If timed out, return a exceptionally completed with the timeout.
         try {
             connectionFuture
-                .get(parameters.getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
+                    .get(parameters.getConnectionTimeout().toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             throw new UnrecoverableCorfuInterruptedError(e);
         } catch (TimeoutException te) {
@@ -499,7 +497,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         // Generate a timeout future, which will complete exceptionally
         // if the main future is not completed.
         final CompletableFuture<T> cfTimeout =
-            CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
+                CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             // CFUtils.within() can wrap different kinds of exceptions in
             // CompletionException, just dealing with TimeoutException here since
@@ -507,7 +505,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
             // takes care of others. This avoids handling same exception twice.
             if (e.getCause() instanceof TimeoutException) {
                 outstandingRequests.remove(thisRequest);
-                log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
+                log.debug(
+                        "sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
                         thisRequest, node, message);
             }
             return null;
@@ -519,21 +518,22 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
     /**
      * Send a request message and get a completable future to be fulfilled by the reply.
      *
-     * @param payload
-     * @param epoch
-     * @param clusterId
-     * @param priority
-     * @param ignoreClusterId
-     * @param ignoreEpoch
-     * @param <T> The type of completable to return.
-     * @return A completable future which will be fulfilled by the reply,
-     * or a timeout in the case there is no response.
+     * @param payload         Payload message of the pending request.
+     * @param epoch           Number of epoch.
+     * @param clusterId       Cluster id.
+     * @param priority        Priority level of the pending request
+     * @param ignoreClusterId Boolean field indicates whether to ignore cluster id.
+     * @param ignoreEpoch     Boolean field indicates whether to ignore epoch.
+     * @param <T>             The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply, or a timeout in the case
+     * there is no response.
      */
     @Override
-    public  <T> CompletableFuture<T> sendRequestAndGetCompletable(CorfuMessage.RequestPayloadMsg payload,
-                                                                  long epoch, Common.UuidMsg clusterId,
-                                                                  CorfuMessage.PriorityLevel priority,
-                                                                  boolean ignoreClusterId, boolean ignoreEpoch) {
+    public <T> CompletableFuture<T> sendRequestAndGetCompletable(
+            CorfuMessage.RequestPayloadMsg payload,
+            long epoch, Common.UuidMsg clusterId,
+            CorfuMessage.PriorityLevel priority,
+            boolean ignoreClusterId, boolean ignoreEpoch) {
 
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return a exceptionally completed with the timeout.
@@ -594,7 +594,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
             // takes care of others. This avoids handling same exception twice.
             if (e.getCause() instanceof TimeoutException) {
                 outstandingRequests.remove(thisRequestId);
-                log.debug("sendRequestAndGetCompletable: Remove request {} to {} due to timeout! Request:{}",
+                log.debug(
+                        "sendRequestAndGetCompletable: Remove request {} to {} due to timeout! Request:{}",
                         thisRequestId, node, request.getHeader());
             }
             return null;
@@ -622,15 +623,16 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
     /**
      * Send a one way message, without adding a completable future.
      *
-     * @param payload
-     * @param epoch
-     * @param clusterId
-     * @param priority
-     * @param ignoreClusterId
-     * @param ignoreEpoch
+     * @param payload         Payload message of the pending request.
+     * @param epoch           Number of epoch.
+     * @param clusterId       Cluster id.
+     * @param priority        Priority level of the pending request
+     * @param ignoreClusterId Boolean field indicates whether to ignore cluster id.
+     * @param ignoreEpoch     Boolean field indicates whether to ignore epoch.
      */
     @Override
-    public void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch, Common.UuidMsg clusterId,
+    public void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch,
+                            Common.UuidMsg clusterId,
                             CorfuMessage.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch) {
         // Get the next request ID
         final long thisRequestId = requestID.getAndIncrement();
@@ -645,8 +647,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         // Write this message out on the channel
         channel.writeAndFlush(request, channel.voidPromise());
         log.trace("Sent one-way request message: {}", request.getHeader());
-        ByteBuf outBuf = PooledByteBufAllocator.DEFAULT.buffer();
-        ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(outBuf);
     }
 
     /**
@@ -679,7 +679,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
                     cause.getClass().getSimpleName(), cause);
         } else {
             log.warn("Attempted to exceptionally complete request {}, but request not outstanding!",
-                requestID);
+                    requestID);
         }
     }
 
@@ -767,9 +767,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
     }
 
     /**
-     * Sends a keep alive message to the server so that the response will keep
-     * the channel active in order to avoid a ReadTimeout exception that will
-     * close the channel.
+     * Sends a keep alive message to the server so that the response will keep the channel active in
+     * order to avoid a ReadTimeout exception that will close the channel.
      */
     private void keepAlive() {
         if (channel == null || !channel.isOpen()) {
@@ -807,6 +806,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
 
     // region Deprecated Methods
     // The methods below are deprecated and may be removed in a future release.
+
     /**
      * Creates a new NettyClientRouter connected to the specified endpoint.
      *
@@ -828,7 +828,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
     @Deprecated
     public NettyClientRouter(String host, Integer port) {
         this(NodeLocator.builder().host(host).port(port).build(),
-            RuntimeParameters.builder().build());
+                RuntimeParameters.builder().build());
     }
 
     /**
@@ -840,30 +840,30 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
      */
     @Deprecated
     public NettyClientRouter(String host, Integer port, Boolean tls,
-        String keyStore, String ksPasswordFile, String trustStore,
-        String tsPasswordFile, Boolean saslPlainText, String usernameFile,
-        String passwordFile) {
+                             String keyStore, String ksPasswordFile, String trustStore,
+                             String tsPasswordFile, Boolean saslPlainText, String usernameFile,
+                             String passwordFile) {
         this(NodeLocator.builder().host(host).port(port).build(),
-            RuntimeParameters.builder()
-                .tlsEnabled(tls)
-                .keyStore(keyStore)
-                .ksPasswordFile(ksPasswordFile)
-                .trustStore(trustStore)
-                .tsPasswordFile(tsPasswordFile)
-                .saslPlainTextEnabled(saslPlainText)
-                .usernameFile(usernameFile)
-                .passwordFile(passwordFile)
-                .build());
+                RuntimeParameters.builder()
+                        .tlsEnabled(tls)
+                        .keyStore(keyStore)
+                        .ksPasswordFile(ksPasswordFile)
+                        .trustStore(trustStore)
+                        .tsPasswordFile(tsPasswordFile)
+                        .saslPlainTextEnabled(saslPlainText)
+                        .usernameFile(usernameFile)
+                        .passwordFile(passwordFile)
+                        .build());
     }
 
     public NettyClientRouter(@Nonnull NodeLocator node,
-        @Nonnull RuntimeParameters parameters) {
+                             @Nonnull RuntimeParameters parameters) {
         this(node, parameters.getSocketType()
-            .getGenerator().generate(parameters.getNettyEventLoopThreads(),
-                new ThreadFactoryBuilder()
-                    .setDaemon(true)
-                    .setNameFormat(parameters.getNettyEventLoopThreadFormat())
-                    .build()), parameters, true);
+                .getGenerator().generate(parameters.getNettyEventLoopThreads(),
+                        new ThreadFactoryBuilder()
+                                .setDaemon(true)
+                                .setNameFormat(parameters.getNettyEventLoopThreadFormat())
+                                .build()), parameters, true);
     }
 
     // endregion
