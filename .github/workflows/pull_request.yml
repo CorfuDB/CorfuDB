@@ -1,9 +1,10 @@
 on: pull_request
 name: Pull Request
 jobs:
-  test:
-    name: Run tests
-    runs-on: ubuntu-latest
+  unit_test:
+    # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
+    runs-on: ubuntu-18.04
+
     steps:
     - uses: actions/checkout@v2
 
@@ -20,5 +21,5 @@ jobs:
       with:
         java-version: 1.8
 
-    - name: Build corfu db
-      run: ./mvnw clean
+    - name: run unit tests
+      run: ./mvnw clean test -pl \!samples -T 1C -Dtest.travisBuild=true
