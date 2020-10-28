@@ -8,11 +8,11 @@ import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.proto.Common.UuidToLongPairMsg;
 import org.corfudb.runtime.proto.Common.UuidToStreamAddressSpacePairMsg;
+import org.corfudb.runtime.proto.ServerErrors.ValueAdoptedErrorMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.LogUnit.CompactRequestMsg;
@@ -76,6 +76,15 @@ public class CorfuProtocolLogUnit {
     }
 
     public static ReadResponse getReadResponse(ReadLogResponseMsg msg) {
+        ReadResponse rr = new ReadResponse();
+        msg.getResponseList().forEach(e -> {
+            rr.put(e.getAddress(), getLogData(e.getLogData()));
+        });
+
+        return rr;
+    }
+
+    public static ReadResponse getReadResponse(ValueAdoptedErrorMsg msg) {
         ReadResponse rr = new ReadResponse();
         msg.getResponseList().forEach(e -> {
             rr.put(e.getAddress(), getLogData(e.getLogData()));

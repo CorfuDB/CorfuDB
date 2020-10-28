@@ -69,6 +69,7 @@ import org.corfudb.util.Sleep;
 
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg;
 import org.corfudb.runtime.proto.Common;
 
 
@@ -118,6 +119,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
      * The handlers registered to this router.
      */
     public final Map<ResponsePayloadMsg.PayloadCase, IClient> responseHandlerMap;
+
+    /**
+     * The handlers registered to this router for server errors.
+     */
+    public final Map<ServerErrorMsg.ErrorCase, IClient> errorHandlerMap;
 
     /**
      * The clients registered to this router.
@@ -204,6 +210,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         this.connectionFuture = new CompletableFuture<>();
         this.handlerMap = new ConcurrentHashMap<>();
         this.responseHandlerMap = new ConcurrentHashMap<>();
+        this.errorHandlerMap = new ConcurrentHashMap<>();
 
         // Set timer mapping
         ImmutableMap.Builder<CorfuMsgType, String> mapBuilder = ImmutableMap.builder();
@@ -283,6 +290,14 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
                     .forEach(x -> {
                         responseHandlerMap.put(x, client);
                         log.trace("Registered {} to handle protobuf messages of type {}", client, x);
+                    });
+        }
+
+        if (!client.getHandledErrors().isEmpty()) {
+            client.getHandledErrors()
+                    .forEach(x -> {
+                        errorHandlerMap.put(x, client);
+                        log.trace("Registered {} to handle server error of type {}", client, x);
                     });
         }
 
@@ -737,7 +752,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
                 }
             } else if (o instanceof ResponseMsg) {
                 ResponseMsg responseMsg = (ResponseMsg) o;
+                ResponsePayloadMsg.PayloadCase payloadCase = responseMsg.getPayload().getPayloadCase();
                 IClient handler = responseHandlerMap.get(responseMsg.getPayload().getPayloadCase());
+
+                if (handler == null && payloadCase.equals(ResponsePayloadMsg.PayloadCase.SERVER_ERROR)) {
+                    handler = errorHandlerMap.get(responseMsg.getPayload().getServerError().getErrorCase());
+                }
+
                 if (handler == null) {
                     // The message was unregistered, we are dropping it.
                     log.warn("Received unregistered message {}, dropping", responseMsg);

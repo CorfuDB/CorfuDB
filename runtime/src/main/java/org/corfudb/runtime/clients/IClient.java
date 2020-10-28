@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 
+import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
@@ -102,5 +103,9 @@ public interface IClient {
      */
     default Set<PayloadCase> getHandledCases() {
         return getResponseHandler().getHandledCases();
+    }
+
+    default Set<ErrorCase> getHandledErrors() {
+        return getResponseHandler().getHandledErrors();
     }
 }

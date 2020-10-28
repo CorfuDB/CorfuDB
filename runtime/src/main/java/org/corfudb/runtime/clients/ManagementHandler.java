@@ -62,7 +62,8 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
      */
     @Getter
     public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
-            .generateHandlers(MethodHandles.lookup(), this);
+            .generateHandlers(MethodHandles.lookup(), this)
+            .generateErrorHandlers(MethodHandles.lookup(), this);
 
 
     @ClientHandler(type = CorfuMsgType.ORCHESTRATOR_RESPONSE)

@@ -56,7 +56,8 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
      */
     @Getter
     public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
-            .generateHandlers(MethodHandles.lookup(), this);
+            .generateHandlers(MethodHandles.lookup(), this)
+            .generateErrorHandlers(MethodHandles.lookup(), this);
 
     @ClientHandler(type = CorfuMsgType.SEQUENCER_METRICS_RESPONSE)
     private static Object handleMetricsResponse(CorfuPayloadMsg<SequencerMetrics> msg,

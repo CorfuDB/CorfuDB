@@ -35,6 +35,8 @@ import org.corfudb.runtime.proto.service.LogUnit.TrimMarkResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.TailResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.KnownAddressResponseMsg;
 import org.corfudb.runtime.proto.service.LogUnit.CommittedTailResponseMsg;
+import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
+
 
 /**
  * A client to a LogUnit.
@@ -66,7 +68,8 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
      */
     @Getter
     public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
-            .generateHandlers(MethodHandles.lookup(), this);
+            .generateHandlers(MethodHandles.lookup(), this)
+            .generateErrorHandlers(MethodHandles.lookup(), this);
 
     /**
      * Handle an WRITE_OK message.
@@ -496,6 +499,88 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
     private static Object handleResetLogUnitResponse(ResponseMsg msg, ChannelHandlerContext ctx,
                                                      IClientRouter r) {
         return true;
+    }
+
+    /**
+     * Handle a TRIMMED_ERROR response from the server.
+     * For old CorfuMsg, use {@link #handleTrimmed(CorfuMsg, ChannelHandlerContext, IClientRouter)}
+     *
+     * @param msg The wrong epoch message
+     * @param ctx The context the message was sent under
+     * @param r   A reference to the router
+     * @return none, throw a wrong epoch exception instead.
+     */
+    @ServerErrorsHandler(type = ErrorCase.TRIMMED_ERROR)
+    private static Object handleTrimmedError(ResponseMsg msg, ChannelHandlerContext ctx,
+                                             IClientRouter r) {
+        throw new TrimmedException();
+    }
+
+    /**
+     * Handle a OVERWRITE_ERROR response from the server.
+     * For old CorfuMsg, use {@link #handleOverwrite(CorfuPayloadMsg, ChannelHandlerContext, IClientRouter)}
+     *
+     * @param msg The wrong epoch message
+     * @param ctx The context the message was sent under
+     * @param r   A reference to the router
+     * @return none, throw a wrong epoch exception instead.
+     */
+    @ServerErrorsHandler(type = ErrorCase.OVERWRITE_ERROR)
+    private static Object handleOverwriteError(ResponseMsg msg, ChannelHandlerContext ctx,
+                                               IClientRouter r) {
+        int causeId = msg.getPayload().getServerError().getOverwriteError().getOverwriteCauseId();
+
+        throw new OverwriteException(OverwriteCause.fromId(causeId));
+    }
+
+    /**
+     * Handle a OVERWRITE_ERROR response from the server.
+     * For old CorfuMsg, use {@link #handleDataOutranked(CorfuMsg, ChannelHandlerContext, IClientRouter)}
+     *
+     * @param msg The wrong epoch message
+     * @param ctx The context the message was sent under
+     * @param r   A reference to the router
+     * @return none, throw a wrong epoch exception instead.
+     */
+    @ServerErrorsHandler(type = ErrorCase.DATA_OUTRANKED_ERROR)
+    private static Object handleDataOutrankedError(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                   IClientRouter r) {
+        throw new DataOutrankedException();
+    }
+
+    /**
+     * Handle a VALUE_ADOPTED_ERROR response from the server.
+     * For old CorfuMsg, use {@link #handleValueAdoptedResponse(CorfuPayloadMsg, ChannelHandlerContext, IClientRouter)}
+     *
+     * @param msg The wrong epoch message
+     * @param ctx The context the message was sent under
+     * @param r   A reference to the router
+     * @return none, throw a wrong epoch exception instead.
+     */
+    @ServerErrorsHandler(type = ErrorCase.VALUE_ADOPTED_ERROR)
+    private static Object handleValueAdoptedError(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                  IClientRouter r) {
+        ReadResponse readResponse = CorfuProtocolLogUnit.getReadResponse(msg.getPayload()
+                .getServerError().getValueAdoptedError());
+
+        throw new ValueAdoptedException(readResponse);
+    }
+
+    /**
+     * Handle a DATA_CORRUPTION_ERROR response from the server.
+     * For old CorfuMsg, use {@link #handleReadDataCorruption(CorfuPayloadMsg, ChannelHandlerContext, IClientRouter)}
+     *
+     * @param msg The wrong epoch message
+     * @param ctx The context the message was sent under
+     * @param r   A reference to the router
+     * @return none, throw a wrong epoch exception instead.
+     */
+    @ServerErrorsHandler(type = ErrorCase.DATA_CORRUPTION_ERROR)
+    private static Object handleDataCorruptionError(ResponseMsg msg, ChannelHandlerContext ctx,
+                                                    IClientRouter r) {
+        long read = msg.getPayload().getServerError().getDataCorruptionError().getAddress();
+
+        throw new DataCorruptionException(String.format("Encountered corrupted data while reading %s", read));
     }
 
     // End region

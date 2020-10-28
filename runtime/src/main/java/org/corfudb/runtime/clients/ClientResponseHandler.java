@@ -3,9 +3,10 @@ package org.corfudb.runtime.clients;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
+
 
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -31,9 +32,14 @@ public class ClientResponseHandler {
     }
 
     /**
-     * The handler map.
+     * The handler map for normal ResponseMsg.
      */
     private final Map<PayloadCase, Handler> handlerMap;
+
+    /**
+     * The handler map for ServerErrorMsg.
+     */
+    private final Map<ErrorCase, Handler> errorHandlerMap;
 
     /**
      * The client.
@@ -48,6 +54,7 @@ public class ClientResponseHandler {
     public ClientResponseHandler(IClient client) {
         this.client = client;
         this.handlerMap = new ConcurrentHashMap<>();
+        this.errorHandlerMap = new ConcurrentHashMap<>();
     }
 
     /**
@@ -57,9 +64,12 @@ public class ClientResponseHandler {
      * @param handler The handler itself.
      * @return This handler, to support chaining.
      */
+    @Deprecated
     public ClientResponseHandler addHandler(PayloadCase payloadCase,
                                             ClientResponseHandler.Handler handler) {
-        handlerMap.put(payloadCase, handler);
+        if (!payloadCase.equals(PayloadCase.SERVER_ERROR)) {
+            handlerMap.put(payloadCase, handler);
+        }
         return this;
     }
 
@@ -71,18 +81,31 @@ public class ClientResponseHandler {
      * @return True if the message was handled successfully.
      */
     public boolean handle(ResponseMsg response, ChannelHandlerContext ctx) {
-        PayloadCase payloadCase = response.getPayload().getPayloadCase();
         IClientRouter router = client.getRouter();
         long requestId = response.getHeader().getRequestId();
+        PayloadCase payloadCase = response.getPayload().getPayloadCase();
 
-        if (handlerMap.containsKey(payloadCase)) {
+        if (payloadCase.equals(PayloadCase.SERVER_ERROR)) {
+            ErrorCase errorCase = response.getPayload().getServerError().getErrorCase();
+            if (errorHandlerMap.containsKey(errorCase)) {
+                try{
+                    // TODO: should we remove this clause?
+                    Object ret = errorHandlerMap.get(errorCase).handle(response, ctx, router);
+                    if (ret != null) {
+                        router.completeRequest(requestId, ret);
+                    }
+                } catch (Throwable e) {
+                    router.completeExceptionally(requestId, e);
+                }
+            }
+        } else if (handlerMap.containsKey(payloadCase)) {
             try {
-                Object ret = handlerMap.get(payloadCase)
-                        .handle(response, ctx, router);
+                Object ret = handlerMap.get(payloadCase).handle(response, ctx, router);
                 if (ret != null) {
                     router.completeRequest(requestId, ret);
                 }
             } catch (Throwable e) {
+                // TODO: same reason, should we remove this clause?
                 router.completeExceptionally(requestId, e);
             }
             return true;
@@ -137,6 +160,58 @@ public class ClientResponseHandler {
                         throw new RuntimeException(e);
                     }
                 });
+
+        return this;
+    }
+
+    public ClientResponseHandler generateErrorHandlers(@NonNull final MethodHandles.Lookup caller,
+                                                       @NonNull final Object o) {
+        Arrays.stream(o.getClass().getDeclaredMethods())
+                .filter(method -> method.isAnnotationPresent(ServerErrorsHandler.class))
+                .forEach(method -> {
+                    ServerErrorsHandler handler = method.getAnnotation(ServerErrorsHandler.class);
+                    if (!method.getParameterTypes()[0]
+                            .isAssignableFrom(ResponseMsg.class)) {
+                        throw new RuntimeException("Incorrect message type, expected "
+                                + ResponseMsg.class + " but provided "
+                                + method.getParameterTypes()[0]);
+                    }
+                    if (errorHandlerMap.containsKey(handler.type())) {
+                        throw new RuntimeException("Handler for " + handler.type()
+                                + " already registered!");
+                    }
+                    // convert the method into a Java8 Lambda for maximum execution speed...
+                    try {
+                        if (Modifier.isStatic(method.getModifiers())) {
+                            MethodHandle mh = caller.unreflect(method);
+                            MethodType mt = mh.type().changeParameterType(0, ResponseMsg.class);
+                            errorHandlerMap.put(handler.type(), (Handler) LambdaMetafactory
+                                    .metafactory(caller, "handle",
+                                            MethodType.methodType(Handler.class),
+                                            mt, mh, mh.type())
+                                    .getTarget().invokeExact());
+                        } else {
+                            // instance method, so we need to capture the type.
+                            MethodType mt = MethodType
+                                    .methodType(method.getReturnType(), method.getParameterTypes());
+                            MethodHandle mh = caller.findVirtual(o.getClass(), method.getName(), mt);
+                            MethodType mtGeneric = mh.type()
+                                    .changeParameterType(1, ResponseMsg.class)
+                                    .changeReturnType(Object.class);
+                            errorHandlerMap.put(handler.type(), (Handler) LambdaMetafactory
+                                    .metafactory(caller, "handle",
+                                            MethodType.methodType(Handler.class,
+                                                    o.getClass()),
+                                            mtGeneric.dropParameterTypes(0, 1), mh, mh.type()
+                                                    .dropParameterTypes(0, 1))
+                                    .getTarget().bindTo(o).invoke());
+                        }
+                    } catch (Throwable e) {
+                        log.error("Exception during incoming message handling", e);
+                        throw new RuntimeException(e);
+                    }
+                });
+
         return this;
     }
 
@@ -147,5 +222,14 @@ public class ClientResponseHandler {
      */
     public Set<PayloadCase> getHandledCases() {
         return handlerMap.keySet();
+    }
+
+    /**
+     * Returns a set of error cases that the client handles.
+     *
+     * @return The set of error cases this client handles.
+     */
+    public Set<ErrorCase> getHandledErrors() {
+        return errorHandlerMap.keySet();
     }
 }
