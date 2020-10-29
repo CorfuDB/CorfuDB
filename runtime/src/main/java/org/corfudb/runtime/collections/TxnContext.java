@@ -4,6 +4,7 @@ import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.TransactionAlreadyStartedException;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -250,6 +251,32 @@ public class TxnContext implements AutoCloseable {
         table.getMetrics().incNumDeletes();
         operations.add(() -> table.deleteRecord(key));
         return this;
+    }
+
+    /*************************** Queue API ***************************************
+     */
+    /**
+     * Enqueue a message object into the CorfuQueue.
+     *
+     * @param table Table object to perform the delete on.
+     * @param record    Record to be inserted into the Queue.
+     * @param <K>       Type of Key.
+     * @param <V>       Type of Value.
+     * @param <M>       Type of Metadata.
+     * @return TxnContext instance.
+     */
+    @Nonnull
+    public <K extends Message, V extends Message, M extends Message>
+    Queue.CorfuQueueIdMsg enqueue(@Nonnull Table<K, V, M> table,
+                                  @Nonnull final V record) {
+        validateTableWrittenIsInNamespace(table);
+        /*
+        table.getMetrics().incNumDeletes();
+        operations.add(() -> table.deleteRecord(key));
+        return this;
+
+         */
+        return Queue.CorfuQueueIdMsg.newBuilder().build();
     }
 
     /**
