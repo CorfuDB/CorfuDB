@@ -1,8 +1,18 @@
 package org.corfudb;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.fusesource.jansi.Ansi.ansi;
+import org.assertj.core.api.AbstractObjectAssert;
+import org.assertj.core.api.AbstractThrowableAssert;
+import org.corfudb.test.concurrent.TestThreadGroups;
+import org.corfudb.util.CFUtils;
+import org.corfudb.util.Sleep;
+import org.fusesource.jansi.Ansi;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.rules.TestRule;
+import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
 
 import java.io.File;
 import java.time.Duration;
@@ -29,20 +39,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntConsumer;
 
-import org.assertj.core.api.AbstractObjectAssert;
-import org.assertj.core.api.AbstractThrowableAssert;
-import org.corfudb.test.DisabledOnTravis;
-import org.corfudb.test.concurrent.TestThreadGroups;
-import org.corfudb.util.CFUtils;
-import org.corfudb.util.Sleep;
-import org.fusesource.jansi.Ansi;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.rules.TestRule;
-import org.junit.runner.Description;
-import org.junit.runners.model.Statement;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.fusesource.jansi.Ansi.ansi;
 
 /**
  * Created by mwei on 12/13/15.
@@ -87,60 +86,49 @@ public class AbstractCorfuTest {
                     Thread testThread = null;
                     try {
                         starting(description);
-                        // Skip the test if we're on travis and the test is
-                        // annotated to be disabled.
-                        if (PARAMETERS.TRAVIS_BUILD &&
-                            description.getAnnotation
-                                (DisabledOnTravis.class) != null ||
-                            PARAMETERS.TRAVIS_BUILD &&
-                                description.getTestClass()
-                                    .getAnnotation(DisabledOnTravis.class)
-                                    != null) {
-                            travisSkipped();
-                        } else {
-                            // Test will complete with a throwable if failed,
-                            // otherwise it will contain null.
-                            CompletableFuture<Throwable> testCompletion = new CompletableFuture<>();
-                            testThread = new Thread(() -> {
-                                try {
-                                    statement.evaluate();
-                                    testCompletion.complete(null);
-                                } catch (Throwable t) {
-                                    testCompletion.complete(t);
-                                }
-                            });
-                            testThread.setName("test-main");
-                            testThread.start();
 
-                            // Generate a timeout
-                            CompletableFuture<Throwable> timeoutCompletion =
-                                CFUtils.within(testCompletion, PARAMETERS.TIMEOUT_LONG);
-                            Throwable t;
+                        // Test will complete with a throwable if failed,
+                        // otherwise it will contain null.
+                        CompletableFuture<Throwable> testCompletion = new CompletableFuture<>();
+                        testThread = new Thread(() -> {
                             try {
-                                t = timeoutCompletion.join();
-                            } catch (CompletionException e) {
-                                if (e.getCause() instanceof TimeoutException) {
-                                    timedOut();
-                                } else {
-                                    failed(e, description);
-                                }
-                                throw e;
-                            } finally {
-                                // If the testThread is still alive for some reason
-                                // interrupt it.
-                                if (testThread.isAlive()) {
-                                    testThread.interrupt();
-                                }
+                                statement.evaluate();
+                                testCompletion.complete(null);
+                            } catch (Throwable t) {
+                                testCompletion.complete(t);
                             }
-                            if (t == null) {
-                                succeeded();
-                            } else if (t instanceof org.junit.internal.AssumptionViolatedException) {
-                                skipped(t);
-                                throw t;
+                        });
+                        testThread.setName("test-main");
+                        testThread.start();
+
+                        // Generate a timeout
+                        CompletableFuture<Throwable> timeoutCompletion =
+                                CFUtils.within(testCompletion, PARAMETERS.TIMEOUT_LONG);
+                        Throwable t;
+                        try {
+                            t = timeoutCompletion.join();
+                        } catch (CompletionException e) {
+                            if (e.getCause() instanceof TimeoutException) {
+                                timedOut();
                             } else {
-                                failed(t, description);
-                                throw t;
+                                failed(e, description);
                             }
+                            throw e;
+                        } finally {
+                            // If the testThread is still alive for some reason
+                            // interrupt it.
+                            if (testThread.isAlive()) {
+                                testThread.interrupt();
+                            }
+                        }
+                        if (t == null) {
+                            succeeded();
+                        } else if (t instanceof org.junit.internal.AssumptionViolatedException) {
+                            skipped(t);
+                            throw t;
+                        } else {
+                            failed(t, description);
+                            throw t;
                         }
                     } finally {
                         finished();

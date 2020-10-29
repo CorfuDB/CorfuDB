@@ -232,7 +232,6 @@
                                 <include>**/*IT.java</include>
                             </includes>
                             <systemPropertyVariables>
-                                <propertyName>test.travisBuild</propertyName>
                                 <propertyName>test.seed</propertyName>
                             </systemPropertyVariables>
                             <skipTests>false</skipTests>
@@ -447,7 +446,6 @@
                     <useFile>false</useFile>
                     <skipAfterFailureCount>2</skipAfterFailureCount>
                     <systemPropertyVariables>
-                        <propertyName>test.travisBuild</propertyName>
                         <propertyName>test.seed</propertyName>
                     </systemPropertyVariables>
                     <includes>
