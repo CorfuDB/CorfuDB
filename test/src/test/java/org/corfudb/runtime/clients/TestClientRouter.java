@@ -2,10 +2,7 @@ package org.corfudb.runtime.clients;
 
 import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufOutputStream;
-import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -29,11 +26,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 
 import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 
@@ -57,6 +57,11 @@ public class TestClientRouter implements IClientRouter {
     public Map<CorfuMsgType, IClient> handlerMap;
 
     /**
+     * The handlers registered to this router.
+     */
+    public Map<ResponsePayloadMsg.PayloadCase, IClient> responseHandlerMap;
+
+    /**
      * The outstanding requests on this router.
      */
     public Map<Long, CompletableFuture> outstandingRequests;
@@ -73,6 +78,7 @@ public class TestClientRouter implements IClientRouter {
 
     private volatile boolean connected = true;
     private Map<CorfuMsgType, String> timerNameCache = new HashMap<>();
+    private Map<RequestPayloadMsg.PayloadCase, String> protoTimerNameCache = new HashMap<>();
 
     public void simulateDisconnectedEndpoint() {
         connected = false;
@@ -120,6 +126,7 @@ public class TestClientRouter implements IClientRouter {
     public TestClientRouter(TestServerRouter serverRouter) {
         clientList = new ArrayList<>();
         handlerMap = new ConcurrentHashMap<>();
+        responseHandlerMap = new ConcurrentHashMap<>();
         outstandingRequests = new ConcurrentHashMap<>();
         requestID = new AtomicLong();
         clientID = CorfuRuntime.getStreamID("testClient");
@@ -136,6 +143,17 @@ public class TestClientRouter implements IClientRouter {
                 IClient handler = handlerMap.get(m.getMsgType());
                 if (handler == null){
                     throw new IllegalStateException("Client handler doesn't exists for message: " + m.getMsgType());
+                }
+
+                handler.handleMessage(m, null);
+            }
+        } else if (o instanceof ResponseMsg) {
+            ResponseMsg m = (ResponseMsg) o;
+            if (validateClientId(m.getHeader().getClientId())) {
+                IClient handler = responseHandlerMap.get(m.getPayload().getPayloadCase());
+                if (handler == null){
+                    throw new IllegalStateException("Client handler doesn't exists for message: "
+                            + m.getPayload().getPayloadCase());
                 }
 
                 handler.handleMessage(m, null);
@@ -165,6 +183,14 @@ public class TestClientRouter implements IClientRouter {
                     handlerMap.put(x, client);
                     log.trace("Registered {} to handle messages of type {}", client, x);
                 });
+
+        if (!client.getHandledCases().isEmpty()) {
+            client.getHandledCases()
+                    .forEach(x -> {
+                        responseHandlerMap.put(x, client);
+                        log.trace("Registered {} to handle protobuf messages of type {}", client, x);
+                    });
+        }
 
         // Register this type
         clientList.add(client);
@@ -242,8 +268,56 @@ public class TestClientRouter implements IClientRouter {
                                                                   long epoch, Common.UuidMsg clusterId,
                                                                   CorfuMessage.PriorityLevel priority,
                                                                   boolean ignoreClusterId, boolean ignoreEpoch) {
-        // TODO(Chetan): empty stub?
-        return null;
+        // Simulate a "disconnected endpoint"
+        if (!connected) {
+            log.trace("Disconnected endpoint " + host + ":" + port);
+            throw new NetworkException("Disconnected endpoint", NodeLocator.builder()
+                    .host(host)
+                    .port(port).build());
+        }
+
+        // Set up the timer and context to measure request
+        final Timer roundTripMsgTimer = getProtoTimer(payload.getPayloadCase());
+        final Timer.Context roundTripMsgContext = MetricsUtils
+                .getConditionalContext(roundTripMsgTimer);
+
+        // Get the next request ID.
+        final long thisRequestId = requestID.getAndIncrement();
+        Common.UuidMsg protoClientId = CorfuProtocolCommon.getUuidMsg(clientID);
+
+        // Set the base fields for this message.
+        CorfuMessage.HeaderMsg header = CorfuProtocolMessage.getHeaderMsg(thisRequestId, priority,
+                epoch, clusterId, protoClientId, ignoreClusterId, ignoreEpoch);
+        CorfuMessage.RequestMsg request = CorfuMessage.RequestMsg.newBuilder().setHeader(header)
+                .setPayload(payload).build();
+
+        // Generate a future and put it in the completion table.
+        final CompletableFuture<T> cf = new CompletableFuture<>();
+        outstandingRequests.put(thisRequestId, cf);
+
+        // TODO: TestRule and TestServerRouter
+        // Evaluate rules.
+        if (rules.stream().allMatch(x -> x.evaluate(request, this))) {
+            // Write the message out to the channel
+            log.trace(Thread.currentThread().getId() + ":Sent request: {}", request);
+            // No need to simulate serialization for Protobuf
+            serverRouter.sendServerMessage(request, channelContext);
+        }
+
+        // Generate a benchmarked future to measure the underlying request
+        final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
+            MetricsUtils.stopConditionalContext(roundTripMsgContext);
+            return x;
+        });
+
+        // Generate a timeout future, which will complete exceptionally if the main future is not completed.
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
+        cfTimeout.exceptionally(e -> {
+            outstandingRequests.remove(thisRequestId);
+            log.debug("Remove request {} due to timeout!", thisRequestId);
+            return null;
+        });
+        return cfTimeout;
     }
 
     // Create a timer using appropriate cached timer names
@@ -255,6 +329,16 @@ public class TestClientRouter implements IClientRouter {
         }
         return CorfuRuntime.getDefaultMetrics()
                 .timer(timerNameCache.get(message.getMsgType()));
+    }
+
+    // Create a timer using appropriate cached timer names
+    private Timer getProtoTimer(@NonNull RequestPayloadMsg.PayloadCase payloadCase) {
+        if (!protoTimerNameCache.containsKey(payloadCase)) {
+            protoTimerNameCache.put(payloadCase,
+                    CorfuComponent.CLIENT_ROUTER.toString() + payloadCase.name().toLowerCase());
+        }
+        return CorfuRuntime.getDefaultMetrics()
+                .timer(protoTimerNameCache.get(payloadCase));
     }
 
     /**
@@ -290,7 +374,23 @@ public class TestClientRouter implements IClientRouter {
     @Override
     public void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch, Common.UuidMsg clusterId,
                             CorfuMessage.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch) {
-        // TODO(Chetan): empty stub?
+        final long thisRequestId = requestID.getAndIncrement();
+        Common.UuidMsg protoClientId = CorfuProtocolCommon.getUuidMsg(clientID);
+
+        // Set the base fields for this message.
+        CorfuMessage.HeaderMsg header = CorfuProtocolMessage.getHeaderMsg(thisRequestId, priority,
+                epoch, clusterId, protoClientId, ignoreClusterId, ignoreEpoch);
+        CorfuMessage.RequestMsg request = CorfuMessage.RequestMsg.newBuilder().setHeader(header)
+                .setPayload(payload).build();
+
+        // TODO: TestRule and TestServerRouter
+        // Evaluate rules.
+        if (rules.stream().allMatch(x -> x.evaluate(request, this))) {
+            // Write the message out to the channel
+            log.trace(Thread.currentThread().getId() + ":Sent request: {}", request);
+            // No need to simulate serialization for Protobuf
+            serverRouter.sendServerMessage(request, channelContext);
+        }
     }
 
     /**
@@ -304,6 +404,22 @@ public class TestClientRouter implements IClientRouter {
         if (!msg.getClientID().equals(clientID)) {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!",
                     msg.getClientID(), clientID);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Validate the clientID of a CorfuMsg.
+     *
+     * @param protoClientId The header of incoming message used for validation.
+     * @return True, if the clientID is correct, but false otherwise.
+     */
+    private boolean validateClientId(Common.UuidMsg protoClientId) {
+        // Check if the message is intended for us. If not, drop the message.
+        if (!protoClientId.equals(CorfuProtocolCommon.getUuidMsg(clientID))) {
+            log.warn("Incoming message intended for client {}, our id is {}, dropping!",
+                    protoClientId, clientID);
             return false;
         }
         return true;
