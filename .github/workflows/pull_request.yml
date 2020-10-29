@@ -86,11 +86,14 @@ jobs:
         with:
           java-version: 1.8
 
-      - name: build corfu
+      - uses: satackey/action-docker-layer-caching@v0.0.8
+        continue-on-error: true
+
+      - name: Build corfu
         run: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
 
       - name: Prepare docker image
         run: ./mvnw -pl infrastructure -DskipTests -Pdocker clean package
 
-      - name: run universe tests
+      - name: Run universe tests
         run: ./mvnw -pl :universe clean verify -Pit
