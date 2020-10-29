@@ -7,8 +7,10 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WriteSizeException;
+import org.corfudb.util.TestTags;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.util.Map;
 
@@ -19,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * A set integration tests that exercise failure modes related to
  * large writes.
  */
-
+@Tag(TestTags.INTEGRATION_TEST)
 public class LargeWriteIT extends AbstractIT {
 
     @Test

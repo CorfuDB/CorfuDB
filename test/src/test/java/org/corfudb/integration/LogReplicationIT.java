@@ -40,9 +40,11 @@ import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.util.TestTags;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -58,6 +60,7 @@ import org.junit.Test;
  * reaches the destination after initiating log replication.
  */
 @Slf4j
+@Tag(TestTags.LOG_REPLICATION)
 public class LogReplicationIT extends AbstractIT implements Observer {
 
     public final static String nettyConfig = "src/test/resources/transport/nettyConfig.properties";

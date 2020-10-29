@@ -13,8 +13,10 @@ import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.test.SampleSchema.Uuid;
+import org.corfudb.util.TestTags;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -28,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Simple test that inserts data into CorfuStore and tests Streaming.
  */
+@Tag(TestTags.INTEGRATION_TEST)
 public class StreamingIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;

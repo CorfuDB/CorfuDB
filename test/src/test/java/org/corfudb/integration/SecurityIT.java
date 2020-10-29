@@ -8,8 +8,10 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.TestTags;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,6 +24,7 @@ import java.util.Arrays;
  * Created by Sam Behnam on 8/13/18.
  */
 @Slf4j
+@Tag(TestTags.INTEGRATION_TEST)
 public class SecurityIT extends AbstractIT {
     private String corfuSingleNodeHost;
     private int corfuStringNodePort;

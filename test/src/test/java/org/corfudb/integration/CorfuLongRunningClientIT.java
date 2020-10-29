@@ -5,7 +5,9 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.util.TestTags;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 
 import java.util.ArrayList;
@@ -23,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * We consider a long running client any client who has accessed the object at an early state,
  * and accesses later when the state of the object has been modified by other clients (including checkpointer).
  */
+@Tag(TestTags.LOG_REPLICATION)
 public class CorfuLongRunningClientIT extends AbstractIT {
 
     private static final String streamName = "streamA";

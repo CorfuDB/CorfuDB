@@ -14,8 +14,10 @@ import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.TestTags;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.io.File;
 import java.time.Duration;
@@ -37,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author amartinezman
  */
 @Slf4j
+@Tag(TestTags.LOG_REPLICATION)
 public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT {
 
     private static final int SLEEP_DURATION = 5;

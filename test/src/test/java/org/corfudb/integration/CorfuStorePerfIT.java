@@ -14,6 +14,8 @@ import com.google.common.reflect.TypeToken;
 import org.apache.commons.io.FileUtils;
 
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.util.TestTags;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import org.corfudb.runtime.CorfuRuntime;
@@ -30,6 +32,7 @@ import org.corfudb.test.SampleSchema.EventInfo;
 /**
  * Simple performance test to insert data into corfu via regular table.put() and CorfuStore protobufs
  */
+@Tag(TestTags.INTEGRATION_TEST)
 public class CorfuStorePerfIT extends  AbstractIT {
 
     @Test

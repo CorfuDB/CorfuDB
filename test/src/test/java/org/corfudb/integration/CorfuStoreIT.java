@@ -25,12 +25,14 @@ import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.test.SampleSchema.ManagedResources;
+import org.corfudb.util.TestTags;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 import org.rocksdb.Options;
 
 import java.io.IOException;
@@ -47,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Simple test that inserts data into CorfuStore via a separate server process
  */
+@Tag(TestTags.INTEGRATION_TEST)
 public class CorfuStoreIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;

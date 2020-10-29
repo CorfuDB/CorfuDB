@@ -2,8 +2,10 @@ package org.corfudb.integration;
 
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
+import org.corfudb.util.TestTags;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.util.Collections;
 
@@ -12,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Created by rmichoud on 2/12/17.
  */
+@Tag(TestTags.INTEGRATION_TEST)
 public class SealIT extends AbstractIT {
 
     static String corfuSingleNodeHost;

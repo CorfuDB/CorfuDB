@@ -11,6 +11,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.serializer.Serializers;
 
 @Slf4j
+
 public class LogReplicationTest {
 
     private String endpoint;

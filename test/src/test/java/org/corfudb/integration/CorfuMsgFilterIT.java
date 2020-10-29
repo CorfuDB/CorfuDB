@@ -8,8 +8,10 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
+import org.corfudb.util.TestTags;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -24,6 +26,7 @@ import java.util.function.Function;
  *
  * Created by Sam Behnam on 5/30/18.
  */
+@Tag(TestTags.INTEGRATION_TEST)
 public class CorfuMsgFilterIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;

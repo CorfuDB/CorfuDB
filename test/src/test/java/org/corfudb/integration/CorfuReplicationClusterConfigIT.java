@@ -19,9 +19,11 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.TestTags;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -39,6 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @Slf4j
 @SuppressWarnings("checkstyle:magicnumber")
+@Tag(TestTags.LOG_REPLICATION)
 public class CorfuReplicationClusterConfigIT extends AbstractIT {
     public final static String nettyPluginPath = "src/test/resources/transport/nettyConfig.properties";
     private final static String streamName = "Table001";

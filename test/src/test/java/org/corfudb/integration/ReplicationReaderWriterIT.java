@@ -39,11 +39,14 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.TestTags;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 @Slf4j
+@Tag(TestTags.LOG_REPLICATION)
 public class ReplicationReaderWriterIT extends AbstractIT {
     private static final String DEFAULT_ENDPOINT = DEFAULT_HOST + ":" + DEFAULT_PORT;
     private static final int WRITER_PORT = DEFAULT_PORT + 1;

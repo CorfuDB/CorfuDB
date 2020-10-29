@@ -15,7 +15,10 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
 
+import org.corfudb.util.TestTags;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
+
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -33,6 +36,7 @@ import java.util.concurrent.CountDownLatch;
  * Created by Maithem on 12/1/17.
  */
 @Slf4j
+@Tag(TestTags.INTEGRATION_TEST)
 public class WorkflowIT extends AbstractIT {
 
     private final String host = "localhost";

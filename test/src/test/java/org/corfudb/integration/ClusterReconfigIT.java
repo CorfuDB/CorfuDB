@@ -52,11 +52,14 @@ import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.TestTags;
 import org.corfudb.util.Utils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
+@Tag(TestTags.INTEGRATION_TEST)
 public class ClusterReconfigIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;

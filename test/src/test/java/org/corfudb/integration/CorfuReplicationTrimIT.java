@@ -6,14 +6,17 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.util.TestTags;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 /**
  * This suite of tests verifies the behavior of log replication in the event of
  * Checkpoint and Trim both in the sender (source/active cluster) and receiver (sink/standby cluster)
  */
 @Slf4j
+@Tag(TestTags.LOG_REPLICATION)
 public class CorfuReplicationTrimIT extends LogReplicationAbstractIT {
 
     /**

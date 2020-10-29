@@ -41,9 +41,11 @@ import org.corfudb.runtime.exceptions.StaleTokenException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
+import org.corfudb.util.TestTags;
 import org.corfudb.util.Utils;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 /**
  * Tests the recovery of the Corfu instance.
@@ -51,6 +53,7 @@ import org.junit.Test;
  * fresh servers.
  * Created by zlokhandwala on 4/25/17.
  */
+@Tag(TestTags.INTEGRATION_TEST)
 public class ServerRestartIT extends AbstractIT {
 
     // Total number of iterations of randomized failovers.

@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.TestTags;
 import org.corfudb.utils.TestLockListener;
 import org.corfudb.utils.lock.Lock;
 import org.corfudb.utils.lock.LockClient;
@@ -16,6 +17,7 @@ import org.corfudb.utils.lock.states.HasLeaseState;
 import org.corfudb.utils.lock.states.LockState;
 import org.corfudb.utils.lock.states.LockStateType;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -34,6 +36,7 @@ import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 
 @Slf4j
+@Tag(TestTags.INTEGRATION_TEST)
 public class LockIT extends AbstractIT implements Observer {
 
     private static final int LOCK_TIME_CONSTANT = 6;

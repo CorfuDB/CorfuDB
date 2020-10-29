@@ -10,9 +10,11 @@ import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
+import org.corfudb.util.TestTags;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -28,6 +30,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+@Tag(TestTags.INTEGRATION_TEST)
 public class StateTransferIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;

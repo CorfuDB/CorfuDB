@@ -1,7 +1,9 @@
 package org.corfudb.integration;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.util.TestTags;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -13,6 +15,7 @@ import java.util.List;
 
 @Slf4j
 @RunWith(Parameterized.class)
+@Tag(TestTags.LOG_REPLICATION)
 public class CorfuReplicationE2EIT extends LogReplicationAbstractIT {
 
     public CorfuReplicationE2EIT(String plugin) {

@@ -9,7 +9,9 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.TestTags;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * thread is started and computes a counters map. That map contains each observed stream and the
  * sum of updates it has seen for that stream.
  */
-
+@Tag(TestTags.INTEGRATION_TEST)
 public class TransactionStreamIT extends AbstractIT {
 
     /**

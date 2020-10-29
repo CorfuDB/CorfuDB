@@ -30,8 +30,10 @@ import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.NodeLocator;
+import org.corfudb.util.TestTags;
 import org.corfudb.util.Utils;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 
 /**
@@ -45,6 +47,7 @@ import org.junit.Test;
  * reading a large stream from a fresh runtime).
  */
 @Slf4j
+@Tag(TestTags.INTEGRATION_TEST)
 public class StreamAddressDiscoveryIT extends AbstractIT {
 
     private CorfuRuntime createDefaultRuntimeUsingFollowBackpointers() {

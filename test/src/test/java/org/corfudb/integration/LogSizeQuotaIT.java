@@ -13,7 +13,9 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.stream.IStreamView;
+import org.corfudb.util.TestTags;
 import org.junit.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.nio.file.FileStore;
 import java.nio.file.Files;
@@ -25,6 +27,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@Tag(TestTags.INTEGRATION_TEST)
 public class LogSizeQuotaIT extends AbstractIT {
 
     final int payloadSize = 1000;

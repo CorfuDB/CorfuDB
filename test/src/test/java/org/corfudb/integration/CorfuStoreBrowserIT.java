@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.TestTags;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Assert;
 import org.junit.Before;
@@ -21,7 +22,9 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.test.SampleAppliance;
 import org.corfudb.test.SampleSchema;
+import org.junit.jupiter.api.Tag;
 
+@Tag(TestTags.INTEGRATION_TEST)
 public class CorfuStoreBrowserIT extends AbstractIT {
 
     private static String corfuSingleNodeHost;
