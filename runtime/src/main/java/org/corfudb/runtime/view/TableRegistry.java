@@ -350,6 +350,9 @@ public class TableRegistry {
         Table<K, V, M> table = new Table<>(
                 namespace,
                 fullyQualifiedTableName,
+                kClass,
+                vClass,
+                mClass,
                 defaultValueMessage,
                 defaultMetadataMessage,
                 this.runtime,
