@@ -1,5 +1,6 @@
 on: pull_request
 name: Pull Request
+
 jobs:
   unit_test:
     # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
@@ -11,7 +12,7 @@ jobs:
     - name: Cache local Maven repository
       uses: actions/cache@v2
       with:
-        path: ~/.m2/repository
+        path: ~/.m2
         key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           ${{ runner.os }}-maven-
@@ -23,3 +24,58 @@ jobs:
 
     - name: run unit tests
       run: ./mvnw clean test -pl \!samples -T 1C -Dtest.travisBuild=true
+
+  integration_test:
+      # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
+      runs-on: ubuntu-18.04
+
+      steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repositoryCorfuStoreShimTest
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+
+      - name: build corfu
+        run: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
+
+      - name: run integration tests
+        run: ./mvnw -pl :test clean verify -Pit -DskipTests -Dtest.travisBuild=true
+
+  universe_test:
+      # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
+      runs-on: ubuntu-18.04
+
+      steps:
+      - uses: actions/checkout@v2
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repositoryCorfuStoreShimTest
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+
+      - name: build corfu
+        run: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
+
+      - name: Prepare docker image
+        run: ./mvnw -pl infrastructure -DskipTests -Pdocker clean package
+
+      - name: run universe tests
+        run: ./mvnw -pl :universe clean verify -Pit
