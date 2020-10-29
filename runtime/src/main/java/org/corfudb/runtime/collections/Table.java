@@ -315,15 +315,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     }
 
     /**
-     * Return the address of the latest updated made in this table.
-     *
-     * @return stream tail of this table.
-     */
-    public long getHighestSequence() {
-        return corfuRuntime.getSequencerView().query(this.streamUUID);
-    }
-
-    /**
      * Scan and filter.
      *
      * @param p Predicate to filter the values.

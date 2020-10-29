@@ -70,7 +70,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("abc").build(),
                         user_1)
                 .commit();
-        long tail1 = table.getHighestSequence();
+        long tail1 = ufoStore.getHighestSequence(someNamespace, tableName);
 
         // Take a snapshot to test snapshot isolation transaction
         final CorfuStoreMetadata.Timestamp timestamp = ufoStore.getTimestamp();
@@ -87,7 +87,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             readWriteTxn.commit();
         }
 
-        long tail2 = table.getHighestSequence();
+        long tail2 = ufoStore.getHighestSequence(someNamespace, tableName);
         assertThat(tail2).isGreaterThan(tail1);
 
         // Try a read followed by write in same txn

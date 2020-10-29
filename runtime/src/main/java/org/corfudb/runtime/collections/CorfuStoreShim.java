@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.protobuf.Message;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.view.TableRegistry;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -114,6 +115,18 @@ public class CorfuStoreShim {
     @Nonnull
     public TxnContextShim txn(@Nonnull final String namespace, IsolationLevel isolationLevel) {
         return new TxnContextShim(corfuStore.txn(namespace, isolationLevel));
+    }
+
+    /**
+     * Return the address of the latest updated made in this table.
+     *
+     * @param namespace - namespace that this table belongs to.
+     * @param tableName - table name of this table without the namespace prefixed in.
+     * @return stream tail of this table.
+     */
+    public long getHighestSequence(@Nonnull final String namespace,
+                                   @Nonnull final String tableName) {
+        return this.corfuStore.getHighestSequence(namespace, tableName);
     }
 
     /**
