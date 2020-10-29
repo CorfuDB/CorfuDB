@@ -28,7 +28,7 @@ jobs:
         java-version: 1.8
 
     - name: run unit tests
-      run: ./mvnw clean test -pl \!samples -T 1C -Dtest.travisBuild=true
+      run: ./mvnw clean test -pl \!samples -am -T 1C
 
   integration_test:
       # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
@@ -45,7 +45,7 @@ jobs:
       - name: Cache local Maven repository
         uses: actions/cache@v2
         with:
-          path: ~/.m2/repositoryCorfuStoreShimTest
+          path: ~/.m2
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
@@ -76,7 +76,7 @@ jobs:
       - name: Cache local Maven repository
         uses: actions/cache@v2
         with:
-          path: ~/.m2/repositoryCorfuStoreShimTest
+          path: ~/.m2
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
