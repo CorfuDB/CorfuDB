@@ -9,6 +9,11 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.6.0
+      with:
+        access_token: ${{ github.token }}
+
     - name: Cache local Maven repository
       uses: actions/cache@v2
       with:
@@ -31,6 +36,11 @@ jobs:
 
       steps:
       - uses: actions/checkout@v2
+
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.6.0
+        with:
+          access_token: ${{ github.token }}
 
       - name: Cache local Maven repository
         uses: actions/cache@v2
@@ -57,6 +67,11 @@ jobs:
 
       steps:
       - uses: actions/checkout@v2
+
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.6.0
+        with:
+          access_token: ${{ github.token }}
 
       - name: Cache local Maven repository
         uses: actions/cache@v2
