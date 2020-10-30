@@ -86,22 +86,22 @@ public class CorfuTestParameters {
     public CorfuTestParameters(){
 
         // Timeouts
-        TIMEOUT_VERY_SHORT = Duration.of(100, MILLIS);
-        TIMEOUT_SHORT = Duration.of(1, SECONDS);
-        TIMEOUT_NORMAL = Duration.of(10, SECONDS);
+        TIMEOUT_VERY_SHORT = Duration.of(1, SECONDS);
+        TIMEOUT_SHORT = Duration.of(5, SECONDS);
+        TIMEOUT_NORMAL = Duration.of(20, SECONDS);
         TIMEOUT_LONG = Duration.of(2, MINUTES);
 
         // Iterations
-        NUM_ITERATIONS_VERY_LOW = 10;
-        NUM_ITERATIONS_LOW = 100;
-        NUM_ITERATIONS_MODERATE = 1000;
-        NUM_ITERATIONS_LARGE = 10_000;
+        NUM_ITERATIONS_VERY_LOW = 1;
+        NUM_ITERATIONS_LOW = 10;
+        NUM_ITERATIONS_MODERATE = 100;
+        NUM_ITERATIONS_LARGE = 1_000;
 
         // Concurrency
         CONCURRENCY_ONE = 1;
         CONCURRENCY_TWO = 2;
-        CONCURRENCY_SOME = 5;
-        CONCURRENCY_LOTS = 100;
+        CONCURRENCY_SOME = 3;
+        CONCURRENCY_LOTS = 25;
 
         // Filesystem
         TEST_TEMP_DIR = com.google.common.io.Files.createTempDir().getAbsolutePath();
