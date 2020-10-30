@@ -78,13 +78,12 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
 
         servers.forEach(server -> {
             if (server.getHandler() != null){
-                Set<CorfuMsgType> handledTypes = server.getHandler().getHandledTypes();
-                handledTypes.forEach(handledType -> handlerMap.put(handledType, server));
+                server.getHandler().getHandledTypes().forEach(handledType -> handlerMap.put(handledType, server));
             }
 
             if (server.getHandlerMethods() != null){
-                Set<RequestPayloadMsg.PayloadCase> protoHandledTypes = server.getHandlerMethods().getHandledTypes();
-                protoHandledTypes.forEach(handledType -> requestTypeHandlerMap.put(handledType, server));
+                server.getHandlerMethods().getHandledTypes().forEach(handledType ->
+                        requestTypeHandlerMap.put(handledType, server));
             }
         });
     }

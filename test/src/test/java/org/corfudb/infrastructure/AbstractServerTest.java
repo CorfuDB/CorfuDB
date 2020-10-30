@@ -119,7 +119,7 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         requestCounter.set(0);
     }
 
-
+    // TODO(Chetan): This method is essentially not used. Get rid of this?
     public CorfuMsg getLastMessage() {
         if (router.getResponseMessages().size() == 0) return null;
         return router.getResponseMessages().get(router.getResponseMessages().size() - 1);
