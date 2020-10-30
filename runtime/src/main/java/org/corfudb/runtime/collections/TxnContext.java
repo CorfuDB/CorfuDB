@@ -14,12 +14,19 @@ import org.corfudb.runtime.view.TableRegistry;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+
+import static org.corfudb.runtime.collections.QueryOptions.DEFAULT_OPTIONS;
 
 /**
  * TxnContext is the access layer for binding all the CorfuStore CRUD operations.
@@ -88,6 +95,11 @@ public class TxnContext implements AutoCloseable {
         if (!table.getNamespace().equals(namespace)) {
             throw new IllegalArgumentException("TxnContext can't apply table from namespace "
                     + table.getNamespace() + " to transaction on namespace " + namespace);
+        }
+        if (!TransactionalContext.isInTransaction()) {
+            throw new IllegalStateException( // Do not allow transactions after commit() or abort()
+                    "TxnContext cannot be used after a transaction has ended on "+
+                    table.getFullyQualifiedTableName());
         }
         txnType |= WRITE_ONLY;
         tablesInTxn.add(table);
@@ -327,6 +339,102 @@ public class TxnContext implements AutoCloseable {
         table.getMetrics().incNumScans();
         return table.scanAndFilterByEntry(entryPredicate);
     }
+
+    /**
+     * Execute a join of 2 tables.
+     *
+     * @param table1         First table in the join query.
+     * @param table2         Second table to join with the first.
+     * @param query1         Predicate to filter entries in table 1.
+     * @param query2         Predicate to filter entries in table 2.
+     * @param joinPredicate  Predicate to filter entries during the join.
+     * @param joinFunction   Function to merge entries.
+     * @param joinProjection Project the merged entries.
+     * @param <V1>           Type of Value in table 1.
+     * @param <V2>           Type of Value in table 2.
+     * @param <T>            Type of resultant value after merging type V and type W.
+     * @param <U>            Type of value projected from T.
+     * @return Result of query.
+     */
+    @Nonnull
+    public <K1 extends Message, K2 extends Message,
+            V1 extends Message, V2 extends Message,
+            M1 extends Message, M2 extends Message, T, U>
+    QueryResult<U> executeJoinQuery(
+            @Nonnull final Table<K1, V1, M1> table1,
+            @Nonnull final Table<K2, V2, M2> table2,
+            @Nonnull final Predicate<CorfuStoreEntry<K1, V1, M1>> query1,
+            @Nonnull final Predicate<CorfuStoreEntry<K2, V2, M2>> query2,
+            @Nonnull final BiPredicate<V1, V2> joinPredicate,
+            @Nonnull final BiFunction<V1, V2, T> joinFunction,
+            final Function<T, U> joinProjection) {
+        return executeJoinQuery(table1, table2, query1, query2,
+                DEFAULT_OPTIONS, DEFAULT_OPTIONS, joinPredicate,
+                joinFunction, joinProjection);
+    }
+
+    /**
+     * Execute a join of 2 tables.
+     *
+     * @param table1         First table object.
+     * @param table2         Second table to join with the first one.
+     * @param query1         Predicate to filter entries in table 1.
+     * @param query2         Predicate to filter entries in table 2.
+     * @param queryOptions1  Query options to transform table 1 filtered values.
+     * @param queryOptions2  Query options to transform table 2 filtered values.
+     * @param joinPredicate  Predicate to filter entries during the join.
+     * @param joinFunction   Function to merge entries.
+     * @param joinProjection Project the merged entries.
+     * @param <V1>           Type of Value in table 1.
+     * @param <V2>           Type of Value in table 2.
+     * @param <R>            Type of projected values from table 1 from type V.
+     * @param <S>            Type of projected values from table 2 from type W.
+     * @param <T>            Type of resultant value after merging type R and type S.
+     * @param <U>            Type of value projected from T.
+     * @return Result of query.
+     */
+    @Nonnull
+    public <K1 extends Message, K2 extends Message,
+            V1 extends Message, V2 extends Message,
+            M1 extends Message, M2 extends Message,
+            R, S, T, U>
+    QueryResult<U> executeJoinQuery(
+            @Nonnull final Table<K1, V1, M1> table1,
+            @Nonnull final Table<K2, V2, M2> table2,
+            @Nonnull final Predicate<CorfuStoreEntry<K1, V1, M1>> query1,
+            @Nonnull final Predicate<CorfuStoreEntry<K2, V2, M2>> query2,
+            @Nonnull final QueryOptions<K1, V1, M1, R> queryOptions1,
+            @Nonnull final QueryOptions<K2, V2, M2, S> queryOptions2,
+            @Nonnull final BiPredicate<R, S> joinPredicate,
+            @Nonnull final BiFunction<R, S, T> joinFunction,
+            final Function<T, U> joinProjection) {
+        applyWritesForReadOnTable(table1);
+        table1.getMetrics().incNumScans();
+        applyWritesForReadOnTable(table1);
+        table1.getMetrics().incNumScans();
+        return Query.executeJoinQuery(table1, table2,
+                query1, query2, queryOptions1,
+                queryOptions2, joinPredicate, joinFunction, joinProjection);
+    }
+
+    /**
+     * Return all the Queue entries ordered by their parent transaction.
+     *
+     * Note that the key in these entries would be the CorfuQueueIdMsg.
+     *
+     * @param table Table< K, V, M > object aka queue on which the scan must be done.
+     * @return Collection of filtered entries.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    List<CorfuStoreEntry<K, V, M>> entryList(@Nonnull final Table<K, V, M> table) {
+        applyWritesForReadOnTable(table);
+        /*
+        table.getMetrics().incNumScans();
+         */
+        return table.scanAndFilterByEntry(record -> true);
+    }
+
+    /** -------------------------- internal private methods ------------------------------*/
 
     /**
      * Apply all pending writes (if any) to serve read queries.
