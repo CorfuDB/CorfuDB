@@ -119,7 +119,6 @@ public class CorfuQueue {
 
         /**
          * @param from - the CorfuQueueIdMsg protobuf to convert from
-         * @throws InvalidProtocolBufferException - invalid set of bytes
          */
         public CorfuRecordId(CorfuQueueIdMsg from) {
             this.txSequence = from.getTxSequence();

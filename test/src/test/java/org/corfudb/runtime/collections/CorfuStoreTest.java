@@ -102,7 +102,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                     .setEventTime(i)
                     .build());
 
-            tx.put(table, uuids.get(i), events.get(i), metadata);
+            tx.putRecord(table, uuids.get(i), events.get(i), metadata);
         }
         tx.commit();
 

@@ -194,9 +194,9 @@ public class LockStore {
     private void create(LockId lockId, LockData lockMetaData, CorfuStoreMetadata.Timestamp timestamp) throws LockStoreException {
         try {
             log.info("LockStore: create lock record for : {}", lockId.getLockName());
-            corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp))
-                    .put(table, lockId, lockMetaData, null)
-                    .commit();
+            TxnContext txnContext = corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp));
+            txnContext.putRecord(table, lockId, lockMetaData, null);
+            txnContext.commit();
         } catch (Exception e) {
             log.error("Lock: {} Exception during create.", lockId, e);
             throw new LockStoreException("Exception while creating lock " + lockId, e);
@@ -213,12 +213,9 @@ public class LockStore {
      */
     private void update(LockId lockId, LockData lockMetaData, CorfuStoreMetadata.Timestamp timestamp) throws LockStoreException {
         try {
-            corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp))
-                    .put(table,
-                         lockId,
-                         lockMetaData,
-                         null)
-                    .commit();
+            TxnContext txn = corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp));
+            txn.putRecord(table, lockId, lockMetaData, null);
+            txn.commit();
         } catch (Exception e) {
             log.error("Lock: {} Exception during update.", lockId, e);
             throw new LockStoreException("Exception while updating lock " + lockId, e);

@@ -1,10 +1,13 @@
 package org.corfudb.runtime.collections;
 
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.checkerframework.checker.units.qual.K;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.Queue.CorfuQueueIdMsg;
 import org.corfudb.runtime.exceptions.TransactionAlreadyStartedException;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -15,17 +18,16 @@ import org.corfudb.runtime.view.TableRegistry;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.collections.QueryOptions.DEFAULT_OPTIONS;
 
@@ -116,11 +118,9 @@ public class TxnContext implements AutoCloseable {
      * @param <K>   Type of Key.
      * @param <V>   Type of Value.
      * @param <M>   Type of Metadata.
-     * @return TxnContext instance.
      */
-    @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    TxnContext put(@Nonnull Table<K, V, M> table,
+    void putRecord(@Nonnull Table<K, V, M> table,
                    @Nonnull final K key,
                    @Nonnull final V value,
                    @Nullable final M metadata) {
@@ -129,8 +129,66 @@ public class TxnContext implements AutoCloseable {
             table.put(key, value, metadata);
             table.getMetrics().incNumPuts();
         });
-        return this;
     }
+
+    /**
+     *
+     * putRecord into a table using just the tableName with metadata validations.
+     *
+     * @param tableName - full string representation of the table
+     * @param key - the key of the record being inserted
+     * @param value - the payload or value of the record to be inserted
+     * @param metadata - the metadata which will be validated
+     * @param <K> - type of the key or identifier.
+     * @param <V> - type of the value or payload
+     * @param <M> - type of the metadata
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void putRecord(@Nonnull String tableName,
+                   @Nonnull final K key,
+                   @Nonnull final V value,
+                   @Nullable final M metadata) {
+        putRecord(this.getTable(tableName), key, value, metadata);
+    }
+
+    /**
+     * put the value on the specified key create record if it does not exist.
+     * (Recommended api for simple KV records without metadata)
+     *
+     * There are several overloaded flavors of put to support optional fields like
+     * metadata, tableNames and the force set of metadata
+     *
+     * @param table    Table object to perform the create/update on.
+     * @param key      Key of the record.
+     * @param value    Value or payload of the record.
+     * @param <K>      Type of Key.
+     * @param <V>      Type of Value.
+     * @param <M>      Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void putRecord(@Nonnull Table<K, V, M> table,
+                   @Nonnull final K key,
+                   @Nonnull final V value) {
+        putRecord(table, key, value, null);
+    }
+
+    /**
+     * putRecord into a table using opened table object as a simple key-value.
+     *
+     * @param tableName - full string representation of the tableName
+     * @param key - the key of the record being inserted
+     * @param value - the payload or value of the record to be inserted
+     * @param <K> - type of the key or identifier.
+     * @param <V> - type of the value or payload
+     * @param <M> - type of the metadata
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void putRecord(@Nonnull String tableName,
+                   @Nonnull final K key,
+                   @Nonnull final V value) {
+        putRecord(this.getTable(tableName), key, value, null);
+    }
+
 
     /**
      * Merges the delta value with the old value by applying a caller specified BiFunction and writes
@@ -143,11 +201,9 @@ public class TxnContext implements AutoCloseable {
      * @param <K>            Type of Key.
      * @param <V>            Type of Value.
      * @param <M>            Type of Metadata.
-     * @return TxnContext instance
      */
-    @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    TxnContext merge(@Nonnull Table<K, V, M> table,
+    void merge(@Nonnull Table<K, V, M> table,
                      @Nonnull final K key,
                      @Nonnull BiFunction<CorfuRecord<V, M>, CorfuRecord<V,M>, CorfuRecord<V,M>> mergeOperator,
                      @Nonnull final CorfuRecord<V,M> recordDelta) {
@@ -165,7 +221,6 @@ public class TxnContext implements AutoCloseable {
             table.put(key, mergedRecord.getPayload(), mergedRecord.getMetadata());
             table.getMetrics().incNumMerges();
         });
-        return this;
     }
 
     /**
@@ -176,11 +231,9 @@ public class TxnContext implements AutoCloseable {
      * @param <K>   Type of Key.
      * @param <V>   Type of Value.
      * @param <M>   Type of Metadata.
-     * @return TxnContext instance.
      */
-    @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    TxnContext touch(@Nonnull Table<K, V, M> table,
+    void touch(@Nonnull Table<K, V, M> table,
                      @Nonnull final K key) {
         validateTableWrittenIsInNamespace(table);
         operations.add(() -> {
@@ -196,7 +249,20 @@ public class TxnContext implements AutoCloseable {
             }
             table.getMetrics().incNumTouches();
         });
-        return this;
+    }
+
+    /**
+     * touch() a key to generate a conflict on it given tableName.
+     *
+     * @param tableName    Table object to perform the touch() in.
+     * @param key          Key of the record.
+     * @param <K>          Type of Key.
+     * @throws UnsupportedOperationException if attempted on a non-existing object.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void touch(@Nonnull String tableName,
+                      @Nonnull final K key) {
+        this.touch(getTable(tableName), key);
     }
 
     /**
@@ -204,13 +270,11 @@ public class TxnContext implements AutoCloseable {
      * directly into the underlying stream bypassing the object layer entirely.
      * @param streamId - UUID of the stream on which the logUpdate is being added to.
      * @param updateEntry - the actual State Machine Replicated entry.
-     * @return
      */
-    public TxnContext logUpdate(UUID streamId, SMREntry updateEntry) {
+    public void logUpdate(UUID streamId, SMREntry updateEntry) {
         operations.add(() -> {
             TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntry);
         });
-        return this;
     }
 
     /**
@@ -220,17 +284,27 @@ public class TxnContext implements AutoCloseable {
      * @param <K>       Type of Key.
      * @param <V>       Type of Value.
      * @param <M>       Type of Metadata.
-     * @return TxnContext instance.
      */
-    @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    TxnContext clear(@Nonnull Table<K, V, M> table) {
+    void clear(@Nonnull Table<K, V, M> table) {
         validateTableWrittenIsInNamespace(table);
         operations.add(() -> {
             table.clearAll();
             table.getMetrics().incNumClears();
         });
-        return this;
+    }
+
+    /**
+     * Clears the entire table given the table name.
+     *
+     * @param tableName Full table name of table to be cleared.
+     * @param <K>   Type of Key.
+     * @param <V>   Type of Value.
+     * @param <M>   Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void clear(@Nonnull String tableName) {
+        this.clear(getTable(tableName));
     }
 
     /**
@@ -253,8 +327,23 @@ public class TxnContext implements AutoCloseable {
         return this;
     }
 
-    /*************************** Queue API ***************************************
+    /**
+     * Deletes the specified key on a table given its full name.
+     *
+     * @param tableName Table object to perform the delete on.
+     * @param key       Key of the record to be deleted.
+     * @param <K>       Type of Key.
+     * @param <V>       Type of Value.
+     * @param <M>       Type of Metadata.
      */
+    public <K extends Message, V extends Message, M extends Message>
+    void delete(@Nonnull String tableName,
+                @Nonnull final K key) {
+        this.delete(getTable(tableName), key);
+    }
+
+    /*************************** Queue API ***************************************/
+
     /**
      * Enqueue a message object into the CorfuQueue.
      *
@@ -267,16 +356,17 @@ public class TxnContext implements AutoCloseable {
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    Queue.CorfuQueueIdMsg enqueue(@Nonnull Table<K, V, M> table,
-                                  @Nonnull final V record) {
+    K enqueue(@Nonnull Table<K, V, M> table,
+              @Nonnull final V record) {
         validateTableWrittenIsInNamespace(table);
-        /*
-        table.getMetrics().incNumDeletes();
-        operations.add(() -> table.deleteRecord(key));
-        return this;
-
-         */
-        return Queue.CorfuQueueIdMsg.newBuilder().build();
+        applyWritesForReadOnTable(table);
+        /********* TEMPORARY FIX UNTIL REAL IMPLEMENTATION********/
+        UUID todoReplaceMe = UUID.randomUUID();
+        CorfuQueueIdMsg key = CorfuQueueIdMsg.newBuilder()
+                .setEntryId(todoReplaceMe.timestamp())
+                .setTxSequence(todoReplaceMe.clockSequence()).build();
+        this.putRecord(table, (K)key, record);
+        return (K) key;
     }
 
     /**
@@ -306,6 +396,22 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
+     * get the full record from the table given a key.
+     * If this is invoked on a Read-Your-Writes transaction, it will result in starting a corfu transaction
+     * and applying all the updates done so far.
+     *
+     * @param tableName Table object to retrieve the record from
+     * @param key   Key of the record.
+     * @return CorfuStoreEntry<Key, Value, Metadata> instance.
+     */
+    @Nonnull
+    public <K extends Message, V extends Message, M extends Message>
+    CorfuStoreEntry getRecord(@Nonnull final String tableName,
+                              @Nonnull final K key) {
+        return this.getRecord(getTable(tableName), key);
+    }
+
+    /**
      * Query by a secondary index.
      *
      * @param table Table object.
@@ -327,6 +433,25 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
+     * Query by a secondary index given just the full tableName.
+     *
+     * @param tableName fullyQualified name of the table.
+     * @param indexName Index name. In case of protobuf-defined secondary index it is the field name.
+     * @param indexKey  Key to query.
+     * @param <K>       Type of Key.
+     * @param <V>       Type of Value.
+     * @param <I>       Type of index/secondary key.
+     * @return Result of the query.
+     */
+    @Nonnull
+    public <K extends Message, V extends Message, M extends Message, I extends Comparable<I>>
+    List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull String tableName,
+                                              @Nonnull final String indexName,
+                                              @Nonnull final I indexKey) {
+        return this.getByIndex(this.getTable(tableName), indexName, indexKey);
+    }
+
+    /**
      * Gets the count of records in the table at a particular timestamp.
      *
      * @param table - the table whose count is requested.
@@ -337,6 +462,16 @@ public class TxnContext implements AutoCloseable {
         applyWritesForReadOnTable(table);
         table.getMetrics().incNumCounts();
         return table.count();
+    }
+
+    /**
+     * Gets the count of records in the table at a particular timestamp.
+     *
+     * @param tableName - the namespace+table name of the table.
+     * @return Count of records.
+     */
+    public int count(@Nonnull final String tableName) {
+        return this.count(this.getTable(tableName));
     }
 
     /**
@@ -353,6 +488,17 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
+     * Get all the keys of a table just given its tableName.
+     *
+     * @param tableName fullyQualifiedTableName whose keys are requested.
+     * @return keyset of the table
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    Set<K> keySet(@Nonnull final String tableName) {
+        return this.keySet(this.getTable(tableName));
+    }
+
+    /**
      * Scan and filter by entry.
      *
      * @param table Table< K, V, M > object on which the scan must be done.
@@ -365,6 +511,19 @@ public class TxnContext implements AutoCloseable {
         applyWritesForReadOnTable(table);
         table.getMetrics().incNumScans();
         return table.scanAndFilterByEntry(entryPredicate);
+    }
+
+    /**
+     * Scan and filter by entry.
+     *
+     * @param tableName table object to filter the entries on.
+     * @param entryPredicate Predicate to filter the entries.
+     * @return Collection of filtered entries.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    List<CorfuStoreEntry<K, V, M>> executeQuery(@Nonnull final String tableName,
+                                                @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
+        return this.executeQuery(this.getTable(tableName), entryPredicate);
     }
 
     /**
@@ -445,6 +604,37 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
+     * Test if a record exists in a table.
+     *
+     * @param table - table object to test if record exists
+     * @param key - key or identifier to test for existence.
+     * @param <K> - type of the key
+     * @param <V> - type of payload or value
+     * @param <M> - type of metadata
+     * @return true if record exists and false if record does not exist.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    boolean isExists(@Nonnull Table<K, V, M> table, @Nonnull final K key) {
+        CorfuStoreEntry<K, V, M> record = getRecord(table, key);
+        return record.getPayload() != null;
+    }
+
+    /**
+     * Variant of isExists that works on tableName instead of the table object.
+     *
+     * @param tableName - namespace + tablename of table being tested
+     * @param key - key to check for existence
+     * @param <K> - type of the key
+     * @param <V> - type of payload or value
+     * @param <M> - type of metadata
+     * @return - true if record exists and false if record does not exist.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    boolean isExists(@Nonnull String tableName, @Nonnull final K key) {
+        return this.isExists(getTable(tableName), key);
+    }
+
+    /**
      * Return all the Queue entries ordered by their parent transaction.
      *
      * Note that the key in these entries would be the CorfuQueueIdMsg.
@@ -455,9 +645,7 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     List<CorfuStoreEntry<K, V, M>> entryList(@Nonnull final Table<K, V, M> table) {
         applyWritesForReadOnTable(table);
-        /*
-        table.getMetrics().incNumScans();
-         */
+        /***** TODO FIX ME WITH REAL IMPLEMENTATION *******/
         return table.scanAndFilterByEntry(record -> true);
     }
 

@@ -262,7 +262,7 @@ public class CorfuStoreBrowser {
                     TableName dummyKey = TableName.newBuilder()
                             .setNamespace(Integer.toString(itemsRemaining))
                             .setTableName(Integer.toString(j)).build();
-                    tx.put(table, dummyKey, dummyVal, dummyVal);
+                    tx.putRecord(table, dummyKey, dummyVal, dummyVal);
                 }
                 tx.commit();
             }
