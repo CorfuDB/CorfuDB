@@ -2,10 +2,11 @@ package org.corfudb.samples;
 
 import com.google.protobuf.Message;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 import samples.protobuf.PersonProfile.Name;
@@ -71,32 +72,36 @@ public class CorfuStoreSample {
                 null,
                 TableOptions.builder().build());
 
-        corfuStore.txn(namespace)
-                .put(table,
-                        Name.newBuilder().setFirstName("a").setLastName("x").build(),
-                        Car.newBuilder().setColor("red").build(),
-                        null)
-                .put(table,
+        try (TxnContext tx = corfuStore.txn(namespace)) {
+            tx.putRecord(table,
+                    Name.newBuilder().setFirstName("a").setLastName("x").build(),
+                    Car.newBuilder().setColor("red").build(),
+                    null);
+            tx.putRecord(table,
                     Name.newBuilder().setFirstName("b").setLastName("y").build(),
                     Car.newBuilder().setColor("blue").build(),
-                    null)
-                // Transaction is begun and ended here.
-                .commit();
+                    null);
+            // Transaction is begun and ended here.
+            tx.commit();
+        } catch (RuntimeException ex) {
+            System.out.println("Transaction hit an error"+ex);
+        }
 
-        CorfuRecord record = corfuStore.query(namespace)
-                .getRecord(tableName,
-                        Name.newBuilder().setFirstName("a").setLastName("x").build());
-        System.out.println("Car = " + record.getPayload());
+        try (TxnContext tx = corfuStore.txn(namespace)) {
+            CorfuStoreEntry record = tx.getRecord(tableName,
+                    Name.newBuilder().setFirstName("a").setLastName("x").build());
+            System.out.println("Car = " + record.getPayload());
+        }
 
-        corfuStore.txn(namespace)
-                .put(table,
-                        Name.newBuilder().setFirstName("a").setLastName("x").build(),
-                        Car.newBuilder().setColor("silver").build(),
-                        null)
-                .commit();
-        record = corfuStore.query(namespace)
-                .getRecord(tableName,
-                        Name.newBuilder().setFirstName("a").setLastName("x").build());
-        System.out.println("Car = " + record.getPayload());
+        try (TxnContext tx = corfuStore.txn(namespace)) {
+            tx.putRecord(table,
+                    Name.newBuilder().setFirstName("a").setLastName("x").build(),
+                    Car.newBuilder().setColor("silver").build(),
+                    null);
+            CorfuStoreEntry record = tx.getRecord(tableName,
+                    Name.newBuilder().setFirstName("a").setLastName("x").build());
+            System.out.println("Car = " + record.getPayload());
+            tx.commit();
+        }
     }
 }

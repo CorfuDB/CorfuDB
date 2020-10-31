@@ -14,6 +14,7 @@ import com.google.gson.JsonObject;
 public class TableMetrics {
     private final String tableName;
     private final Counter numPuts;
+    private final Counter numEnqueues;
     private final Counter numMerges;
     private final Counter numTouches;
     private final Counter numDeletes;
@@ -32,6 +33,10 @@ public class TableMetrics {
 
     public void incNumPuts() {
         numPuts.inc();
+    }
+
+    public void incNumEnqueues() {
+        numEnqueues.inc();
     }
 
     public void incNumMerges() {
@@ -96,6 +101,7 @@ public class TableMetrics {
     TableMetrics(String fullTableName, MetricRegistry registry) {
         this.tableName = fullTableName;
         this.numPuts = registry.counter(fullTableName+"_numPuts");
+        this.numEnqueues = registry.counter(fullTableName+"_numEnqueues");
         this.numMerges = registry.counter(fullTableName+"_numMerges");
         this.numTouches = registry.counter(fullTableName+"_numTouches");
         this.numDeletes = registry.counter(fullTableName+"_numDeletes");
@@ -121,6 +127,7 @@ public class TableMetrics {
         JsonObject json = new JsonObject();
         json.addProperty("tableName", tableName);
         json.addProperty("numPuts", numPuts.getCount());
+        json.addProperty("numEnqueues", numEnqueues.getCount());
         json.addProperty("numMerges", numMerges.getCount());
         json.addProperty("numTouches", numTouches.getCount());
         json.addProperty("numGets", numGets.getCount());

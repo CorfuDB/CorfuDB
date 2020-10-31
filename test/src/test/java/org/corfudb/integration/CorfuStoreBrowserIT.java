@@ -106,8 +106,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
             .setLsb(metadataUuid)
             .build();
         TxnContext tx = store.txn(namespace);
-        tx.put(table1, uuidKey, uuidVal, metadata)
-            .commit();
+        tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.commit();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -206,8 +206,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         SampleSchema.Uuid uuidMeta = SampleSchema.Uuid.newBuilder().setLsb(metaUuid)
             .setMsb(metaUuid).build();
         TxnContext tx = store.txn(namespace);
-        tx.put(table, uuidKey, firewallRuleVal, uuidMeta)
-            .commit();
+        tx.putRecord(table, uuidKey, firewallRuleVal, uuidMeta);
+        tx.commit();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -272,8 +272,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 .setLsb(valueUuid)
                 .build();
         TxnContext tx = store.txn(namespace);
-        tx.put(table, uuidKey, uuidVal, null)
-                .commit();
+        tx.putRecord(table, uuidKey, uuidVal, null);
+        tx.commit();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -335,7 +335,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 .setLsb(metadataUuid)
                 .build();
         TxnContext tx = store.txn(namespace);
-        tx.put(table, uuidKey, uuidVal, metadata).commit();
+        tx.putRecord(table, uuidKey, uuidVal, metadata);
+        tx.commit();
         // Todo: Remove this once serializers move into the runtime
         Serializers.clearCustomSerializers();
         runtime.shutdown();

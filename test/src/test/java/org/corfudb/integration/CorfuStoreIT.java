@@ -112,8 +112,8 @@ public class CorfuStoreIT extends AbstractIT {
                 .setLsb(metadataUuid)
                 .build();
         TxnContext tx = store.txn("namespace");
-        tx.put(table, uuidKey, uuidVal, metadata)
-                .commit();
+        tx.putRecord(table, uuidKey, uuidVal, metadata);
+        tx.commit();
         CorfuRecord record = table.get(uuidKey);
         assertThat(record.getPayload()).isEqualTo(uuidVal);
         assertThat(record.getMetadata()).isEqualTo(metadata);
@@ -166,8 +166,8 @@ public class CorfuStoreIT extends AbstractIT {
                 .setCreateTimestamp(keyUuid)
                 .build();
         TxnContext tx = store.txn(namespace);
-        tx.put(table, uuidKey, uuidVal, metadata)
-                .commit();
+        tx.putRecord(table, uuidKey, uuidVal, metadata);
+        tx.commit();
 
         runtime.shutdown();
 
@@ -243,7 +243,9 @@ public class CorfuStoreIT extends AbstractIT {
         CorfuRecord<Uuid, ManagedResources> record = store3.query(namespace).getRecord(tableName, uuidKey);
         assertThat(record.getMetadata().getCreateTimestamp()).isEqualTo(newMetadataUuid);
 
-        store3.txn(namespace).put(table1, uuidKey, uuidVal, metadata).commit();
+        tx = store3.txn(namespace);
+        tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.commit();
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
@@ -341,7 +343,8 @@ public class CorfuStoreIT extends AbstractIT {
         for (int i = numRecords; i > 0; --i) {
             TxnContext tx = store.txn(namespace);
             Uuid uuidKey = Uuid.newBuilder().setMsb(aLong+i).setLsb(aLong+i).build();
-            tx.put(table, uuidKey, uuidVal, metadata).commit();
+            tx.putRecord(table, uuidKey, uuidVal, metadata);
+            tx.commit();
         }
         final int TEN = 10;
         Set<Uuid> keys = store.query(namespace).keySet(tableName, null);
@@ -407,16 +410,16 @@ public class CorfuStoreIT extends AbstractIT {
         SampleSchema.EventInfo value = SampleSchema.EventInfo.newBuilder().setName("simpleValue").build();
 
         long timestamp = System.currentTimeMillis();
-        corfuStore.txn(nsxManager)
-                .put(table, key, value,
+        TxnContext tx = corfuStore.txn(nsxManager);
+        tx.putRecord(table, key, value,
                         ManagedResources.newBuilder()
-                                .setCreateTimestamp(timestamp).build())
-                .commit();
+                                .setCreateTimestamp(timestamp).build());
+        tx.commit();
 
-        corfuStore.txn(nsxManager)
-                .put(table, key, value,
-                        ManagedResources.newBuilder().setCreateUser("CreateUser").build())
-                .commit();
+        tx = corfuStore.txn(nsxManager);
+        tx.putRecord(table, key, value,
+                ManagedResources.newBuilder().setCreateUser("CreateUser").build());
+        tx.commit();
 
         corfuStore.deleteTable(nsxManager, tableName);
 
@@ -448,10 +451,10 @@ public class CorfuStoreIT extends AbstractIT {
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
 
-        corfuStore.txn(nsxManager)
-                .put(tableV2, value, value,
-                        ManagedResources.newBuilder().setCreateUser("CreateUser").build())
-                .commit();
+        tx = corfuStore.txn(nsxManager);
+        tx.putRecord(tableV2, value, value,
+                ManagedResources.newBuilder().setCreateUser("CreateUser").build());
+        tx.commit();
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }

@@ -64,7 +64,9 @@ public class LogUpdateAPITest extends AbstractViewTest {
             Uuid key = Uuid.newBuilder()
                     .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
                     .build();
-            corfuStore1.txn(namespace).put(tableA, key, key, key).commit();
+            TxnContext txnContext = corfuStore1.txn(namespace);
+            txnContext.putRecord(tableA, key, key, key);
+            txnContext.commit();
         }
 
         //start runtime 2, open A, B as a stream and C as an UFO
@@ -104,7 +106,7 @@ public class LogUpdateAPITest extends AbstractViewTest {
             Uuid key = Uuid.newBuilder()
                     .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
                     .build();
-            txnContext.put(tableC2, key, key, key);
+            txnContext.putRecord(tableC2, key, key, key);
             OpaqueEntry opaqueEntry = iterator.next();
             for( SMREntry smrEntry : opaqueEntry.getEntries().get(uuidA)) {
                     txnContext.logUpdate(CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName()), smrEntry);
