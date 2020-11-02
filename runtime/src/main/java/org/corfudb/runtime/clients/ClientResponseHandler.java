@@ -89,11 +89,8 @@ public class ClientResponseHandler {
             ErrorCase errorCase = response.getPayload().getServerError().getErrorCase();
             if (errorHandlerMap.containsKey(errorCase)) {
                 try{
-                    // TODO: should we remove this clause?
-                    Object ret = errorHandlerMap.get(errorCase).handle(response, ctx, router);
-                    if (ret != null) {
-                        router.completeRequest(requestId, ret);
-                    }
+                    // For errors, we always want to completeExceptionally
+                    errorHandlerMap.get(errorCase).handle(response, ctx, router);
                 } catch (Throwable e) {
                     router.completeExceptionally(requestId, e);
                 }
@@ -105,7 +102,6 @@ public class ClientResponseHandler {
                     router.completeRequest(requestId, ret);
                 }
             } catch (Throwable e) {
-                // TODO: same reason, should we remove this clause?
                 router.completeExceptionally(requestId, e);
             }
             return true;
@@ -133,11 +129,10 @@ public class ClientResponseHandler {
                     try {
                         if (Modifier.isStatic(method.getModifiers())) {
                             MethodHandle mh = caller.unreflect(method);
-                            MethodType mt = mh.type().changeParameterType(0, ResponseMsg.class);
                             handlerMap.put(handler.type(), (Handler) LambdaMetafactory
                                     .metafactory(caller, "handle",
                                             MethodType.methodType(Handler.class),
-                                            mt, mh, mh.type())
+                                            mh.type(), mh, mh.type())
                                     .getTarget().invokeExact());
                         } else {
                             // instance method, so we need to capture the type.
@@ -145,7 +140,6 @@ public class ClientResponseHandler {
                                     .methodType(method.getReturnType(), method.getParameterTypes());
                             MethodHandle mh = caller.findVirtual(o.getClass(), method.getName(), mt);
                             MethodType mtGeneric = mh.type()
-                                    .changeParameterType(1, ResponseMsg.class)
                                     .changeReturnType(Object.class);
                             handlerMap.put(handler.type(), (Handler) LambdaMetafactory
                                     .metafactory(caller, "handle",
@@ -184,11 +178,10 @@ public class ClientResponseHandler {
                     try {
                         if (Modifier.isStatic(method.getModifiers())) {
                             MethodHandle mh = caller.unreflect(method);
-                            MethodType mt = mh.type().changeParameterType(0, ResponseMsg.class);
                             errorHandlerMap.put(handler.type(), (Handler) LambdaMetafactory
                                     .metafactory(caller, "handle",
                                             MethodType.methodType(Handler.class),
-                                            mt, mh, mh.type())
+                                            mh.type(), mh, mh.type())
                                     .getTarget().invokeExact());
                         } else {
                             // instance method, so we need to capture the type.
@@ -196,7 +189,6 @@ public class ClientResponseHandler {
                                     .methodType(method.getReturnType(), method.getParameterTypes());
                             MethodHandle mh = caller.findVirtual(o.getClass(), method.getName(), mt);
                             MethodType mtGeneric = mh.type()
-                                    .changeParameterType(1, ResponseMsg.class)
                                     .changeReturnType(Object.class);
                             errorHandlerMap.put(handler.type(), (Handler) LambdaMetafactory
                                     .metafactory(caller, "handle",

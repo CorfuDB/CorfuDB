@@ -285,10 +285,11 @@ public class BaseHandler implements IClient {
         ByteString bs = msg.getPayload().getServerError().getUnknownError().getThrowable();
         byte[] bytes = new byte[bs.size()];
         bs.copyTo(bytes, 0);
-        ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
-        ObjectInputStream ois = new ObjectInputStream(bis);
-
-        throw (Throwable) ois.readObject();
+        try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)) {
+            try (ObjectInputStream ois = new ObjectInputStream(bis)) {
+                throw (Throwable) ois.readObject();
+            }
+        }
     }
 
     /**

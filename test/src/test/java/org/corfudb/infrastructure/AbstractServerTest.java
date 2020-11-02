@@ -3,6 +3,7 @@ package org.corfudb.infrastructure;
 import lombok.Getter;
 import org.assertj.core.api.Assertions;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.CorfuRuntime;
@@ -13,11 +14,11 @@ import org.corfudb.runtime.clients.LogUnitHandler;
 import org.corfudb.runtime.clients.ManagementHandler;
 import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
+import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
 
-import java.util.AbstractMap;
-import java.util.AbstractMap.SimpleEntry;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -72,6 +73,18 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
                 .setEpoch(0L);
         clientRouter.setClientID(testClientId);
         return clientRouter.sendMessageAndGetCompletable(msg);
+    }
+
+    public <T> CompletableFuture<T> sendRequest(RequestPayloadMsg msg,
+                                                boolean ignoreClusterId, boolean ignoreEpoch) {
+
+    return clientRouter.sendRequestAndGetCompletable(
+        msg,
+        0L,
+        CorfuProtocolCommon.getUuidMsg(Layout.INVALID_CLUSTER_ID),
+        CorfuMessage.PriorityLevel.NORMAL,
+        ignoreClusterId,
+        ignoreEpoch);
     }
 
     public <T> CompletableFuture<T> sendRequestWithEpoch(CorfuMsg msg, long epoch) {

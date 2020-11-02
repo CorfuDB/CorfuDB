@@ -23,6 +23,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -209,8 +210,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object>
         this.eventLoopGroup = eventLoopGroup;
         this.connectionFuture = new CompletableFuture<>();
         this.handlerMap = new ConcurrentHashMap<>();
-        this.responseHandlerMap = new ConcurrentHashMap<>();
-        this.errorHandlerMap = new ConcurrentHashMap<>();
+        this.responseHandlerMap = new EnumMap<>(ResponsePayloadMsg.PayloadCase.class);
+        this.errorHandlerMap = new EnumMap<>(ServerErrorMsg.ErrorCase.class);
 
         // Set timer mapping
         ImmutableMap.Builder<CorfuMsgType, String> mapBuilder = ImmutableMap.builder();

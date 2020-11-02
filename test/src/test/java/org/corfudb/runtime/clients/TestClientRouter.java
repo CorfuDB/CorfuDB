@@ -2,6 +2,8 @@ package org.corfudb.runtime.clients;
 
 import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
+import io.netty.buffer.ByteBufOutputStream;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.NonNull;
@@ -15,14 +17,16 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.proto.Common;
-import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +35,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
@@ -60,6 +66,11 @@ public class TestClientRouter implements IClientRouter {
      * The handlers registered to this router.
      */
     public Map<ResponsePayloadMsg.PayloadCase, IClient> responseHandlerMap;
+
+    /**
+     * The handlers registered to this router for server errors.
+     */
+    public Map<ServerErrorMsg.ErrorCase, IClient> errorHandlerMap;
 
     /**
      * The outstanding requests on this router.
@@ -126,7 +137,8 @@ public class TestClientRouter implements IClientRouter {
     public TestClientRouter(TestServerRouter serverRouter) {
         clientList = new ArrayList<>();
         handlerMap = new ConcurrentHashMap<>();
-        responseHandlerMap = new ConcurrentHashMap<>();
+        responseHandlerMap = new EnumMap<>(ResponsePayloadMsg.PayloadCase.class);
+        errorHandlerMap = new EnumMap<>(ServerErrorMsg.ErrorCase.class);
         outstandingRequests = new ConcurrentHashMap<>();
         requestID = new AtomicLong();
         clientID = CorfuRuntime.getStreamID("testClient");
@@ -150,13 +162,19 @@ public class TestClientRouter implements IClientRouter {
         } else if (o instanceof ResponseMsg) {
             ResponseMsg m = (ResponseMsg) o;
             if (validateClientId(m.getHeader().getClientId())) {
+                ResponsePayloadMsg.PayloadCase payloadCase = m.getPayload().getPayloadCase();
                 IClient handler = responseHandlerMap.get(m.getPayload().getPayloadCase());
+
+                if (handler == null && payloadCase.equals(ResponsePayloadMsg.PayloadCase.SERVER_ERROR)) {
+                    handler = errorHandlerMap.get(m.getPayload().getServerError().getErrorCase());
+                }
+
                 if (handler == null){
                     throw new IllegalStateException("Client handler doesn't exists for message: "
                             + m.getPayload().getPayloadCase());
+                } else {
+                    handler.handleMessage(m, null);
                 }
-
-                handler.handleMessage(m, null);
             }
         }
     }
@@ -189,6 +207,14 @@ public class TestClientRouter implements IClientRouter {
                     .forEach(x -> {
                         responseHandlerMap.put(x, client);
                         log.trace("Registered {} to handle protobuf messages of type {}", client, x);
+                    });
+        }
+
+        if (!client.getHandledErrors().isEmpty()) {
+            client.getHandledErrors()
+                    .forEach(x -> {
+                        errorHandlerMap.put(x, client);
+                        log.trace("Registered {} to handle server error of type {}", client, x);
                     });
         }
 
@@ -295,15 +321,17 @@ public class TestClientRouter implements IClientRouter {
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequestId, cf);
 
-        // TODO: TestRule and TestServerRouter
         // Evaluate rules.
         if (rules.stream().allMatch(x -> x.evaluate(request, this))) {
-            // Write the message out to the channel
             log.trace(Thread.currentThread().getId() + ":Sent request: {}", request);
-            // No need to simulate serialization for Protobuf
-            serverRouter.sendServerMessage(request, channelContext);
+            // Write the message out to the channel
+            try {
+                RequestMsg requestMsg = simulateSerialization(request);
+                serverRouter.sendServerMessage(requestMsg, channelContext);
+            } catch (IOException e) {
+                log.error("encode: Error during serialization or deserialization!", e);
+            }
         }
-
         // Generate a benchmarked future to measure the underlying request
         final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
             MetricsUtils.stopConditionalContext(roundTripMsgContext);
@@ -383,13 +411,16 @@ public class TestClientRouter implements IClientRouter {
         CorfuMessage.RequestMsg request = CorfuMessage.RequestMsg.newBuilder().setHeader(header)
                 .setPayload(payload).build();
 
-        // TODO: TestRule and TestServerRouter
         // Evaluate rules.
         if (rules.stream().allMatch(x -> x.evaluate(request, this))) {
-            // Write the message out to the channel
             log.trace(Thread.currentThread().getId() + ":Sent request: {}", request);
-            // No need to simulate serialization for Protobuf
-            serverRouter.sendServerMessage(request, channelContext);
+            // Write the message out to the channel
+            try {
+                RequestMsg requestMsg = simulateSerialization(request);
+                serverRouter.sendServerMessage(requestMsg, channelContext);
+            } catch (IOException e) {
+                log.error("encode: Error during serialization or deserialization!", e);
+            }
         }
     }
 
@@ -476,6 +507,20 @@ public class TestClientRouter implements IClientRouter {
         CorfuMsg msg = CorfuMsg.deserialize(oBuf);
         oBuf.release();
         return msg;
+    }
+
+    public RequestMsg simulateSerialization(RequestMsg message) throws IOException {
+        /* simulate serialization/deserialization */
+        ByteBuf oBuf = Unpooled.buffer();
+        try (ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(oBuf)) {
+            message.writeTo(requestOutputStream);
+            oBuf.resetReaderIndex();
+            try (ByteBufInputStream msgInputStream = new ByteBufInputStream(oBuf)) {
+                RequestMsg msg = RequestMsg.parseFrom(msgInputStream);
+                oBuf.release();
+                return msg;
+            }
+        }
     }
 
 }

@@ -130,8 +130,8 @@ public class CorfuProtocolCommon {
     public static StreamsAddressResponse getStreamsAddressResponse(long tail, List<UuidToStreamAddressSpacePairMsg> map) {
         return new StreamsAddressResponse(tail, map.stream()
                 .collect(Collectors.<UuidToStreamAddressSpacePairMsg, UUID, StreamAddressSpace>toMap(
-                        e -> getUUID(e.getStreamUuid()),
-                        e -> getStreamAddressSpace(e.getAddressSpace()))
+                        e -> getUUID(e.getKey()),
+                        e -> getStreamAddressSpace(e.getValue()))
                 ));
     }
 }
