@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-
 import io.netty.channel.ChannelHandlerContext;
 
 import java.lang.invoke.MethodHandles;
@@ -37,6 +36,15 @@ public class ManagementHandler implements IClient, IHandler<ManagementClient> {
     @Getter
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
             .generateHandlers(MethodHandles.lookup(), this);
+
+    /**
+     * For old CorfuMsg, use {@link #msgHandler}
+     * The handler and handlers which implement this client.
+     */
+    @Getter
+    public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this)
+            .generateErrorHandlers(MethodHandles.lookup(), this);
 
 
     @ClientHandler(type = CorfuMsgType.ORCHESTRATOR_RESPONSE)

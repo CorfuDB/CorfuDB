@@ -25,6 +25,7 @@ import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
@@ -376,30 +377,42 @@ public class ManagementViewTest extends AbstractViewTest {
         failureDetected.acquire(2);
 
         log.info("Only allow SERVERS.PORT_0 to manage failures. Prevent the other servers from handling failures.");
-        TestRule testRule = new TestRule()
-                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SEAL)
-                        || corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED))
+
+        TestRule sealTestRule = new TestRule()
+                .requestMatches(msg -> msg.getPayload().getPayloadCase().equals(PayloadCase.SEAL_REQUEST))
+                .drop();
+
+        TestRule failureTestRule = new TestRule()
+                .matches(msg -> msg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED))
                 .drop();
 
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
-                SERVERS.ENDPOINT_1, testRule);
+                SERVERS.ENDPOINT_1, sealTestRule);
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
-                SERVERS.ENDPOINT_2, testRule);
+                SERVERS.ENDPOINT_1, failureTestRule);
+        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_2, sealTestRule);
+        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_2, failureTestRule);
         addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
-                SERVERS.ENDPOINT_1, testRule);
+                SERVERS.ENDPOINT_1, sealTestRule);
         addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
-                SERVERS.ENDPOINT_2, testRule);
+                SERVERS.ENDPOINT_1, failureTestRule);
+        addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_2, sealTestRule);
+        addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_2, failureTestRule);
         addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
-                SERVERS.ENDPOINT_1, testRule);
+                SERVERS.ENDPOINT_1, sealTestRule);
         addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
-                SERVERS.ENDPOINT_2, testRule);
+                SERVERS.ENDPOINT_1, failureTestRule);
+        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_2, sealTestRule);
+        addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
+                SERVERS.ENDPOINT_2, failureTestRule);
 
         // PART 1.
-        log.info("Prevent ENDPOINT_1 from sealing.");
-        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
-                SERVERS.ENDPOINT_1, new TestRule()
-                        .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SEAL))
-                        .drop());
+
         log.info("Simulate ENDPOINT_2 failure from ENDPOINT_1 (only Management Server)");
         addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 SERVERS.ENDPOINT_2, new TestRule().always().drop());
@@ -427,10 +440,7 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(failureDetected.tryAcquire(2, PARAMETERS.TIMEOUT_NORMAL.toNanos(),
                 TimeUnit.NANOSECONDS)).isEqualTo(true);
 
-        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
-                new TestRule().matches(corfuMsg ->
-                        corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED))
-                        .drop());
+        addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(), failureTestRule);
 
         log.info("Assert that only a partial seal was successful. " +
                 "ENDPOINT_0 sealed. ENDPOINT_1 & ENDPOINT_2 not sealed."
@@ -1279,7 +1289,7 @@ public class ManagementViewTest extends AbstractViewTest {
         // client's connectivity) on ENDPOINT_0 and ENDPOINT_1, this test will show both nodes
         // unresponsive, despite of their actual node status being UP.
         TestRule rule = new TestRule()
-                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.PING))
+                .requestMatches(msg -> msg.getPayload().getPayloadCase().equals(PayloadCase.PING_REQUEST))
                 .drop();
         addClientRule(getCorfuRuntime(), SERVERS.ENDPOINT_0, rule);
         addClientRule(getCorfuRuntime(), SERVERS.ENDPOINT_1, rule);
@@ -1356,7 +1366,6 @@ public class ManagementViewTest extends AbstractViewTest {
         assertThat(nodeStatusMap.get(SERVERS.ENDPOINT_2)).isEqualTo(NodeStatus.NA);
         assertThat(clusterStatusReliability).isEqualTo(ClusterStatusReport.ClusterStatusReliability.WEAK_NO_QUORUM);
         assertThat(clusterStatus.getClusterStatus()).isEqualTo(ClusterStatus.UNAVAILABLE);
-
 
         // STEP 5.
         clearClientRules(getCorfuRuntime());
@@ -1439,7 +1448,7 @@ public class ManagementViewTest extends AbstractViewTest {
         managementRuntime1.getParameters().setSystemDownHandlerTriggerLimit(sysDownTriggerLimit);
 
         TestRule testRule = new TestRule()
-                .matches(m -> m.getMsgType().equals(CorfuMsgType.SEAL))
+                .requestMatches(msg -> msg.getPayload().getPayloadCase().equals(PayloadCase.SEAL_REQUEST))
                 .drop();
         addClientRule(managementRuntime0, testRule);
         addClientRule(managementRuntime1, testRule);

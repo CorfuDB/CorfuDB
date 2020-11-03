@@ -2,42 +2,27 @@ package org.corfudb.runtime.clients;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
+
+import static org.corfudb.protocols.service.CorfuProtocolBase.getPingRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolBase.getResetRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolBase.getRestartRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolBase.getSealRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolBase.getVersionRequestMsg;
 
 /**
  * This is a base client which sends basic messages.
- * It mainly sends PINGs, as well as the ACK/NACKs defined by
- * the Corfu protocol.
- * This is also responsible to send SEAL messages used to seal the servers with an epoch
+ * It mainly sends PINGs, and is also responsible to send
+ * SEAL messages used to seal the servers with an epoch.
  *
  * <p>Created by mwei on 12/9/15.
  */
 @Slf4j
-public class BaseClient implements IClient {
-
-    /**
-     * The router to use for the client.
-     */
-    @Getter
-    @Setter
-    private IClientRouter router;
-
-    private final long epoch;
-
-    private final UUID clusterId;
+public class BaseClient extends AbstractClient {
 
     public BaseClient(IClientRouter router, long epoch, UUID clusterId) {
-        this.router = router;
-        this.epoch = epoch;
-        this.clusterId = clusterId;
+        super(router, epoch, clusterId);
     }
 
     /**
@@ -56,33 +41,23 @@ public class BaseClient implements IClient {
     }
 
     /**
-     * Sets the epoch on client router and on the target layout server.
-     *
-     * @param newEpoch New Epoch to be set
-     * @return Completable future which returns true on successful epoch set.
-     */
-    public CompletableFuture<Boolean> sealRemoteServer(long newEpoch) {
-        CorfuMsg msg = new CorfuPayloadMsg<>(CorfuMsgType.SEAL, newEpoch).setEpoch(epoch).setClusterID(clusterId);
-        log.info("sealRemoteServer: send SEAL from me(clientId={}) to new epoch {}",
-                msg.getClientID(), epoch);
-        return router.sendMessageAndGetCompletable(msg);
-    }
-
-    public CompletableFuture<VersionInfo> getVersionInfo() {
-        return router.sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsgType.VERSION_REQUEST).setEpoch(epoch).setClusterID(clusterId));
-    }
-
-
-    /**
      * Ping the endpoint, asynchronously.
      *
      * @return A completable future which will be completed with True if
      * the endpoint is reachable, otherwise False or exceptional completion.
      */
     public CompletableFuture<Boolean> ping() {
-        return router.sendMessageAndGetCompletable(
-                new CorfuMsg(CorfuMsgType.PING).setEpoch(epoch).setClusterID(clusterId));
+        return sendRequestWithFuture(getPingRequestMsg(), true, true);
+    }
+
+    /**
+     * Restart the endpoint, asynchronously.
+     *
+     * @return A completable future which will be completed with True if
+     * the endpoint restarts successfully, otherwise False or exceptional completion.
+     */
+    public CompletableFuture<Boolean> restart() {
+        return sendRequestWithFuture(getRestartRequestMsg(), true, true);
     }
 
     /**
@@ -90,21 +65,28 @@ public class BaseClient implements IClient {
      * WARNING: ALL EXISTING DATA ON THIS NODE WILL BE LOST.
      *
      * @return A completable future which will be completed with True if
-     * the endpoint acks, otherwise False or exceptional completion.
+     * the endpoint resets successfully, otherwise False or exceptional completion.
      */
     public CompletableFuture<Boolean> reset() {
-        return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESET)
-                .setEpoch(epoch).setClusterID(clusterId));
+        return sendRequestWithFuture(getResetRequestMsg(), true, true);
     }
 
     /**
-     * Restart the endpoint, asynchronously.
+     * Sets the epoch on client router and on the target layout server.
      *
-     * @return A completable future which will be completed with True if
-     * the endpoint acks, otherwise False or exceptional completion.
+     * @param newEpoch New Epoch to be set
+     * @return Completable future which returns true on successful epoch set.
      */
-    public CompletableFuture<Boolean> restart() {
-        return router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.RESTART)
-                .setEpoch(epoch).setClusterID(clusterId));
+    public CompletableFuture<Boolean> sealRemoteServer(long newEpoch) {
+        return sendRequestWithFuture(getSealRequestMsg(newEpoch), false, true);
+    }
+
+    /**
+     * Get the version info from the target layout server.
+     *
+     * @return Completable future which returns {@link VersionInfo} object.
+     */
+    public CompletableFuture<VersionInfo> getVersionInfo() {
+        return sendRequestWithFuture(getVersionRequestMsg(), true, true);
     }
 }

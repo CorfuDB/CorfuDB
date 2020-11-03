@@ -49,6 +49,15 @@ public class LogUnitHandler implements IClient, IHandler<LogUnitClient> {
             .generateHandlers(MethodHandles.lookup(), this);
 
     /**
+     * For old CorfuMsg, use {@link #msgHandler}
+     * The handler and handlers which implement this client.
+     */
+    @Getter
+    public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this)
+            .generateErrorHandlers(MethodHandles.lookup(), this);
+
+    /**
      * Handle an WRITE_OK message.
      *
      * @param msg Incoming Message

@@ -40,6 +40,15 @@ public class SequencerHandler implements IClient, IHandler<SequencerClient> {
     public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
             .generateHandlers(MethodHandles.lookup(), this);
 
+    /**
+     * For old CorfuMsg, use {@link #msgHandler}
+     * The handler and handlers which implement this client.
+     */
+    @Getter
+    public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
+            .generateHandlers(MethodHandles.lookup(), this)
+            .generateErrorHandlers(MethodHandles.lookup(), this);
+
     @ClientHandler(type = CorfuMsgType.SEQUENCER_METRICS_RESPONSE)
     private static Object handleMetricsResponse(CorfuPayloadMsg<SequencerMetrics> msg,
                                                 ChannelHandlerContext ctx, IClientRouter r) {

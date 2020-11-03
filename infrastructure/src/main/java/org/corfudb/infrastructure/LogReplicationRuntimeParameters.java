@@ -6,7 +6,6 @@ import lombok.Data;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
-import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.runtime.RuntimeParameters;
@@ -15,7 +14,6 @@ import org.corfudb.util.MetricsUtils;
 
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -209,11 +207,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             return this;
         }
 
-        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder nettyClientInboundMsgFilters(List<MsgHandlingFilter> nettyClientInboundMsgFilters) {
-            super.nettyClientInboundMsgFilters(nettyClientInboundMsgFilters);
-            return this;
-        }
-
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder prometheusMetricsPort(int prometheusMetricsPort) {
             super.prometheusMetricsPort(prometheusMetricsPort);
             return this;
@@ -253,7 +246,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setShutdownNettyEventLoop(shutdownNettyEventLoop);
             runtimeParameters.setCustomNettyChannelOptions(customNettyChannelOptions);
             runtimeParameters.setUncaughtExceptionHandler(uncaughtExceptionHandler);
-            runtimeParameters.setNettyClientInboundMsgFilters(nettyClientInboundMsgFilters);
             runtimeParameters.setPrometheusMetricsPort(prometheusMetricsPort);
             runtimeParameters.setSystemDownHandler(systemDownHandler);
             runtimeParameters.setBeforeRpcHandler(beforeRpcHandler);
