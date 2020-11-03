@@ -3,12 +3,23 @@ package org.corfudb.runtime.collections;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections.map.HashedMap;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.object.transactions.WriteSetInfo;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Thin shim layer around CorfuStore's TxnContext for providing metadata management
@@ -155,5 +166,58 @@ public class TxnContextShim extends TxnContext {
             }
         }
         return new CorfuRecord<V, M>(deltaUpdate.getPayload(), (M) builder.build());
+    }
+
+    /**
+     * Protobuf objects are immutable. So any metadata modifications made here won't be
+     * reflected back into the caller's in-memory object directly.
+     * The caller is only really interested in the modified valies of those transactions
+     * that successfully commit.
+     * To reflect metadata changes made here, we modify commit() to accept a callback
+     * that carries all the final values of the changes made by this transaction.
+     */
+    public interface CommitCallback {
+        /**
+         * @param mutations - A group of all tables touched by this transaction along with
+         *                    the updates made in each table.
+         */
+        void onCommit(CorfuStreamEntries mutations);
+    }
+
+    /**
+     * A wrapper around commit that will callback with all mutations made in this transaction.
+     * @param commitCallback - callback with all final values of mutations made.
+     * @return commitAddress at which all the transactional updates were written.
+     */
+    public long commit(@Nonnull CommitCallback commitCallback) {
+        if (!TransactionalContext.isInTransaction()) {
+            throw new IllegalStateException("commit(callback) called without a transaction!");
+        }
+        // CorfuStore should have only one transactional context since nesting is prohibited.
+        AbstractTransactionalContext rootContext = TransactionalContext.getRootContext();
+        long commitAddress = super.commit(); // now invoke the actual commit
+        // If we are here this means commit was successful, now invoke the callback with
+        // the final versions of all the mutated objects.
+        Map<UUID, Table> tablesInTxn = getTablesInTxn();
+        MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
+        final Map<TableSchema, List<CorfuStreamEntry>> mutations = new HashMap<>();
+        tablesInTxn.forEach((uuid, table) -> {
+            List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream().map(entry ->
+                    CorfuStreamEntry.fromSMREntry(entry, 0)).collect(Collectors.toList());
+
+            TableSchema schema;
+            if (writesInTable.size() > 0) {
+                schema = new TableSchema(table.getFullyQualifiedTableName(),
+                        writesInTable.get(0).getKey().getClass(),
+                        writesInTable.get(0).getPayload().getClass(),
+                        writesInTable.get(0).getMetadata().getClass());
+            } else {
+                schema = new TableSchema(table.getFullyQualifiedTableName(),
+                        null, null, null); // TODO: fix up once schemas are in table
+            }
+            mutations.put(schema, writesInTable);
+        });
+        commitCallback.onCommit(new CorfuStreamEntries(mutations));
+        return commitAddress;
     }
 }
