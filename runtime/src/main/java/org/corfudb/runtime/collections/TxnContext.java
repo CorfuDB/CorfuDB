@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.units.qual.K;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -19,6 +20,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -47,7 +49,8 @@ public class TxnContext implements AutoCloseable {
     private final String namespace;
     private final IsolationLevel isolationLevel;
     private final List<Runnable> operations;
-    private final Set<Table> tablesInTxn;
+    @Getter
+    private final Map<UUID, Table> tablesInTxn;
     private long txnStartTime = 0L;
     private static final byte READ_ONLY  = 0x01;
     private static final byte WRITE_ONLY = 0x02;
@@ -72,7 +75,7 @@ public class TxnContext implements AutoCloseable {
         this.namespace = namespace;
         this.isolationLevel = isolationLevel;
         this.operations = new ArrayList<>();
-        this.tablesInTxn = new HashSet<>();
+        this.tablesInTxn = new HashMap<>();
         txBeginInternal(); // May throw exception if transaction was already started
     }
 
@@ -105,7 +108,7 @@ public class TxnContext implements AutoCloseable {
                     table.getFullyQualifiedTableName());
         }
         txnType |= WRITE_ONLY;
-        tablesInTxn.add(table);
+        tablesInTxn.putIfAbsent(table.getStreamUUID(), table);
     }
 
     /**
@@ -352,7 +355,7 @@ public class TxnContext implements AutoCloseable {
      * @param <K>       Type of Key.
      * @param <V>       Type of Value.
      * @param <M>       Type of Metadata.
-     * @return TxnContext instance.
+     * @return K the type of key this queue table was created with.
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
@@ -595,9 +598,9 @@ public class TxnContext implements AutoCloseable {
             @Nonnull final BiFunction<R, S, T> joinFunction,
             final Function<T, U> joinProjection) {
         applyWritesForReadOnTable(table1);
-        table1.getMetrics().incNumScans();
+        table1.getMetrics().incNumJoins();
         applyWritesForReadOnTable(table1);
-        table1.getMetrics().incNumScans();
+        table2.getMetrics().incNumJoins();
         return Query.executeJoinQuery(table1, table2,
                 query1, query2, queryOptions1,
                 queryOptions2, joinPredicate, joinFunction, joinProjection);
@@ -656,7 +659,7 @@ public class TxnContext implements AutoCloseable {
      */
     private <K extends Message, V extends Message, M extends Message>
     void applyWritesForReadOnTable(Table<K, V, M> tableBeingRead) {
-        tablesInTxn.add(tableBeingRead);
+        tablesInTxn.putIfAbsent(tableBeingRead.getStreamUUID(), tableBeingRead);
         txnType |= READ_ONLY;
         if (!operations.isEmpty()) {
             operations.forEach(Runnable::run);
@@ -702,20 +705,20 @@ public class TxnContext implements AutoCloseable {
         try {
             commitAddress = this.objectsView.TXEnd();
         } catch (Exception ex) {
-            tablesInTxn.forEach(t -> t.getMetrics().incNumTxnAborts());
+            tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
             tablesInTxn.clear();
             throw ex;
         }
         long timeElapsed = System.nanoTime() - txnStartTime;
         switch (txnType) {
             case READ_ONLY:
-                tablesInTxn.forEach(t -> t.getMetrics().setReadOnlyTxnTimes(timeElapsed));
+                tablesInTxn.values().forEach(t -> t.getMetrics().setReadOnlyTxnTimes(timeElapsed));
                 break;
             case WRITE_ONLY:
-                tablesInTxn.forEach(t -> t.getMetrics().setWriteOnlyTxnTimes(timeElapsed));
+                tablesInTxn.values().forEach(t -> t.getMetrics().setWriteOnlyTxnTimes(timeElapsed));
                 break;
             case READ_WRITE:
-                tablesInTxn.forEach(t -> t.getMetrics().setReadWriteTxnTimes(timeElapsed));
+                tablesInTxn.values().forEach(t -> t.getMetrics().setReadWriteTxnTimes(timeElapsed));
                 break;
             default:
                 log.error("UNKNOWN TxnType!!");
@@ -733,7 +736,7 @@ public class TxnContext implements AutoCloseable {
         operations.clear();
         if (TransactionalContext.isInTransaction()) {
             this.objectsView.TXAbort();
-            tablesInTxn.forEach(t -> t.getMetrics().incNumTxnAborts());
+            tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
         }
         tablesInTxn.clear();
     }
@@ -748,9 +751,9 @@ public class TxnContext implements AutoCloseable {
             log.warn("close()ing a {} transaction without calling commit()!", txnType);
             long timeElapsed = System.nanoTime() - txnStartTime;
             if (txnType == READ_ONLY) {
-                tablesInTxn.forEach(t -> t.getMetrics().setReadOnlyTxnTimes(timeElapsed));
+                tablesInTxn.values().forEach(t -> t.getMetrics().setReadOnlyTxnTimes(timeElapsed));
             } else {
-                tablesInTxn.forEach(t -> t.getMetrics().incNumTxnAborts());
+                tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
             }
             this.objectsView.TXAbort();
         }
