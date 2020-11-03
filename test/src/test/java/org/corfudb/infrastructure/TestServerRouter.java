@@ -4,10 +4,12 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.clients.TestChannelContext;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.protocol.proto.CorfuProtocol;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.*;
@@ -66,7 +68,7 @@ public class TestServerRouter implements IServerRouter {
         this.requestCounter = new AtomicLong();
         this.servers = new ArrayList<>();
         this.handlerMap = new ConcurrentHashMap<>();
-        // TODO(Chetan): Verify ConcurrentHashMap vs EnumMap - https://docs.oracle.com/javase/7/docs/api/java/util/EnumMap.html
+        // EnumMap is not thread-safe - https://docs.oracle.com/javase/7/docs/api/java/util/EnumMap.html
         this.requestTypeHandlerMap = Collections.synchronizedMap(new EnumMap<>(RequestPayloadMsg.PayloadCase.class));
         this.rules = new ArrayList<>();
     }
@@ -93,11 +95,10 @@ public class TestServerRouter implements IServerRouter {
      * @param ctx      The context of the channel handler.
      */
     public void sendResponse(ResponseMsg response, ChannelHandlerContext ctx) {
-        // Set the server epoch; protobufs are immutable, hence create a new object
-        // TODO(Chetan): Verify this approach for setting just the server epoch.
-        ResponseMsg.Builder b = ResponseMsg.newBuilder(response);
-        b.setHeader(HeaderMsg.newBuilder(response.getHeader()).setEpoch(getServerEpoch()).build());
-        ResponseMsg newResponse = b.build();
+        // Set the server epoch; protobuf objects are immutable, hence create a new object
+        ResponseMsg newResponse = CorfuProtocolMessage.getResponseMsg(
+                HeaderMsg.newBuilder(response.getHeader()).setEpoch(getServerEpoch()).build(),
+                response.getPayload());
 
         if (rules.stream()
                 .allMatch(x -> x.evaluate(newResponse, this))) {
