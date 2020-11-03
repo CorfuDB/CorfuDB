@@ -12,7 +12,6 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.clients.BaseClient;
@@ -380,11 +379,6 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParametersBuilder nettyClientInboundMsgFilters(List<MsgHandlingFilter> nettyClientInboundMsgFilters) {
-                super.nettyClientInboundMsgFilters(nettyClientInboundMsgFilters);
-                return this;
-            }
-
             public CorfuRuntimeParametersBuilder prometheusMetricsPort(int prometheusMetricsPort) {
                 super.prometheusMetricsPort(prometheusMetricsPort);
                 return this;
@@ -554,7 +548,6 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setShutdownNettyEventLoop(shutdownNettyEventLoop);
                 corfuRuntimeParameters.setCustomNettyChannelOptions(customNettyChannelOptions);
                 corfuRuntimeParameters.setUncaughtExceptionHandler(uncaughtExceptionHandler);
-                corfuRuntimeParameters.setNettyClientInboundMsgFilters(nettyClientInboundMsgFilters);
                 corfuRuntimeParameters.setPrometheusMetricsPort(prometheusMetricsPort);
                 corfuRuntimeParameters.setSystemDownHandler(systemDownHandler);
                 corfuRuntimeParameters.setBeforeRpcHandler(beforeRpcHandler);

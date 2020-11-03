@@ -1,21 +1,27 @@
 package org.corfudb.infrastructure;
 
 import io.netty.channel.ChannelHandlerContext;
-import lombok.Getter;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.JSONPayloadMsg;
-import org.corfudb.protocols.wireprotocol.VersionInfo;
-import org.corfudb.runtime.exceptions.WrongEpochException;
-
-import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
 import java.net.InetSocketAddress;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import javax.annotation.Nonnull;
+import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+
+import static org.corfudb.protocols.CorfuProtocolServerErrors.getWrongEpochErrorMsg;
+import static org.corfudb.protocols.service.CorfuProtocolBase.getPingResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolBase.getResetResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolBase.getRestartResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolBase.getSealResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolBase.getVersionResponseMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 
 /**
  * Created by mwei on 12/8/15.
@@ -27,24 +33,21 @@ public class BaseServer extends AbstractServer {
 
     private final ExecutorService executor;
 
-    /** HandlerMethod for the base server. */
+    /**
+     * RequestHandlerMethods for the Base server
+     */
     @Getter
-    private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
-
-    @Override
-    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
-        return getState() == ServerState.READY;
-    }
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     public BaseServer(@Nonnull ServerContext context) {
-        this.serverContext = context;
-        executor = Executors.newFixedThreadPool(serverContext.getBaseServerThreadCount(),
-                new ServerThreadFactory("baseServer-", new ServerThreadFactory.ExceptionHandler()));
+        serverContext = context;
+        executor = serverContext.getExecutorService(serverContext.getBaseServerThreadCount(), "baseServer-");
     }
 
     @Override
-    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        executor.submit(() -> getHandler().handle(msg, ctx, r));
+    protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
     @Override
@@ -54,73 +57,70 @@ public class BaseServer extends AbstractServer {
     }
 
     /**
-     * Respond to a ping message.
+     * Respond to a ping request.
      *
-     * @param msg   The incoming message
-     * @param ctx   The channel context
+     * @param req   The incoming request message.
+     * @param ctx   The channel context.
      * @param r     The server router.
      */
-    @ServerHandler(type = CorfuMsgType.PING)
-    private void ping(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        r.sendResponse(ctx, msg, CorfuMsgType.PONG.msg());
-    }
+    @RequestHandler(type = RequestPayloadMsg.PayloadCase.PING_REQUEST)
+    public void handlePing(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        log.trace("handlePing[{}]: Ping message received from {} {}", req.getHeader().getRequestId(),
+                req.getHeader().getClientId().getMsb(), req.getHeader().getClientId().getLsb());
 
-    /**
-     * Respond to a keep alive message.
-     * Note: this message ignores epoch.
-     *
-     * @param msg   The incoming message
-     * @param ctx   The channel context
-     * @param r     The server router.
-     */
-    @ServerHandler(type = CorfuMsgType.KEEP_ALIVE)
-    private void keepAlive(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        ResponseMsg response = getResponseMsg(responseHeader, getPingResponseMsg());
+        r.sendResponse(response, ctx);
     }
 
     /**
      * Respond to a version request message.
      *
-     * @param msg   The incoming message
+     * @param req   The incoming message
      * @param ctx   The channel context
      * @param r     The server router.
      */
-    @ServerHandler(type = CorfuMsgType.VERSION_REQUEST)
-    private void getVersion(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        VersionInfo vi = new VersionInfo(serverContext.getServerConfig(),
-                                         serverContext.getNodeIdBase64());
-        r.sendResponse(ctx, msg, new JSONPayloadMsg<>(vi, CorfuMsgType.VERSION_RESPONSE));
+    @RequestHandler(type = RequestPayloadMsg.PayloadCase.VERSION_REQUEST)
+    private void getVersion(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        VersionInfo versionInfo = new VersionInfo(serverContext.getServerConfig(), serverContext.getNodeIdBase64());
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        ResponseMsg response = getResponseMsg(responseHeader, getVersionResponseMsg(versionInfo));
+        r.sendResponse(response, ctx);
     }
 
     /**
-     * Respond to a epoch change message.
+     * Respond to a epoch change request.
      * This method also executes sealing logic on each individual server type.
      *
-     * @param msg The incoming message
-     * @param ctx The channel context
-     * @param r   The server router.
+     * @param req The incoming request message.
+     * @param ctx The channel context.
+     * @param r The server router.
      */
-    @ServerHandler(type = CorfuMsgType.SEAL)
-    public synchronized void handleMessageSetEpoch(@NonNull CorfuPayloadMsg<Long> msg,
-                                                   ChannelHandlerContext ctx,
-                                                   @NonNull IServerRouter r) {
+    @RequestHandler(type = RequestPayloadMsg.PayloadCase.SEAL_REQUEST)
+    private synchronized void handleSeal(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         try {
-            long epoch = msg.getPayload();
+            final long epoch = req.getPayload().getSealRequest().getEpoch();
             String remoteHostAddress;
             try {
                 remoteHostAddress = ((InetSocketAddress)ctx.channel().remoteAddress()).getAddress().getHostAddress();
-            } catch (NullPointerException e) {
+            } catch (NullPointerException ex) {
                 remoteHostAddress = "unavailable";
             }
-            log.info("handleMessageSetEpoch: Received SEAL from (clientId={}:{}), moving to new epoch {}",
-                    msg.getClientID(), remoteHostAddress, epoch);
+
+            log.info("handleSeal[{}]: Received SEAL from (clientId={}:{}), moving to new epoch {},",
+                    req.getHeader().getRequestId(), req.getHeader().getClientId(), remoteHostAddress, epoch);
+
             serverContext.setServerEpoch(epoch, r);
-            r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            ResponseMsg response = getResponseMsg(responseHeader, getSealResponseMsg());
+            r.sendResponse(response, ctx);
         } catch (WrongEpochException e) {
-            log.debug("handleMessageSetEpoch: Rejected SEAL current={}, requested={}",
-                    e.getCorrectEpoch(), msg.getPayload());
-            r.sendResponse(ctx, msg,
-                    new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, e.getCorrectEpoch()));
+            log.debug("handleSeal[{}]: Rejected SEAL current={}, requested={}", req.getHeader().getRequestId(),
+                    e.getCorrectEpoch(), req.getPayload().getSealRequest().getEpoch());
+
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            ResponseMsg response = getResponseMsg(responseHeader, getWrongEpochErrorMsg(e.getCorrectEpoch()));
+            r.sendResponse(response, ctx);
         }
     }
 
@@ -129,14 +129,18 @@ public class BaseServer extends AbstractServer {
      * which monitors the exit code of Corfu. If the exit code is 100, then it resets
      * the server and DELETES ALL EXISTING DATA.
      *
-     * @param msg   The incoming message
-     * @param ctx   The channel context
-     * @param r     The server router.
+     * @param req The incoming request message.
+     * @param ctx The channel context.
+     * @param r The server router.
      */
-    @ServerHandler(type = CorfuMsgType.RESET)
-    private void doReset(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.warn("Remote reset requested from client {}", msg.getClientID());
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    @RequestHandler(type = RequestPayloadMsg.PayloadCase.RESET_REQUEST)
+    private void handleReset(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        log.warn("handleReset[{}]: Remote reset requested from client {}",
+                req.getHeader().getRequestId(), req.getHeader().getClientId());
+
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        ResponseMsg response = getResponseMsg(responseHeader, getResetResponseMsg());
+        r.sendResponse(response, ctx);
         CorfuServer.restartServer(true);
     }
 
@@ -145,14 +149,18 @@ public class BaseServer extends AbstractServer {
      * which monitors the exit code of Corfu. If the exit code is 200, then it restarts
      * the server.
      *
-     * @param msg   The incoming message
-     * @param ctx   The channel context
+     * @param req   The incoming request message.
+     * @param ctx   The channel context.
      * @param r     The server router.
      */
-    @ServerHandler(type = CorfuMsgType.RESTART)
-    private void doRestart(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.warn("Remote restart requested from client {}", msg.getClientID());
-        r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
+    @RequestHandler(type = RequestPayloadMsg.PayloadCase.RESTART_REQUEST)
+    private void handleRestart(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        log.warn("handleRestart[{}]: Remote restart requested from client {}",
+                req.getHeader().getRequestId(), req.getHeader().getClientId());
+
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        ResponseMsg response = getResponseMsg(responseHeader, getRestartResponseMsg());
+        r.sendResponse(response, ctx);
         CorfuServer.restartServer(false);
     }
 }

@@ -38,6 +38,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -217,6 +219,18 @@ public class ServerContext implements AutoCloseable {
     public String getPluginConfigFilePath() {
         String pluginConfigFilePath = getServerConfig(String.class, "--plugin");
         return pluginConfigFilePath == null ? PLUGIN_CONFIG_FILE_PATH : pluginConfigFilePath;
+    }
+
+    /**
+     * Get an ExecutorService that can be used by the
+     * servers to process RPCs.
+     * @param threadCount   The number of threads to use in the pool
+     * @param threadPrefix  The naming prefix
+     * @return The newly created ExecutorService
+     */
+    public ExecutorService getExecutorService(int threadCount, String threadPrefix) {
+        return Executors.newFixedThreadPool(threadCount,
+                new ServerThreadFactory(threadPrefix, new ServerThreadFactory.ExceptionHandler()));
     }
 
     /**

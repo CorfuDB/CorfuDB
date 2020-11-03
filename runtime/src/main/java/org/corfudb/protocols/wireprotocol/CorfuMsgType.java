@@ -25,15 +25,9 @@ import java.lang.reflect.Constructor;
 @AllArgsConstructor
 public enum CorfuMsgType {
     // Base Messages
-    PING(0, TypeToken.of(CorfuMsg.class), true, true),
-    PONG(1, TypeToken.of(CorfuMsg.class), true, false),
-    RESET(2, TypeToken.of(CorfuMsg.class), true, true),
-    SEAL(3, new TypeToken<CorfuPayloadMsg<Long>>() {}, true, false),
     ACK(4, TypeToken.of(CorfuMsg.class), true, false),
     WRONG_EPOCH(5, new TypeToken<CorfuPayloadMsg<Long>>() {},  true, false),
     NACK(6, TypeToken.of(CorfuMsg.class)),
-    VERSION_REQUEST(7, TypeToken.of(CorfuMsg.class), true, true),
-    VERSION_RESPONSE(8, new TypeToken<JSONPayloadMsg<VersionInfo>>() {}, true, false),
     NOT_READY(9, TypeToken.of(CorfuMsg.class), true, false),
     WRONG_CLUSTER_ID(28, new TypeToken<CorfuPayloadMsg<WrongClusterMsg>>(){}, true, false),
 
@@ -90,8 +84,6 @@ public enum CorfuMsgType {
     // EXTRA CODES
     LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), true, false),
     LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, true, false),
-    RESTART(62, TypeToken.of(CorfuMsg.class), true, true),
-    KEEP_ALIVE(63, TypeToken.of(CorfuMsg.class), true, true),
     COMMITTED_TAIL_REQUEST(64, TypeToken.of(CorfuMsg.class)),
     COMMITTED_TAIL_RESPONSE(65, new TypeToken<CorfuPayloadMsg<Long>>(){}),
     UPDATE_COMMITTED_TAIL(66, new TypeToken<CorfuPayloadMsg<Long>>(){}),

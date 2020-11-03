@@ -19,6 +19,8 @@ import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics
 import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.UnreachableClusterException;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.concurrent.SingletonResource;
@@ -70,8 +72,15 @@ public class ManagementServer extends AbstractServer {
     /**
      * HandlerMethod for this server.
      */
-    @Getter
+    @Getter(onMethod_={@Override})
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /**
+     * RequestHandlerMethods for the Management server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     /**
      * System down handler to break out of live-locks if the runtime cannot reach the cluster for a
@@ -111,6 +120,16 @@ public class ManagementServer extends AbstractServer {
             getHandler().handle(msg, ctx, r);
         } else {
             executor.submit(() -> getHandler().handle(msg, ctx, r));
+        }
+    }
+
+    @Override
+    protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        if (req.getPayload().getPayloadCase().equals(PayloadCase.QUERY_NODE_REQUEST)) {
+            // Execute this type of request on the IO thread
+            getHandlerMethods().handle(req, ctx, r);
+        } else {
+            executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
         }
     }
 

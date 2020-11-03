@@ -26,6 +26,7 @@ import org.corfudb.protocols.wireprotocol.TokenRequest;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TokenType;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CorfuComponent;
@@ -118,8 +119,15 @@ public class SequencerServer extends AbstractServer {
     /**
      * HandlerMethod for this server.
      */
-    @Getter
+    @Getter(onMethod_={@Override})
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /**
+     * RequestHandlerMethods for the Sequencer server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @Getter
     private SequencerServerCache cache;
@@ -164,6 +172,11 @@ public class SequencerServer extends AbstractServer {
     }
 
     @Override
+    protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
+    }
+
+    @Override
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
@@ -182,6 +195,12 @@ public class SequencerServer extends AbstractServer {
             return false;
         }
         return true;
+    }
+
+    @Override
+    public boolean isServerReadyToHandleMsg(RequestMsg request) {
+        // This implementation will be completed with other Sequencer RPCs
+        throw new UnsupportedOperationException("This operation is not supported");
     }
 
     /**

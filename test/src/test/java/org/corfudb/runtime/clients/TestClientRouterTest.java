@@ -1,18 +1,17 @@
 package org.corfudb.runtime.clients;
 
+import java.util.concurrent.TimeoutException;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.infrastructure.BaseServer;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.UUID;
-import java.util.concurrent.TimeoutException;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 
 /**
  * Created by mwei on 6/29/16.
@@ -30,8 +29,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
         tcr = new TestClientRouter(tsr);
         BaseHandler baseHandler = new BaseHandler();
         tcr.addClient(baseHandler);
-        bc = new BaseClient(tcr, 0L, UUID.fromString("00000000-0000-0000-0000-000000000000"));
-
+        bc = new BaseClient(tcr, 0L, DEFAULT_UUID);
     }
 
     @Test
@@ -50,7 +48,7 @@ public class TestClientRouterTest extends AbstractCorfuTest {
     @Test
     public void onlyDropEpochChangeMessages() {
         tcr.rules.add(new TestRule()
-                .matches(x -> x.getMsgType().equals(CorfuMsgType.SEAL))
+                .requestMatches(msg -> msg.getPayload().getPayloadCase().equals(PayloadCase.SEAL_REQUEST))
                 .drop());
 
         assertThat(bc.pingSync())

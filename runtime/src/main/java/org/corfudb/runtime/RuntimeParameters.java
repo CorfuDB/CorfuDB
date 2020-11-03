@@ -6,13 +6,11 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import lombok.ToString;
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.runtime.clients.NettyClientRouter;
 
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -165,13 +163,6 @@ public class RuntimeParameters {
          * the runtime's default handler runs, which logs an error level message.
          */
         public UncaughtExceptionHandler uncaughtExceptionHandler;
-
-        /**
-         * Represents filtering logic to be applied on the inbound messages received by Netty Client
-         * Router. If filters are not null, Netty Client Router add a filter handler and configures it
-         * with provided filters. If filters are null, no filter handler will be added to Netty's pipeline.
-         */
-        public List<MsgHandlingFilter> nettyClientInboundMsgFilters = null;
 
         /**
          * Port at which the {@link CorfuRuntime} will allow third-party
