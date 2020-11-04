@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto";
+
+/**
+ * Common Protobuf definitions used by several RPCs.
+ */
+
+message UuidMsg {
+  int64 lsb = 1;
+  int64 msb = 2;
+}
+
+// Token returned by the sequencer is a combination of the
+// sequence number and the epoch at which it was acquired.
+message TokenMsg {
+  int64 epoch = 1;
+  int64 sequence = 2;
+}
+
+/**
+ * Sequencer metrics for a node.
+ */
+message SequencerMetricsMsg {
+  enum SequencerStatus {
+    INVALID = 0;
+    // Sequencer is in READY state, and can dispatch tokens.
+    READY = 1;
+    // Sequencer is in a NOT_READY state.
+    NOT_READY = 2;
+    // Unknown state.
+    UNKNOWN = 3;
+  }
+
+  // Ready state of a sequencer to determine its READY/NOT_READY state.
+  SequencerStatus sequencer_status = 1;
+}
+
+// Representation of a Layout as a JSON string.
+message LayoutMsg {
+  string layout_json = 1;
+}
+
+/**
+ * A stream's address space is defined by:
+ *       1. The collection of all addresses that belong to this stream.
+ *       2. The trim mark (last trimmed address, i.e., an address that is
+ *       no longer present and that was subsumed by a checkpoint).
+ */
+message StreamAddressSpaceMsg {
+  // Holds the last trimmed address for this stream.
+  // Note: keeping the last trimmed address is required in order to properly set the stream tail on sequencer resets
+  // when a stream has been checkpointed and trimmed and there are no further updates to this stream.
+  uint64 trim_mark = 1;
+
+  // Holds the complete map of addresses for this stream.
+  // Note: currently of type Roaring64NavigableMap.
+  bytes address_map = 2;
+}
+
+/**
+ * This message represents a range of addresses for a stream.
+ * This is used to request the address map of a stream in
+ * a given boundary-- limits given by (end, start].
+ */
+message StreamAddressRangeMsg {
+  UuidMsg stream_id = 1;
+  // Start is inclusive
+  int64 start = 2;
+  // End is exclusive
+  int64 end = 3;
+}
+
+message UuidToLongPairMsg {
+  UuidMsg key = 1;
+  int64 value = 2;
+}
+
+message UuidToStreamAddressSpacePairMsg {
+  UuidMsg streamUuid = 1;
+  StreamAddressSpaceMsg addressSpace = 2;
+}

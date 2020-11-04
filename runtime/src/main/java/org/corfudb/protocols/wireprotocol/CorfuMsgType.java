@@ -106,10 +106,6 @@ public enum CorfuMsgType {
     ORCHESTRATOR_RESPONSE(78, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}, true, false),
     MANAGEMENT_LAYOUT_REQUEST(79, TypeToken.of(CorfuMsg.class), true, false),
 
-    // Handshake Messages
-    HANDSHAKE_INITIATE(80, new TypeToken<CorfuPayloadMsg<HandshakeMsg>>() {}, true, false),
-    HANDSHAKE_RESPONSE(81, new TypeToken<CorfuPayloadMsg<HandshakeResponse>>() {}, true, false),
-
     NODE_STATE_REQUEST(82, TypeToken.of(CorfuMsg.class)),
     NODE_STATE_RESPONSE(83, new TypeToken<CorfuPayloadMsg<NodeState>>(){}, true, false),
 

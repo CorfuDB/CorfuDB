@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto";
+
+import "rpc_common.proto";
+
+/**
+ * Protobuf definitions for various workflows used by
+ * the Orchestrator. Used by Management RPCs.
+ */
+
+message QueryWorkflowMsg {
+  UuidMsg workflow_id = 1;
+}
+
+message AddNodeWorkflowMsg {
+  string endpoint = 1;
+}
+
+message RemoveNodeWorkflowMsg {
+  string endpoint = 1;
+}
+
+message HealNodeWorkflowMsg {
+  string endpoint = 1;
+  int32 stripe_index = 2;
+  bool layout_server = 3;
+  bool sequencer_server = 4;
+  bool log_unit_server = 5;
+}
+
+message ForceRemoveNodeWorkflowMsg {
+  string endpoint = 1;
+}
+
+message RestoreRedundancyMergeSegmentsWorkflowMsg {
+  string endpoint = 1;
+}
+
+message QueriedWorkflowMsg {
+  bool active = 1;
+}
+
+message CreatedWorkflowMsg {
+  UuidMsg workflow_id = 1;
+}
