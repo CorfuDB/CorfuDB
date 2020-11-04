@@ -15,6 +15,7 @@ import java.util.stream.Stream;
 import com.google.protobuf.InvalidProtocolBufferException;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -235,11 +236,11 @@ public class CorfuStoreBrowser {
             if (diskPath != null) {
                 optionsBuilder.persistentDataPath(Paths.get(diskPath));
             }
-            final Table<TableName, TableName, TableName> table = store.openTable(
+            final Table<TableName, TableName, CorfuStoreMetadata.Timestamp> table = store.openTable(
                     namespace, tablename,
                     TableName.class,
                     TableName.class,
-                    TableName.class,
+                    CorfuStoreMetadata.Timestamp.class,
                     optionsBuilder.build());
 
             byte[] array = new byte[itemSize];
@@ -262,7 +263,11 @@ public class CorfuStoreBrowser {
                     TableName dummyKey = TableName.newBuilder()
                             .setNamespace(Integer.toString(itemsRemaining))
                             .setTableName(Integer.toString(j)).build();
-                    tx.putRecord(table, dummyKey, dummyVal, dummyVal);
+                    CorfuStoreMetadata.Timestamp ts = CorfuStoreMetadata.Timestamp.newBuilder()
+                            .setEpoch(0)
+                            .setSequence(System.currentTimeMillis())
+                            .build();
+                    tx.putRecord(table, dummyKey, dummyVal, ts);
                 }
                 tx.commit();
             }
