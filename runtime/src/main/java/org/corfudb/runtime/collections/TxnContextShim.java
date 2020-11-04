@@ -39,6 +39,44 @@ public class TxnContextShim extends TxnContext {
 
     /**
      * put the value on the specified key create record if it does not exist.
+     * If metadata schema is present then metadata will be populated automatically in this layer.
+     *
+     * There are several overloaded flavors of put to support optional fields like
+     * metadata, tableNames and the force set of metadata
+     *
+     * @param table    Table object to perform the create/update on.
+     * @param key      Key of the record.
+     * @param value    Value or payload of the record.
+     * @param <K>      Type of Key.
+     * @param <V>      Type of Value.
+     * @param <M>      Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void putRecord(@Nonnull Table<K, V, M> table,
+                   @Nonnull final K key,
+                   @Nonnull final V value) {
+        putRecord(table, key, value, null, false);
+    }
+
+    /**
+     * putRecord into a table using opened table object as a simple key-value.
+     *
+     * @param tableName - full string representation of the tableName
+     * @param key - the key of the record being inserted
+     * @param value - the payload or value of the record to be inserted
+     * @param <K> - type of the key or identifier.
+     * @param <V> - type of the value or payload
+     * @param <M> - type of the metadata
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void putRecord(@Nonnull String tableName,
+                   @Nonnull final K key,
+                   @Nonnull final V value) {
+        putRecord(this.getTable(tableName), key, value, null, false);
+    }
+
+    /**
+     * put the value on the specified key create record if it does not exist.
      *
      * @param table Table object to perform the create/update on.
      * @param key   Key of the record.
@@ -69,13 +107,33 @@ public class TxnContextShim extends TxnContext {
      * @param <V> - type of the value or payload
      * @param <M> - type of the metadata
      */
-    @Override
     public <K extends Message, V extends Message, M extends Message>
     void putRecord(@Nonnull String tableName,
                    @Nonnull final K key,
                    @Nonnull final V value,
                    @Nullable final M metadata) {
         putRecord(this.getTable(tableName), key, value, metadata, false);
+    }
+
+    /**
+     * put the value on the specified key & create record if it does not exist given tableName
+     *
+     * @param tableName        Table object to perform the create/update on.
+     * @param key              Key of the record.
+     * @param value            Value or payload of the record.
+     * @param metadata         Metadata associated with the record.
+     * @param forceSetMetadata if specified, metadata will not be validated, just set
+     * @param <K>              Type of Key.
+     * @param <V>              Type of Value.
+     * @param <M>              Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void putRecord(@Nonnull String tableName,
+                   @Nonnull final K key,
+                   @Nonnull final V value,
+                   @Nullable final M metadata,
+                   boolean forceSetMetadata) {
+        putRecord(super.getTable(tableName), key, value, metadata, forceSetMetadata);
     }
 
     /**
@@ -94,24 +152,24 @@ public class TxnContextShim extends TxnContext {
     void putRecord(@Nonnull Table<K, V, M> table,
                    @Nonnull final K key,
                    @Nonnull final V value,
-                   @Nullable final M metadata,
+                   @Nullable M metadata,
                    boolean forceSetMetadata) {
 
-        if (forceSetMetadata || metadata == null) {
+        if (forceSetMetadata) {
             super.putRecord(table, key, value, metadata);
             return;
         }
 
-        super.merge(table, key, this::fixUpMetadata, new CorfuRecord<>(value, metadata));
-    }
+        if (metadata == null) {
+            if (table.getMetadataOptions().isMetadataEnabled()) {
+                metadata = (M) table.getMetadataOptions().getDefaultMetadataInstance();
+            } else { // metadata is null and no metadata schema has been specified
+                super.putRecord(table, key, value, null);
+                return;
+            }
+        }
 
-    public <K extends Message, V extends Message, M extends Message>
-    void putRecord(@Nonnull String tableName,
-                   @Nonnull final K key,
-                   @Nonnull final V value,
-                   @Nullable final M metadata,
-                   boolean forceSetMetadata) {
-        putRecord(super.getTable(tableName), key, value, metadata, forceSetMetadata);
+        super.merge(table, key, this::fixUpMetadata, new CorfuRecord<>(value, metadata));
     }
 
     /**
@@ -171,17 +229,21 @@ public class TxnContextShim extends TxnContext {
     /**
      * Protobuf objects are immutable. So any metadata modifications made here won't be
      * reflected back into the caller's in-memory object directly.
-     * The caller is only really interested in the modified valies of those transactions
+     * The caller is only really interested in the modified values of those transactions
      * that successfully commit.
      * To reflect metadata changes made here, we modify commit() to accept a callback
      * that carries all the final values of the changes made by this transaction.
      */
     public interface CommitCallback {
         /**
+         * This callback returns a list of stream entries as opposed to CorfuStoreEntries
+         * because if this transaction had operations like clear() then the CorfuStoreEntry
+         * would just be empty.
+         *
          * @param mutations - A group of all tables touched by this transaction along with
          *                    the updates made in each table.
          */
-        void onCommit(CorfuStreamEntries mutations);
+        void onCommit(Map<String, List<CorfuStreamEntry>> mutations);
     }
 
     /**
@@ -195,29 +257,19 @@ public class TxnContextShim extends TxnContext {
         }
         // CorfuStore should have only one transactional context since nesting is prohibited.
         AbstractTransactionalContext rootContext = TransactionalContext.getRootContext();
+        Map<UUID, Table> tablesInTxn = getTablesInTxn();
+
         long commitAddress = super.commit(); // now invoke the actual commit
         // If we are here this means commit was successful, now invoke the callback with
         // the final versions of all the mutated objects.
-        Map<UUID, Table> tablesInTxn = getTablesInTxn();
         MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
-        final Map<TableSchema, List<CorfuStreamEntry>> mutations = new HashMap<>();
+        final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>();
         tablesInTxn.forEach((uuid, table) -> {
             List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream().map(entry ->
                     CorfuStreamEntry.fromSMREntry(entry, 0)).collect(Collectors.toList());
-
-            TableSchema schema;
-            if (writesInTable.size() > 0) {
-                schema = new TableSchema(table.getFullyQualifiedTableName(),
-                        writesInTable.get(0).getKey().getClass(),
-                        writesInTable.get(0).getPayload().getClass(),
-                        writesInTable.get(0).getMetadata().getClass());
-            } else {
-                schema = new TableSchema(table.getFullyQualifiedTableName(),
-                        null, null, null); // TODO: fix up once schemas are in table
-            }
-            mutations.put(schema, writesInTable);
+            mutations.put(table.getFullyQualifiedTableName(), writesInTable);
         });
-        commitCallback.onCommit(new CorfuStreamEntries(mutations));
+        commitCallback.onCommit(mutations);
         return commitAddress;
     }
 }

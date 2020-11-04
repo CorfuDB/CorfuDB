@@ -135,65 +135,6 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
-     *
-     * putRecord into a table using just the tableName with metadata validations.
-     *
-     * @param tableName - full string representation of the table
-     * @param key - the key of the record being inserted
-     * @param value - the payload or value of the record to be inserted
-     * @param metadata - the metadata which will be validated
-     * @param <K> - type of the key or identifier.
-     * @param <V> - type of the value or payload
-     * @param <M> - type of the metadata
-     */
-    public <K extends Message, V extends Message, M extends Message>
-    void putRecord(@Nonnull String tableName,
-                   @Nonnull final K key,
-                   @Nonnull final V value,
-                   @Nullable final M metadata) {
-        putRecord(this.getTable(tableName), key, value, metadata);
-    }
-
-    /**
-     * put the value on the specified key create record if it does not exist.
-     * (Recommended api for simple KV records without metadata)
-     *
-     * There are several overloaded flavors of put to support optional fields like
-     * metadata, tableNames and the force set of metadata
-     *
-     * @param table    Table object to perform the create/update on.
-     * @param key      Key of the record.
-     * @param value    Value or payload of the record.
-     * @param <K>      Type of Key.
-     * @param <V>      Type of Value.
-     * @param <M>      Type of Metadata.
-     */
-    public <K extends Message, V extends Message, M extends Message>
-    void putRecord(@Nonnull Table<K, V, M> table,
-                   @Nonnull final K key,
-                   @Nonnull final V value) {
-        putRecord(table, key, value, null);
-    }
-
-    /**
-     * putRecord into a table using opened table object as a simple key-value.
-     *
-     * @param tableName - full string representation of the tableName
-     * @param key - the key of the record being inserted
-     * @param value - the payload or value of the record to be inserted
-     * @param <K> - type of the key or identifier.
-     * @param <V> - type of the value or payload
-     * @param <M> - type of the metadata
-     */
-    public <K extends Message, V extends Message, M extends Message>
-    void putRecord(@Nonnull String tableName,
-                   @Nonnull final K key,
-                   @Nonnull final V value) {
-        putRecord(this.getTable(tableName), key, value, null);
-    }
-
-
-    /**
      * Merges the delta value with the old value by applying a caller specified BiFunction and writes
      * the final value.
      *
@@ -345,7 +286,7 @@ public class TxnContext implements AutoCloseable {
         this.delete(getTable(tableName), key);
     }
 
-    /*************************** Queue API ***************************************/
+    // ************************** Queue API ***************************************/
 
     /**
      * Enqueue a message object into the CorfuQueue.
@@ -368,13 +309,11 @@ public class TxnContext implements AutoCloseable {
         CorfuQueueIdMsg key = CorfuQueueIdMsg.newBuilder()
                 .setEntryId(todoReplaceMe.timestamp())
                 .setTxSequence(todoReplaceMe.clockSequence()).build();
-        this.putRecord(table, (K)key, record);
+        this.putRecord(table, (K)key, record, null);
         return (K) key;
     }
 
-    /**
-     *************************** READ API *****************************************
-     */
+    // *************************** READ API *****************************************
 
     /**
      * get the full record from the table given a key.
@@ -724,7 +663,6 @@ public class TxnContext implements AutoCloseable {
                 log.error("UNKNOWN TxnType!!");
                 break;
         }
-        tablesInTxn.clear();
         operations.clear();
         return commitAddress;
     }

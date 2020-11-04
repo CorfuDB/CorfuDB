@@ -2,6 +2,7 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.integration.Event;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
@@ -13,6 +14,7 @@ import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -398,6 +400,92 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                         .build(), true);
         txn.commit();
 
+        log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Validate that fields of metadata that are not set explicitly retain their prior values.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkMetadataWorksWithoutSupervision() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "EventInfo";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, EventInfo, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                EventInfo.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        Uuid key = Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
+        EventInfo value = EventInfo.newBuilder().setName("simpleValue").build();
+
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, key, value); // Look no metadata specified!
+            txn.commit();
+        }
+
+        CorfuStoreEntry<Uuid, EventInfo, ManagedMetadata> entry;
+        try (TxnContextShim query = shimStore.txn(someNamespace)) {
+            entry = query.getRecord(tableName, key);
+        }
+        assertThat(entry.getMetadata().getRevision()).isEqualTo(0);
+        assertThat(entry.getMetadata().getCreateTime()).isGreaterThan(0);
+        assertThat(entry.getMetadata().getCreateTime()).isEqualTo(entry.getMetadata().getLastModifiedTime());
+
+        class CommitCallbackImpl implements TxnContextShim.CommitCallback {
+            public void onCommit(Map<String, List<CorfuStreamEntry>> mutations) {
+                assertThat(mutations.size()).isEqualTo(1);
+                assertThat(mutations.get(table.getFullyQualifiedTableName()).size()).isEqualTo(1);
+                // This one way to selectively extract the metadata out
+                ManagedMetadata metadata = (ManagedMetadata) mutations.get(table.getFullyQualifiedTableName()).get(0).getMetadata();
+                assertThat(metadata.getRevision()).isGreaterThan(0);
+
+                // This is another way to extract the metadata out..
+                mutations.forEach((tblName, entries) -> {
+                    entries.forEach(mutation -> {
+                        // This is how we can extract the metadata out
+                        ManagedMetadata metaData = (ManagedMetadata) mutations.get(tblName).get(0).getMetadata();
+                        assertThat(metaData.getRevision()).isGreaterThan(0);
+                    });
+                });
+            }
+        }
+
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.delete(tableName, key);
+            txn.commit((mutations) -> {
+                 mutations.values().forEach(mutation -> {
+                     CorfuStreamEntry.OperationType op = mutation.get(0).getOperation();
+                     assertThat(op).isEqualTo(CorfuStreamEntry.OperationType.DELETE);
+                 });
+            });
+        }
+
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.clear(tableName);
+            txn.commit((mutations) -> {
+                mutations.values().forEach(mutation -> {
+                    CorfuStreamEntry.OperationType op = mutation.get(0).getOperation();
+                    assertThat(op).isEqualTo(CorfuStreamEntry.OperationType.CLEAR);
+                });
+            });
+        }
         log.debug(table.getMetrics().toString());
     }
 }
