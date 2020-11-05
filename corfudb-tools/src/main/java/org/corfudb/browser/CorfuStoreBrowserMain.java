@@ -26,6 +26,7 @@ public class CorfuStoreBrowserMain {
         loadTable,
         infoTable,
         showTable,
+        listenOnTable,
         dropTable
     }
 
@@ -42,7 +43,7 @@ public class CorfuStoreBrowserMain {
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable> Operation\n"
+        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable|listenOnTable> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--keystore=<keystore_file> KeyStore File\n"
@@ -137,6 +138,13 @@ public class CorfuStoreBrowserMain {
                         itemSize = Integer.parseInt(opts.get("--itemSize").toString());
                     }
                     browser.loadTable(namespace, tableName, numItems, batchSize, itemSize);
+                    break;
+                case listenOnTable:
+                    numItems = Integer.MAX_VALUE;
+                    if (opts.get("--numItems") != null) {
+                        numItems = Integer.parseInt(opts.get("--numItems").toString());
+                    }
+                    browser.listenOnTable(namespace, tableName, numItems);
                     break;
             }
         } catch (Throwable t) {

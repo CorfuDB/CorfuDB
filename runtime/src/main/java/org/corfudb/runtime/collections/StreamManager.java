@@ -115,6 +115,9 @@ public class StreamManager {
             throw new StreamSubscriptionException(
                     "StreamManager: too many (" + MAX_SUBSCRIBERS + ") subscriptions");
         }
+        tablesOfInterest.forEach(t -> {
+            log.info("table name = {} ID {}", t.getTableName(), CorfuRuntime.getStreamID(t.getTableName()));
+        });
         log.info("StreamManager::subscribe {}, startAddress {}, namespace {}, tables {}",
                 streamListener, startAddress, namespace, tablesOfInterest.toString());
         SubscriberTask task = new SubscriberTask(this,
