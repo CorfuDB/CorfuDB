@@ -3,18 +3,15 @@ package org.corfudb.runtime.collections;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections.map.HashedMap;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.object.transactions.WriteSetInfo;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +25,7 @@ import java.util.stream.Collectors;
  * Created by hisundar on 2020-09-16
  */
 @Slf4j
-public class TxnContextShim extends TxnContext {
+public class TxnContextShim extends TxnContext implements AutoCloseable {
 
     public TxnContextShim(@Nonnull final ObjectsView objectsView,
                           @Nonnull final TableRegistry tableRegistry,
@@ -169,61 +166,68 @@ public class TxnContextShim extends TxnContext {
             }
         }
 
-        super.merge(table, key, this::fixUpMetadata, new CorfuRecord<>(value, metadata));
+        MergeCallbackImpl mergeCallback = new MergeCallbackImpl();
+        super.merge(table, key, mergeCallback, new CorfuRecord<>(value, metadata));
     }
 
-    /**
-     * Core logic for handling metadata modifications on mutations
-     *
-     * @param oldRecord - The previous fetched record that exists in the table.
-     * @param deltaUpdate - New record that will be inserted/updated.
-     * @param <K> - type of the key
-     * @param <V> - type of the value or payload
-     * @param <M> - type of the metadata
-     * @return the merged record that will be inserted into the table.
-     */
-    private <K extends Message, V extends Message, M extends Message>
-    CorfuRecord<V, M> fixUpMetadata(CorfuRecord<V, M> oldRecord, CorfuRecord<V, M> deltaUpdate) {
-        M deltaMetadata = deltaUpdate.getMetadata();
-        final Message.Builder builder = deltaMetadata.toBuilder();
-        long currentTime = System.currentTimeMillis();
-        for (Descriptors.FieldDescriptor fieldDescriptor : deltaMetadata.getDescriptorForType().getFields()) {
-            switch (fieldDescriptor.getName()) {
-                case "revision":
-                    if (oldRecord == null || oldRecord.getMetadata() == null) {
-                        builder.setField(fieldDescriptor, 0L);
-                    } else {
-                        Long prevRevision = (Long) oldRecord.getMetadata().getField(fieldDescriptor);
-                        Long givenRevision = (Long)deltaMetadata.getField(fieldDescriptor);
-                        if ((givenRevision > 0 && // Validate revision only if set
-                                prevRevision.longValue() == givenRevision.longValue())
-                                || givenRevision == 0) { // Do not validate revision if field isn't set
-                            builder.setField(fieldDescriptor, prevRevision + 1);
+    class MergeCallbackImpl implements TxnContext.MergeCallback {
+        /**
+         * Core logic for handling metadata modifications on mutations
+         *
+         * @param oldRecord - The previous fetched record that exists in the table.
+         * @param deltaUpdate - New record that will be inserted/updated.
+         * @param <K> - type of the key
+         * @param <V> - type of the value or payload
+         * @param <M> - type of the metadata
+         * @return the merged record that will be inserted into the table.
+         */
+        @Override
+        public <K extends Message, V extends Message, M extends Message>
+        CorfuRecord<V, M> doMerge(Table<K, V, M> table,
+                                  CorfuRecord<V, M> oldRecord,
+                                  CorfuRecord<V, M> deltaUpdate) {
+            M deltaMetadata = deltaUpdate.getMetadata();
+
+            final Message.Builder builder = deltaMetadata.toBuilder();
+            long currentTime = System.currentTimeMillis();
+            for (Descriptors.FieldDescriptor fieldDescriptor : deltaMetadata.getDescriptorForType().getFields()) {
+                switch (fieldDescriptor.getName()) {
+                    case "revision":
+                        if (oldRecord == null || oldRecord.getMetadata() == null) {
+                            builder.setField(fieldDescriptor, 0L);
                         } else {
-                            throw new StaleRevisionUpdateException(prevRevision, givenRevision);
+                            Long prevRevision = (Long) oldRecord.getMetadata().getField(fieldDescriptor);
+                            Long givenRevision = (Long)deltaMetadata.getField(fieldDescriptor);
+                            if ((givenRevision > 0 && // Validate revision only if set
+                                    prevRevision.longValue() == givenRevision.longValue())
+                                    || givenRevision == 0) { // Do not validate revision if field isn't set
+                                builder.setField(fieldDescriptor, prevRevision + 1);
+                            } else {
+                                throw new StaleRevisionUpdateException(prevRevision, givenRevision);
+                            }
                         }
-                    }
-                    break;
-                case "create_time":
-                    if (oldRecord == null) {
+                        break;
+                    case "create_time":
+                        if (oldRecord == null) {
+                            builder.setField(fieldDescriptor, currentTime);
+                        }
+                        break;
+                    case "last_modified_time":
                         builder.setField(fieldDescriptor, currentTime);
-                    }
-                    break;
-                case "last_modified_time":
-                    builder.setField(fieldDescriptor, currentTime);
-                    break;
-                default: // By default just merge any field not explicitly set with prev value
-                    if (oldRecord != null
-                            && oldRecord.getMetadata() != null
-                            && oldRecord.getMetadata().hasField(fieldDescriptor)
-                            && !deltaMetadata.hasField(fieldDescriptor)) {
-                        builder.setField(fieldDescriptor, oldRecord.getMetadata().getField(fieldDescriptor));
-                    } else {
-                        builder.setField(fieldDescriptor, deltaMetadata.getField(fieldDescriptor));
-                    }
+                        break;
+                    default: // By default just merge any field not explicitly set with prev value
+                        if (oldRecord != null
+                                && oldRecord.getMetadata() != null
+                                && oldRecord.getMetadata().hasField(fieldDescriptor)
+                                && !deltaMetadata.hasField(fieldDescriptor)) {
+                            builder.setField(fieldDescriptor, oldRecord.getMetadata().getField(fieldDescriptor));
+                        } else {
+                            builder.setField(fieldDescriptor, deltaMetadata.getField(fieldDescriptor));
+                        }
+                }
             }
+            return new CorfuRecord<V, M>(deltaUpdate.getPayload(), (M) builder.build());
         }
-        return new CorfuRecord<V, M>(deltaUpdate.getPayload(), (M) builder.build());
     }
 
     /**
