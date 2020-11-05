@@ -17,11 +17,12 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * To ensure that feature changes in CorfuStore do not break verticals,
  * we simulate their usage pattern with implementation and tests.
- *
+ * <p>
  * Created by hisundar on 2020-09-16
  */
 @Slf4j
@@ -31,7 +32,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * happen in a write transaction or vice versa
      * This test demonstrates how that would work
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void checkDirtyReads() throws Exception {
@@ -73,7 +74,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // Take a snapshot to test snapshot isolation transaction
         final CorfuStoreMetadata.Timestamp timestamp = ufoStore.getTimestamp();
-        CorfuStoreEntry<Uuid, EventInfo, ManagedMetadata> entry = null;
+        CorfuStoreEntry<Uuid, EventInfo, ManagedMetadata> entry;
         // Start a dirty read transaction
         try (TxnContextShim readWriteTxn = ufoStore.txn(someNamespace)) {
             readWriteTxn.putRecord(table, key1,
@@ -95,7 +96,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             entry = readWriteTxn.getRecord(table, key1);
             readWriteTxn.putRecord(table, key1,
                     EventInfo.newBuilder()
-                            .setName("abc"+entry.getPayload().getName())
+                            .setName("abc" + entry.getPayload().getName())
                             .build(),
                     ManagedMetadata.newBuilder().build());
             readWriteTxn.commit();
@@ -112,7 +113,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Simple example to see how secondary indexes work. Please see sample_schema.proto.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void testSecondaryIndexes() throws Exception {
@@ -170,7 +171,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
      * CorfuStoreShim stores 3 pieces of information - key, value and metadata
      * This test demonstrates how metadata field options esp "version" can be used and verified.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void checkRevisionValidation() throws Exception {
@@ -214,11 +215,11 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 .touch(tableName, key1)
                 .commit();
 
-        CorfuStoreEntry<Uuid, EventInfo, ManagedMetadata> entry = null;
+        CorfuStoreEntry<Uuid, EventInfo, ManagedMetadata> entry;
         try (TxnContextShim queryTxn = ufoStore.txn(someNamespace)) {
             entry = queryTxn.getRecord(table, key1);
         }
-        assert entry != null;
+        assertNotNull(entry);
         assertThat(entry.getMetadata().getRevision()).isEqualTo(0L);
         assertThat(entry.getMetadata().getCreateTime()).isLessThan(System.currentTimeMillis());
 
@@ -248,7 +249,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         }
         assertThat(entry.getMetadata().getRevision()).isEqualTo(2L);
         assertThat(entry.getMetadata().getCreateUser()).isEqualTo("user_1");
-        assertThat(entry.getMetadata().getLastModifiedTime()).isLessThan(System.currentTimeMillis());
+        assertThat(entry.getMetadata().getLastModifiedTime()).isLessThan(System.currentTimeMillis() + 1);
         assertThat(entry.getMetadata().getCreateTime()).isLessThan(entry.getMetadata().getLastModifiedTime());
 
         log.debug(table.getMetrics().toString());
@@ -257,7 +258,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Demonstrates the checks that the metadata passed into CorfuStoreShim is validated against.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void checkNullMetadataTransactions() throws Exception {
@@ -277,13 +278,13 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // This is required to initialize the table for the current corfu client.
         Table<Uuid, EventInfo, ManagedMetadata> table =
                 ufoStore.openTable(
-                someNamespace,
-                tableName,
-                Uuid.class,
-                EventInfo.class,
-                null,
-                // TableOptions includes option to choose - Memory/Disk based corfu table.
-                TableOptions.builder().build());
+                        someNamespace,
+                        tableName,
+                        Uuid.class,
+                        EventInfo.class,
+                        null,
+                        // TableOptions includes option to choose - Memory/Disk based corfu table.
+                        TableOptions.builder().build());
 
         UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
         Uuid key1 = Uuid.newBuilder().setMsb(uuid1.getMostSignificantBits()).setLsb(uuid1.getLeastSignificantBits()).build();
@@ -306,9 +307,9 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Setting metadata into a schema that did not have metadata specified?
         ufoStore.txn(someNamespace)
                 .putRecord(tableName,
-                           key1,
-                           EventInfo.newBuilder().setName("bcd").build(),
-                           ManagedMetadata.newBuilder().setCreateUser("testUser").setRevision(1L).build())
+                        key1,
+                        EventInfo.newBuilder().setName("bcd").build(),
+                        ManagedMetadata.newBuilder().setCreateUser("testUser").setRevision(1L).build())
                 .commit();
         assertThat(ufoStore.getTable(someNamespace, tableName).get(key1).getMetadata())
                 .isNotNull();
@@ -316,8 +317,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Now setting back null into the metadata which had non-null value
         ufoStore.txn(someNamespace)
                 .putRecord(tableName,
-                           key1,
-                           EventInfo.newBuilder().setName("cde").build(),
+                        key1,
+                        EventInfo.newBuilder().setName("cde").build(),
                         null)
                 .commit();
         assertThat(ufoStore.getTable(someNamespace, tableName).get(key1).getMetadata())
@@ -329,7 +330,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     /**
      * Validate that fields of metadata that are not set explicitly retain their prior values.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void checkMetadataMergesOldFieldsTest() throws Exception {
