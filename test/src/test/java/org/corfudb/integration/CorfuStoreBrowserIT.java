@@ -5,6 +5,10 @@ import com.google.protobuf.UnknownFieldSet;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Paths;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
@@ -154,6 +158,48 @@ public class CorfuStoreBrowserIT extends AbstractIT {
 
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
         Assert.assertEquals(browser.loadTable(namespace, tableName, numItems, batchSize, itemSize), batchSize);
+        runtime.shutdown();
+        // TODO: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
+    }
+
+    /**
+     * Create a table and add data to it using the loadTable command.
+     * @throws IOException
+     */
+    @Test
+    public void listenOnTableTest() throws IOException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+        final int numItems = 100;
+        final int batchSize = 1;
+        final int itemSize = 100;
+        final int threadingError = 30; // at least receive 70% of the stream
+
+        AtomicLong itemsRead = new AtomicLong();
+        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        executorService.submit( () -> {
+            itemsRead.set(browser.listenOnTable(namespace, tableName, numItems - threadingError));
+        });
+
+        final long waitTillDoneMillis = 200;
+        try {
+            TimeUnit.MILLISECONDS.sleep(waitTillDoneMillis);
+        } catch (InterruptedException ignored) {}
+        Assert.assertEquals(browser.loadTable(namespace, tableName, numItems, batchSize, itemSize), numItems);
+        try {
+            TimeUnit.MILLISECONDS.sleep(waitTillDoneMillis);
+            executorService.awaitTermination(waitTillDoneMillis, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException ignored) {
+        }
+        Assert.assertTrue(numItems - threadingError <= itemsRead.get());
+
         runtime.shutdown();
         // TODO: Remove this once serializers move into the runtime
         Serializers.clearCustomSerializers();
