@@ -1,13 +1,10 @@
 package org.corfudb.runtime.collections;
 
-import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.checkerframework.checker.units.qual.K;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.Queue.CorfuQueueIdMsg;
 import org.corfudb.runtime.exceptions.TransactionAlreadyStartedException;
 import org.corfudb.runtime.object.transactions.Transaction;
@@ -19,9 +16,7 @@ import org.corfudb.runtime.view.TableRegistry;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -135,12 +130,33 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
+     * A user callback that will take previous value of the record along with its new value
+     * and return the merged record which is to be inserted into the table.
+     */
+    public interface MergeCallback {
+        /**
+         *
+         * @param table     table the merge is being done one that will be returned.
+         * @param oldRecord previous record extracted from the table for the same key.
+         * @param newRecord new record that user is currently inserting into table.
+         * @param <K>       type of the key
+         * @param <V>       type of value or payload
+         * @param <M>       type of metadata
+         * @return
+         */
+        <K extends Message, V extends Message, M extends Message>
+        CorfuRecord<V, M> doMerge(Table<K, V, M> table,
+                                  CorfuRecord<V, M> oldRecord,
+                                  CorfuRecord<V, M> newRecord);
+    }
+
+    /**
      * Merges the delta value with the old value by applying a caller specified BiFunction and writes
      * the final value.
      *
      * @param table Table object to perform the merge operation on.
      * @param key            Key
-     * @param mergeOperator  Function to apply to get the new value
+     * @param mergeCallback  Function to apply to get the new value
      * @param recordDelta    Argument to pass to the mutation function
      * @param <K>            Type of Key.
      * @param <V>            Type of Value.
@@ -149,14 +165,14 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     void merge(@Nonnull Table<K, V, M> table,
                      @Nonnull final K key,
-                     @Nonnull BiFunction<CorfuRecord<V, M>, CorfuRecord<V,M>, CorfuRecord<V,M>> mergeOperator,
+                     @Nonnull MergeCallback mergeCallback,
                      @Nonnull final CorfuRecord<V,M> recordDelta) {
         validateTableWrittenIsInNamespace(table);
         operations.add(() -> {
             CorfuRecord<V,M> oldRecord = table.get(key);
             CorfuRecord<V, M> mergedRecord;
             try {
-                mergedRecord = mergeOperator.apply(oldRecord, recordDelta);
+                mergedRecord = mergeCallback.doMerge(table, oldRecord, recordDelta);
             } catch (Exception ex) {
                 txAbort(); // explicitly abort this transaction and then throw the abort manually
                 log.error("TX Abort merge: {}", table.getFullyQualifiedTableName(), ex);
@@ -458,7 +474,7 @@ public class TxnContext implements AutoCloseable {
     /**
      * Scan and filter by entry.
      *
-     * @param tableName table object to filter the entries on.
+     * @param tableName fullyQualified tablename to filter the entries on.
      * @param entryPredicate Predicate to filter the entries.
      * @return Collection of filtered entries.
      */
