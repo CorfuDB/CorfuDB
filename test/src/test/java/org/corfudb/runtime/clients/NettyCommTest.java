@@ -16,6 +16,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.util.NodeLocator;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -86,6 +87,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Ignore
     public void nettyTlsNoMutualAuth() throws Exception {
         runWithBaseServer(
             (port) -> {
@@ -121,6 +123,7 @@ public class NettyCommTest extends AbstractCorfuTest {
     }
 
     @Test
+    @Ignore
     public void nettyTlsMutualAuth() throws Exception {
         runWithBaseServer(
             (port) -> {
