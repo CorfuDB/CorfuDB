@@ -49,7 +49,8 @@ public class CorfuStore {
     @Nonnull
     public CorfuStore(@Nonnull final CorfuRuntime runtime, boolean enableTxLogging) {
         runtime.setTransactionLogging(enableTxLogging);
-        this.runtime = runtime;    }
+        this.runtime = runtime;
+    }
 
     /**
      * Fetches the latest logical timestamp (global tail) in Corfu's distributed log.
@@ -170,7 +171,7 @@ public class CorfuStore {
      * On read or commit the latest available snapshot will be used to resolve the transaction
      * unless the isolation level has a snapshot timestamp value specified.
      *
-     * @param namespace Namespace of the tables involved in the transaction.
+     * @param namespace      Namespace of the tables involved in the transaction.
      * @param isolationLevel Snapshot (latest or specific) at which the transaction must execute.
      * @return Returns a transaction context instance.
      */
@@ -199,26 +200,48 @@ public class CorfuStore {
     }
 
     /**
-     * Subscribe to a specific a table in a namespace or the entire namespace.
-     * Objects returned will honor transactional boundaries
-     * @param streamListener - callback context.
-     * @param namespace - the CorfuStore namespace to subscribe to.
-     * @param tablesOfInterest - If specified, only updates from these tables will be returned.
-     * @param timestamp - If specified, all stream updates from this timestamp will be returned
-     *                  - if null, only future updates will be returned.
+     * Subscribe to transaction updates on specific tables in the namespace.
+     * Objects returned will honor transactional boundaries.
+     *
+     * @param streamListener   callback context
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     * @param timestamp        if specified, all stream updates from this timestamp will be returned
+     *                         if null, only future updates will be returned
      */
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message>
     void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
                    @Nonnull List<TableSchema<K, V, M>> tablesOfInterest,
                    @Nullable Timestamp timestamp) {
         runtime.getTableRegistry().getStreamManager()
                 .subscribe(streamListener, namespace, tablesOfInterest,
-                (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
+                        (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
+    }
+
+    /**
+     * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
+     * Objects returned will honor transactional boundaries.
+     *
+     * @param streamListener   callback context
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     * @param timestamp        if specified, all stream updates from this timestamp will be returned
+     *                         if null, only future updates will be returned
+     */
+    public void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                   @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                   @Nullable Timestamp timestamp) {
+        runtime.getTableRegistry().getStreamManager()
+                .subscribe(streamListener, namespace, streamTag, tablesOfInterest,
+                        (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
     }
 
     /**
      * Gracefully shutdown a streamer.
      * Once this call returns no further stream updates will be returned.
+     *
      * @param streamListener - callback context.
      */
     public void unsubscribe(@Nonnull StreamListener streamListener) {

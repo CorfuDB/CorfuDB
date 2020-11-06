@@ -58,18 +58,36 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     @Getter
     private final TableMetrics metrics;
 
+    @Getter
+    private final Class<K> keyClass;
+
+    @Getter
+    private final Class<V> valueClass;
+
+    @Getter
+    private final Class<M> metadataClass;
+
     /**
      * Returns a Table instance backed by a CorfuTable.
      *
-     * @param namespace               Namespace of the table.
-     * @param fullyQualifiedTableName Fully qualified table name.
-     * @param valueSchema             Value schema to identify secondary keys.
-     * @param corfuRuntime            Connected instance of the Corfu Runtime.
-     * @param serializer              Protobuf Serializer.
+     * @param namespace               namespace of the table
+     * @param fullyQualifiedTableName Fully qualified table name
+     * @param kClass                  key class
+     * @param vClass                  value class
+     * @param mClass                  metadata class
+     * @param valueSchema             value schema to identify secondary keys
+     * @param metadataSchema          default metadata instance
+     * @param corfuRuntime            connected instance of the Corfu Runtime
+     * @param serializer              protobuf serializer
+     * @param streamingMapSupplier    supplier of underlying map data structure
+     * @param versionPolicy           versioning policy
      */
     @Nonnull
     public Table(@Nonnull final String namespace,
                  @Nonnull final String fullyQualifiedTableName,
+                 @Nonnull final Class<K> kClass,
+                 @Nonnull final Class<V> vClass,
+                 @Nullable final Class<M> mClass,
                  @Nonnull final V valueSchema,
                  @Nullable final M metadataSchema,
                  @Nonnull final CorfuRuntime corfuRuntime,
@@ -95,6 +113,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setArguments(new ProtobufIndexer(valueSchema), streamingMapSupplier, versionPolicy)
                 .open();
         this.metrics = new TableMetrics(this.fullyQualifiedTableName, corfuRuntime.getParameters().getMetricRegistry());
+        this.keyClass = kClass;
+        this.valueClass = vClass;
+        this.metadataClass = mClass;
     }
 
     /**
