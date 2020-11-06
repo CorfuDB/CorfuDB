@@ -327,7 +327,7 @@ public abstract class AbstractTransactionalContext implements
      * @param conflictObjects The fine-grained conflict information, if
      *                        available.
      */
-    public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
+    public <T extends ICorfuSMR<T>> void addToReadSet(ICorfuSMRProxyInternal<T> proxy, Object[] conflictObjects) {
         getReadSetInfo().add(proxy, conflictObjects);
     }
 
@@ -349,8 +349,8 @@ public abstract class AbstractTransactionalContext implements
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
-            conflictObjects) {
+    <T extends ICorfuSMR<T>> long addToWriteSet(ICorfuSMRProxyInternal<T> proxy,
+                                                SMREntry updateEntry, Object[] conflictObjects) {
         return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
     }
 
