@@ -1,22 +1,8 @@
 package org.corfudb.integration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
-
-
 import com.google.common.reflect.TypeToken;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -31,21 +17,38 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Utils;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 
 /**
  * This class provides a set of tests to:
- *
+ * <p>
  * 1. Validate functional behaviour of stream's address discovery mechanisms, under certain scenarios.
- *    These mechanisms are:
- *       (a) follow backpointers &
- *       (b) stream address maps (bitmaps).
+ * These mechanisms are:
+ * (a) follow backpointers &
+ * (b) stream address maps (bitmaps).
  * 2. Compare performance of both, for the same described scenarios (example: reading in presence of holes,
  * reading a large stream from a fresh runtime).
  */
 @Slf4j
 public class StreamAddressDiscoveryIT extends AbstractIT {
+
+    private static final TypeToken<CorfuTable<Integer, String>> TYPE_TOKEN =
+            new TypeToken<CorfuTable<Integer, String>>() {
+            };
 
     private CorfuRuntime createDefaultRuntimeUsingFollowBackpointers() {
         CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT);
@@ -57,7 +60,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     private CorfuRuntime createDefaultRuntimeUsingAddressMaps() {
         CorfuRuntime runtime = createRuntime(DEFAULT_ENDPOINT);
         runtime.getParameters().setFollowBackpointersEnabled(false)
-        .setCacheDisabled(false);
+                .setCacheDisabled(false);
         runtime.getParameters().setStreamBatchSize(PARAMETERS.NUM_ITERATIONS_LOW);
         return runtime;
     }
@@ -73,8 +76,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     private long readFromNewRuntime(CorfuRuntime rt, String streamName, int expectedSize) {
         try {
             CorfuTable<Integer, String> table = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(TYPE_TOKEN)
                     .setStreamName(streamName)
                     .open();
 
@@ -86,25 +88,25 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         }
     }
 
-     /**
+    /**
      * This test aims to validate a stream rebuilt when holes are present. At the same time it is a very
      * small scale test for benchmarking stream rebuilt in the presence of holes when using backpointers
      * vs. using stream maps.
-     *
+     * <p>
      * Steps to reproduce this test:
      * - Write 10000 entries to S1.
      * - Write 10000 entries to S2.
      * - Insert a hole for S1.
      * - Write 100 entries to S1.
-     *
+     * <p>
      * - From a new (fresh) runtime access S1:
-     *      - First, using followBackpointers as the address discovery mechanism.
-     *      - Second, using streamMaps as the address discovery mechanism.
-     *
+     * - First, using followBackpointers as the address discovery mechanism.
+     * - Second, using streamMaps as the address discovery mechanism.
+     * <p>
      * Compare times for both mechanisms, ensure stream maps is faster than following backpointers
      * (which will single step through 10.000 entries)
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void benchMarkStreamRebuiltInPresenceOfHoles() throws Exception {
@@ -119,8 +121,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         try {
             // Write 10K entries on S1 & S2
             CorfuTable<Integer, String> table1 = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(TYPE_TOKEN)
                     .setStreamName(stream1Name)
                     .open();
 
@@ -130,8 +131,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Write 10K entries on S2
             CorfuTable<Integer, String> table2 = runtime.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(TYPE_TOKEN)
                     .setStreamName(stream2Name)
                     .open();
 
@@ -172,7 +172,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     /**
      * Compare behaviour of multi-threaded writes over a shared runtime
      * and stream rebuilt.
-     *
+     * <p>
      * - Write 10K entries to S1 (runtime follow backpointers) - rt1w
      * - Write 10K entries to S1 (runtime address maps) - rt2w
      * - Compare behaviour (it is expected to be in the same order)
@@ -180,7 +180,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * - Read 10K entries new runtime (address maps) - rt2r
      * - Compare behaviour (it is expected to be better for address maps)
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void benchmarkMultiThreadedPutsSharedRuntime() throws Exception {
@@ -201,13 +201,12 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             log.debug("**** Start multi-threaded benchmark");
 
             CorfuTable<Integer, String> table = rt1w.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(TYPE_TOKEN)
                     .setStreamName("streamTable")
                     .open();
 
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-            Long startTime = System.currentTimeMillis();
+            long startTime = System.currentTimeMillis();
 
             for (int i = 0; i < numKeys; i++) {
                 final int value = i;
@@ -219,14 +218,13 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             executor.shutdown();
-            executor.awaitTermination(2, TimeUnit.MINUTES);
+            executor.awaitTermination(PARAMETERS.TIMEOUT_LONG.toMinutes(), TimeUnit.MINUTES);
             log.debug(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
                             " %s ms (for follow backpointers)",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
 
             CorfuTable<Integer, String> table2 = rt2w.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(TYPE_TOKEN)
                     .setStreamName("streamTable")
                     .open();
 
@@ -243,7 +241,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             executor2.shutdown();
-            executor2.awaitTermination(2, TimeUnit.MINUTES);
+            executor2.awaitTermination(PARAMETERS.TIMEOUT_LONG.toMinutes(), TimeUnit.MINUTES);
             log.debug(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
                             " %s ms (for stream address maps)",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
@@ -272,7 +270,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * Compare behaviour of multi-threaded writes over multiple runtime's
      * and stream rebuilt.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void benchmarkMultiThreadedPutsMultiClients() throws Exception {
@@ -289,10 +287,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         final int numKeys = PARAMETERS.NUM_ITERATIONS_LARGE;
 
         for (int i = 0; i < numClients; i++) {
-            CorfuRuntime rt = createDefaultRuntimeUsingFollowBackpointers().setCacheDisabled(false);
+            CorfuRuntime rt = createDefaultRuntimeUsingFollowBackpointers();
             CorfuTable<Integer, String> table = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(TYPE_TOKEN)
                     .setStreamName("streamTable")
                     .open();
             runtimeToTable.put(rt, table);
@@ -302,8 +299,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
         for (int i = 0; i < numClients; i++) {
             CorfuRuntime rt = createDefaultRuntimeUsingAddressMaps();
             CorfuTable<Integer, String> table = rt.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(TYPE_TOKEN)
                     .setStreamName("streamTable")
                     .open();
             runtimeToTable.put(rt, table);
@@ -315,7 +311,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // RUNTIME FOLLOW BACKPOINTERS (WRITE)
             ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-            Long startTime = System.currentTimeMillis();
+            long startTime = System.currentTimeMillis();
 
             int runtimeIndex = 0;
             for (int i = 0; i < numKeys; i++) {
@@ -334,7 +330,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             executor.shutdown();
-            executor.awaitTermination(2, TimeUnit.MINUTES);
+            executor.awaitTermination(PARAMETERS.TIMEOUT_LONG.toMinutes(), TimeUnit.MINUTES);
             log.debug(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
                             " %s ms (for follow backpointers)",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
@@ -360,7 +356,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             executor.shutdown();
-            executor.awaitTermination(2, TimeUnit.MINUTES);
+            executor.awaitTermination(PARAMETERS.TIMEOUT_LONG.toMinutes(), TimeUnit.MINUTES);
             log.debug(String.format("**** Multi-threaded puts (%s threads, %s keys) completed in:" +
                             " %s ms (for stream address maps)",
                     numThreads, numKeys, (System.currentTimeMillis() - startTime)));
@@ -379,11 +375,11 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             assertThat(totalTimeAddressMaps).isLessThanOrEqualTo(totalTimeFollowBackpointers);
         } finally {
-            for(CorfuRuntime rt : runtimesFollowBackpointers) {
+            for (CorfuRuntime rt : runtimesFollowBackpointers) {
                 rt.shutdown();
             }
 
-            for(CorfuRuntime rt : runtimesAddressMaps) {
+            for (CorfuRuntime rt : runtimesAddressMaps) {
                 rt.shutdown();
             }
 
@@ -394,7 +390,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     /**
      * Evaluate stream rebuilt for transactional reads.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void benchmarkMultiThreadedPutsReadsTx() throws Exception {
@@ -418,8 +414,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             log.debug("Start multi-threaded benchmark");
 
             CorfuTable<Integer, String> table = rt1.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(TYPE_TOKEN)
                     .setStreamName("streamTable")
                     .open();
 
@@ -427,7 +422,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             ExecutorService executor2 = Executors.newFixedThreadPool(numThreads);
             ExecutorService executor3 = Executors.newFixedThreadPool(numThreads);
 
-            Long startTime = System.currentTimeMillis();
+            long startTime = System.currentTimeMillis();
 
             for (int i = 0; i < numKeys; i++) {
                 final int value = i;
@@ -446,8 +441,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Read from fresh runtime (following backpointers)
             CorfuTable<Integer, String> table2 = rt2.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(TYPE_TOKEN)
                     .setStreamName("streamTable")
                     .open();
 
@@ -473,8 +467,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Read from fresh runtime (stream address map)
             CorfuTable<Integer, String> table3 = rt3.getObjectsView().build()
-                    .setTypeToken(new TypeToken<CorfuTable<Integer, String>>() {
-                    })
+                    .setTypeToken(TYPE_TOKEN)
                     .setStreamName("streamTable")
                     .open();
 
@@ -498,7 +491,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             assertThat(table3.size()).isEqualTo(numKeys);
             assertThat(addressMapTime).isLessThanOrEqualTo(followBackpointersTime);
-        } catch(Exception e) {
+        } catch (Exception e) {
             log.debug("**** Exception: " + e);
             // Exception
         } finally {
@@ -510,21 +503,21 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     }
 
     /**
-     *  This test checkpoints two streams separately and trims on the lower checkpoint boundary.
-     *  The objective is to test that a stream is rebuilt from a checkpoint with updates to the
-     *  regular stream still present in the log (addresses 10 and 11)
+     * This test checkpoints two streams separately and trims on the lower checkpoint boundary.
+     * The objective is to test that a stream is rebuilt from a checkpoint with updates to the
+     * regular stream still present in the log (addresses 10 and 11)
+     * <p>
+     * S1  S2  S1  S2  S2  S1 cp1 cp1 cp1 s1   s2   s2   cp2  cp2  cp2   s2
+     * +---------------------------------------------------------------------+
+     * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
+     * +---------------------------------------------------------------------+
+     * <p>
+     * S1: Stream 1
+     * S2: Stream 2
+     * CP1: Checkpoint S1
+     * CP2: Checkpoint S2
      *
-     *         S1  S2  S1  S2  S2  S1 cp1 cp1 cp1 s1   s2   s2   cp2  cp2  cp2   s2
-     *       +---------------------------------------------------------------------+
-     *       | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
-     *       +---------------------------------------------------------------------+
-     *
-     *  S1: Stream 1
-     *  S2: Stream 2
-     *  CP1: Checkpoint S1
-     *  CP2: Checkpoint S2
-     *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void checkpointAndTrimAtDifferentPoint() throws Exception {
@@ -558,7 +551,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             transactionalWrite(defaultRT, map1, "5", "5");
 
             // Checkpoint S1
-            MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+            MultiCheckpointWriter<StreamingMap<String, String>> mcw1 = new MultiCheckpointWriter<>();
             mcw1.addMap(map1);
             Token minCheckpointAddress = mcw1.appendCheckpoints(defaultRT, "author");
 
@@ -567,7 +560,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             transactionalWrite(defaultRT, map2, "11", "11");
 
             // Checkpoint S2
-            MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
+            MultiCheckpointWriter<StreamingMap<String, String>> mcw2 = new MultiCheckpointWriter<>();
             mcw2.addMap(map2);
             Token maxCheckpointAddress = mcw2.appendCheckpoints(defaultRT, "author");
 
@@ -592,8 +585,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .setStreamName("stream2")
                     .open();
 
-            assertThat(map1rt.size()).isEqualTo(sizeMap1);
-            assertThat(map2rt.size()).isEqualTo(sizeMap2);
+            assertThat(map1rt).hasSize(sizeMap1);
+            assertThat(map2rt).hasSize(sizeMap2);
         } catch (Exception e) {
             fail("Exception thrown", e);
         } finally {
@@ -610,25 +603,24 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     }
 
     /**
+     * This test validates that a snapshot transaction can be completed
+     * between two checkpoints, whenever part of the address space below the
+     * first checkpoint has been trimmed.
+     * <p>
+     * <p>
+     * S1  S1  S1  S1  S1  No [   CP1   ]  S1  S1  S1   S1   S1  No-Op [     CP2      ]
+     * Op
+     * +-------------------------------------------------------------------------------+
+     * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 |
+     * +-------------------------------------------------------------------------------+
+     * ^                       ^
+     * TRIM                  SNAPSHOT
+     * <p>
+     * S1: Stream 1
+     * CP1: Checkpoint 1 to S1
+     * CP2: Checkpoint 2 to S1
      *
-     *    This test validates that a snapshot transaction can be completed
-     *    between two checkpoints, whenever part of the address space below the
-     *    first checkpoint has been trimmed.
-     *
-     *
-     *         S1  S1  S1  S1  S1  No [   CP1   ]  S1  S1  S1   S1   S1  No-Op [     CP2      ]
-     *                             Op
-     *       +-------------------------------------------------------------------------------+
-     *       | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 |
-     *       +-------------------------------------------------------------------------------+
-     *                     ^                       ^
-     *                    TRIM                  SNAPSHOT
-     *
-     *  S1: Stream 1
-     *  CP1: Checkpoint 1 to S1
-     *  CP2: Checkpoint 2 to S1
-     *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void checkpointAndTrimAtDifferentPointSnapshot() throws Exception {
@@ -649,25 +641,25 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .setStreamName("stream1")
                     .open();
 
-            for(int i=0; i<batchWrite; i++) {
+            for (int i = 0; i < batchWrite; i++) {
                 transactionalWrite(writeRuntime, map1, String.valueOf(i), String.valueOf(i));
             }
 
             // Checkpoint 1
-            MultiCheckpointWriter mcw1 = new MultiCheckpointWriter();
+            MultiCheckpointWriter<StreamingMap<String, String>> mcw1 = new MultiCheckpointWriter<>();
             mcw1.addMap(map1);
             Token minCheckpointAddress = mcw1.appendCheckpoints(writeRuntime, "author");
 
-            for(int i=batchWrite; i<batchWrite + batchWrite; i++) {
+            for (int i = batchWrite; i < batchWrite + batchWrite; i++) {
                 transactionalWrite(writeRuntime, map1, String.valueOf(i), String.valueOf(i));
             }
 
             // Checkpoint 2
-            MultiCheckpointWriter mcw2 = new MultiCheckpointWriter();
+            MultiCheckpointWriter<StreamingMap<String, String>> mcw2 = new MultiCheckpointWriter<>();
             mcw2.addMap(map1);
             Token maxCheckpointAddress = mcw2.appendCheckpoints(writeRuntime, "author");
 
-            assertThat(map1).hasSize(batchWrite+batchWrite);
+            assertThat(map1).hasSize(batchWrite + batchWrite);
 
             // Trim below lower checkpoint
             writeRuntime.getAddressSpaceView().prefixTrim(new Token(minCheckpointAddress.getEpoch(), trimAddress));
@@ -697,18 +689,17 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     }
 
     /**
-     *
      * In this test we want to verify stream's address space rebuilt from log unit given that a valid checkpoint
      * appears after entries to the regular stream. We aim to validate trim mark is properly set despite ordering.
-     *
+     * <p>
      * Test Case 0:
-     *
-     *         S1  S1  S1      S1  S2  S2        S1  S1  S1  S1    S1    S1   S1   S1  CP-S1 snapshot @7 (tail)
-     *       +---------------------------    +-----------------------------------------------+-------+
-     *       | 0 | 1 | 2 | ..| 7 | 8 | 9 |    | 10 | 6 | 7 | 8 | ..... | 11 | 19 | 20 | 21 | 22 | 23 | ...
-     *       +---------------------------    +-----------------------------------------------+-------+
-     *                          ^
-     *                         TRIM
+     * <p>
+     * S1  S1  S1      S1  S2  S2        S1  S1  S1  S1    S1    S1   S1   S1  CP-S1 snapshot @7 (tail)
+     * +---------------------------    +-----------------------------------------------+-------+
+     * | 0 | 1 | 2 | ..| 7 | 8 | 9 |    | 10 | 6 | 7 | 8 | ..... | 11 | 19 | 20 | 21 | 22 | 23 | ...
+     * +---------------------------    +-----------------------------------------------+-------+
+     * ^
+     * TRIM
      **/
     @Test
     public void testStreamRebuilt() throws Exception {
@@ -749,13 +740,15 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Start checkpoint with snapshot time 9 for mapA
-            CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(stream1),
-                    "checkpointer-test", mapA);
+            CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(stream1), "checkpointer-test", mapA
+            );
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress));
 
             // Start checkpoint with snapshot time 9 for mapB
-            CheckpointWriter cpwB = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(stream2),
-                    "checkpointer-test", mapB);
+            CheckpointWriter<StreamingMap<String, Integer>> cpwB = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(stream2), "checkpointer-test", mapB
+            );
             cpwB.appendCheckpoint(new Token(0, snapshotAddress));
 
             // Trim the log
@@ -778,19 +771,19 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(stream1));
 
-            // Verify address space and trim mark is properly set for the given stream (should be 7 which  is the start log address
-            // for the existing checkpoint)
+            // Verify address space and trim mark is properly set for the given stream
+            // (should be 7 which  is the start log address for the existing checkpoint)
             assertThat(addressSpaceA.getTrimMark()).isEqualTo(snapshotAddress);
             assertThat(addressSpaceA.getAddressMap().getLongCardinality()).isEqualTo(insertions);
 
             // Fetch Address Space for the given stream S2
-            StreamAddressSpace addressSpaceB =  Utils.getLogAddressSpace(runtimeRestart
+            StreamAddressSpace addressSpaceB = Utils.getLogAddressSpace(runtimeRestart
                     .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
                     .get(CorfuRuntime.getStreamID(stream2));
 
-            // Verify address space and trim mark is properly set for the given stream (should be 7 which  is the start log address
-            // for the existing checkpoint)
+            // Verify address space and trim mark is properly set for the given stream
+            // (should be 7 which  is the start log address for the existing checkpoint)
             assertThat(addressSpaceB.getTrimMark()).isEqualTo(snapshotAddress);
             assertThat(addressSpaceB.getAddressMap().getLongCardinality()).isEqualTo(insertionsB);
 
@@ -800,7 +793,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Open mapA after restart (verify it loads from checkpoint)
             Map<String, Integer> mapARestart = createMap(runtimeRestart, stream1);
-            assertThat(mapARestart).hasSize(insertions*2 - insertionsB);
+            assertThat(mapARestart).hasSize(insertions * 2 - insertionsB);
 
         } finally {
             runtimes.forEach(CorfuRuntime::shutdown);
@@ -810,20 +803,19 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
 
     /**
-     *
-     *  In this test we want to verify stream's address space rebuilt from log unit given that a hole is the first
-     *  valid address for a stream after a trim (i.e., backpointer is lost) and a checkpoint is present.
-     *
+     * In this test we want to verify stream's address space rebuilt from log unit given that a hole is the first
+     * valid address for a stream after a trim (i.e., backpointer is lost) and a checkpoint is present.
+     * <p>
      * Test Case 1:
+     * <p>
+     * S1  S1  S1   S1   S1  S2        S1       S1  S1  S1    S1    S1   S1   S1     CP-S1
+     * +-------------------------    +-----------------------------------------------+--------------+
+     * | 0 | 1 | 2 | ... | 8 | 9 |    | 10 (hole) | 6 | 7 | 8 | ..... | 11 | 19 | 20 | 21 | 22 | 23 |
+     * +-------------------------    +-----------------------------------------------+--------------+
+     * ^
+     * TRIM
      *
-     *         S1  S1  S1   S1   S1  S2        S1       S1  S1  S1    S1    S1   S1   S1     CP-S1
-     *       +-------------------------    +-----------------------------------------------+--------------+
-     *       | 0 | 1 | 2 | ... | 8 | 9 |    | 10 (hole) | 6 | 7 | 8 | ..... | 11 | 19 | 20 | 21 | 22 | 23 |
-     *       +-------------------------    +-----------------------------------------------+--------------+
-     *                             ^
-     *                           TRIM
-     *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void testStreamRebuiltWithHoleAsFirstEntryAfterTrim() throws Exception {
@@ -873,8 +865,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Start checkpoint with snapshot time (right before the hole) - Ignore the fact the entry from streamB is lost
             // we're interested in verifying the behaviour of streamA with end address != trim address.
-            CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamNameA),
-                    "checkpoint-test", mapA);
+            CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamNameA), "checkpoint-test", mapA
+            );
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress));
 
             // Trim the log
@@ -892,9 +885,10 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             runtimes.add(runtimeRestart);
 
             // Verify checkpoint START_LOG_ADDRESS
-            LogEntry cpStart = (CheckpointEntry) runtimeRestart.getAddressSpaceView().read(checkpointStartRecord)
+            CheckpointEntry cpStart = (CheckpointEntry) runtimeRestart.getAddressSpaceView()
+                    .read(checkpointStartRecord)
                     .getPayload(runtimeRestart);
-            assertThat(((CheckpointEntry) cpStart).getDict()
+            assertThat(cpStart.getDict()
                     .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("8");
 
             // Fetch Address Space for the given stream
@@ -918,21 +912,20 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
 
     /**
-     *
-     *   In this test we want to verify stream's address space rebuilt from log unit given that a hole is the first
-     *   valid address for a stream after a trim (i.e., backpointer is lost) and no checkpoint is present, i.e.,
-     *   S2 was never written to before the checkpoint.
-     *
+     * In this test we want to verify stream's address space rebuilt from log unit given that a hole is the first
+     * valid address for a stream after a trim (i.e., backpointer is lost) and no checkpoint is present, i.e.,
+     * S2 was never written to before the checkpoint.
+     * <p>
      * Test Case 2:
+     * <p>
+     * S1  S1  S1   S1   S1  S1        S2       S2   S2  S2    S2    S2   S2
+     * +-------------------------     +---------------------------------------+
+     * | 0 | 1 | 2 | ... | 8 | 9 |    | 10 (hole) | 11 | 12 | 13 | ..... | 19 |
+     * +-------------------------     +---------------------------------------+
+     * ^
+     * TRIM
      *
-     *         S1  S1  S1   S1   S1  S1        S2       S2   S2  S2    S2    S2   S2
-     *       +-------------------------     +---------------------------------------+
-     *       | 0 | 1 | 2 | ... | 8 | 9 |    | 10 (hole) | 11 | 12 | 13 | ..... | 19 |
-     *       +-------------------------     +---------------------------------------+
-     *                                ^
-     *                              TRIM
-     *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void testStreamRebuiltWithHoleAsFirstEntryAfterTrimNoCP() throws Exception {
@@ -973,8 +966,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Checkpoint A with snapshot @ 9
-            CheckpointWriter cpw = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamNameA),
-                    "checkpointer-test", mapA);
+            CheckpointWriter<StreamingMap<String, Integer>> cpw = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamNameA), "checkpointer-test", mapA
+            );
             Token cpAddress = cpw.appendCheckpoint(new Token(0, snapshotAddress - 1));
 
             // Trim the log
@@ -1040,7 +1034,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     /**
      * Test rebuilding a stream from a new runtime, whenever the last address before the checkpoint
      * was a hole.
-     *
+     * <p>
      * This case is interesting to test as addresses that become holes are discarded by the streamView,
      * while sequencer's are agnostic of this info, hence, take it into account for trim mark computation.
      */
@@ -1083,13 +1077,15 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             }
 
             // Start a CheckpointWriter for streamA
-            CheckpointWriter cpwA = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamA),
-                    "checkpointer-Test", mA);
+            CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamA), "checkpointer-Test", mA
+            );
             Token cpTokenA = cpwA.appendCheckpoint();
 
             // Start a CheckpointWriter for streamB
-            CheckpointWriter cpwB = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamB),
-                    "checkpointer-Test", mB);
+            CheckpointWriter<StreamingMap<String, Integer>> cpwB = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamB), "checkpointer-Test", mB
+            );
             cpwB.appendCheckpoint();
 
             // Add an update to streamA after checkpoint
@@ -1117,7 +1113,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
                         .type(TransactionType.OPTIMISTIC)
                         .build()
                         .begin();
-                assertThat(mA2.size()).isEqualTo(numEntries + 1);
+                assertThat(mA2).hasSize(numEntries + 1);
 
                 // Check Data
                 for (int i = 0; i <= numEntries; i++) {
@@ -1137,7 +1133,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * This test creates an empty checkpoint (for an empty stream) and resets the server to verify
      * that sequencer bootstrap is correct and stream is correctly built from checkpoint.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void testEmptyCheckpointRebuiltOnRestart() throws Exception {
@@ -1156,8 +1152,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             StreamingMap<String, Integer> map = createMap(runtime, streamA);
 
             // Start a CheckpointWriter for streamA (empty)
-            CheckpointWriter cpwA = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamA),
-                    "checkpointer-Test", map);
+            CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamA), "checkpointer-Test", map
+            );
             Token cpToken = cpwA.appendCheckpoint();
 
             // Verify Checkpoint Token
@@ -1165,8 +1162,9 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Verify Checkpoint START_LOG_ADDRESS (reading start record)
             // Because the stream was empty, it should force a hole on 0, and this should be the start address
-            LogEntry cpStart = (CheckpointEntry) runtime.getAddressSpaceView().read(1L).getPayload(runtime);
-            assertThat(((CheckpointEntry) cpStart).getDict()
+            CheckpointEntry cpStart = (CheckpointEntry) runtime.getAddressSpaceView()
+                    .read(1L).getPayload(runtime);
+            assertThat(cpStart.getDict()
                     .get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).isEqualTo("0");
 
             // Trim the log at B's CPToken
@@ -1190,7 +1188,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Instantiate streamA as map after restart (verify it can load from empty checkpoint)
             Map<String, Integer> mapRestart = createMap(rtRestart, streamA);
-            assertThat(mapRestart).hasSize(0);
+            assertThat(mapRestart).isEmpty();
 
         } finally {
             shutdownCorfuServer(server);
@@ -1215,7 +1213,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
      * 6. Verify Stream Maps from log unit and sequencer tails (both regular stream and checkpoint
      * stream should be present).
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Test
     public void testCheckpointEmptyMapAndSequencerFailover() throws Exception {
@@ -1225,14 +1223,15 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
     /**
      * This test is similar to the previous, but enforces the hole from a reader, as reader hole fill
      * does not contain stream information to build address map.
-     * @throws Exception
+     *
+     * @throws Exception exception
      */
     @Test
     public void testCheckpointEmptyMapWithReaderHoleAndSequencerFailover() throws Exception {
         testCheckpointEmptyMapWithSequencerFailover(true);
     }
 
-    private void testCheckpointEmptyMapWithSequencerFailover(boolean readerHole) throws Exception{
+    private void testCheckpointEmptyMapWithSequencerFailover(boolean readerHole) throws Exception {
         final int n0Port = 9000;
         final int n1Port = 9001;
         final int n2Port = 9002;
@@ -1251,8 +1250,8 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
         runtime = new CorfuRuntime(DEFAULT_ENDPOINT).connect();
 
-        runtime.getManagementView().addNode(getConnectionString(n1Port), workflowNumRetry,
-                timeout, pollPeriod);
+        runtime.getManagementView()
+                .addNode(getConnectionString(n1Port), workflowNumRetry, timeout, pollPeriod);
         runtime.invalidateLayout();
         assertThat(runtime.getLayoutView().getLayout().getAllServers().size()).isEqualTo(clusterSizeN2);
 
@@ -1275,13 +1274,14 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             if (readerHole) {
                 // Generate hole from a reader
                 runtime.getSequencerView().next(streamID).getToken();
-                assertThat(mA.size()).isEqualTo(0);
+                assertThat(mA.size()).isZero();
                 extraEntry = 1;
             }
 
             // Start a CheckpointWriter for streamA
-            CheckpointWriter cpwA = new CheckpointWriter(runtime, CorfuRuntime.getStreamID(streamA),
-                    "checkpointer-Test", mA);
+            CheckpointWriter<StreamingMap<String, Integer>> cpwA = new CheckpointWriter<>(
+                    runtime, CorfuRuntime.getStreamID(streamA), "checkpointer-Test", mA
+            );
             Token cpTokenA = cpwA.appendCheckpoint();
 
             // Verify Address Maps from Log Unit and Sequencer Tails (first node)

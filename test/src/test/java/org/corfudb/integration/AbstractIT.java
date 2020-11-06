@@ -88,7 +88,7 @@ public class AbstractIT extends AbstractCorfuTest {
     /**
      * Cleans up the corfu log directory before running any test.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @Before
     public void setUp() throws Exception {
@@ -100,7 +100,7 @@ public class AbstractIT extends AbstractCorfuTest {
     /**
      * Cleans up all Corfu instances after the tests.
      *
-     * @throws Exception
+     * @throws Exception exception
      */
     @After
     public void cleanUp() throws Exception {
@@ -228,7 +228,6 @@ public class AbstractIT extends AbstractCorfuTest {
      * @param pid parent process identifier
      * @return list of children process identifiers
      *
-     * @throws IOException
      */
     private static List<Long> getChildPIDs (long pid) {
         List<Long> childPIDs = new ArrayList<>();
