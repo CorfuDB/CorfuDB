@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package org.corfudb.test;
+package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime";
 
 import "corfu_options.proto";
@@ -21,4 +21,5 @@ message ExampleValue {
     option (org.corfudb.runtime.table_schema).is_federated = true;
 
     string payload = 1;
+    fixed64 anotherKey = 2 [(org.corfudb.runtime.schema).secondary_key = true];
 }

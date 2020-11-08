@@ -61,10 +61,10 @@ public class TxnContext implements AutoCloseable {
      * @param isolationLevel How should this transaction be applied/evaluated.
      */
     @Nonnull
-    TxnContext(@Nonnull final ObjectsView objectsView,
-               @Nonnull final TableRegistry tableRegistry,
-               @Nonnull final String namespace,
-               @Nonnull final IsolationLevel isolationLevel) {
+    public TxnContext(@Nonnull final ObjectsView objectsView,
+                      @Nonnull final TableRegistry tableRegistry,
+                      @Nonnull final String namespace,
+                      @Nonnull final IsolationLevel isolationLevel) {
         this.objectsView = objectsView;
         this.tableRegistry = tableRegistry;
         this.namespace = namespace;

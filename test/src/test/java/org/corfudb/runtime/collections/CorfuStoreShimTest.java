@@ -2,15 +2,14 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.integration.Event;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas.ExampleValue;
+import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
 import org.corfudb.runtime.view.AbstractViewTest;
-import org.corfudb.test.SampleSchema;
-import org.corfudb.test.SampleSchema.EventInfo;
-import org.corfudb.test.SampleSchema.ManagedMetadata;
-import org.corfudb.test.SampleSchema.Uuid;
+import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.Messages.Uuid;
 import org.junit.Test;
 
 import java.util.List;
@@ -29,6 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 @Slf4j
 public class CorfuStoreShimTest extends AbstractViewTest {
+    private CorfuRuntime getTestRuntime() {
+        return getDefaultRuntime();
+    }
     /**
      * CorfuStoreShim supports read your transactional writes implicitly when reads
      * happen in a write transaction or vice versa
@@ -40,7 +42,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     public void checkDirtyReads() throws Exception {
 
         // Get a Corfu Runtime instance.
-        CorfuRuntime corfuRuntime = getDefaultRuntime();
+        CorfuRuntime corfuRuntime = getTestRuntime();
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
@@ -48,15 +50,15 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Define a namespace for the table.
         final String someNamespace = "some-namespace";
         // Define table name.
-        final String tableName = "EventInfo";
+        final String tableName = "ManagedMetadata";
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<Uuid, EventInfo, ManagedMetadata> table = shimStore.openTable(
+        Table<Uuid, ManagedMetadata, ManagedMetadata> table = shimStore.openTable(
                 someNamespace,
                 tableName,
                 Uuid.class,
-                EventInfo.class,
+                ManagedMetadata.class,
                 ManagedMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
@@ -69,23 +71,23 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         TxnContextShim txn = shimStore.txn(someNamespace);
         txn.putRecord(tableName, key1,
-                EventInfo.newBuilder().setName("abc").build(),
+                ManagedMetadata.newBuilder().setCreateUser("abc").build(),
                 user_1);
         txn.commit();
         long tail1 = shimStore.getHighestSequence(someNamespace, tableName);
 
         // Take a snapshot to test snapshot isolation transaction
         final CorfuStoreMetadata.Timestamp timestamp = shimStore.getTimestamp();
-        CorfuStoreEntry<Uuid, EventInfo, ManagedMetadata> entry;
+        CorfuStoreEntry<Uuid, ManagedMetadata, ManagedMetadata> entry;
         // Start a dirty read transaction
         try (TxnContextShim readWriteTxn = shimStore.txn(someNamespace)) {
             readWriteTxn.putRecord(table, key1,
-                    EventInfo.newBuilder().setName("xyz").build(),
+                    ManagedMetadata.newBuilder().setCreateUser("xyz").build(),
                     ManagedMetadata.newBuilder().build());
 
             // Now within the same txn query the object and validate that it shows the local update.
             entry = readWriteTxn.getRecord(table, key1);
-            assertThat(entry.getPayload().getName()).isEqualTo("xyz");
+            assertThat(entry.getPayload().getCreateUser()).isEqualTo("xyz");
             readWriteTxn.commit();
         }
 
@@ -97,8 +99,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         try (TxnContextShim readWriteTxn = shimStore.txn(someNamespace)) {
             entry = readWriteTxn.getRecord(table, key1);
             readWriteTxn.putRecord(table, key1,
-                    EventInfo.newBuilder()
-                            .setName("abc" + entry.getPayload().getName())
+                    ManagedMetadata.newBuilder()
+                            .setCreateUser("abc" + entry.getPayload().getCreateUser())
                             .build(),
                     ManagedMetadata.newBuilder().build());
             readWriteTxn.commit();
@@ -107,7 +109,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Try a read on an older timestamp
         try (TxnContextShim readTxn = shimStore.txn(someNamespace, IsolationLevel.snapshot(timestamp))) {
             entry = readTxn.getRecord(table, key1);
-            assertThat(entry.getPayload().getName()).isEqualTo("abc");
+            assertThat(entry.getPayload().getCreateUser()).isEqualTo("abc");
         }
         log.debug(table.getMetrics().toString());
     }
@@ -121,7 +123,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     public void testSecondaryIndexes() throws Exception {
 
         // Get a Corfu Runtime instance.
-        CorfuRuntime corfuRuntime = getDefaultRuntime();
+        CorfuRuntime corfuRuntime = getTestRuntime();
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
@@ -129,15 +131,15 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Define a namespace for the table.
         final String someNamespace = "some-namespace";
         // Define table name.
-        final String tableName = "EventInfo";
+        final String tableName = "ManagedMetadata";
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<Uuid, EventInfo, ManagedMetadata> table = shimStore.openTable(
+        Table<Uuid, ExampleValue, ManagedMetadata> table = shimStore.openTable(
                 someNamespace,
                 tableName,
                 Uuid.class,
-                EventInfo.class,
+                ExampleValue.class,
                 ManagedMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
@@ -150,19 +152,21 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         final long eventTime = 123L;
 
-        TxnContextShim txn = shimStore.txn(someNamespace);
-        txn.putRecord(tableName, key1,
-                EventInfo.newBuilder()
-                        .setName("abc")
-                        .setEventTime(eventTime).build(),
-                user_1);
-        txn.commit();
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, key1,
+                    ExampleValue.newBuilder()
+                            .setPayload("abc")
+                            .setAnotherKey(eventTime)
+                            .build(),
+                    user_1);
+            txn.commit();
+        }
 
         try (TxnContextShim readWriteTxn = shimStore.txn(someNamespace)) {
-            List<CorfuStoreEntry<Uuid, EventInfo, ManagedMetadata>> entries = readWriteTxn
-                    .getByIndex(table, "event_time", eventTime);
+            List<CorfuStoreEntry<Uuid, ExampleValue, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(table, "anotherKey", eventTime);
             assertThat(entries.size()).isEqualTo(1);
-            assertThat(entries.get(0).getPayload().getName()).isEqualTo("abc");
+            assertThat(entries.get(0).getPayload().getPayload()).isEqualTo("abc");
             readWriteTxn.commit();
         }
 
@@ -179,7 +183,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     public void checkRevisionValidation() throws Exception {
 
         // Get a Corfu Runtime instance.
-        CorfuRuntime corfuRuntime = getDefaultRuntime();
+        CorfuRuntime corfuRuntime = getTestRuntime();
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
@@ -187,15 +191,15 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Define a namespace for the table.
         final String someNamespace = "some-namespace";
         // Define table name.
-        final String tableName = "EventInfo";
+        final String tableName = "ManagedMetadata";
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<Uuid, EventInfo, ManagedMetadata> table = shimStore.openTable(
+        Table<Uuid, ManagedMetadata, ManagedMetadata> table = shimStore.openTable(
                 someNamespace,
                 tableName,
                 Uuid.class,
-                EventInfo.class,
+                ManagedMetadata.class,
                 ManagedMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
@@ -206,18 +210,20 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 .build();
         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
 
-        TxnContextShim txn = shimStore.txn(someNamespace);
-        txn.putRecord(tableName, key1,
-                EventInfo.newBuilder().setName("abc").build(),
-                user_1);
-        txn.commit();
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, key1,
+                    ManagedMetadata.newBuilder().setCreateUser("abc").build(),
+                    user_1);
+            txn.commit();
+        }
 
         // Validate that touch() does not change the revision
-        txn = shimStore.txn(someNamespace);
-        txn.touch(tableName, key1);
-        txn.commit();
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.touch(tableName, key1);
+            txn.commit();
+        }
 
-        CorfuStoreEntry<Uuid, EventInfo, ManagedMetadata> entry;
+        CorfuStoreEntry<Uuid, ManagedMetadata, ManagedMetadata> entry;
         try (TxnContextShim queryTxn = shimStore.txn(someNamespace)) {
             entry = queryTxn.getRecord(table, key1);
         }
@@ -228,23 +234,25 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Ensure that if metadata's revision field is set, it is validated and exception thrown if stale
         final TxnContextShim txn1 = shimStore.txn(someNamespace);
         txn1.putRecord(tableName, key1,
-                EventInfo.newBuilder().setName("abc").build(),
+                ManagedMetadata.newBuilder().setCreateUser("abc").build(),
                 ManagedMetadata.newBuilder().setRevision(1L).build());
         assertThatThrownBy(txn1::commit).isExactlyInstanceOf(StaleRevisionUpdateException.class);
 
         // Correct revision field set should NOT throw an exception
-        txn = shimStore.txn(someNamespace);
-        txn.putRecord(tableName, key1,
-                EventInfo.newBuilder().setName("xyz").build(),
-                ManagedMetadata.newBuilder().setRevision(0L).build());
-        txn.commit();
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, key1,
+                    ManagedMetadata.newBuilder().setCreateUser("xyz").build(),
+                    ManagedMetadata.newBuilder().setRevision(0L).build());
+            txn.commit();
+        }
 
         // Revision field not set should also not throw an exception, just internally bump up revision
-        txn = shimStore.txn(someNamespace);
-        txn.putRecord(tableName, key1,
-                EventInfo.newBuilder().setName("xyz").build(),
-                ManagedMetadata.newBuilder().build());
-        txn.commit();
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, key1,
+                    ManagedMetadata.newBuilder().setCreateUser("xyz").build(),
+                    ManagedMetadata.newBuilder().build());
+            txn.commit();
+        }
 
         try (TxnContextShim queryTxn = shimStore.txn(someNamespace)) {
             entry = queryTxn.getRecord(table, key1);
@@ -266,7 +274,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     public void checkNullMetadataTransactions() throws Exception {
 
         // Get a Corfu Runtime instance.
-        CorfuRuntime corfuRuntime = getDefaultRuntime();
+        CorfuRuntime corfuRuntime = getTestRuntime();
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
@@ -274,16 +282,16 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Define a namespace for the table.
         final String someNamespace = "some-namespace";
         // Define table name.
-        final String tableName = "EventInfo";
+        final String tableName = "ManagedMetadata";
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<Uuid, EventInfo, ManagedMetadata> table =
+        Table<Uuid, ManagedMetadata, ManagedMetadata> table =
                 shimStore.openTable(
                         someNamespace,
                         tableName,
                         Uuid.class,
-                        EventInfo.class,
+                        ManagedMetadata.class,
                         null,
                         // TableOptions includes option to choose - Memory/Disk based corfu table.
                         TableOptions.builder().build());
@@ -293,13 +301,13 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         TxnContextShim txn = shimStore.txn(someNamespace);
         txn.putRecord(tableName,
                 key1,
-                EventInfo.newBuilder().setName("abc").build(),
+                ManagedMetadata.newBuilder().setCreateUser("abc").build(),
                 null);
                txn.commit();
         txn = shimStore.txn(someNamespace);
         txn.putRecord(table,
                 key1,
-                EventInfo.newBuilder().setName("abc").build(),
+                ManagedMetadata.newBuilder().setCreateUser("abc").build(),
                 null);
         txn.commit();
         Message metadata = shimStore.getTable(someNamespace, tableName).get(key1).getMetadata();
@@ -310,7 +318,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         txn = shimStore.txn(someNamespace);
         txn.putRecord(tableName,
                 key1,
-                EventInfo.newBuilder().setName("bcd").build(),
+                ManagedMetadata.newBuilder().setCreateUser("bcd").build(),
                 ManagedMetadata.newBuilder().setCreateUser("testUser").setRevision(1L).build());
         txn.commit();
         assertThat(shimStore.getTable(someNamespace, tableName).get(key1).getMetadata())
@@ -320,7 +328,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         txn = shimStore.txn(someNamespace);
         txn.putRecord(tableName,
                 key1,
-                EventInfo.newBuilder().setName("cde").build(),
+                ManagedMetadata.newBuilder().setCreateUser("cde").build(),
                 null);
         txn.commit();
         assertThat(shimStore.getTable(someNamespace, tableName).get(key1).getMetadata())
@@ -337,7 +345,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     @Test
     public void checkMetadataMergesOldFieldsTest() throws Exception {
         // Get a Corfu Runtime instance.
-        CorfuRuntime corfuRuntime = getDefaultRuntime();
+        CorfuRuntime corfuRuntime = getTestRuntime();
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
@@ -345,60 +353,58 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Define a namespace for the table.
         final String someNamespace = "some-namespace";
         // Define table name.
-        final String tableName = "EventInfo";
+        final String tableName = "ManagedMetadata";
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<Uuid, EventInfo, SampleSchema.ManagedResources> table = shimStore.openTable(
+        Table<Uuid, ManagedMetadata, Messages.LogReplicationEntryMetadata> table = shimStore.openTable(
                 someNamespace,
                 tableName,
                 Uuid.class,
-                EventInfo.class,
-                SampleSchema.ManagedResources.class,
+                ManagedMetadata.class,
+                Messages.LogReplicationEntryMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
 
         Uuid key = Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
-        EventInfo value = EventInfo.newBuilder().setName("simpleValue").build();
+        ManagedMetadata value = ManagedMetadata.newBuilder().setCreateUser("simpleValue").build();
         final String something = "double_nested_metadata_field";
+        final int one = 1; // Frankly stupid but i could not figure out how to selectively disable checkstyle
+        final long twelve = 12L; // please help figure out how to disable checkstyle selectively
 
-        TxnContextShim txn = shimStore.txn(someNamespace);
-        txn.putRecord(tableName, key, value,
-                SampleSchema.ManagedResources.newBuilder()
-                        .setCreateUser("CreateUser")
-                        .setNestedType(
-                                SampleSchema.NestedTypeA.newBuilder()
-                                        .addTag(
-                                                SampleSchema.NestedTypeB.newBuilder()
-                                                        .setSomething(something).build()
-                                        ).build()
-                        ).build());
-        txn.commit();
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, key, value,
+                    Messages.LogReplicationEntryMetadata.newBuilder()
+                            .setSiteConfigID(twelve)
+                            .setSyncRequestId(Uuid.newBuilder().setMsb(one).build())
+                            .build());
+            txn.commit();
+        }
 
-        final long arbitraryRevision = 12L;
         // Update the record, validate that metadata fields not set, get merged with existing
-        txn = shimStore.txn(someNamespace);
-        txn.putRecord(tableName, key, value,
-                SampleSchema.ManagedResources.newBuilder()
-                        .setCreateUser("CreateUser")
-                        .setVersion(arbitraryRevision)
-                        .build());
-        txn.commit();
-        CorfuStoreEntry<Uuid, EventInfo, SampleSchema.ManagedResources> entry = null;
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, key, value,
+                    Messages.LogReplicationEntryMetadata.newBuilder()
+                            .setTimestamp(one+twelve)
+                            .build());
+            txn.commit();
+        }
+        CorfuStoreEntry<Uuid, ManagedMetadata, Messages.LogReplicationEntryMetadata> entry = null;
         try (TxnContextShim queryTxn = shimStore.txn(someNamespace)) {
             entry = queryTxn.getRecord(table, key);
         }
 
-        assertThat(entry.getMetadata().getVersion()).isEqualTo(arbitraryRevision);
-        assertThat(entry.getMetadata().getCreateUser()).isEqualTo("CreateUser");
-        assertThat(entry.getMetadata().getNestedType().getTag(0).getSomething()).isEqualTo(something);
+        assertThat(entry.getMetadata().getSiteConfigID()).isEqualTo(twelve);
+        assertThat(entry.getMetadata().getSyncRequestId().getMsb()).isEqualTo(one);
+        assertThat(entry.getMetadata().getTimestamp()).isEqualTo(twelve+one);
 
         // Rolling Upgrade compatibility test: It should be ok to set a different metadata schema message
-        txn = shimStore.txn(someNamespace);
-        txn.putRecord(tableName, key, value,
-                ManagedMetadata.newBuilder()
-                        .build(), true);
-        txn.commit();
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, key, value,
+                    ManagedMetadata.newBuilder()
+                            .build(), true);
+            txn.commit();
+        }
 
         log.debug(table.getMetrics().toString());
     }
@@ -411,7 +417,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     @Test
     public void checkMetadataWorksWithoutSupervision() throws Exception {
         // Get a Corfu Runtime instance.
-        CorfuRuntime corfuRuntime = getDefaultRuntime();
+        CorfuRuntime corfuRuntime = getTestRuntime();
 
         // Creating Corfu Store using a connected corfu client.
         CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
@@ -419,28 +425,28 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         // Define a namespace for the table.
         final String someNamespace = "some-namespace";
         // Define table name.
-        final String tableName = "EventInfo";
+        final String tableName = "ManagedMetadata";
 
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
-        Table<Uuid, EventInfo, ManagedMetadata> table = shimStore.openTable(
+        Table<Uuid, ManagedMetadata, ManagedMetadata> table = shimStore.openTable(
                 someNamespace,
                 tableName,
                 Uuid.class,
-                EventInfo.class,
+                ManagedMetadata.class,
                 ManagedMetadata.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
 
         Uuid key = Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
-        EventInfo value = EventInfo.newBuilder().setName("simpleValue").build();
+        ManagedMetadata value = ManagedMetadata.newBuilder().setCreateUser("simpleValue").build();
 
         try (TxnContextShim txn = shimStore.txn(someNamespace)) {
             txn.putRecord(tableName, key, value); // Look no metadata specified!
             txn.commit();
         }
 
-        CorfuStoreEntry<Uuid, EventInfo, ManagedMetadata> entry;
+        CorfuStoreEntry<Uuid, ManagedMetadata, ManagedMetadata> entry;
         try (TxnContextShim query = shimStore.txn(someNamespace)) {
             entry = query.getRecord(tableName, key);
         }
