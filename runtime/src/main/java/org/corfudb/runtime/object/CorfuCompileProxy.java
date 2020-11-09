@@ -1,10 +1,6 @@
 package org.corfudb.runtime.object;
 
-import static java.lang.Long.min;
-
-import com.codahale.metrics.Counter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -20,8 +16,6 @@ import org.corfudb.runtime.exceptions.TrimmedUpcallException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.ReflectionUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
@@ -31,10 +25,13 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
+
+import static java.lang.Long.min;
 
 /**
  * In the Corfu runtime, on top of a stream,
@@ -103,14 +100,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     /**
      * Metrics: meter (counter), histogram.
      */
-    private final Timer timerAccess;
-    private final Timer timerAccessPerStream;
-    private final Timer timerLogWrite;
-    private final Timer timerTxn;
-    private final Timer timerUpcall;
-    private final Counter counterTxnRetry1;
-    private final Counter counterTxnRetryN;
-
+    private final Optional<Timer> readTimer;
+    private final Optional<Timer> writeTimer;
+    private final Optional<Timer> txTimer;
     /**
      * Correctness Logging
      */
@@ -142,14 +134,18 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                 new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
                 wrapperObject);
 
-        final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-        timerAccess = metrics.timer(CorfuComponent.OBJECT + "access");
-        timerAccessPerStream = metrics.timer(CorfuComponent.OBJECT + "access-" + streamID);
-        timerLogWrite = metrics.timer(CorfuComponent.OBJECT + "log-write");
-        timerTxn = metrics.timer(CorfuComponent.OBJECT + "txn");
-        timerUpcall = metrics.timer(CorfuComponent.OBJECT + "upcall");
-        counterTxnRetry1 = metrics.counter(CorfuComponent.OBJECT + "txn-first-retry");
-        counterTxnRetryN = metrics.counter(CorfuComponent.OBJECT + "txn-extra-retries");
+        String streamIdKey = "streamId";
+        String streamIdValue = getStreamID().toString();
+
+        readTimer = rt.getRegistry().map(registry ->
+                Timer.builder("vlo.read.timer").tag(streamIdKey, streamIdValue)
+                        .register(registry));
+        writeTimer = rt.getRegistry().map(registry ->
+                Timer.builder("vlo.write.timer").tag(streamIdKey, streamIdValue)
+                        .register(registry));
+        txTimer = rt.getRegistry().map(registry ->
+                Timer.builder("vlo.tx.timer").tag(streamIdKey, streamIdValue)
+                        .register(registry));
     }
 
     /**
@@ -166,11 +162,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timerAccess)) {
-            try (Timer.Context streamContext = MetricsUtils.getConditionalContext(timerAccessPerStream)) {
-                return accessInner(accessMethod, conflictObject);
-            }
-        }
+        Supplier<R> accessSupplier = () -> accessInner(accessMethod, conflictObject);
+        return readTimer.map(timer -> timer.record(accessSupplier)).orElseGet(() -> accessSupplier.get());
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
@@ -222,9 +215,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
                           Object[] conflictObject, Object... args) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timerLogWrite)) {
-            return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
-        }
+        Supplier<Long> logUpdateSupplier = () ->
+                logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
+        return writeTimer.map(timer -> timer.record(logUpdateSupplier)).orElseGet(() -> logUpdateSupplier.get());
     }
 
     private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
@@ -258,9 +251,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     @Override
     public <R> R getUpcallResult(long timestamp, Object[] conflictObject) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timerUpcall);) {
-            return getUpcallResultInner(timestamp, conflictObject);
-        }
+        return getUpcallResultInner(timestamp, conflictObject);
     }
 
     private <R> R getUpcallResultInner(long timestamp, Object[] conflictObject) {
@@ -335,9 +326,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timerTxn)) {
-            return TXExecuteInner(txFunction);
-        }
+        Supplier<R> txSupplier = () -> TXExecuteInner(txFunction);
+        return txTimer.map(timer -> timer.record(txSupplier)).orElseGet(() -> txSupplier.get());
     }
 
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"})
@@ -373,12 +363,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                         throw e;
                     }
                 }
-
-                if (retries == 1) {
-                    MetricsUtils
-                            .incConditionalCounter(counterTxnRetry1, 1);
-                }
-                MetricsUtils.incConditionalCounter(counterTxnRetryN, 1);
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);
                 Sleep.sleepUninterruptibly(Duration.ofMillis(sleepTime));

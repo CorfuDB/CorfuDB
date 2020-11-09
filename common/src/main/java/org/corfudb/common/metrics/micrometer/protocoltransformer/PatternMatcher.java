@@ -12,7 +12,7 @@ public interface PatternMatcher extends Predicate<String> {
      * A pattern string that contains the name of the metric as well as
      * the previously defined tags.
      */
-    String METRIC_PATTERN_STRING = "^([a-z.]+)\\{([a-z0-9.:-=,]+)}";
+    String METRIC_PATTERN_STRING = "^(.*)\\{(.*)}";
 
     /**
      * Return the optionally matched result.

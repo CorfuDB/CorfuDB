@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view.replication;
 
 import com.google.common.collect.Iterables;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
@@ -22,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -33,25 +35,50 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
     public ChainReplicationProtocol(IHoleFillPolicy holeFillPolicy) {
         super(holeFillPolicy);
     }
+    private final ConcurrentHashMap<String, Timer> perNodeWriteTimer =
+            new ConcurrentHashMap<>();
 
     /**
      * {@inheritDoc}
      */
+
+    private void registerTimerPerNode(RuntimeLayout runtimeLayout){
+        runtimeLayout.getRuntime().getRegistry().ifPresent(registry -> {
+            for (String server : runtimeLayout.getLayout().getAllLogServers()) {
+                perNodeWriteTimer.putIfAbsent(server,
+                        Timer.builder("chain_replication.write").tag("node", server).register(registry));
+            }
+        });
+    }
+
+    private void doWrite(RuntimeLayout runtimeLayout, long address, int index, Runnable writeRunnable) {
+        String server = runtimeLayout.getLayout().getStripe(address).getLogServers().get(index);
+        if (perNodeWriteTimer.containsKey(server)) {
+            perNodeWriteTimer.get(server).record(writeRunnable);
+        }
+        else {
+            writeRunnable.run();
+        }
+    }
+
     @Override
     public void write(RuntimeLayout runtimeLayout, ILogData data) throws OverwriteException {
         final long globalAddress = data.getGlobalAddress();
         int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
 
+        registerTimerPerNode(runtimeLayout);
         // To reduce the overhead of serialization, we serialize only the
         // first time we write, saving when we go down the chain.
         try (ILogData.SerializationHandle sh = data.getSerializedForm(true)) {
             log.trace("Write[{}]: chain head {}/{}", globalAddress, 1, numUnits);
             // In chain replication, we start at the chain head.
             try {
-                CFUtils.getUninterruptibly(
-                        runtimeLayout.getLogUnitClient(globalAddress, 0)
+                final int headIndex = 0;
+                Runnable writable = () -> CFUtils.getUninterruptibly(
+                        runtimeLayout.getLogUnitClient(globalAddress, headIndex)
                                 .write(sh.getSerialized()),
                         OverwriteException.class);
+                doWrite(runtimeLayout, globalAddress, headIndex, writable);
                 propagate(runtimeLayout, globalAddress, sh.getSerialized());
             } catch (OverwriteException oe) {
                 // Some other wrote here (usually due to hole fill)
@@ -241,7 +268,6 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
                            long globalAddress,
                            @Nullable ILogData data) {
         int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
-
         for (int i = 1; i < numUnits; i++) {
             log.trace("Propagate[{}]: chain {}/{}", Token.of(runtimeLayout.getLayout().getEpoch(),
                     globalAddress),
@@ -249,18 +275,21 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
             // In chain replication, we write synchronously to every unit
             // in the chain.
             try {
+                Runnable writable;
+                final int writableIndex = i;
                 if (data != null) {
-                    CFUtils.getUninterruptibly(
-                            runtimeLayout.getLogUnitClient(globalAddress, i)
+                    writable = () -> CFUtils.getUninterruptibly(
+                            runtimeLayout.getLogUnitClient(globalAddress, writableIndex)
                                     .write(data),
                             OverwriteException.class);
                 } else {
                     Token token = new Token(runtimeLayout.getLayout().getEpoch(), globalAddress);
                     LogData hole = LogData.getHole(token);
-                    CFUtils.getUninterruptibly(runtimeLayout
-                            .getLogUnitClient(globalAddress, i)
+                    writable = () -> CFUtils.getUninterruptibly(runtimeLayout
+                            .getLogUnitClient(globalAddress, writableIndex)
                             .write(hole), OverwriteException.class);
                 }
+                doWrite(runtimeLayout, globalAddress, i, writable);
             } catch (OverwriteException oe) {
                 log.info("Propagate[{}]: Completed by other writer", globalAddress);
             }
@@ -310,11 +339,13 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         // now we go down the chain and write, ignoring any overwrite exception we get.
         for (int i = 1; i < numUnits; i++) {
             log.debug("Recover[{}]: write chain {}/{}", layout, i + 1, numUnits);
+            final int writableIndex = i;
             // In chain replication, we write synchronously to every unit in the chain.
             try {
-                CFUtils.getUninterruptibly(
-                        runtimeLayout.getLogUnitClient(globalAddress, i).write(ld),
+                Runnable writable = () -> CFUtils.getUninterruptibly(
+                        runtimeLayout.getLogUnitClient(globalAddress, writableIndex).write(ld),
                         OverwriteException.class);
+                doWrite(runtimeLayout, globalAddress, writableIndex, writable);
                 // We successfully recovered a write to this member of the chain
                 log.debug("Recover[{}]: recovered write at chain {}/{}", layout, i + 1, numUnits);
             } catch (OverwriteException oe) {
@@ -338,9 +369,11 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         try {
             Token token = new Token(runtimeLayout.getLayout().getEpoch(), globalAddress);
             LogData hole = LogData.getHole(token);
-            CFUtils.getUninterruptibly(runtimeLayout
-                    .getLogUnitClient(globalAddress, 0)
+            final int headIndex = 0;
+            Runnable writable = () -> CFUtils.getUninterruptibly(runtimeLayout
+                    .getLogUnitClient(globalAddress, headIndex)
                     .write(hole), OverwriteException.class);
+            doWrite(runtimeLayout, globalAddress, headIndex, writable);
             propagate(runtimeLayout, globalAddress, null);
         } catch (OverwriteException oe) {
             // The hole-fill failed. We must ensure the other writer's

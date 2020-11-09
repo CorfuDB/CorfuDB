@@ -23,6 +23,6 @@ public class LongRunningTaskInfluxLineTransformer implements InfluxLineProtocolT
     public boolean test(String s) {
         Matcher matcher = longRunningTaskPattern.matcher(s);
         this.matched = Optional.of(matcher);
-        return matcher.find();
+        return matcher.matches();
     }
 }
