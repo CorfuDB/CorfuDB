@@ -5,6 +5,7 @@ import com.google.protobuf.Message;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -14,6 +15,8 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.view.TableRegistry;
 
 /**
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
@@ -113,6 +116,32 @@ public class CorfuStore {
     }
 
     /**
+     * Creates and registers a Queue backed by a Table.
+     * A table needs to be registered before it is used.
+     *
+     * @param namespace    Namespace of the table.
+     * @param queueName    Queue's table name.
+     * @param vClass       Class of the Queue's record Model.
+     * @param tableOptions Table options.
+     * @param <V>          Value type.
+     * @return Table instance.
+     * @throws NoSuchMethodException     Thrown if key/value class are not protobuf classes.
+     * @throws InvocationTargetException Thrown if key/value class are not protobuf classes.
+     * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
+     */
+    @Nonnull
+    public <V extends Message, M extends Message>
+    Table<Queue.CorfuQueueIdMsg, V, M> openQueue(@Nonnull final String namespace,
+                                                 @Nonnull final String queueName,
+                                                 @Nonnull final Class<V> vClass,
+                                                 @Nonnull final TableOptions tableOptions)
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+
+        return runtime.getTableRegistry().openTable(namespace, queueName,
+                Queue.CorfuQueueIdMsg.class, vClass, null, tableOptions);
+    }
+
+    /**
      * Deletes a table instance. [NOT SUPPORTED.]
      *
      * @param namespace Namespace of the table.
@@ -158,11 +187,7 @@ public class CorfuStore {
      */
     @Nonnull
     public TxnContext txn(@Nonnull final String namespace) {
-        return new TxnContext(
-                this.runtime.getObjectsView(),
-                this.runtime.getTableRegistry(),
-                namespace,
-                IsolationLevel.snapshot());
+        return this.txn(namespace, IsolationLevel.snapshot());
     }
 
     /**
@@ -182,6 +207,22 @@ public class CorfuStore {
                 this.runtime.getTableRegistry(),
                 namespace,
                 isolationLevel);
+    }
+
+    /**
+     * Return the address of the latest updated made in this table.
+     *
+     * @param namespace - namespace that this table belongs to.
+     * @param tableName - table name of this table without the namespace prefixed in.
+     * @return stream tail of this table.
+     */
+    public long getHighestSequence(@Nonnull final String namespace,
+                                   @Nonnull final String tableName) {
+        return this.runtime.getSequencerView().query(
+                CorfuRuntime.getStreamID(
+                        TableRegistry.getFullyQualifiedTableName(namespace, tableName)
+                )
+        );
     }
 
     /**

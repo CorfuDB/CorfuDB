@@ -5,26 +5,39 @@ import com.google.common.reflect.TypeToken;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Message;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreShim;
+import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.CorfuDynamicKey;
 import org.corfudb.runtime.collections.CorfuDynamicRecord;
 import org.corfudb.runtime.collections.PersistedStreamingMap;
+import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.collections.TxnContextShim;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
@@ -143,9 +156,11 @@ public class CorfuStoreBrowser {
                     builder = new StringBuilder("\nKey:\n")
                             .append(JsonFormat.printer().print(entry.getKey().getKey()))
                             .append("\nPayload:\n")
-                            .append(JsonFormat.printer().print(entry.getValue().getPayload()))
+                            .append(entry.getValue() != null && entry.getValue().getPayload() != null ?
+                                    JsonFormat.printer().print(entry.getValue().getPayload())   : "")
                             .append("\nMetadata:\n")
-                            .append(JsonFormat.printer().print(entry.getValue().getMetadata()))
+                            .append(entry.getValue() != null && entry.getValue().getMetadata() != null ?
+                                    JsonFormat.printer().print(entry.getValue().getMetadata()): "")
                             .append("\n====================\n");
                     log.info(builder.toString());
                 } catch (InvalidProtocolBufferException e) {
@@ -227,17 +242,17 @@ public class CorfuStoreBrowser {
      */
     public int loadTable(String namespace, String tablename, int numItems, int batchSize, int itemSize) {
         verifyNamespaceAndTablename(namespace, tablename);
-        CorfuStore store = new CorfuStore(runtime);
+        CorfuStoreShim store = new CorfuStoreShim(runtime);
         try {
             TableOptions.TableOptionsBuilder<Object, Object> optionsBuilder = TableOptions.builder();
             if (diskPath != null) {
                 optionsBuilder.persistentDataPath(Paths.get(diskPath));
             }
-            final Table<TableName, TableName, TableName> table = store.openTable(
+            final Table<TableName, TableName, ManagedMetadata> table = store.openTable(
                     namespace, tablename,
                     TableName.class,
                     TableName.class,
-                    TableName.class,
+                    ManagedMetadata.class,
                     optionsBuilder.build());
 
             byte[] array = new byte[itemSize];
@@ -254,19 +269,126 @@ public class CorfuStoreBrowser {
                     numItems, itemSize, batchSize, namespace, tablename);
             int itemsRemaining = numItems;
             while (itemsRemaining > 0) {
-                log.info("loadTable: Items left {}", itemsRemaining);
-                TxnContext tx = store.txn(namespace);
+                TxnContextShim tx = store.txn(namespace);
                 for (int j = batchSize; j > 0 && itemsRemaining > 0; j--, itemsRemaining--) {
                     TableName dummyKey = TableName.newBuilder()
                             .setNamespace(Integer.toString(itemsRemaining))
                             .setTableName(Integer.toString(j)).build();
-                    tx.put(table, dummyKey, dummyVal, dummyVal);
+                    tx.putRecord(table, dummyKey, dummyVal, ManagedMetadata.getDefaultInstance());
                 }
-                tx.commit();
+                long address = tx.commit();
+                log.info("loadTable: Txn at address {}. Items  now left {}", address,
+                        itemsRemaining);
             }
         } catch (Exception e) {
             log.error("loadTable: {} {} {} {} failed.", namespace, tablename, numItems, batchSize, e);
         }
         return (int)(Math.ceil((double)numItems/batchSize));
+    }
+
+    /**
+     * Subscribe to and just dump the updates read from a table
+     * @param namespace namespace to listen on
+     * @param tableName tableName to subscribe to
+     * @param stopAfter number of updates to stop listening at
+     * @return number of updates read so far
+     */
+    public long listenOnTable(String namespace, String tableName, int stopAfter) {
+        verifyNamespaceAndTablename(namespace, tableName);
+        CorfuStoreShim store = new CorfuStoreShim(runtime);
+        final Table<TableName, TableName, ManagedMetadata> table;
+        try {
+            TableOptions.TableOptionsBuilder<Object, Object> optionsBuilder = TableOptions.builder();
+            if (diskPath != null) {
+                optionsBuilder.persistentDataPath(Paths.get(diskPath));
+            }
+            table = store.openTable(
+                    namespace, tableName,
+                    TableName.class,
+                    TableName.class,
+                    ManagedMetadata.class,
+                    optionsBuilder.build());
+        } catch (Exception ex) {
+            log.error("Unable to open table "+namespace+"$"+tableName);
+            return 0;
+        }
+
+        int tableSize = table.count();
+        log.info("Listening to updates on Table {} in namespace {} with size {} ID {}...",
+                tableName, namespace, tableSize, table.getStreamUUID().toString());
+
+        class StreamDumper implements StreamListener {
+            @Getter
+            TableSchema tableSchema;
+
+            @Getter
+            AtomicLong txnRead;
+
+            @Getter
+            volatile boolean isError;
+
+            public StreamDumper() {
+                tableSchema = new TableSchema(tableName, TableName.class, TableName.class, ManagedMetadata.class);
+                this.txnRead = new AtomicLong(0);
+            }
+
+            @Override
+            public void onNext(CorfuStreamEntries results) {
+                log.info("onNext invoked with {}. Read so far {}", results.getEntries().size(),
+                        txnRead.get());
+                results.getEntries().forEach((schema, entries) -> {
+                    if (!schema.getTableName().equals(tableSchema.getTableName())) {
+                        log.warn("Not my table {}", schema);
+                        return;
+                    }
+                    entries.forEach(entry -> {
+                        try {
+                            String builder = "\nKey:\n" +
+                                    JsonFormat.printer().print(entry.getKey()) +
+                                    "\nPayload:\n" +
+                                    (entry.getPayload() != null ?
+                                            JsonFormat.printer().print(entry.getPayload()) : "") +
+                                    "\nMetadata:\n" +
+                                    (entry.getMetadata() != null ?
+                                            JsonFormat.printer().print(entry.getMetadata()) : "") +
+                                    "\nOperation:\n" +
+                                    entry.getOperation().toString() +
+                                    "\n====================\n"+
+                                    "\n====================\n";
+                            log.info(builder);
+                            long now = System.currentTimeMillis();
+                            long recordInsertedAt = ((ManagedMetadata)entry.getMetadata()).getLastModifiedTime();
+                            log.info("\n Time since insert: "+(now - recordInsertedAt)+"ms\n");
+                            txnRead.incrementAndGet();
+                        } catch (InvalidProtocolBufferException e) {
+                            log.error("invalid protobuf: ", e);
+                        }
+                    });
+                });
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                isError = true;
+                log.error("Subscriber hit error", throwable);
+            }
+        }
+
+        StreamDumper streamDumper = new StreamDumper();
+        List<TableSchema<Message, Message, Message>> tablesOfInterest = new ArrayList<>();
+        tablesOfInterest.add(streamDumper.getTableSchema());
+        store.subscribe(streamDumper, namespace, tablesOfInterest, null);
+        while (streamDumper.getTxnRead().get() < stopAfter || streamDumper.isError()) {
+            final int SLEEP_DURATION_MILLIS = 100;
+            try {
+                TimeUnit.MILLISECONDS.sleep(SLEEP_DURATION_MILLIS);
+            } catch (InterruptedException e) {
+                log.error("listenOnTable: Interrupted while sleeping", e);
+            }
+        }
+
+        store.unsubscribe(streamDumper);
+
+        return streamDumper.getTxnRead().get();
     }
 }

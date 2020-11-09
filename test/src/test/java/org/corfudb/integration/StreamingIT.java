@@ -139,7 +139,8 @@ public class StreamingIT extends AbstractIT {
         for (int i = 0; i < numUpdates; i++) {
             Uuid uuid = Uuid.newBuilder().setMsb(i).setLsb(i).build();
             TxnContext tx = store.txn("n1");
-            tx.put(n1t1, uuid, uuid, uuid).commit();
+            tx.putRecord(n1t1, uuid, uuid, uuid);
+            tx.commit();
         }
 
         // Subscribe to streaming updates from the table.
@@ -265,9 +266,11 @@ public class StreamingIT extends AbstractIT {
         for (int i = 0; i < numUpdates; i++) {
             Uuid uuid = Uuid.newBuilder().setMsb(i).setLsb(i).build();
             TxnContext tx = store.txn("n1");
-            tx.put(n1t1, uuid, uuid, uuid).commit();
+            tx.putRecord(n1t1, uuid, uuid, uuid);
+            tx.commit();
             TxnContext tx2 = store.txn("n2");
-            tx2.put(n2t1, uuid, uuid, uuid).commit();
+            tx2.putRecord(n2t1, uuid, uuid, uuid);
+            tx2.commit();
         }
 
         // Subscribe to streaming updates from the table1.
@@ -366,8 +369,8 @@ public class StreamingIT extends AbstractIT {
         Uuid t1Uuid = Uuid.newBuilder().setMsb(t1_uuid).setLsb(t1_uuid).build();
         Uuid t2Uuid = Uuid.newBuilder().setMsb(t2_uuid).setLsb(t2_uuid).build();
         TxnContext txnContext = store.txn("n1");
-        txnContext.put(n1t1, t1Uuid, t1Uuid, t1Uuid);
-        txnContext.put(n1t2, t2Uuid, t2Uuid, t2Uuid);
+        txnContext.putRecord(n1t1, t1Uuid, t1Uuid, t1Uuid);
+        txnContext.putRecord(n1t2, t2Uuid, t2Uuid, t2Uuid);
         txnContext.commit();
 
         // Subscribe to both tables

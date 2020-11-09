@@ -118,6 +118,24 @@ public class CorfuQueue {
         }
 
         /**
+         * @param from - the CorfuQueueIdMsg protobuf to convert from
+         */
+        public CorfuRecordId(CorfuQueueIdMsg from) {
+            this.txSequence = from.getTxSequence();
+            this.entryId = from.getEntryId();
+        }
+
+        /**
+         * @return - the protobuf representation of CorfuRecordId
+         */
+        public CorfuQueueIdMsg toCorfuQueueIdMsg() {
+            return CorfuQueueIdMsg.newBuilder()
+                    .setTxSequence(this.txSequence)
+                    .setEntryId(this.entryId)
+                    .build();
+        }
+
+        /**
          * @return serialized representation of the CorfuRecordId as a byte[]
          */
         public byte[] toByteArray() {

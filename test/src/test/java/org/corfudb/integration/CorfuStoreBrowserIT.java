@@ -5,6 +5,10 @@ import com.google.protobuf.UnknownFieldSet;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Paths;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.view.TableRegistry;
@@ -106,8 +110,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
             .setLsb(metadataUuid)
             .build();
         TxnContext tx = store.txn(namespace);
-        tx.put(table1, uuidKey, uuidVal, metadata)
-            .commit();
+        tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.commit();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -160,6 +164,48 @@ public class CorfuStoreBrowserIT extends AbstractIT {
     }
 
     /**
+     * Create a table and add data to it using the loadTable command.
+     * @throws IOException
+     */
+    @Test
+    public void listenOnTableTest() throws IOException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+        final int numItems = 100;
+        final int batchSize = 1;
+        final int itemSize = 100;
+        final int threadingError = 30; // at least receive 70% of the stream
+
+        AtomicLong itemsRead = new AtomicLong();
+        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        executorService.submit( () -> {
+            itemsRead.set(browser.listenOnTable(namespace, tableName, numItems - threadingError));
+        });
+
+        final long waitTillDoneMillis = 200;
+        try {
+            TimeUnit.MILLISECONDS.sleep(waitTillDoneMillis);
+        } catch (InterruptedException ignored) {}
+        Assert.assertEquals(browser.loadTable(namespace, tableName, numItems, batchSize, itemSize), numItems);
+        try {
+            TimeUnit.MILLISECONDS.sleep(waitTillDoneMillis);
+            executorService.awaitTermination(waitTillDoneMillis, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException ignored) {
+        }
+        Assert.assertTrue(numItems - threadingError <= itemsRead.get());
+
+        runtime.shutdown();
+        // TODO: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
+    }
+
+    /**
      * Create a table and add nested protobufs as data to it.  Verify that the
      * browser tool is able to read the contents accurately.
      * @throws IOException
@@ -206,8 +252,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         SampleSchema.Uuid uuidMeta = SampleSchema.Uuid.newBuilder().setLsb(metaUuid)
             .setMsb(metaUuid).build();
         TxnContext tx = store.txn(namespace);
-        tx.put(table, uuidKey, firewallRuleVal, uuidMeta)
-            .commit();
+        tx.putRecord(table, uuidKey, firewallRuleVal, uuidMeta);
+        tx.commit();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -256,7 +302,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 tableName,
                 SampleSchema.Uuid.class,
                 SampleSchema.Uuid.class,
-                SampleSchema.Uuid.class,
+                null,
                 TableOptions.builder().build());
 
         final long keyUuid = 1L;
@@ -271,13 +317,9 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 .setMsb(valueUuid)
                 .setLsb(valueUuid)
                 .build();
-        SampleSchema.Uuid metadata = SampleSchema.Uuid.newBuilder()
-                .setMsb(metadataUuid)
-                .setLsb(metadataUuid)
-                .build();
         TxnContext tx = store.txn(namespace);
-        tx.put(table, uuidKey, uuidVal, metadata)
-                .commit();
+        tx.putRecord(table, uuidKey, uuidVal, null);
+        tx.commit();
         runtime.shutdown();
 
         runtime = createRuntime(singleNodeEndpoint);
@@ -285,6 +327,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         // Invoke listTables and verify table count
         Assert.assertEquals(2, browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
         TableRegistry.REGISTRY_TABLE_NAME));
+        Assert.assertEquals(1, browser.printTableInfo(namespace, tableName));
         // Todo: Remove this once serializers move into the runtime
         Serializers.clearCustomSerializers();
     }
@@ -338,7 +381,8 @@ public class CorfuStoreBrowserIT extends AbstractIT {
                 .setLsb(metadataUuid)
                 .build();
         TxnContext tx = store.txn(namespace);
-        tx.put(table, uuidKey, uuidVal, metadata).commit();
+        tx.putRecord(table, uuidKey, uuidVal, metadata);
+        tx.commit();
         // Todo: Remove this once serializers move into the runtime
         Serializers.clearCustomSerializers();
         runtime.shutdown();
