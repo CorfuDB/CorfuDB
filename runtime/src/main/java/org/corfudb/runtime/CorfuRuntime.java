@@ -1,9 +1,13 @@
 package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
@@ -11,6 +15,7 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.common.compression.Codec;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
@@ -27,14 +32,14 @@ import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.AddressSpaceView;
+import org.corfudb.runtime.view.Layout;
+import org.corfudb.runtime.view.LayoutManagementView;
+import org.corfudb.runtime.view.LayoutView;
+import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.SequencerView;
 import org.corfudb.runtime.view.StreamsView;
-import org.corfudb.runtime.view.ManagementView;
 import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.runtime.view.LayoutView;
-import org.corfudb.runtime.view.LayoutManagementView;
-import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.GitRepositoryState;
 import org.corfudb.util.MetricsUtils;
@@ -42,6 +47,7 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
@@ -79,6 +85,13 @@ public class CorfuRuntime {
 
         public static CorfuRuntimeParametersBuilder builder() {
             return new CorfuRuntimeParametersBuilder();
+        }
+
+        @AllArgsConstructor
+        public static class MicroMeterRuntimeConfig {
+            private final boolean metricsEnabled;
+            private final String configuredLoggerName;
+            private final Duration loggingInterval;
         }
 
         /*
@@ -235,6 +248,14 @@ public class CorfuRuntime {
          */
         private Codec.Type codecType = Codec.Type.ZSTD;
 
+        /**
+         * Application specified registry to hook up Corfu metrics into an existing
+         * scraping/reporting mechanism.
+         */
+        private MetricRegistry metricRegistry;
+
+        private MicroMeterRuntimeConfig microMeterRuntimeConfig;
+
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
             int maxWriteSize = Integer.MAX_VALUE;
             int bulkReadSize = 10;
@@ -261,6 +282,16 @@ public class CorfuRuntime {
             int invalidateRetry = 5;
             private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
             private Codec.Type codecType = Codec.Type.ZSTD;
+            private MetricRegistry metricRegistry = null;
+            private MicroMeterRuntimeConfig microMeterRuntimeConfig =
+                    new MicroMeterRuntimeConfig(false,
+                            "CorfuMetrics", Duration.ofMinutes(1));
+
+            public CorfuRuntimeParametersBuilder configureMicroMeterMetrics(
+                    MicroMeterRuntimeConfig microMeterRuntimeConfig) {
+                this.microMeterRuntimeConfig = microMeterRuntimeConfig;
+                return this;
+            }
 
             public CorfuRuntimeParametersBuilder tlsEnabled(boolean tlsEnabled) {
                 super.tlsEnabled(tlsEnabled);
@@ -570,6 +601,12 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setInvalidateRetry(invalidateRetry);
                 corfuRuntimeParameters.setPriorityLevel(priorityLevel);
                 corfuRuntimeParameters.setCodecType(codecType);
+                corfuRuntimeParameters.setMicroMeterRuntimeConfig(microMeterRuntimeConfig);
+                if (metricRegistry == null) {
+                    metricRegistry = SharedMetricRegistries.getOrCreate("default");
+                }
+
+                corfuRuntimeParameters.setMetricRegistry(metricRegistry);
                 return corfuRuntimeParameters;
             }
         }
@@ -628,6 +665,9 @@ public class CorfuRuntime {
      * CorfuStore's table registry cache for Table lifecycle management.
      */
     private final AtomicReference<TableRegistry> tableRegistry = new AtomicReference<>(null);
+
+    @Getter
+    private final Optional<MeterRegistry> registry;
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
@@ -807,6 +847,17 @@ public class CorfuRuntime {
             // Try to expose metrics via Prometheus.
             MetricsUtils.metricsReportingSetup(
                     defaultMetrics, parameters.getPrometheusMetricsPort());
+        }
+        CorfuRuntimeParameters.MicroMeterRuntimeConfig microMeterRuntimeConfig =
+                this.parameters.getMicroMeterRuntimeConfig();
+        if (microMeterRuntimeConfig.metricsEnabled) {
+            org.slf4j.Logger logger = LoggerFactory.getLogger(microMeterRuntimeConfig.configuredLoggerName);
+
+            registry = Optional.of(MeterRegistryProvider.MeterRegistryInitializer.newInstance(logger,
+                    microMeterRuntimeConfig.loggingInterval, parameters.clientId));
+        }
+        else {
+            registry = Optional.empty();
         }
 
         log.info("Corfu runtime version {} initialized.", getVersionString());
@@ -1063,7 +1114,8 @@ public class CorfuRuntime {
             List<String> layoutServersCopy = new ArrayList<>(servers);
             parameters.getBeforeRpcHandler().run();
             int systemDownTriggerCounter = 0;
-
+            Optional<Timer.Sample> fetchSample =
+                    getRegistry().map(Timer::start);
             while (true) {
 
                 Collections.shuffle(layoutServersCopy);
@@ -1101,6 +1153,9 @@ public class CorfuRuntime {
                         // Prune away removed node routers from the nodeRouterPool.
                         pruneRemovedRouters(l);
 
+                        getRegistry().ifPresent(reg ->
+                                fetchSample.ifPresent(sample ->
+                                        sample.stop(reg.timer("runtime.fetch_layout.timer"))));
                         return l;
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(

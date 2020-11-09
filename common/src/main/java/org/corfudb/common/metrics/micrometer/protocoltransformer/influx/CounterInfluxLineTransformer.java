@@ -24,6 +24,6 @@ public class CounterInfluxLineTransformer implements InfluxLineProtocolTransform
     public boolean test(String s) {
         Matcher matcher = counterPattern.matcher(s);
         this.matched = Optional.of(matcher);
-        return matcher.find();
+        return matcher.matches();
     }
 }

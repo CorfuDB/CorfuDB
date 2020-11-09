@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 public class ByteDistSummaryInfluxLineTransformer implements InfluxLineProtocolTransformer {
     protected static final String BYTE_DIST_SUMMARY_PATTERN_STRING =
             PatternMatcher.METRIC_PATTERN_STRING +
-                    " (throughput=[\\d]+/s mean=[\\d.]+ [KMGTPE]iB max=[\\d.]+ [KMGTPE]iB)$";
+                    " (throughput=[\\d]+/s mean=[\\d.]+ [KMGTPE]?i?B max=[\\d.]+ [KMGTPE]?i?B)$";
     private final Pattern byteDistSummaryPattern = Pattern.compile(BYTE_DIST_SUMMARY_PATTERN_STRING);
     private Optional<Matcher> matched = Optional.empty();
 
@@ -26,6 +26,6 @@ public class ByteDistSummaryInfluxLineTransformer implements InfluxLineProtocolT
     public boolean test(String s) {
         Matcher matcher = byteDistSummaryPattern.matcher(s);
         this.matched = Optional.of(matcher);
-        return matcher.find();
+        return matcher.matches();
     }
 }

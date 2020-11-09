@@ -23,6 +23,6 @@ public class TimerInfluxLineTransformer implements InfluxLineProtocolTransformer
     public boolean test(String s) {
         Matcher matcher = timerPattern.matcher(s);
         this.matched = Optional.of(matcher);
-        return matcher.find();
+        return matcher.matches();
     }
 }
