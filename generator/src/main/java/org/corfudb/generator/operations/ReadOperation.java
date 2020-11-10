@@ -31,9 +31,9 @@ public class ReadOperation extends Operation {
         Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
 
         // Accessing secondary objects
-        ((CorfuTable)state.getMap((CorfuRuntime.getStreamID(streamId)))).
+        ((CorfuTable) state.getMap((CorfuRuntime.getStreamID(streamId)))).
                 getByIndex(StringIndexer.BY_FIRST_CHAR, "a");
-        ((CorfuTable)state.getMap((CorfuRuntime.getStreamID(streamId)))).
+        ((CorfuTable) state.getMap((CorfuRuntime.getStreamID(streamId)))).
                 getByIndex(StringIndexer.BY_VALUE, val);
 
         if (!TransactionalContext.isInTransaction()) {

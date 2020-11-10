@@ -1,15 +1,15 @@
 package org.corfudb.generator;
 
+import org.corfudb.generator.operations.CheckpointOperation;
+import org.corfudb.generator.operations.Operation;
+import org.corfudb.runtime.CorfuRuntime;
+
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
-import org.corfudb.generator.operations.CheckpointOperation;
-import org.corfudb.generator.operations.Operation;
-import org.corfudb.runtime.CorfuRuntime;
 
 import static java.util.concurrent.Executors.newWorkStealingPool;
 
@@ -18,8 +18,8 @@ import static java.util.concurrent.Executors.newWorkStealingPool;
  * real applications that consume the CorfuDb client. Application's access
  * patterns can be approximated by setting different configurations like
  * data distributions, concurrency level, operation types, time skews etc.
- *
- *
+ * <p>
+ * <p>
  * Created by maithem on 7/14/17.
  */
 public class Generator {

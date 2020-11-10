@@ -1,10 +1,10 @@
 package org.corfudb.generator.operations;
 
-import java.util.Random;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.State;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+
+import java.util.Random;
 
 /**
  * Created by maithem on 7/14/17.
@@ -22,7 +22,7 @@ public class SleepOperation extends Operation {
     public void execute() {
         Random rand = new Random();
 
-        int  sleepTime = rand.nextInt(50);
+        int sleepTime = rand.nextInt(50);
         try {
             Thread.sleep(sleepTime);
         } catch (InterruptedException e) {

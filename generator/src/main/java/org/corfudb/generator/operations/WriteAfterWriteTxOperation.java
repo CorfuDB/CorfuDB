@@ -25,15 +25,14 @@ public class WriteAfterWriteTxOperation extends Operation {
         int numOperations = state.getOperationCount().sample(1).get(0);
         List<Operation> operations = state.getOperations().sample(numOperations);
 
-        for (int x = 0; x < operations.size(); x++) {
-            if (operations.get(x) instanceof org.corfudb.generator.operations.OptimisticTxOperation
-                    || operations.get(x) instanceof SnapshotTxOperation
-                    || operations.get(x) instanceof NestedTxOperation)
-            {
+        for (Operation operation : operations) {
+            if (operation instanceof OptimisticTxOperation
+                    || operation instanceof SnapshotTxOperation
+                    || operation instanceof NestedTxOperation) {
                 continue;
             }
 
-            operations.get(x).execute();
+            operation.execute();
         }
         try {
             timestamp = state.stopTx();

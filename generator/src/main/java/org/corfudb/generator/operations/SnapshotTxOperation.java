@@ -39,16 +39,16 @@ public class SnapshotTxOperation extends Operation {
             int numOperations = state.getOperationCount().sample(1).get(0);
             List<Operation> operations = state.getOperations().sample(numOperations);
 
-            for (int x = 0; x < operations.size(); x++) {
-                if (operations.get(x) instanceof OptimisticTxOperation
-                        || operations.get(x) instanceof SnapshotTxOperation
-                        || operations.get(x) instanceof RemoveOperation
-                        || operations.get(x) instanceof WriteOperation
-                        || operations.get(x) instanceof NestedTxOperation) {
+            for (Operation operation : operations) {
+                if (operation instanceof OptimisticTxOperation
+                        || operation instanceof SnapshotTxOperation
+                        || operation instanceof RemoveOperation
+                        || operation instanceof WriteOperation
+                        || operation instanceof NestedTxOperation) {
                     continue;
                 }
 
-                operations.get(x).execute();
+                operation.execute();
             }
 
             state.stopTx();

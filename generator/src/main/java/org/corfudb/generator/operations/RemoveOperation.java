@@ -20,8 +20,8 @@ public class RemoveOperation extends Operation {
     public void execute() {
         // Hack for Transaction writes only
         if (TransactionalContext.isInTransaction()) {
-            String streamId = (String) state.getStreams().sample(1).get(0);
-            String key = (String) state.getKeys().sample(1).get(0);
+            String streamId = state.getStreams().sample(1).get(0);
+            String key = state.getKeys().sample(1).get(0);
             state.getMap(CorfuRuntime.getStreamID(streamId)).remove(key);
 
             String correctnessRecord = String.format("%s, %s:%s", shortName, streamId, key);

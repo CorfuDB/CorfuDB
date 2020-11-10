@@ -1,13 +1,7 @@
 package org.corfudb.generator;
 
-import com.google.common.reflect.TypeToken;
-
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
-
+import lombok.Getter;
+import lombok.Setter;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.OperationCount;
 import org.corfudb.generator.distributions.Operations;
@@ -17,44 +11,46 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
 
-import lombok.Getter;
-import lombok.Setter;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
 
 /**
  * This object keeps state information of the different data distributions and runtime client.
- *
+ * <p>
  * Created by maithem on 7/14/17.
  */
 public class State {
 
     @Getter
-    final Streams streams;
+    private final Streams streams;
 
     @Getter
-    final Keys keys;
+    private final Keys keys;
 
     @Getter
-    final OperationCount operationCount;
+    private final OperationCount operationCount;
 
     @Getter
-    final Operations operations;
+    private final Operations operations;
 
     @Getter
-    final CorfuRuntime runtime;
+    private final CorfuRuntime runtime;
 
-    @Getter
-    final Map<UUID, CorfuTable> maps;
-
-    @Getter
-    @Setter
-    volatile long lastSuccessfulReadOperationTimestamp = -1;
+    private final Map<UUID, CorfuTable<String, String>> maps;
 
     @Getter
     @Setter
-    volatile long lastSuccessfulWriteOperationTimestamp = -1;
+    private volatile long lastSuccessfulReadOperationTimestamp = -1;
 
     @Getter
-    volatile Token trimMark = Token.UNINITIALIZED;
+    @Setter
+    private volatile long lastSuccessfulWriteOperationTimestamp = -1;
+
+    @Getter
+    private volatile Token trimMark = Token.UNINITIALIZED;
 
     public final Random rand;
 
@@ -84,12 +80,12 @@ public class State {
     }
 
     private void openObjects() {
-        for (String id: streams.getDataSet()) {
+        for (String id : streams.getDataSet()) {
             UUID uuid = CorfuRuntime.getStreamID(id);
             CorfuTable<String, String> map = runtime.getObjectsView()
                     .build()
                     .setStreamID(uuid)
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                    .setTypeToken(CorfuTable.<String, String>getTableType())
                     .setArguments(new StringIndexer())
                     .open();
 
@@ -98,14 +94,14 @@ public class State {
     }
 
     public Map<String, String> getMap(UUID uuid) {
-        Map map = maps.get(uuid);
+        Map<String, String> map = maps.get(uuid);
         if (map == null) {
-            throw new RuntimeException("Map doesn't exist");
+            throw new IllegalStateException("Map doesn't exist");
         }
         return maps.get(uuid);
     }
 
-    public Collection<CorfuTable> getMaps() {
+    public Collection<CorfuTable<String, String>> getMaps() {
         return maps.values();
     }
 

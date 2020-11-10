@@ -8,13 +8,13 @@ import java.util.Set;
 /**
  * This class implements a distribution over the possible streams that
  * can be created/modified.
- *
+ * <p>
  * Created by maithem on 7/14/17.
  */
-public class Streams implements DataSet {
+public class Streams implements DataSet<String> {
 
-    final Set<String> streamIds;
-    final int numStreams;
+    private final Set<String> streamIds;
+    private final int numStreams;
 
     public Streams(int num) {
         streamIds = new HashSet<>();
@@ -24,7 +24,7 @@ public class Streams implements DataSet {
     @Override
     public void populate() {
         for (int x = 0; x < numStreams; x++) {
-            streamIds.add("table_" + Integer.toString(x));
+            streamIds.add("table_" + x);
         }
     }
 

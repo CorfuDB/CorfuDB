@@ -34,9 +34,8 @@ public class Correctness {
     /**
      * Record a transaction marker operation
      *
-     *
      * @param version if we have a version to report
-     * @param fields fields to report
+     * @param fields  fields to report
      */
     public static void recordTransactionMarkers(boolean version, String... fields) {
         if (version) {

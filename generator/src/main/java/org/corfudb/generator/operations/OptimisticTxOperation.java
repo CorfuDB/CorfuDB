@@ -30,22 +30,21 @@ public class OptimisticTxOperation extends Operation {
             int numOperations = state.getOperationCount().sample(1).get(0);
             List<Operation> operations = state.getOperations().sample(numOperations);
 
-            for (int x = 0; x < operations.size(); x++) {
-                if (operations.get(x) instanceof OptimisticTxOperation
-                        || operations.get(x) instanceof SnapshotTxOperation
-                        || operations.get(x) instanceof NestedTxOperation)
-                {
+            for (Operation operation : operations) {
+                if (operation instanceof OptimisticTxOperation
+                        || operation instanceof SnapshotTxOperation
+                        || operation instanceof NestedTxOperation) {
                     continue;
                 }
 
-                operations.get(x).execute();
+                operation.execute();
             }
 
             timestamp = state.stopTx();
 
             Correctness.recordTransactionMarkers(true, shortName, Correctness.TX_END,
                     Long.toString(timestamp));
-            
+
             if (Address.isAddress(timestamp)) {
                 state.setLastSuccessfulWriteOperationTimestamp(System.currentTimeMillis());
             }
@@ -58,8 +57,5 @@ public class OptimisticTxOperation extends Operation {
             }
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
         }
-
-
-
     }
 }
