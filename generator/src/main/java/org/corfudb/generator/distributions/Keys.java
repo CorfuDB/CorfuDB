@@ -22,8 +22,8 @@ public class Keys implements DataSet<String> {
 
     @Override
     public void populate() {
-        for (int x = 0; x < numKeys; x++) {
-            mapKeys.add("key_" + x);
+        for (int key = 0; key < numKeys; key++) {
+            mapKeys.add("key_" + key);
         }
     }
 

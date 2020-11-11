@@ -12,8 +12,7 @@ import java.util.List;
 public class WriteAfterWriteTxOperation extends Operation {
 
     public WriteAfterWriteTxOperation(State state) {
-        super(state);
-        shortName = "TxWaw";
+        super(state, "TxWaw");
     }
 
     @Override
@@ -22,7 +21,7 @@ public class WriteAfterWriteTxOperation extends Operation {
         long timestamp;
         state.startWriteAfterWriteTx();
 
-        int numOperations = state.getOperationCount().sample(1).get(0);
+        int numOperations = state.getOperationCount().sample();
         List<Operation> operations = state.getOperations().sample(numOperations);
 
         for (Operation operation : operations) {

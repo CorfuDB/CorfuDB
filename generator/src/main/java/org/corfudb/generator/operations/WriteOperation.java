@@ -15,17 +15,16 @@ import java.util.UUID;
 public class WriteOperation extends Operation {
 
     public WriteOperation(State state) {
-        super(state);
-        shortName = "Write";
+        super(state, "Write");
     }
 
     @Override
     public void execute() {
         // Hack for Transaction writes only
         if (TransactionalContext.isInTransaction()) {
-            String streamId = state.getStreams().sample(1).get(0);
+            String streamId = state.getStreams().sample();
 
-            String key = state.getKeys().sample(1).get(0);
+            String key = state.getKeys().sample();
             String val = UUID.randomUUID().toString();
             state.getMap(CorfuRuntime.getStreamID(streamId)).put(key, val);
 
@@ -33,7 +32,7 @@ public class WriteOperation extends Operation {
             Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
 
             if (!TransactionalContext.isInTransaction()) {
-                state.setLastSuccessfulWriteOperationTimestamp(System.currentTimeMillis());
+                state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
             }
         }
     }

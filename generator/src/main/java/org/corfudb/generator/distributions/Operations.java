@@ -30,9 +30,8 @@ public class Operations implements DataSet<Operation> {
                 new OptimisticTxOperation(state),
                 new SnapshotTxOperation(state),
                 new SleepOperation(state),
-                new RemoveOperation(state));
-//              TODO: Fix nestedTx path to enable it
-//              new NestedTxOperation(state));
+                new RemoveOperation(state)
+        );
         this.state = state;
     }
 

@@ -1,11 +1,12 @@
 package org.corfudb.generator;
 
+import com.google.common.reflect.TypeToken;
 import lombok.Getter;
-import lombok.Setter;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.OperationCount;
 import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.distributions.Streams;
+import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -16,6 +17,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
+
+import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT_IN_MS;
 
 /**
  * This object keeps state information of the different data distributions and runtime client.
@@ -42,15 +45,7 @@ public class State {
     private final Map<UUID, CorfuTable<String, String>> maps;
 
     @Getter
-    @Setter
-    private volatile long lastSuccessfulReadOperationTimestamp = -1;
-
-    @Getter
-    @Setter
-    private volatile long lastSuccessfulWriteOperationTimestamp = -1;
-
-    @Getter
-    private volatile Token trimMark = Token.UNINITIALIZED;
+    private final StateContext ctx = new StateContext();
 
     public final Random rand;
 
@@ -74,8 +69,8 @@ public class State {
     }
 
     public void updateTrimMark(Token newTrimMark) {
-        if (newTrimMark.compareTo(trimMark) > 0) {
-            trimMark = newTrimMark;
+        if (newTrimMark.compareTo(ctx.trimMark) > 0) {
+            ctx.trimMark = newTrimMark;
         }
     }
 
@@ -85,7 +80,7 @@ public class State {
             CorfuTable<String, String> map = runtime.getObjectsView()
                     .build()
                     .setStreamID(uuid)
-                    .setTypeToken(CorfuTable.<String, String>getTableType())
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                     .setArguments(new StringIndexer())
                     .open();
 
@@ -93,8 +88,8 @@ public class State {
         }
     }
 
-    public Map<String, String> getMap(UUID uuid) {
-        Map<String, String> map = maps.get(uuid);
+    public CorfuTable<String, String> getMap(UUID uuid) {
+        CorfuTable<String, String> map = maps.get(uuid);
         if (map == null) {
             throw new IllegalStateException("Map doesn't exist");
         }
@@ -127,6 +122,49 @@ public class State {
                 .type(TransactionType.WRITE_AFTER_WRITE)
                 .build()
                 .begin();
+    }
+
+    public static class StateContext {
+        @Getter
+        private volatile long lastSuccessfulReadOperationTimestamp = -1;
+
+        @Getter
+        private volatile long lastSuccessfulWriteOperationTimestamp = -1;
+
+        @Getter
+        private volatile Token trimMark = Token.UNINITIALIZED;
+
+        public void updateLastSuccessfulReadOperationTimestamp(){
+            lastSuccessfulReadOperationTimestamp = System.currentTimeMillis();
+        }
+
+        public void updateLastSuccessfulWriteOperationTimestamp() {
+            lastSuccessfulWriteOperationTimestamp = System.currentTimeMillis();
+        }
+
+        /**
+         * Assess liveness of the application
+         * <p>
+         * If the client was not able to do any operation during the last APPLICATION_TIMEOUT_IN_MS,
+         * we declare liveness of the client as failed. Also, if the client was not able to finish
+         * in time, it is marked as liveness failure.
+         *
+         * @param finishedInTime finished in time
+         * @return if an operation finished successfully
+         */
+        public boolean livenessSuccess(boolean finishedInTime) {
+            if (!finishedInTime) {
+                return false;
+            }
+
+            long timeSinceSuccessfulReadOperation = System.currentTimeMillis()
+                    - lastSuccessfulReadOperationTimestamp;
+            long timeSinceSuccessfulWriteOperation = System.currentTimeMillis()
+                    - lastSuccessfulWriteOperationTimestamp;
+
+            return (timeSinceSuccessfulReadOperation < APPLICATION_TIMEOUT_IN_MS
+                    && timeSinceSuccessfulWriteOperation < APPLICATION_TIMEOUT_IN_MS);
+        }
     }
 
 }

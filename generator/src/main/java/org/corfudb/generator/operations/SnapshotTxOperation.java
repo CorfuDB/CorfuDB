@@ -14,29 +14,20 @@ import java.util.Random;
  */
 @Slf4j
 public class SnapshotTxOperation extends Operation {
-
+    private static final Random RANDOM = new Random();
 
     public SnapshotTxOperation(State state) {
-        super(state);
-        shortName = "TxSnap";
+        super(state, "TxSnap");
     }
 
     @Override
     public void execute() {
         try {
-            Token trimMark = state.getTrimMark();
-            Random rand = new Random();
-            long delta = (long) rand.nextInt(10) + 1;
-
             // Safety Hack for not having snapshot in the future
-
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_START);
-
-            // TODO(Maithem) keep a window of tokens issued in the past and select
-            // a random token to use for user-defined snapshot transactions
             state.startSnapshotTx();
 
-            int numOperations = state.getOperationCount().sample(1).get(0);
+            int numOperations = state.getOperationCount().sample();
             List<Operation> operations = state.getOperations().sample(numOperations);
 
             for (Operation operation : operations) {
@@ -53,7 +44,7 @@ public class SnapshotTxOperation extends Operation {
 
             state.stopTx();
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_END);
-            state.setLastSuccessfulReadOperationTimestamp(System.currentTimeMillis());
+            state.getCtx().updateLastSuccessfulReadOperationTimestamp();
         } catch (TransactionAbortedException tae) {
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
         }

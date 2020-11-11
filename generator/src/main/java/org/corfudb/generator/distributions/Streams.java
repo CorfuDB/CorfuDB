@@ -23,8 +23,8 @@ public class Streams implements DataSet<String> {
 
     @Override
     public void populate() {
-        for (int x = 0; x < numStreams; x++) {
-            streamIds.add("table_" + x);
+        for (int tableId = 0; tableId < numStreams; tableId++) {
+            streamIds.add("table_" + tableId);
         }
     }
 

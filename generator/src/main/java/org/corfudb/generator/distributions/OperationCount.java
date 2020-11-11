@@ -3,7 +3,6 @@ package org.corfudb.generator.distributions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Random;
 
 /**
  * This class implements the distribution of a random integer generator.

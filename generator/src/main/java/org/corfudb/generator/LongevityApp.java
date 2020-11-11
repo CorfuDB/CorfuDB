@@ -36,8 +36,8 @@ public class LongevityApp {
 
     // How much time we live the application hangs once the duration is finished
     // and the application is hanged
-    private static final int APPLICATION_TIMEOUT_IN_MS = 10000;
-    private static final long TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT = 60000;
+    public static final int APPLICATION_TIMEOUT_IN_MS = 10000;
+    public static final long TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT = 60000;
 
     private static final int QUEUE_CAPACITY = 1000;
 
@@ -70,30 +70,6 @@ public class LongevityApp {
     }
 
     /**
-     * Assess liveness of the application
-     * <p>
-     * If the client was not able to do any operation during the last APPLICATION_TIMEOUT_IN_MS,
-     * we declare liveness of the client as failed. Also, if the client was not able to finish
-     * in time, it is marked as liveness failure.
-     *
-     * @param finishedInTime finished in time
-     * @return if an operation finished successfully
-     */
-    private boolean livenessSuccess(boolean finishedInTime) {
-        if (!finishedInTime) {
-            return false;
-        }
-
-        long timeSinceSuccessfulReadOperation = System.currentTimeMillis()
-                - state.getLastSuccessfulReadOperationTimestamp();
-        long timeSinceSuccessfulWriteOperation = System.currentTimeMillis()
-                - state.getLastSuccessfulWriteOperationTimestamp();
-
-        return (timeSinceSuccessfulReadOperation < APPLICATION_TIMEOUT_IN_MS
-                && timeSinceSuccessfulWriteOperation < APPLICATION_TIMEOUT_IN_MS);
-    }
-
-    /**
      * Give a chance to the workers to finish naturally (thanks to the timer) and then kill
      * the producer and the checkpointer.
      * <p>
@@ -110,7 +86,7 @@ public class LongevityApp {
             boolean finishedInTime = workers.
                     awaitTermination(durationMs + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
 
-            String livenessState = livenessSuccess(finishedInTime) ? "Success" : "Fail";
+            String livenessState = state.getCtx().livenessSuccess(finishedInTime) ? "Success" : "Fail";
 
             Correctness.recordOperation("Liveness, " + livenessState, false);
             if (!finishedInTime) {

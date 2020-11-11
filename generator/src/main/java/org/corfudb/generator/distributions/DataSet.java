@@ -36,6 +36,10 @@ public interface DataSet<T> {
         return ret;
     }
 
+    default T sample() {
+        return sample(1).get(0);
+    }
+
     /**
      * Return the whole data set.
      *

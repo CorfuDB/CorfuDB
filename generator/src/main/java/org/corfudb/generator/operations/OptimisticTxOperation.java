@@ -16,8 +16,7 @@ import java.util.List;
 public class OptimisticTxOperation extends Operation {
 
     public OptimisticTxOperation(State state) {
-        super(state);
-        shortName = "TxOpt";
+        super(state, "TxOpt");
     }
 
     @Override
@@ -27,7 +26,7 @@ public class OptimisticTxOperation extends Operation {
             long timestamp;
             state.startOptimisticTx();
 
-            int numOperations = state.getOperationCount().sample(1).get(0);
+            int numOperations = state.getOperationCount().sample();
             List<Operation> operations = state.getOperations().sample(numOperations);
 
             for (Operation operation : operations) {
@@ -46,14 +45,14 @@ public class OptimisticTxOperation extends Operation {
                     Long.toString(timestamp));
 
             if (Address.isAddress(timestamp)) {
-                state.setLastSuccessfulWriteOperationTimestamp(System.currentTimeMillis());
+                state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
             }
 
         } catch (TransactionAbortedException tae) {
             // TX aborted because of conflict is a successful operation regarding
             // Liveness status.
             if (tae.getAbortCause() == AbortCause.CONFLICT) {
-                state.setLastSuccessfulWriteOperationTimestamp(System.currentTimeMillis());
+                state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
             }
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
         }
