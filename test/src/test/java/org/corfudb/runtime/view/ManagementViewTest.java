@@ -10,8 +10,6 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -860,9 +858,9 @@ public class ManagementViewTest extends AbstractViewTest {
         AtomicBoolean commitWithDifferentEpoch = new AtomicBoolean(false);
 
         final CountDownLatch latch = new CountDownLatch(1);
-        TestRule interceptCommit = new TestRule().matches(corfuMsg -> {
-            if (corfuMsg.getMsgType().equals(CorfuMsgType.LAYOUT_COMMITTED)) {
-                if (((CorfuPayloadMsg<LayoutCommittedRequest>) corfuMsg).getPayload().getLayout().getEpoch() == 2) {
+        TestRule interceptCommit = new TestRule().requestMatches(msg -> {
+            if (msg.getPayload().getPayloadCase().equals(PayloadCase.COMMIT_LAYOUT_REQUEST)) {
+                if (msg.getPayload().getCommitLayoutRequest().getEpoch() == 2) {
                     latch.countDown();
                 } else {
                     commitWithDifferentEpoch.set(true);
@@ -909,7 +907,7 @@ public class ManagementViewTest extends AbstractViewTest {
         Layout layout = new Layout(getManagementTestLayout());
 
         TestRule dropPrepareMsg = new TestRule()
-                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.LAYOUT_PREPARE))
+                .requestMatches(msg -> msg.getPayload().getPayloadCase().equals(PayloadCase.PREPARE_LAYOUT_REQUEST))
                 .drop();
 
         // Block Paxos round by blocking all prepare methods.
