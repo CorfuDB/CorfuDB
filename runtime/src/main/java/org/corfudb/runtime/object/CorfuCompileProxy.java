@@ -162,8 +162,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
-        Supplier<R> accessSupplier = () -> accessInner(accessMethod, conflictObject);
-        return readTimer.map(timer -> timer.record(accessSupplier)).orElseGet(() -> accessSupplier.get());
+        return accessInner(accessMethod, conflictObject);
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
@@ -215,9 +214,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
                           Object[] conflictObject, Object... args) {
-        Supplier<Long> logUpdateSupplier = () ->
-                logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
-        return writeTimer.map(timer -> timer.record(logUpdateSupplier)).orElseGet(() -> logUpdateSupplier.get());
+        return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
     }
 
     private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
@@ -326,8 +323,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
      */
     @Override
     public <R> R TXExecute(Supplier<R> txFunction) {
-        Supplier<R> txSupplier = () -> TXExecuteInner(txFunction);
-        return txTimer.map(timer -> timer.record(txSupplier)).orElseGet(() -> txSupplier.get());
+        return TXExecuteInner(txFunction);
     }
 
     @SuppressWarnings({"checkstyle:membername", "checkstyle:abbreviation"})

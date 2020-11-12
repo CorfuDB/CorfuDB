@@ -47,6 +47,7 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
@@ -91,6 +92,13 @@ public class CorfuRuntime {
         public static class MicroMeterRuntimeConfig {
             private final boolean metricsEnabled;
             private final String configuredLoggerName;
+            private final Duration loggingInterval;
+        }
+
+        @AllArgsConstructor
+        public static class MicroMeterRuntimeConfigSl4j {
+            private final boolean metricsEnabled;
+            private final Logger logger;
             private final Duration loggingInterval;
         }
 
@@ -284,7 +292,7 @@ public class CorfuRuntime {
             private Codec.Type codecType = Codec.Type.ZSTD;
             private MetricRegistry metricRegistry = null;
             private MicroMeterRuntimeConfig microMeterRuntimeConfig =
-                    new MicroMeterRuntimeConfig(false,
+                    new MicroMeterRuntimeConfig(true,
                             "CorfuMetrics", Duration.ofMinutes(1));
 
             public CorfuRuntimeParametersBuilder configureMicroMeterMetrics(
