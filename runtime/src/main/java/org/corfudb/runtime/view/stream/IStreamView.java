@@ -22,8 +22,7 @@ import org.corfudb.runtime.view.Address;
  *
  * <p>Created by mwei on 1/5/17.
  */
-public interface IStreamView extends
-        Iterator<ILogData> {
+public interface IStreamView extends Iterator<ILogData> {
 
     /** Return the ID of the stream this view is for.
      * @return  The ID of the stream.
@@ -142,6 +141,15 @@ public interface IStreamView extends
      *                  if no entries are available.
      */
     List<ILogData> remainingUpTo(long maxGlobal);
+
+    /**
+     * Retrieve at most {@code maxEntries} entries from the stream, returning
+     * empty list if there are no remaining entries.
+     *
+     * @param maxEntries maximum number of entries to return
+     * @return limited of entries remaining in the stream
+     */
+    List<ILogData> remainingAtMost(int maxEntries);
 
     /** Returns whether or not there are potentially more entries in this
      * stream - this function may return true even if there are no entries
