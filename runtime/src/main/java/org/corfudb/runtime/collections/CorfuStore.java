@@ -19,12 +19,12 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
- *
+ * <p>
  * Key APIs exposed are:
- *   o-> TxnContext() for CRUD operations
- *   o-> getTimestamp() for database snapshots
- *   o-> table lifecycle management
- *
+ * o-> TxnContext() for CRUD operations
+ * o-> getTimestamp() for database snapshots
+ * o-> table lifecycle management
+ * <p>
  * Created by zlokhandwala on 2019-08-02.
  */
 public class CorfuStore {
@@ -33,6 +33,7 @@ public class CorfuStore {
     private final CorfuRuntime runtime;
 
     private final Optional<AtomicLong> openTableCounter;
+
     /**
      * Creates a new CorfuStore.
      *
@@ -46,7 +47,7 @@ public class CorfuStore {
     /**
      * Creates a new CorfuStore.
      *
-     * @param runtime Connected instance of the Corfu Runtime.
+     * @param runtime         Connected instance of the Corfu Runtime.
      * @param enableTxLogging
      */
     @Nonnull
@@ -250,9 +251,10 @@ public class CorfuStore {
      * @param streamListener   callback context
      * @param namespace        the CorfuStore namespace to subscribe to
      * @param tablesOfInterest only updates from these tables of interest will be sent to listener
-     * @param timestamp        if specified, all stream updates from this timestamp will be returned
+     * @param timestamp        if specified, all stream updates after this timestamp will be returned
      *                         if null, only future updates will be returned
      */
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message>
     void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
                    @Nonnull List<TableSchema<K, V, M>> tablesOfInterest,
@@ -265,20 +267,43 @@ public class CorfuStore {
     /**
      * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
      * Objects returned will honor transactional boundaries.
+     * <p>
+     * Note: if memory is a consideration consider use the other version of subscribe that is
+     * able to specify the size of buffered transactions entries.
      *
      * @param streamListener   callback context
      * @param namespace        the CorfuStore namespace to subscribe to
      * @param streamTag        only updates of tables with the stream tag will be polled
      * @param tablesOfInterest only updates from these tables of interest will be sent to listener
-     * @param timestamp        if specified, all stream updates from this timestamp will be returned
+     * @param timestamp        if specified, all stream updates from this timestamp will be returned,
      *                         if null, only future updates will be returned
      */
-    public void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                   @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
-                   @Nullable Timestamp timestamp) {
-        runtime.getTableRegistry().getStreamManager()
+    public void subscribeListener(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                                  @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                                  @Nullable Timestamp timestamp) {
+        runtime.getTableRegistry().getStreamingManager()
                 .subscribe(streamListener, namespace, streamTag, tablesOfInterest,
                         (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
+    }
+
+    /**
+     * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
+     * Objects returned will honor transactional boundaries.
+     *
+     * @param streamListener   client listener for callback
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     * @param timestamp        if specified, all stream updates after this timestamp will be returned,
+     *                         if null, only future updates will be returned
+     * @param bufferSize       maximum size of buffered transaction entries
+     */
+    public void subscribeListener(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                                  @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                                  @Nullable Timestamp timestamp, int bufferSize) {
+        runtime.getTableRegistry().getStreamingManager()
+                .subscribe(streamListener, namespace, streamTag, tablesOfInterest,
+                        (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence(), bufferSize);
     }
 
     /**
@@ -287,8 +312,18 @@ public class CorfuStore {
      *
      * @param streamListener - callback context.
      */
+    @Deprecated
     public void unsubscribe(@Nonnull StreamListener streamListener) {
-        runtime.getTableRegistry().getStreamManager()
-                .unsubscribe(streamListener);
+        runtime.getTableRegistry().getStreamManager().unsubscribe(streamListener);
+    }
+
+    /**
+     * Gracefully shutdown a streamer.
+     * Once this call returns no further stream updates will be returned.
+     *
+     * @param streamListener - callback context.
+     */
+    public void unsubscribeListener(@Nonnull StreamListener streamListener) {
+        runtime.getTableRegistry().getStreamingManager().unsubscribe(streamListener);
     }
 }

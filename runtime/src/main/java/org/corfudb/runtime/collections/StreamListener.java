@@ -5,7 +5,7 @@ package org.corfudb.runtime.collections;
  *
  * Created by hisundar on 2019-10-18
  */
-public interface StreamListener{
+public interface StreamListener {
     /**
      * A corfu update can/may have multiple updates belonging to different streams.
      * This callback will return those updates as a list grouped by their Stream UUIDs.

@@ -20,8 +20,8 @@ message Uuid {
 }
 
 message ExampleValue {
-    option (org.corfudb.runtime.table_schema).stream_tag = "searchStreamer";
-    option (org.corfudb.runtime.table_schema).stream_tag = "slowStreamer";
+    option (org.corfudb.runtime.table_schema).stream_tag = "search_streamer";
+    option (org.corfudb.runtime.table_schema).stream_tag = "slow_streamer";
     option (org.corfudb.runtime.table_schema).requires_backup_support = true;
     option (org.corfudb.runtime.table_schema).is_federated = true;
 

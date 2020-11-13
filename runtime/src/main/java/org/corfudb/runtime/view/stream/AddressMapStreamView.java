@@ -1,18 +1,7 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.NavigableSet;
-import java.util.SortedSet;
-import java.util.TreeSet;
-import java.util.UUID;
-import java.util.function.Function;
-
-import javax.annotation.Nonnull;
-
 import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
@@ -20,7 +9,17 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
+import org.roaringbitmap.longlong.LongIterator;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
+
+import javax.annotation.Nonnull;
+import java.util.Collections;
+import java.util.List;
+import java.util.NavigableSet;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.function.Function;
 
 
 /** A view of a stream implemented with address maps.
@@ -383,7 +382,34 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
      * @return whether this stream is capable of being checkpointed
      */
     private boolean isCheckpointCapable() {
-        return !getId().equals(ObjectsView.TRANSACTION_STREAM_ID);
+        return !getId().equals(ObjectsView.TRANSACTION_STREAM_ID)
+                && getStreamOptions().isCheckpointCapable();
+    }
+
+    @Override
+    protected long getMaxGlobalFromMaxEntries(int maxEntries) {
+        if (maxEntries == Integer.MAX_VALUE) {
+            return Address.MAX;
+        }
+
+        StreamAddressSpace streamAddressSpace = runtime.getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(getId(), Address.MAX, getCurrentGlobalPosition()));
+
+        long size = streamAddressSpace.getAddressMap().getLongCardinality();
+        if (size == 0L) {
+            return Address.NON_ADDRESS;
+        }
+
+        if (size <= maxEntries) {
+            return streamAddressSpace.getHighestAddress();
+        }
+
+        LongIterator it = streamAddressSpace.getAddressMap().getLongIterator();
+        while (--maxEntries > 0) {
+            it.next();
+        }
+
+        return it.next();
     }
 
     @Override

@@ -146,11 +146,11 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         return entry;
     }
 
-    /** {@inheritDoc}
+    /**
+     * {@inheritDoc}
      */
     @Override
     public final synchronized List<ILogData> remainingUpTo(long maxGlobal) {
-
         // Pop the context if it has changed.
         if (getCurrentContext().getGlobalPointer()
                 >= getCurrentContext().maxGlobalAddress) {
@@ -241,7 +241,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      * @return                  A list of the next entries for this context
      */
     protected List<ILogData> getNextEntries(T context, long maxGlobal,
-                                                     Function<ILogData, Boolean> contextCheckFn) {
+                                            Function<ILogData, Boolean> contextCheckFn) {
         final List<ILogData> dataList = new ArrayList<>();
         ILogData thisData;
 
