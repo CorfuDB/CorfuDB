@@ -36,17 +36,13 @@ public class TxnContextShim extends TxnContext implements AutoCloseable {
 
     /**
      * put the value on the specified key create record if it does not exist.
-     * If metadata schema is present then metadata will be populated automatically in this layer.
-     *
-     * There are several overloaded flavors of put to support optional fields like
-     * metadata, tableNames and the force set of metadata
      *
      * @param table    Table object to perform the create/update on.
      * @param key      Key of the record.
      * @param value    Value or payload of the record.
      * @param <K>      Type of Key.
      * @param <V>      Type of Value.
-     * @param <M>      Type of Metadata.
+     * @param <M>      Type of Metadata, should be null at time of table creation.
      */
     public <K extends Message, V extends Message, M extends Message>
     void putRecord(@Nonnull Table<K, V, M> table,
@@ -63,7 +59,7 @@ public class TxnContextShim extends TxnContext implements AutoCloseable {
      * @param value - the payload or value of the record to be inserted
      * @param <K> - type of the key or identifier.
      * @param <V> - type of the value or payload
-     * @param <M> - type of the metadata
+     * @param <M> - type of the metadata should be null at time of table creation.
      */
     public <K extends Message, V extends Message, M extends Message>
     void putRecord(@Nonnull String tableName,
@@ -78,7 +74,7 @@ public class TxnContextShim extends TxnContext implements AutoCloseable {
      * @param table Table object to perform the create/update on.
      * @param key   Key of the record.
      * @param value Value or payload of the record.
-     * @param metadata Metadata associated with the record.
+     * @param metadata Metadata associated with the record for validations.
      * @param <K>   Type of Key.
      * @param <V>   Type of Value.
      * @param <M>   Type of Metadata.
@@ -93,7 +89,6 @@ public class TxnContextShim extends TxnContext implements AutoCloseable {
     }
 
     /**
-     *
      * putRecord into a table using just the tableName with metadata validations.
      *
      * @param tableName - full string representation of the table
@@ -170,20 +165,23 @@ public class TxnContextShim extends TxnContext implements AutoCloseable {
         super.merge(table, key, mergeCallback, new CorfuRecord<>(value, metadata));
     }
 
-    class MergeCallbackImpl implements TxnContext.MergeCallback {
+    static class MergeCallbackImpl implements TxnContext.MergeCallback {
         /**
          * Core logic for handling metadata modifications on mutations
          *
-         * @param oldRecord - The previous fetched record that exists in the table.
+         * @param table       - The table object on which the merge is being done.
+         * @param key         - Key of the record on which merge is being done.
+         * @param oldRecord   - The previous fetched record that exists in the table.
          * @param deltaUpdate - New record that will be inserted/updated.
-         * @param <K> - type of the key
-         * @param <V> - type of the value or payload
-         * @param <M> - type of the metadata
-         * @return the merged record that will be inserted into the table.
+         * @param <K>         - type of the key
+         * @param <V>         - type of the value or payload
+         * @param <M>         - type of the metadata
+         * @return the merged record that will be inserted into or deleted from the table
          */
         @Override
         public <K extends Message, V extends Message, M extends Message>
         CorfuRecord<V, M> doMerge(Table<K, V, M> table,
+                                  K key,
                                   CorfuRecord<V, M> oldRecord,
                                   CorfuRecord<V, M> deltaUpdate) {
             M deltaMetadata = deltaUpdate.getMetadata();
@@ -227,6 +225,92 @@ public class TxnContextShim extends TxnContext implements AutoCloseable {
                 }
             }
             return new CorfuRecord<V, M>(deltaUpdate.getPayload(), (M) builder.build());
+        }
+    }
+
+    /**
+     * Delete the record given the table object and metadata for validation.
+     *
+     * @param table Table object to perform the create/update on.
+     * @param key   Key of the record to be deleted.
+     * @param metadata Metadata to validate against.
+     * @param <K>   Type of Key.
+     * @param <V>   Type of Value.
+     * @param <M>   Type of Metadata.
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void deleteRecord(@Nonnull Table<K, V, M> table,
+                      @Nonnull final K key,
+                      @Nullable final M metadata) {
+        if (metadata == null) {
+            super.delete(table, key);
+            return;
+        }
+        MergeCallbackForDeleteImpl mergeCallbackForDelete = new MergeCallbackForDeleteImpl();
+        super.merge(table, key, mergeCallbackForDelete, new CorfuRecord<>(null, metadata));
+    }
+
+    /**
+     *
+     * Delete a record given just tableName and the metadata for validation against.
+     *
+     * @param tableName - full string representation of the table
+     * @param key - the key of the record being inserted
+     * @param metadata - the metadata which will be validated
+     * @param <K> - type of the key or identifier.
+     * @param <V> - type of the value or payload
+     * @param <M> - type of the metadata
+     */
+    public <K extends Message, V extends Message, M extends Message>
+    void deleteRecord(@Nonnull String tableName,
+                      @Nonnull final K key,
+                      @Nullable final M metadata) {
+        deleteRecord(this.getTable(tableName), key, metadata);
+    }
+
+    static class MergeCallbackForDeleteImpl implements TxnContext.MergeCallback {
+        /**
+         * Core logic for handling metadata modifications on delete with metadata.
+         *
+         * @param table       - The table object on which the merge is being done.
+         * @param key         - Key of the record on which merge is being done.
+         * @param oldRecord   - The previous fetched record that exists in the table.
+         * @param deltaUpdate - Record with only the metadata passed in for validation.
+         * @param <K>         - type of the key
+         * @param <V>         - type of the value or payload
+         * @param <M>         - type of the metadata
+         * @return null if validation was successful or StaleRevision exception if not.
+         */
+        @Override
+        public <K extends Message, V extends Message, M extends Message>
+        CorfuRecord<V, M> doMerge(Table<K, V, M> table,
+                                  K key,
+                                  CorfuRecord<V, M> oldRecord,
+                                  CorfuRecord<V, M> deltaUpdate) {
+            M deltaMetadata = deltaUpdate.getMetadata();
+            if (deltaUpdate.getPayload() != null) {
+                throw new IllegalArgumentException("Non-null payload sent for delete validation");
+            }
+
+            final Message.Builder builder = deltaMetadata.toBuilder();
+            for (Descriptors.FieldDescriptor fieldDescriptor : deltaMetadata.getDescriptorForType().getFields()) {
+                if ("revision".equals(fieldDescriptor.getName())) {
+                    if (oldRecord == null || oldRecord.getMetadata() == null) {
+                        return null;
+                    } else {
+                        Long prevRevision = (Long) oldRecord.getMetadata().getField(fieldDescriptor);
+                        Long givenRevision = (Long) deltaMetadata.getField(fieldDescriptor);
+                        if ((givenRevision > 0 && // Validate revision only if set
+                                prevRevision.longValue() == givenRevision.longValue())
+                                || givenRevision == 0) { // Do not validate revision if field isn't set
+                            return null;
+                        } else {
+                            throw new StaleRevisionUpdateException(prevRevision, givenRevision);
+                        }
+                    }
+                }
+            }
+            return null;
         }
     }
 
