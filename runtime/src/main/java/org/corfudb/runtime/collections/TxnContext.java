@@ -3,13 +3,16 @@ package org.corfudb.runtime.collections;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.Queue.CorfuQueueIdMsg;
 import org.corfudb.runtime.exceptions.TransactionAlreadyStartedException;
+import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.TableRegistry;
 
@@ -25,6 +28,7 @@ import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 import static org.corfudb.runtime.collections.QueryOptions.DEFAULT_OPTIONS;
 
@@ -47,12 +51,14 @@ public class TxnContext implements AutoCloseable {
     private final List<Runnable> operations;
     @Getter
     private final Map<UUID, Table> tablesInTxn;
+    private final List<CommitCallback> commitCallbacks;
     private long txnStartTime = 0L;
     private static final byte READ_ONLY  = 0x01;
     private static final byte WRITE_ONLY = 0x02;
     private static final byte READ_WRITE = 0x03;
     private byte txnType;
 
+    private boolean iDidNotStartCorfuTxn;
     /**
      * Creates a new TxnContext.
      *
@@ -60,19 +66,64 @@ public class TxnContext implements AutoCloseable {
      * @param tableRegistry Table Registry.
      * @param namespace     Namespace boundary defined for the transaction.
      * @param isolationLevel How should this transaction be applied/evaluated.
+     * @param allowNestedTransactions Is it ok to re-use another transaction context.
      */
     @Nonnull
     public TxnContext(@Nonnull final ObjectsView objectsView,
                       @Nonnull final TableRegistry tableRegistry,
                       @Nonnull final String namespace,
-                      @Nonnull final IsolationLevel isolationLevel) {
+                      @Nonnull final IsolationLevel isolationLevel,
+                      boolean allowNestedTransactions) {
         this.objectsView = objectsView;
         this.tableRegistry = tableRegistry;
         this.namespace = namespace;
         this.isolationLevel = isolationLevel;
         this.operations = new ArrayList<>();
         this.tablesInTxn = new HashMap<>();
-        txBeginInternal(); // May throw exception if transaction was already started
+        this.commitCallbacks = new ArrayList<>();
+        txBeginInternal(allowNestedTransactions); // May throw exception if transaction was already started
+    }
+
+    /**
+     * @param allowNestedTransactions - is it ok to re-use thread's corfu transaction?
+     * Start the actual corfu transaction. Ensure there isn't one already in the same thread.
+     *
+     */
+    private void txBeginInternal(boolean allowNestedTransactions) {
+        if (TransactionalContext.isInTransaction()) {
+            TxnContext txnContext = TransactionalContext.getRootContext().getTxnContext();
+            if (!allowNestedTransactions) {
+                log.error("Nested transactions are disabled & current thread already has a transaction started at...");
+                for (StackTraceElement st : TransactionalContext.getRootContext().getBeginTxnStackTrace()) {
+                    log.error("{}", st);
+                }
+                throw new TransactionAlreadyStartedException(TransactionalContext.getRootContext().toString());
+            }
+            if (txnContext != null) {
+                log.error("Cannot start new CorfuStore transaction in this thread without ending previous one at...");
+                for (StackTraceElement st : TransactionalContext.getRootContext().getBeginTxnStackTrace()) {
+                    log.error("{}", st);
+                }
+                throw new TransactionAlreadyStartedException(TransactionalContext.getRootContext().toString());
+            }
+            this.txnStartTime = System.nanoTime();
+            log.warn("Reusing the transactional context created outside this layer!");
+            this.iDidNotStartCorfuTxn = true;
+            TransactionalContext.getRootContext().setTxnContext(this);
+            return;
+        }
+
+        // Consider moving this to trace after stability improves.
+        log.debug("TxnContext: begin transaction in namespace {}", namespace);
+        this.txnStartTime = System.nanoTime();
+        Transaction.TransactionBuilder transactionBuilder = this.objectsView
+                .TXBuild()
+                .type(TransactionType.WRITE_AFTER_WRITE);
+        if (isolationLevel.getTimestamp() != Token.UNINITIALIZED) {
+            transactionBuilder.snapshot(isolationLevel.getTimestamp());
+        }
+        transactionBuilder.build().begin();
+        TransactionalContext.getRootContext().setTxnContext(this);
     }
 
     public  <K extends Message, V extends Message, M extends Message>
@@ -368,7 +419,7 @@ public class TxnContext implements AutoCloseable {
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     CorfuStoreEntry<K, V, M> getRecord(@Nonnull Table<K, V, M> table,
-                              @Nonnull final K key) {
+                                       @Nonnull final K key) {
         applyWritesForReadOnTable(table);
         CorfuRecord<V, M> record = table.get(key);
         table.getMetrics().incNumGets();
@@ -632,6 +683,24 @@ public class TxnContext implements AutoCloseable {
         return table.scanAndFilterByEntry(record -> true);
     }
 
+    /**
+     * @return The the thread local's TxnContext, null if not in a transaction.
+     */
+    public static TxnContext getMyTxnContext() {
+        if (!TransactionalContext.isInTransaction()) {
+            return null;
+        }
+        return TransactionalContext.getRootContext().getTxnContext();
+    }
+
+    /**
+     * @return true if the transaction was started by this layer, false otherwise
+     */
+    public boolean isInMyTransaction() {
+        TxnContext txnContext = getMyTxnContext();
+        return txnContext == this;
+    }
+
     /** -------------------------- internal private methods ------------------------------*/
 
     /**
@@ -648,21 +717,23 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
-     * Start the actual corfu transaction. Ensure there isn't one already in the same thread.
+     * Protobuf objects are immutable. So any metadata modifications made by any merge() callback
+     * won't be reflected back into the caller's in-memory object directly.
+     * The caller is only really interested in the modified values of those transactions
+     * that successfully commit.
+     * To reflect metadata changes made here, we modify commit() to accept a callback
+     * that carries all the final values of the changes made by this transaction.
      */
-    private void txBeginInternal() {
-        if (TransactionalContext.isInTransaction()) {
-            log.error("Cannot start new transaction in this thread without ending previous one");
-            throw new TransactionAlreadyStartedException(TransactionalContext.getRootContext().toString());
-        }
-        this.txnStartTime = System.nanoTime();
-        Transaction.TransactionBuilder transactionBuilder = this.objectsView
-                .TXBuild()
-                .type(TransactionType.WRITE_AFTER_WRITE);
-        if (isolationLevel.getTimestamp() != Token.UNINITIALIZED) {
-            transactionBuilder.snapshot(isolationLevel.getTimestamp());
-        }
-        transactionBuilder.build().begin();
+    public interface CommitCallback {
+        /**
+         * This callback returns a list of stream entries as opposed to CorfuStoreEntries
+         * because if this transaction had operations like clear() then the CorfuStoreEntry
+         * would just be empty.
+         *
+         * @param mutations - A group of all tables touched by this transaction along with
+         *                    the updates made in each table.
+         */
+        void onCommit(Map<String, List<CorfuStreamEntry>> mutations);
     }
 
     /**
@@ -674,21 +745,35 @@ public class TxnContext implements AutoCloseable {
      * Otherwise this throws a TransactionAbortedException with a cause.
      * The cause and the caller's intent of the transaction can determine if this aborted
      * Transaction can be retried.
+     * If there are any post-commit callbacks registered, they will be invoked.
      * @return - address at which the commit of this transaction occurred.
      */
     public long commit() {
-        if (!TransactionalContext.isInTransaction()) {
+        if (!isInMyTransaction()) {
             throw new IllegalStateException("commit() called without a transaction!");
         }
+
+        // Apply any buffered up operations.
         operations.forEach(Runnable::run);
-        long commitAddress;
-        try {
-            commitAddress = this.objectsView.TXEnd();
-        } catch (Exception ex) {
-            tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
-            tablesInTxn.clear();
-            throw ex;
+
+        // CorfuStore should have only one transactional context since nesting is prohibited.
+        AbstractTransactionalContext rootContext = TransactionalContext.getRootContext();
+        // Regardless of transaction outcome remove any TxnContext association from ThreadLocal.
+        TransactionalContext.getRootContext().setTxnContext(null);
+
+        long commitAddress = Address.NON_ADDRESS;
+        if (iDidNotStartCorfuTxn) {
+            log.warn("commit() called on an inner transaction not started by CorfuStore");
+        } else {
+            try {
+                commitAddress = this.objectsView.TXEnd();
+            } catch (Exception ex) {
+                tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
+                tablesInTxn.clear();
+                throw ex;
+            }
         }
+
         long timeElapsed = System.nanoTime() - txnStartTime;
         switch (txnType) {
             case READ_ONLY:
@@ -704,8 +789,36 @@ public class TxnContext implements AutoCloseable {
                 log.error("UNKNOWN TxnType!!");
                 break;
         }
+
+        // These can be moved to trace once stability improves.
+        log.debug("Txn committed on namespace {}", namespace);
+
+        // If we are here this means commit was successful, now invoke the callback with
+        // the final versions of all the mutated objects.
+        MultiObjectSMREntry writeSet = rootContext.getWriteSetInfo().getWriteSet();
+        final Map<String, List<CorfuStreamEntry>> mutations = new HashMap<>();
+        tablesInTxn.forEach((uuid, table) -> {
+            List<CorfuStreamEntry> writesInTable = writeSet.getSMRUpdates(uuid).stream().map(entry ->
+                    CorfuStreamEntry.fromSMREntry(entry, 0)).collect(Collectors.toList());
+            mutations.put(table.getFullyQualifiedTableName(), writesInTable);
+        });
+        commitCallbacks.forEach(cb -> cb.onCommit(mutations));
         operations.clear();
+
+        tablesInTxn.values().forEach(table -> {
+            log.debug(table.getMetrics().toString()); // consider moving to trace after stability improves.
+        });
         return commitAddress;
+    }
+
+
+    /**
+     * To allow nested transactions, we need to track all commit callbacks
+     * @param commitCallback
+     */
+    public void addCommitCallback(@Nonnull CommitCallback commitCallback) {
+        log.debug("TxnContext:addCommitCallback in transaction on namespace {}", namespace);
+        this.commitCallbacks.add(commitCallback);
     }
 
     /**
@@ -714,6 +827,8 @@ public class TxnContext implements AutoCloseable {
     public void txAbort() {
         operations.clear();
         if (TransactionalContext.isInTransaction()) {
+            // Regardless of transaction outcome remove any TxnContext association from ThreadLocal.
+            TransactionalContext.getRootContext().setTxnContext(null);
             this.objectsView.TXAbort();
             tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
         }
@@ -727,6 +842,7 @@ public class TxnContext implements AutoCloseable {
     @Override
     public void close() {
         if (TransactionalContext.isInTransaction()) {
+            TransactionalContext.getRootContext().setTxnContext(null);
             log.warn("close()ing a {} transaction without calling commit()!", txnType);
             long timeElapsed = System.nanoTime() - txnStartTime;
             if (txnType == READ_ONLY) {
@@ -734,7 +850,11 @@ public class TxnContext implements AutoCloseable {
             } else {
                 tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
             }
-            this.objectsView.TXAbort();
+            if (iDidNotStartCorfuTxn) {
+                log.warn("close() called on an inner transaction not started by CorfuStore");
+            } else {
+                this.objectsView.TXAbort();
+            }
         }
         operations.clear();
         tablesInTxn.clear();
