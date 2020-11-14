@@ -20,11 +20,8 @@ import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
-import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
-import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -36,8 +33,7 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
-import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.collections.TxnContextShim;
+import org.corfudb.runtime.collections.ManagedTxnContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
@@ -269,7 +265,7 @@ public class CorfuStoreBrowser {
                     numItems, itemSize, batchSize, namespace, tablename);
             int itemsRemaining = numItems;
             while (itemsRemaining > 0) {
-                TxnContextShim tx = store.txn(namespace);
+                ManagedTxnContext tx = store.tx(namespace);
                 for (int j = batchSize; j > 0 && itemsRemaining > 0; j--, itemsRemaining--) {
                     TableName dummyKey = TableName.newBuilder()
                             .setNamespace(Integer.toString(itemsRemaining))
