@@ -3,6 +3,7 @@ package org.corfudb.runtime.object.transactions;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -10,6 +11,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -121,6 +123,13 @@ public abstract class AbstractTransactionalContext implements
      */
     @Getter
     private final AbstractTransactionalContext parentContext;
+
+    /**
+     * CorfuStore Transaction context to allow nesting.
+     */
+    @Getter
+    @Setter
+    private TxnContext txnContext;
 
     @Getter
     private final WriteSetInfo writeSetInfo = new WriteSetInfo();

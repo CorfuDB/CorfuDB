@@ -5,7 +5,6 @@ import com.google.protobuf.Message;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
 import java.util.List;
-import java.util.UUID;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -191,10 +190,7 @@ public class CorfuStore {
     }
 
     /**
-     * Start appending mutations to a transaction.
-     * The transaction does not begin until either a commit or the first read is invoked.
-     * On read or commit the latest available snapshot will be used to resolve the transaction
-     * unless the isolation level has a snapshot timestamp value specified.
+     * Start a corfu transaction and bind it to a ThreadLocal TxnContext.
      *
      * @param namespace      Namespace of the tables involved in the transaction.
      * @param isolationLevel Snapshot (latest or specific) at which the transaction must execute.
@@ -206,7 +202,8 @@ public class CorfuStore {
                 this.runtime.getObjectsView(),
                 this.runtime.getTableRegistry(),
                 namespace,
-                isolationLevel);
+                isolationLevel,
+                false);
     }
 
     /**
@@ -250,7 +247,6 @@ public class CorfuStore {
      * @param timestamp        if specified, all stream updates from this timestamp will be returned
      *                         if null, only future updates will be returned
      */
-    @Deprecated
     public <K extends Message, V extends Message, M extends Message>
     void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
                    @Nonnull List<TableSchema<K, V, M>> tablesOfInterest,

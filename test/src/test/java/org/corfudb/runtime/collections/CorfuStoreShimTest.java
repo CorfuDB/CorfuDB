@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -7,9 +8,12 @@ import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
+import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.Messages.Uuid;
+import org.corfudb.runtime.view.Address;
 import org.junit.Test;
 
 import java.util.List;
@@ -69,7 +73,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 .build();
         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
 
-        TxnContextShim txn = shimStore.txn(someNamespace);
+        ManagedTxnContext txn = shimStore.txn(someNamespace);
         txn.putRecord(tableName, key1,
                 ManagedMetadata.newBuilder().setCreateUser("abc").build(),
                 user_1);
@@ -80,7 +84,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         final CorfuStoreMetadata.Timestamp timestamp = shimStore.getTimestamp();
         CorfuStoreEntry<Uuid, ManagedMetadata, ManagedMetadata> entry;
         // Start a dirty read transaction
-        try (TxnContextShim readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
             readWriteTxn.putRecord(table, key1,
                     ManagedMetadata.newBuilder().setCreateUser("xyz").build(),
                     ManagedMetadata.newBuilder().build());
@@ -96,7 +100,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         // Try a read followed by write in same txn
         // Start a dirty read transaction
-        try (TxnContextShim readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
             entry = readWriteTxn.getRecord(table, key1);
             readWriteTxn.putRecord(table, key1,
                     ManagedMetadata.newBuilder()
@@ -107,11 +111,11 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         }
 
         // Try a read on an older timestamp
-        try (TxnContextShim readTxn = shimStore.txn(someNamespace, IsolationLevel.snapshot(timestamp))) {
+        try (ManagedTxnContext readTxn = shimStore.txn(someNamespace, IsolationLevel.snapshot(timestamp))) {
             entry = readTxn.getRecord(table, key1);
             assertThat(entry.getPayload().getCreateUser()).isEqualTo("abc");
         }
-        try (TxnContextShim readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
             Uuid key2 = null;
             assertThatThrownBy( () -> readWriteTxn.putRecord(tableName, key2, null, null))
                     .isExactlyInstanceOf(IllegalArgumentException.class);
@@ -157,7 +161,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         final long eventTime = 123L;
 
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.putRecord(tableName, key1,
                     ExampleValue.newBuilder()
                             .setPayload("abc")
@@ -167,7 +171,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             txn.commit();
         }
 
-        try (TxnContextShim readWriteTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
             List<CorfuStoreEntry<Uuid, ExampleValue, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(table, "anotherKey", eventTime);
             assertThat(entries.size()).isEqualTo(1);
@@ -215,7 +219,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 .build();
         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
 
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.putRecord(tableName, key1,
                     ManagedMetadata.newBuilder().setCreateUser("abc").build(),
                     user_1);
@@ -223,13 +227,13 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         }
 
         // Validate that touch() does not change the revision
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.touch(tableName, key1);
             txn.commit();
         }
 
         CorfuStoreEntry<Uuid, ManagedMetadata, ManagedMetadata> entry;
-        try (TxnContextShim queryTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext queryTxn = shimStore.txn(someNamespace)) {
             entry = queryTxn.getRecord(table, key1);
         }
         assertNotNull(entry);
@@ -237,14 +241,14 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(entry.getMetadata().getCreateTime()).isLessThan(System.currentTimeMillis());
 
         // Ensure that if metadata's revision field is set, it is validated and exception thrown if stale
-        final TxnContextShim txn1 = shimStore.txn(someNamespace);
+        final ManagedTxnContext txn1 = shimStore.txn(someNamespace);
         txn1.putRecord(tableName, key1,
                 ManagedMetadata.newBuilder().setCreateUser("abc").build(),
                 ManagedMetadata.newBuilder().setRevision(1L).build());
         assertThatThrownBy(txn1::commit).isExactlyInstanceOf(StaleRevisionUpdateException.class);
 
         // Correct revision field set should NOT throw an exception
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.putRecord(tableName, key1,
                     ManagedMetadata.newBuilder().setCreateUser("xyz").build(),
                     ManagedMetadata.newBuilder().setRevision(0L).build());
@@ -252,14 +256,14 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         }
 
         // Revision field not set should also not throw an exception, just internally bump up revision
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.putRecord(tableName, key1,
                     ManagedMetadata.newBuilder().setCreateUser("xyz").build(),
                     ManagedMetadata.newBuilder().build());
             txn.commit();
         }
 
-        try (TxnContextShim queryTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext queryTxn = shimStore.txn(someNamespace)) {
             entry = queryTxn.getRecord(table, key1);
         }
         assertThat(entry.getMetadata().getRevision()).isEqualTo(2L);
@@ -303,7 +307,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
         Uuid key1 = Uuid.newBuilder().setMsb(uuid1.getMostSignificantBits()).setLsb(uuid1.getLeastSignificantBits()).build();
-        TxnContextShim txn = shimStore.txn(someNamespace);
+        ManagedTxnContext txn = shimStore.txn(someNamespace);
         txn.putRecord(tableName,
                 key1,
                 ManagedMetadata.newBuilder().setCreateUser("abc").build(),
@@ -377,7 +381,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         final int one = 1; // Frankly stupid but i could not figure out how to selectively disable checkstyle
         final long twelve = 12L; // please help figure out how to disable checkstyle selectively
 
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.putRecord(tableName, key, value,
                     Messages.LogReplicationEntryMetadata.newBuilder()
                             .setSiteConfigID(twelve)
@@ -387,7 +391,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         }
 
         // Update the record, validate that metadata fields not set, get merged with existing
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.putRecord(tableName, key, value,
                     Messages.LogReplicationEntryMetadata.newBuilder()
                             .setTimestamp(one+twelve)
@@ -395,7 +399,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             txn.commit();
         }
         CorfuStoreEntry<Uuid, ManagedMetadata, Messages.LogReplicationEntryMetadata> entry = null;
-        try (TxnContextShim queryTxn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext queryTxn = shimStore.txn(someNamespace)) {
             entry = queryTxn.getRecord(table, key);
         }
 
@@ -404,7 +408,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(entry.getMetadata().getTimestamp()).isEqualTo(twelve+one);
 
         // Rolling Upgrade compatibility test: It should be ok to set a different metadata schema message
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.putRecord(tableName, key, value,
                     ManagedMetadata.newBuilder()
                             .build(), true);
@@ -446,20 +450,20 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         Uuid key = Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
         ManagedMetadata value = ManagedMetadata.newBuilder().setCreateUser("simpleValue").build();
 
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.putRecord(tableName, key, value); // Look no metadata specified!
             txn.commit();
         }
 
         CorfuStoreEntry<Uuid, ManagedMetadata, ManagedMetadata> entry;
-        try (TxnContextShim query = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext query = shimStore.txn(someNamespace)) {
             entry = query.getRecord(tableName, key);
         }
         assertThat(entry.getMetadata().getRevision()).isEqualTo(0);
         assertThat(entry.getMetadata().getCreateTime()).isGreaterThan(0);
         assertThat(entry.getMetadata().getCreateTime()).isEqualTo(entry.getMetadata().getLastModifiedTime());
 
-        class CommitCallbackImpl implements TxnContextShim.CommitCallback {
+        class CommitCallbackImpl implements TxnContext.CommitCallback {
             public void onCommit(Map<String, List<CorfuStreamEntry>> mutations) {
                 assertThat(mutations.size()).isEqualTo(1);
                 assertThat(mutations.get(table.getFullyQualifiedTableName()).size()).isEqualTo(1);
@@ -479,30 +483,121 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         }
 
         CommitCallbackImpl commitCallback = new CommitCallbackImpl();
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.putRecord(tableName, key, value); // Look no metadata specified!
-            txn.commit(commitCallback);
-        }
-
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
-            txn.deleteRecord(tableName, key, ManagedMetadata.newBuilder().build());
-            txn.commit((mutations) -> {
-                 mutations.values().forEach(mutation -> {
-                     CorfuStreamEntry.OperationType op = mutation.get(0).getOperation();
-                     assertThat(op).isEqualTo(CorfuStreamEntry.OperationType.DELETE);
-                 });
+            txn.addCommitCallback((mutations) -> {
+                mutations.values().forEach(mutation -> {
+                    CorfuStreamEntry.OperationType op = mutation.get(0).getOperation();
+                    assertThat(op).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
+                });
             });
+            txn.commit();
         }
 
-        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            txn.deleteRecord(tableName, key, ManagedMetadata.newBuilder().build());
+            txn.addCommitCallback((mutations) -> {
+                mutations.values().forEach(mutation -> {
+                    CorfuStreamEntry.OperationType op = mutation.get(0).getOperation();
+                    assertThat(op).isEqualTo(CorfuStreamEntry.OperationType.DELETE);
+                });
+            });
+            txn.commit();
+        }
+
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
             txn.clear(tableName);
-            txn.commit((mutations) -> {
+            txn.addCommitCallback((mutations) -> {
                 mutations.values().forEach(mutation -> {
                     CorfuStreamEntry.OperationType op = mutation.get(0).getOperation();
                     assertThat(op).isEqualTo(CorfuStreamEntry.OperationType.CLEAR);
                 });
             });
+            txn.commit();
         }
         log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Validate that nested transactions do not throw exception if txnWithNesting is used.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkNestedTransaction() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "ManagedMetadata";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, ManagedMetadata, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ManagedMetadata.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        Uuid key = Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
+        ManagedMetadata value = ManagedMetadata.newBuilder().setCreateUser("simpleValue").build();
+
+        class NestedTxnTester {
+            public void nestedQuery() {
+                CorfuStoreEntry<Uuid, ManagedMetadata, ManagedMetadata> entry;
+                try (ManagedTxnContext rwTxn = shimStore.txnWithNesting(someNamespace)) {
+                    entry = rwTxn.getRecord(tableName, key);
+                    // Nested transactions can also supply commitCallbacks that will be invoked when
+                    // the transaction actually commits.
+                    rwTxn.addCommitCallback((mutations) -> {
+                        assertThat(mutations).containsKey(table.getFullyQualifiedTableName());
+                    });
+                    rwTxn.commit();
+                }
+                assertThat(entry.getMetadata().getRevision()).isEqualTo(0);
+                assertThat(entry.getMetadata().getCreateTime()).isGreaterThan(0);
+                assertThat(entry.getMetadata().getCreateTime()).isEqualTo(entry.getMetadata().getLastModifiedTime());
+            }
+        }
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, key, value); // Look no metadata specified!
+            NestedTxnTester nestedTxnTester = new NestedTxnTester();
+            nestedTxnTester.nestedQuery();
+            txn.commit();
+        }
+
+        // ----- check nested transactions NOT started by CorfuStore isn't messed up by CorfuStore txn -----
+        CorfuTable<String, String>
+                corfuTable = corfuRuntime.getObjectsView().build()
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamName("test")
+                .open();
+
+        corfuRuntime.getObjectsView()
+                .TXBuild()
+                .type(TransactionType.WRITE_AFTER_WRITE).build().begin();
+        corfuTable.put("k1", "a"); // Load non-CorfuStore data
+        corfuTable.put("k2", "ab");
+        corfuTable.put("k3", "b");
+        CorfuStoreEntry<Uuid, ManagedMetadata, ManagedMetadata> entry;
+        try (ManagedTxnContext nestedTxn = shimStore.txnWithNesting(someNamespace)) {
+            nestedTxn.putRecord(tableName, key, ManagedMetadata.newBuilder().setLastModifiedUser("secondUser").build());
+            entry = nestedTxn.getRecord(tableName, key);
+            nestedTxn.commit(); // should not commit the parent transaction!
+        }
+        assertThat(entry.getMetadata().getRevision()).isGreaterThan(0);
+
+        boolean isInTransaction = TransactionalContext.isInTransaction();
+        assertThat(isInTransaction).isTrue();
+        long commitAddress = corfuRuntime.getObjectsView().TXEnd();
+        assertThat(commitAddress).isNotEqualTo(Address.NON_ADDRESS);
     }
 }
