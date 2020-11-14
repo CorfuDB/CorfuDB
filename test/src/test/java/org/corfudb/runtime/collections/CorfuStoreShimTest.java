@@ -111,6 +111,11 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             entry = readTxn.getRecord(table, key1);
             assertThat(entry.getPayload().getCreateUser()).isEqualTo("abc");
         }
+        try (TxnContextShim readWriteTxn = shimStore.txn(someNamespace)) {
+            Uuid key2 = null;
+            assertThatThrownBy( () -> readWriteTxn.putRecord(tableName, key2, null, null))
+                    .isExactlyInstanceOf(IllegalArgumentException.class);
+        }
         log.debug(table.getMetrics().toString());
     }
 
@@ -473,8 +478,14 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             }
         }
 
+        CommitCallbackImpl commitCallback = new CommitCallbackImpl();
         try (TxnContextShim txn = shimStore.txn(someNamespace)) {
-            txn.delete(tableName, key);
+            txn.putRecord(tableName, key, value); // Look no metadata specified!
+            txn.commit(commitCallback);
+        }
+
+        try (TxnContextShim txn = shimStore.txn(someNamespace)) {
+            txn.deleteRecord(tableName, key, ManagedMetadata.newBuilder().build());
             txn.commit((mutations) -> {
                  mutations.values().forEach(mutation -> {
                      CorfuStreamEntry.OperationType op = mutation.get(0).getOperation();

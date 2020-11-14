@@ -41,6 +41,7 @@ public class TxnContext implements AutoCloseable {
 
     private final ObjectsView objectsView;
     private final TableRegistry tableRegistry;
+    @Getter
     private final String namespace;
     private final IsolationLevel isolationLevel;
     private final List<Runnable> operations;
@@ -86,13 +87,15 @@ public class TxnContext implements AutoCloseable {
     /**
      * All write api must be validate to ensure that the table belongs to the namespace.
      *
-     * @param table - table being written to
-     * @param <K> -type of the key
-     * @param <V> - type of the payload/value
-     * @param <M> - type of the metadata
+     * @param table         - table being written to
+     * @param key           - key used in the transaction to check for null.
+     * @param validateKey   - should key be validated for null.
+     * @param <K>           - type of the key
+     * @param <V>           - type of the payload/value
+     * @param <M>           - type of the metadata
      */
     private <K extends Message, V extends Message, M extends Message>
-    void validateTableWrittenIsInNamespace(@Nonnull Table<K, V, M> table) {
+    void validateWrite(@Nonnull Table<K, V, M> table, K key, boolean validateKey) {
         if (!table.getNamespace().equals(namespace)) {
             throw new IllegalArgumentException("TxnContext can't apply table from namespace "
                     + table.getNamespace() + " to transaction on namespace " + namespace);
@@ -102,8 +105,22 @@ public class TxnContext implements AutoCloseable {
                     "TxnContext cannot be used after a transaction has ended on "+
                     table.getFullyQualifiedTableName());
         }
+        if (validateKey && key == null) {
+            throw new IllegalArgumentException("Key cannot be null on "
+                    + table.getFullyQualifiedTableName() + " in transaction on namespace " + namespace);
+        }
         txnType |= WRITE_ONLY;
         tablesInTxn.putIfAbsent(table.getStreamUUID(), table);
+    }
+
+    private <K extends Message, V extends Message, M extends Message>
+    void validateWrite(@Nonnull Table<K, V, M> table) {
+        validateWrite(table, null, false);
+    }
+
+    private <K extends Message, V extends Message, M extends Message>
+    void validateWrite(@Nonnull Table<K, V, M> table, K key) {
+        validateWrite(table, key, true);
     }
 
     /**
@@ -122,7 +139,7 @@ public class TxnContext implements AutoCloseable {
                    @Nonnull final K key,
                    @Nonnull final V value,
                    @Nullable final M metadata) {
-        validateTableWrittenIsInNamespace(table);
+        validateWrite(table, key);
         operations.add(() -> {
             table.put(key, value, metadata);
             table.getMetrics().incNumPuts();
@@ -137,6 +154,7 @@ public class TxnContext implements AutoCloseable {
         /**
          *
          * @param table     table the merge is being done one that will be returned.
+         * @param key       key of the record on which merge is being done.
          * @param oldRecord previous record extracted from the table for the same key.
          * @param newRecord new record that user is currently inserting into table.
          * @param <K>       type of the key
@@ -146,6 +164,7 @@ public class TxnContext implements AutoCloseable {
          */
         <K extends Message, V extends Message, M extends Message>
         CorfuRecord<V, M> doMerge(Table<K, V, M> table,
+                                  K key,
                                   CorfuRecord<V, M> oldRecord,
                                   CorfuRecord<V, M> newRecord);
     }
@@ -164,21 +183,27 @@ public class TxnContext implements AutoCloseable {
      */
     public <K extends Message, V extends Message, M extends Message>
     void merge(@Nonnull Table<K, V, M> table,
-                     @Nonnull final K key,
-                     @Nonnull MergeCallback mergeCallback,
-                     @Nonnull final CorfuRecord<V,M> recordDelta) {
-        validateTableWrittenIsInNamespace(table);
+               @Nonnull final K key,
+               @Nonnull MergeCallback mergeCallback,
+               @Nonnull final CorfuRecord<V,M> recordDelta) {
+        validateWrite(table, key);
         operations.add(() -> {
-            CorfuRecord<V,M> oldRecord = table.get(key);
+            CorfuRecord<V, M> oldRecord = table.get(key);
             CorfuRecord<V, M> mergedRecord;
             try {
-                mergedRecord = mergeCallback.doMerge(table, oldRecord, recordDelta);
+                mergedRecord = mergeCallback.doMerge(table, key, oldRecord, recordDelta);
             } catch (Exception ex) {
                 txAbort(); // explicitly abort this transaction and then throw the abort manually
                 log.error("TX Abort merge: {}", table.getFullyQualifiedTableName(), ex);
                 throw ex;
             }
-            table.put(key, mergedRecord.getPayload(), mergedRecord.getMetadata());
+            if (mergedRecord == null) {
+                table.getMetrics().incNumDeletes();
+                table.deleteRecord(key);
+            } else {
+                table.getMetrics().incNumPuts();
+                table.put(key, mergedRecord.getPayload(), mergedRecord.getMetadata());
+            }
             table.getMetrics().incNumMerges();
         });
     }
@@ -195,7 +220,7 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     void touch(@Nonnull Table<K, V, M> table,
                      @Nonnull final K key) {
-        validateTableWrittenIsInNamespace(table);
+        validateWrite(table, key);
         operations.add(() -> {
             CorfuRecord<V, M> touchedObject = table.get(key);
             if (touchedObject != null) {
@@ -247,7 +272,7 @@ public class TxnContext implements AutoCloseable {
      */
     public <K extends Message, V extends Message, M extends Message>
     void clear(@Nonnull Table<K, V, M> table) {
-        validateTableWrittenIsInNamespace(table);
+        validateWrite(table);
         operations.add(() -> {
             table.clearAll();
             table.getMetrics().incNumClears();
@@ -281,7 +306,7 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     TxnContext delete(@Nonnull Table<K, V, M> table,
                       @Nonnull final K key) {
-        validateTableWrittenIsInNamespace(table);
+        validateWrite(table);
         table.getMetrics().incNumDeletes();
         operations.add(() -> table.deleteRecord(key));
         return this;
@@ -318,7 +343,7 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     K enqueue(@Nonnull Table<K, V, M> table,
               @Nonnull final V record) {
-        validateTableWrittenIsInNamespace(table);
+        validateWrite(table);
         applyWritesForReadOnTable(table);
         /********* TEMPORARY FIX UNTIL REAL IMPLEMENTATION********/
         UUID todoReplaceMe = UUID.randomUUID();
