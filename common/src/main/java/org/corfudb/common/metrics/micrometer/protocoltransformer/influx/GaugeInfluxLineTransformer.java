@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  * and transforms them into the InfluxDb line protocol.
  */
 public class GaugeInfluxLineTransformer implements InfluxLineProtocolTransformer {
-    protected static final String GAUGE_PATTERN_STRING = PatternMatcher.METRIC_PATTERN_STRING + " (value=[\\d]+$)";
+    protected static final String GAUGE_PATTERN_STRING = PatternMatcher.METRIC_PATTERN_STRING + " (value=[\\d.]+$)";
     private final Pattern gaugePattern = Pattern.compile(GAUGE_PATTERN_STRING);
     private Optional<Matcher> matched = Optional.empty();
 
