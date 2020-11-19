@@ -117,6 +117,10 @@ public class LogEntryWriter {
         for (OpaqueEntry opaqueEntry : newOpaqueEntryList) {
             for (UUID uuid : opaqueEntry.getEntries().keySet()) {
                 for (SMREntry smrEntry : opaqueEntry.getEntries().get(uuid)) {
+                    if (smrEntry.getSMRMethod().equals("remove") || smrEntry.getSMRMethod().equals("clear")) {
+                        log.debug("Entries deleted/cleared for stream id={}/method={}, args={}", uuid, smrEntry.getSMRMethod(),
+                                smrEntry.getSMRArguments());
+                    }
                     txBuilder.logUpdate(uuid, smrEntry);
                 }
             }
