@@ -247,6 +247,10 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         logReplicationMetadataManager.appendUpdate(txBuilder, LogReplicationMetadataType.LAST_SNAPSHOT_STARTED, srcGlobalSnapshot);
 
         for (SMREntry smrEntry : smrEntries) {
+            if (smrEntry.getSMRMethod().equals("remove") || smrEntry.getSMRMethod().equals("clear")) {
+                log.debug("Entries deleted/cleared for stream id={}/method={}, shadow_id={}, args={}", regularToShadowStreamId.get(shadowStreamUuid),
+                        smrEntry.getSMRMethod(), shadowStreamUuid, smrEntry.getSMRArguments());
+            }
             txBuilder.logUpdate(shadowStreamUuid, smrEntry);
         }
 
