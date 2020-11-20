@@ -1,6 +1,5 @@
 package org.corfudb.protocols.wireprotocol.orchestrator;
 
-
 /**
  *
  * An interface that should be implemented by all the orchestrator service requests.
@@ -17,9 +16,8 @@ public interface Request {
     OrchestratorRequestType getType();
 
     /**
-     * Serialize this request into a byte array
-     *
-     * @return serialized bytes of the request
+     * The endpoint of the node to operate on (i.e. endpoint of a new node to be added)
+     * @return the endpoint
      */
-    byte[] getSerialized();
+    String getEndpoint();
 }

@@ -3,11 +3,6 @@ package org.corfudb.protocols.wireprotocol.orchestrator;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
-import java.util.Arrays;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
 /**
  * The type of requests that can be made to the Orchestrator Service.
  *
@@ -19,44 +14,33 @@ public enum OrchestratorRequestType {
     /**
      * Query a workflow id
      */
-    QUERY(0, QueryRequest::new),
+    QUERY(0),
 
     /**
      * Add a new node to the cluster
      */
-    ADD_NODE(1, AddNodeRequest::new),
+    ADD_NODE(1),
 
     /**
      * Remove a node from the cluster
      */
-    REMOVE_NODE(2, RemoveNodeRequest::new),
+    REMOVE_NODE(2),
 
     /**
      * Heal an existing node in the cluster
      */
-    HEAL_NODE(3, HealNodeRequest::new),
+    HEAL_NODE(3),
 
     /**
      * Force remove a node from the cluster
      */
-    FORCE_REMOVE_NODE(4, ForceRemoveNodeRequest::new),
+    FORCE_REMOVE_NODE(4),
 
     /**
      * Restore redundancy and merge segments in the layout.
      */
-    RESTORE_REDUNDANCY_MERGE_SEGMENTS(5, RestoreRedundancyMergeSegmentsRequest::new);
-
+    RESTORE_REDUNDANCY_MERGE_SEGMENTS(5);
 
     @Getter
     public final int type;
-
-    @Getter
-    final Function<byte[], Request> requestGenerator;
-
-    /**
-     * Map an int to an enum.
-     */
-    static final Map<Integer, OrchestratorRequestType> typeMap =
-            Arrays.stream(OrchestratorRequestType.values())
-                    .collect(Collectors.toMap(OrchestratorRequestType::getType, Function.identity()));
 }

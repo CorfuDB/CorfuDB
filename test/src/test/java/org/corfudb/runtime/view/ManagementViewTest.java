@@ -20,7 +20,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.ICorfuTable;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -85,7 +84,7 @@ public class ManagementViewTest extends AbstractViewTest {
     public void invokeFailureHandler()
             throws Exception {
 
-        // Boolean flag turned to true when the MANAGEMENT_FAILURE_DETECTED message
+        // Boolean flag turned to true when the REPORT_FAILURE message
         // is sent by the Management client to its server.
         final Semaphore failureDetected = new Semaphore(1, true);
 
@@ -120,13 +119,14 @@ public class ManagementViewTest extends AbstractViewTest {
         addServerRule(SERVERS.PORT_0, new TestRule().always().drop());
 
         // Adding a rule on SERVERS.PORT_1 to toggle the flag when it sends the
-        // MANAGEMENT_FAILURE_DETECTED message.
+        // REPORT_FAILURE message.
+
         addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
-                new TestRule().matches(corfuMsg -> {
-                    if (corfuMsg.getMsgType().equals(CorfuMsgType
-                            .MANAGEMENT_FAILURE_DETECTED)) {
+                new TestRule().requestMatches(msg -> {
+                    if (msg.getPayload().getPayloadCase().equals(PayloadCase.REPORT_FAILURE_REQUEST)) {
                         failureDetected.release();
                     }
+
                     return true;
                 }));
 
@@ -335,9 +335,9 @@ public class ManagementViewTest extends AbstractViewTest {
      */
     @Test
     public void handleTransientFailure() throws Exception {
-        log.info("Boolean flag turned to true when the MANAGEMENT_FAILURE_DETECTED message " +
-                "is sent by the Management client to its server"
-        );
+        log.info("Boolean flag turned to true when the REPORT_FAILURE_REQUEST message " +
+                "is sent by the Management client to its server");
+
         final Semaphore failureDetected = new Semaphore(2, true);
 
         addServer(SERVERS.PORT_0);
@@ -383,7 +383,7 @@ public class ManagementViewTest extends AbstractViewTest {
                 .drop();
 
         TestRule failureTestRule = new TestRule()
-                .matches(msg -> msg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED))
+                .requestMatches(msg -> msg.getPayload().getPayloadCase().equals(PayloadCase.REPORT_FAILURE_REQUEST))
                 .drop();
 
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
@@ -418,13 +418,14 @@ public class ManagementViewTest extends AbstractViewTest {
                 SERVERS.ENDPOINT_2, new TestRule().always().drop());
 
         log.info("Adding a rule on SERVERS.PORT_1 to toggle the flag when it " +
-                "sends the MANAGEMENT_FAILURE_DETECTED message."
-        );
+                "sends the REPORT_FAILURE_REQUEST message.");
+
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(),
-                new TestRule().matches(corfuMsg -> {
-                    if (corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)) {
+                new TestRule().requestMatches(msg -> {
+                    if (msg.getPayload().getPayloadCase().equals(PayloadCase.REPORT_FAILURE_REQUEST)) {
                         failureDetected.release();
                     }
+
                     return true;
                 }));
 
@@ -1341,14 +1342,16 @@ public class ManagementViewTest extends AbstractViewTest {
         // in the cluster is reported.
         Semaphore latch1 = new Semaphore(1);
         latch1.acquire();
+
         addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
-                new TestRule().matches(corfuMsg -> {
-                    if (corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED)) {
+                new TestRule().requestMatches(msg -> {
+                    if (msg.getPayload().getPayloadCase().equals(PayloadCase.REPORT_FAILURE_REQUEST)) {
                         latch1.release();
-                        return true;
                     }
+
                     return false;
                 }).drop());
+
         addServerRule(SERVERS.PORT_1, new TestRule().drop().always());
         addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
                 new TestRule().always().drop());
@@ -1668,8 +1671,8 @@ public class ManagementViewTest extends AbstractViewTest {
         // Bootstrap the layout server.
         corfuRuntime.getLayoutView().getRuntimeLayout().getLayoutClient(SERVERS.ENDPOINT_1).bootstrapLayout(layout);
 
-        addClientRule(corfuRuntime, new TestRule().matches(corfuMsg ->
-                corfuMsg.getMsgType().equals(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST)).drop());
+        addClientRule(corfuRuntime, new TestRule().requestMatches(msg ->
+                msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_MANAGEMENT_REQUEST)).drop());
         assertThat(corfuRuntime.getLayoutManagementView().bootstrapNewNode(SERVERS.ENDPOINT_1).join()).isTrue();
     }
 }

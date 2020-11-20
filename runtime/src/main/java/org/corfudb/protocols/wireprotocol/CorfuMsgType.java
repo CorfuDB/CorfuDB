@@ -8,9 +8,6 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationLeadershipLoss;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
-import org.corfudb.runtime.view.Layout;
 
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -87,22 +84,6 @@ public enum CorfuMsgType {
     COMMITTED_TAIL_REQUEST(64, TypeToken.of(CorfuMsg.class)),
     COMMITTED_TAIL_RESPONSE(65, new TypeToken<CorfuPayloadMsg<Long>>(){}),
     UPDATE_COMMITTED_TAIL(66, new TypeToken<CorfuPayloadMsg<Long>>(){}),
-
-    // Management Messages
-    MANAGEMENT_BOOTSTRAP_REQUEST(70, new TypeToken<CorfuPayloadMsg<Layout>>(){}, true, true),
-    MANAGEMENT_NOBOOTSTRAP_ERROR(71, TypeToken.of(CorfuMsg.class), true, false),
-    MANAGEMENT_ALREADY_BOOTSTRAP_ERROR(72, TypeToken.of(CorfuMsg.class), true, false),
-    MANAGEMENT_HEALING_DETECTED(73, new TypeToken<CorfuPayloadMsg<DetectorMsg>>(){}, true, false),
-    MANAGEMENT_FAILURE_DETECTED(74, new TypeToken<CorfuPayloadMsg<DetectorMsg>>(){}, true, false),
-    ORCHESTRATOR_REQUEST(77, new TypeToken<CorfuPayloadMsg<OrchestratorMsg>>() {}, true, true),
-    ORCHESTRATOR_RESPONSE(78, new TypeToken<CorfuPayloadMsg<OrchestratorResponse>>() {}, true, false),
-    MANAGEMENT_LAYOUT_REQUEST(79, TypeToken.of(CorfuMsg.class), true, false),
-
-    NODE_STATE_REQUEST(82, TypeToken.of(CorfuMsg.class)),
-    NODE_STATE_RESPONSE(83, new TypeToken<CorfuPayloadMsg<NodeState>>(){}, true, false),
-
-    FAILURE_DETECTOR_METRICS_REQUEST(84, TypeToken.of(CorfuMsg.class)),
-    FAILURE_DETECTOR_METRICS_RESPONSE(85, new TypeToken<CorfuPayloadMsg<NodeState>>(){}, true, false),
 
     KNOWN_ADDRESS_REQUEST(86, new TypeToken<CorfuPayloadMsg<KnownAddressRequest>>() {}),
     KNOWN_ADDRESS_RESPONSE(87, new TypeToken<CorfuPayloadMsg<KnownAddressResponse>>() {}),
