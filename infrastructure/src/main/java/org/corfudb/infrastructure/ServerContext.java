@@ -222,15 +222,27 @@ public class ServerContext implements AutoCloseable {
     }
 
     /**
-     * Get an ExecutorService that can be used by the
-     * servers to process RPCs.
+     * Get an ExecutorService that can be used by the servers to
+     * process RPCs. Uses a ServerThreadFactory as the underlying
+     * thread factory.
      * @param threadCount   The number of threads to use in the pool
      * @param threadPrefix  The naming prefix
      * @return The newly created ExecutorService
      */
     public ExecutorService getExecutorService(int threadCount, String threadPrefix) {
-        return Executors.newFixedThreadPool(threadCount,
+        return getExecutorService(threadCount,
                 new ServerThreadFactory(threadPrefix, new ServerThreadFactory.ExceptionHandler()));
+    }
+
+    /**
+     * Get an ExecutorService that can be used by the servers to
+     * process RPCs.
+     * @param threadCount    The number of threads to use in the pool
+     * @param threadFactory  The underlying thread factory
+     * @return The newly created ExecutorService
+     */
+    public ExecutorService getExecutorService(int threadCount, @Nonnull ThreadFactory threadFactory) {
+        return Executors.newFixedThreadPool(threadCount, threadFactory);
     }
 
     /**

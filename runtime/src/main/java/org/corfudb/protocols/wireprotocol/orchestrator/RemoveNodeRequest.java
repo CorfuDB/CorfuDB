@@ -20,14 +20,6 @@ public class RemoveNodeRequest extends AddNodeRequest {
         super(endpoint);
     }
 
-    /**
-     * Create a remove node request from a byte buffer
-     * @param buf the serialized request
-     */
-    public RemoveNodeRequest(byte[] buf) {
-        super(buf);
-    }
-
     @Override
     public OrchestratorRequestType getType() {
         return REMOVE_NODE;

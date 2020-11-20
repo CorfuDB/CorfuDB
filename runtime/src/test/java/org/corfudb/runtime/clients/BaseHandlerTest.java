@@ -45,7 +45,7 @@ import static org.mockito.Mockito.verify;
 
 @Slf4j
 @RunWith(MockitoJUnitRunner.class)
-public class CorfuBaseHandlerTest {
+public class BaseHandlerTest {
 
     // The BaseHandler instance used for testing
     private BaseHandler baseHandler;

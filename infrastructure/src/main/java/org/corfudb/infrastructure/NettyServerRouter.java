@@ -75,7 +75,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
             try {
                 server.getHandler().getHandledTypes().forEach(handledType -> handlerMap.put(handledType, server));
             } catch (UnsupportedOperationException ex) {
-                // Ignore
+                log.error("No registered CorfuMsg handler for server {}", server, ex);
             }
 
             server.getHandlerMethods().getHandledTypes().forEach(handledType ->

@@ -144,11 +144,15 @@ public class LogReplicationClientRouter implements IClientRouter {
         client.setRouter(this);
 
         // Iterate through all types of CorfuMsgType, registering the handler
-        client.getHandledTypes().stream()
-                .forEach(x -> {
-                    handlerMap.put(x, client);
-                    log.info("Registered client to handle messages of type {}", x);
-                });
+        try {
+            client.getHandledTypes().stream()
+                    .forEach(x -> {
+                        handlerMap.put(x, client);
+                        log.info("Registered client to handle messages of type {}", x);
+                    });
+        } catch (UnsupportedOperationException ex) {
+            log.error("No registered CorfuMsg handler for client {}", client, ex);
+        }
 
         // Register this type
         clientList.add(client);

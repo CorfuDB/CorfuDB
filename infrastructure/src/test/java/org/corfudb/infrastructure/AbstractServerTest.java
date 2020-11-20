@@ -13,7 +13,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-public class CorfuAbstractServerTest {
+public class AbstractServerTest {
 
     /**
      * Check that handler is not executed if the server is in shutdown state.
