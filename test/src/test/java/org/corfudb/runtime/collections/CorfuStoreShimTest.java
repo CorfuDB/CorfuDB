@@ -559,9 +559,11 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                     // the transaction actually commits.
                     rwTxn.addCommitCallback((mutations) -> {
                         assertThat(mutations).containsKey(table.getFullyQualifiedTableName());
+                        assertThat(TransactionalContext.isInTransaction()).isFalse();
                     });
                     rwTxn.commit();
                 }
+                assertThat(TransactionalContext.isInTransaction()).isTrue();
                 assertThat(entry.getMetadata().getRevision()).isEqualTo(0);
                 assertThat(entry.getMetadata().getCreateTime()).isGreaterThan(0);
                 assertThat(entry.getMetadata().getCreateTime()).isEqualTo(entry.getMetadata().getLastModifiedTime());
@@ -573,6 +575,8 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             nestedTxnTester.nestedQuery();
             txn.commit();
         }
+
+        assertThat(TransactionalContext.isInTransaction()).isFalse();
 
         // ----- check nested transactions NOT started by CorfuStore isn't messed up by CorfuStore txn -----
         CorfuTable<String, String>
@@ -595,8 +599,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         }
         assertThat(entry.getMetadata().getRevision()).isGreaterThan(0);
 
-        boolean isInTransaction = TransactionalContext.isInTransaction();
-        assertThat(isInTransaction).isTrue();
+        assertThat(TransactionalContext.isInTransaction()).isTrue();
         long commitAddress = corfuRuntime.getObjectsView().TXEnd();
         assertThat(commitAddress).isNotEqualTo(Address.NON_ADDRESS);
     }

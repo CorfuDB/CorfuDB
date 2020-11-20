@@ -220,13 +220,15 @@ public class CorfuStoreShim {
     @Deprecated
     public ManagedTxnContext txnWithNesting(@Nonnull final String namespace) {
         TxnContext txnContext = TxnContext.getMyTxnContext();
+        boolean isNested = true;
         if (txnContext == null) {
             txnContext = new TxnContext(corfuStore.getRuntime().getObjectsView(),
                     corfuStore.getRuntime().getTableRegistry(),
                     namespace,
                     IsolationLevel.snapshot(), true);
+            isNested = false;
         }
-        return new ManagedTxnContext(txnContext, true);
+        return new ManagedTxnContext(txnContext, isNested);
     }
 
     public CorfuRuntime getRuntime() {

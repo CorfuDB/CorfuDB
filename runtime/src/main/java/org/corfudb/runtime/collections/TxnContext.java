@@ -93,19 +93,28 @@ public class TxnContext implements AutoCloseable {
         if (TransactionalContext.isInTransaction()) {
             TxnContext txnContext = TransactionalContext.getRootContext().getTxnContext();
             if (!allowNestedTransactions) {
-                log.error("Current thread already has a transaction started and nested transactions are disabled!");
+                log.error("Nested transactions are disabled & current thread already has a transaction started at...");
+                for (StackTraceElement st : TransactionalContext.getRootContext().getBeginTxnStackTrace()) {
+                    log.error("{}", st);
+                }
                 throw new TransactionAlreadyStartedException(TransactionalContext.getRootContext().toString());
             }
             if (txnContext != null) {
-                log.error("Cannot start new transaction in this thread without ending previous one");
+                log.error("Cannot start new CorfuStore transaction in this thread without ending previous one at...");
+                for (StackTraceElement st : TransactionalContext.getRootContext().getBeginTxnStackTrace()) {
+                    log.error("{}", st);
+                }
                 throw new TransactionAlreadyStartedException(TransactionalContext.getRootContext().toString());
             }
             this.txnStartTime = System.nanoTime();
             log.warn("Reusing the transactional context created outside this layer!");
             this.iDidNotStartCorfuTxn = true;
+            TransactionalContext.getRootContext().setTxnContext(this);
             return;
         }
 
+        // Consider moving this to trace after stability improves.
+        log.debug("TxnContext: begin transaction in namespace {}", namespace);
         this.txnStartTime = System.nanoTime();
         Transaction.TransactionBuilder transactionBuilder = this.objectsView
                 .TXBuild()
