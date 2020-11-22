@@ -4,6 +4,7 @@ import com.google.protobuf.Message;
 
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.Setter;
 
 /**
  * Encapsulates the payload/value and metadata into one object.
@@ -27,7 +28,8 @@ public class CorfuRecord<V extends Message, M extends Message> {
      * services provided by the database for metadata fields.
      */
     @Getter
-    private final M metadata;
+    @Setter
+    private M metadata;
 
     public CorfuRecord(V payload, M metadata) {
         this.payload = payload;

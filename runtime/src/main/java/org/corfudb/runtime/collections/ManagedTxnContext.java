@@ -2,7 +2,6 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
-import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
 import org.corfudb.runtime.view.Address;
 
@@ -175,10 +174,11 @@ public class ManagedTxnContext implements AutoCloseable {
      *
      * @param table  Table object to perform the delete on.
      * @param record Record to be inserted into the Queue.
+     * @return Queue.CorfuGuidMsg which can identify a record in the underlying table.
      */
     public <K extends Message, V extends Message, M extends Message>
-    void enqueue(@Nonnull Table<K, V, M> table, @Nonnull V record) {
-        this.txnContext.enqueue(table, record);
+    K enqueue(@Nonnull Table<K, V, M> table, @Nonnull V record) {
+        return this.txnContext.enqueue(table, record);
     }
 
     /**
@@ -407,10 +407,10 @@ public class ManagedTxnContext implements AutoCloseable {
      * Note that the key in these entries would be the CorfuQueueIdMsg.
      *
      * @param table Table< K, V, M > object aka queue on which the scan must be done.
-     * @return Collection of filtered entries.
+     * @return Collection of Queue records sorted by their transaction commit time.
      */
     public <K extends Message, V extends Message, M extends Message>
-    List<CorfuStoreEntry<K, V, M>> entryList(@Nonnull Table<K, V, M> table) {
+    List<Table.CorfuQueueRecord> entryList(@Nonnull Table<K, V, M> table) {
         return this.txnContext.entryList(table);
     }
 

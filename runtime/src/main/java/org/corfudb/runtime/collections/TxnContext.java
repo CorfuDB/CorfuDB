@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.Queue.CorfuQueueIdMsg;
 import org.corfudb.runtime.exceptions.TransactionAlreadyStartedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionalContext;
 import org.corfudb.runtime.object.transactions.Transaction;
@@ -396,13 +395,8 @@ public class TxnContext implements AutoCloseable {
               @Nonnull final V record) {
         validateWrite(table);
         applyWritesForReadOnTable(table);
-        /********* TEMPORARY FIX UNTIL REAL IMPLEMENTATION********/
-        UUID todoReplaceMe = UUID.randomUUID();
-        CorfuQueueIdMsg key = CorfuQueueIdMsg.newBuilder()
-                .setEntryId(todoReplaceMe.timestamp())
-                .setTxSequence(todoReplaceMe.clockSequence()).build();
-        this.putRecord(table, (K)key, record, null);
-        return (K) key;
+        table.getMetrics().incNumEnqueues();
+        return table.enqueue(record);
     }
 
     // *************************** READ API *****************************************
@@ -677,10 +671,10 @@ public class TxnContext implements AutoCloseable {
      * @return Collection of filtered entries.
      */
     public <K extends Message, V extends Message, M extends Message>
-    List<CorfuStoreEntry<K, V, M>> entryList(@Nonnull final Table<K, V, M> table) {
+    List<Table.CorfuQueueRecord> entryList(@Nonnull final Table<K, V, M> table) {
         applyWritesForReadOnTable(table);
-        /***** TODO FIX ME WITH REAL IMPLEMENTATION *******/
-        return table.scanAndFilterByEntry(record -> true);
+        table.getMetrics().incNumEntryLists();
+        return table.entryList();
     }
 
     /**
