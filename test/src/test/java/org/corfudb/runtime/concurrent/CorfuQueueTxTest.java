@@ -59,7 +59,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
      * This concurrent test validates that the CorfuQueue::enqueue operations
      * are ordered by that of the parent transaction and fail if transaction aborts.
      *
-     * @throws Exception
+     * @throws Exception - RuntimeException if the guid generator had problems.
      */
     @Test
     public void queueOrderedByOptimisticTxn() throws Exception {
