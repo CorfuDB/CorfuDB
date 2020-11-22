@@ -12,13 +12,18 @@ import java.util.stream.Stream;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import lombok.AllArgsConstructor;
 import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
 
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.util.serializer.ISerializer;
 import lombok.Getter;
 
@@ -28,6 +33,7 @@ import lombok.Getter;
  * The value is a CorfuRecord which comprises of 2 fields - Payload and Metadata. These are protobuf messages as well.
  * <p>
  */
+@Slf4j
 public class Table<K extends Message, V extends Message, M extends Message> {
 
     private final CorfuRuntime corfuRuntime;
@@ -66,6 +72,11 @@ public class Table<K extends Message, V extends Message, M extends Message> {
 
     @Getter
     private final Class<M> metadataClass;
+
+    /**
+     * In case this table is opened as a Queue, we need the Guid generator to support enqueue operations.
+     */
+    private final CorfuGuidGenerator guidGenerator;
 
     /**
      * Returns a Table instance backed by a CorfuTable.
@@ -116,6 +127,12 @@ public class Table<K extends Message, V extends Message, M extends Message> {
         this.keyClass = kClass;
         this.valueClass = vClass;
         this.metadataClass = mClass;
+        if (kClass == Queue.CorfuGuidMsg.class &&
+                mClass == Queue.CorfuQueueMetadataMsg.class) { // Really a Queue
+            this.guidGenerator = CorfuGuidGenerator.getInstance(corfuRuntime);
+        } else {
+            this.guidGenerator = null;
+        }
     }
 
     /**
@@ -293,6 +310,154 @@ public class Table<K extends Message, V extends Message, M extends Message> {
             if (beganNewTxn) {
                 TxEnd();
             }
+        }
+    }
+
+    /**
+     * Appends the specified element at the end of this unbounded queue.
+     * Capacity restrictions and backoffs must be implemented outside this
+     * interface. Consider validating the size of the queue against a high
+     * watermark before enqueue.
+     *
+     * @param e the element to add
+     * @throws IllegalArgumentException if some property of the specified
+     *         element prevents it from being added to this queue
+     */
+    public K enqueue(V e) {
+        /**
+         * This is a callback that is placed into the root transaction's context on
+         * the thread local stack which will be invoked right after this transaction
+         * is deemed successful and has obtained a final sequence number to write.
+         */
+        @AllArgsConstructor
+        class QueueEntryAddressGetter implements TransactionalContext.PreCommitListener {
+            private CorfuRecord<V, M> record;
+
+            /**
+             * If we are in a transaction, determine the commit address and fix it up in
+             * the queue entry's metadata.
+             * @param tokenResponse - the sequencer's token response returned.
+             */
+            @Override
+            public void preCommitCallback(TokenResponse tokenResponse) {
+                record.setMetadata((M)Queue.CorfuQueueMetadataMsg.newBuilder()
+                        .setTxSequence(tokenResponse.getSequence()).build());
+                log.trace("preCommitCallback for Queue: " + tokenResponse);
+            }
+        }
+
+        // Obtain a cluster-wide unique 64-bit id to identify this entry in the queue.
+        long entryId = guidGenerator.nextLong();
+        // Embed this key into a protobuf.
+        K keyOfQueueEntry = (K)Queue.CorfuGuidMsg.newBuilder().setInstanceId(entryId).build();
+
+        // Prepare a partial record with the queue's payload and temporary metadata that will be overwritten
+        // by the QueueEntryAddressGetter callback above when the transaction finally commits.
+        CorfuRecord<V, M> queueEntry = new CorfuRecord<>(e,
+                (M)Queue.CorfuQueueMetadataMsg.newBuilder().setTxSequence(0).build());
+
+        QueueEntryAddressGetter addressGetter = new QueueEntryAddressGetter(queueEntry);
+        log.trace("enqueue: Adding preCommitListener for Queue: " + e.toString());
+        TransactionalContext.getRootContext().addPreCommitListener(addressGetter);
+
+        corfuTable.put(keyOfQueueEntry, queueEntry);
+        return keyOfQueueEntry;
+    }
+
+    /**
+     * Returns a List of CorfuQueueRecords sorted by the order in which the enqueue materialized.
+     * This is the primary method of consumption of entries enqueued into CorfuQueue.
+     *
+     * <p>This function currently does not return a view like the java.util implementation,
+     * and changes to the entryList will *not* be reflected in the map. </p>
+     *
+     * @return List of Entries sorted by their enqueue order
+     */
+    public List<CorfuQueueRecord>  entryList() {
+        Comparator<Map.Entry<K, CorfuRecord<V,M>>> queueComparator =
+                (Map.Entry<K, CorfuRecord<V,M>> rec1, Map.Entry<K, CorfuRecord<V,M>> rec2) -> {
+                    long r1EntryId = ((Queue.CorfuGuidMsg)rec1.getKey()).getInstanceId();
+                    long r1Sequence = ((Queue.CorfuQueueMetadataMsg)rec1.getValue().getMetadata()).getTxSequence();
+
+                    long r2EntryId = ((Queue.CorfuGuidMsg)rec2.getKey()).getInstanceId();
+                    long r2Sequence = ((Queue.CorfuQueueMetadataMsg)rec2.getValue().getMetadata()).getTxSequence();
+                    return CorfuQueueRecord.compareTo(r1EntryId, r2EntryId, r1Sequence, r2Sequence);
+                };
+
+        List<CorfuQueueRecord> copy = new ArrayList<>(corfuTable.size());
+        for (Map.Entry<K, CorfuRecord<V,M>> entry : corfuTable.entryStream()
+                .sorted(queueComparator).collect(Collectors.toList())) {
+            copy.add(new CorfuQueueRecord((Queue.CorfuGuidMsg)entry.getKey(),
+                    (Queue.CorfuQueueMetadataMsg)entry.getValue().getMetadata(),
+                    entry.getValue().getPayload()));
+        }
+        return copy;
+    }
+
+    /**
+     * CorfuQueueRecord encapsulates each entry enqueued into CorfuQueue with its unique ID.
+     * It is a read-only type returned by the entryList() method.
+     * The ID returned here can be used for both point get()s as well as remove() operations
+     * on this Queue.
+     *
+     */
+    public static class CorfuQueueRecord implements Comparable<CorfuQueueRecord> {
+        /**
+         * This ID represents the entry and its order in the Queue.
+         * This implies that it is unique and comparable with other IDs
+         * returned from CorfuQueue methods with respect to its enqueue order.
+         * because if this method is wrapped in a transaction, the order is established only later.
+         */
+        @Getter
+        private final Queue.CorfuGuidMsg recordId;
+
+        @Getter
+        private final Queue.CorfuQueueMetadataMsg txSequence;
+
+        @Getter
+        private final Message entry;
+
+        public String toString() {
+            return String.format("%s | %s =>%s", recordId, txSequence, entry);
+        }
+
+        CorfuQueueRecord(Queue.CorfuGuidMsg entryId, Queue.CorfuQueueMetadataMsg txSequence, Message entry) {
+            this.recordId = entryId;
+            this.txSequence = txSequence;
+            this.entry = entry;
+        }
+
+        public static int compareTo(long thisEntryId, long thatEntryId, long thisSequence, long thatSequence) {
+            if (thisEntryId == thatEntryId && thisSequence == thatSequence) {
+                return 0;
+            }
+            if (thisSequence > thatSequence) {
+                return 1;
+            }
+            if (thisSequence == thatSequence && thisEntryId > thatEntryId) {
+                return 1;
+            }
+            return -1;
+        }
+
+        @Override
+        public int compareTo(CorfuQueueRecord o) {
+            return compareTo(this.getRecordId().getInstanceId(), ((CorfuQueueRecord) o).recordId.getInstanceId(),
+                    this.getTxSequence().getTxSequence(), ((CorfuQueueRecord) o).getTxSequence().getTxSequence());
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CorfuQueueRecord that = (CorfuQueueRecord) o;
+            return this.getRecordId().getInstanceId() == that.getRecordId().getInstanceId() &&
+                    this.getTxSequence().getTxSequence() == that.getTxSequence().getTxSequence();
+        }
+
+        @Override
+        public int hashCode() {
+            return recordId.hashCode();
         }
     }
 

@@ -129,15 +129,15 @@ public class CorfuStore {
      * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
      */
     @Nonnull
-    public <V extends Message, M extends Message>
-    Table<Queue.CorfuQueueIdMsg, V, M> openQueue(@Nonnull final String namespace,
-                                                 @Nonnull final String queueName,
-                                                 @Nonnull final Class<V> vClass,
-                                                 @Nonnull final TableOptions tableOptions)
+    public <V extends Message>
+    Table<Queue.CorfuGuidMsg, V, Queue.CorfuQueueMetadataMsg> openQueue(@Nonnull final String namespace,
+                                                                        @Nonnull final String queueName,
+                                                                        @Nonnull final Class<V> vClass,
+                                                                        @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
 
         return runtime.getTableRegistry().openTable(namespace, queueName,
-                Queue.CorfuQueueIdMsg.class, vClass, null, tableOptions);
+                Queue.CorfuGuidMsg.class, vClass, Queue.CorfuQueueMetadataMsg.class, tableOptions);
     }
 
     /**
