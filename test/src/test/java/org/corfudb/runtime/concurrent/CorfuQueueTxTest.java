@@ -14,11 +14,21 @@ import java.util.TreeMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+
+import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.Messages;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.collections.CorfuQueue;
 import org.corfudb.runtime.collections.CorfuQueue.CorfuRecordId;
+import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ManagedTxnContext;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.AbstractTransactionsTest;
 import org.corfudb.runtime.object.transactions.TransactionType;
@@ -92,8 +102,8 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
 
         scheduleConcurrently(numThreads, t ->
         {
-            for (Long i = 0L; i < numIterations; i++) {
-                String queueData = t.toString() + ":" + i.toString();
+            for (long i = 0L; i < numIterations; i++) {
+                String queueData = t.toString() + ":" + Long.toString(i);
                 try {
                     TXBegin(txnType);
                     Long coinToss = new Random().nextLong() % numConflictKeys;
@@ -142,6 +152,87 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
         log.debug("byte array from Record {} = {}", idx, fromRecId);
         assertThat(backToRecId.getTxSequence()).isEqualTo(records.get(idx).getRecordId().getTxSequence());
         log.debug("RecordId back from byte array = {}", backToRecId);
+    }
+
+    @Test
+    public void queueOrderInTxnContext() throws Exception {
+        final int numThreads = PARAMETERS.CONCURRENCY_TWO;
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String conflictTableName = "ConflictTable";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Messages.Uuid, Messages.Uuid, Message> conflictTable =
+                shimStore.openTable(
+                        someNamespace,
+                        conflictTableName,
+                        Messages.Uuid.class,
+                        Messages.Uuid.class,
+                        null,
+                        // TableOptions includes option to choose - Memory/Disk based corfu table.
+                        TableOptions.builder().build());
+
+        Messages.Uuid key = Messages.Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
+        ExampleSchemas.ManagedMetadata value = ExampleSchemas.ManagedMetadata.newBuilder().setCreateUser("simpleValue").build();
+
+        Table<Queue.CorfuGuidMsg, ExampleSchemas.ExampleValue, Queue.CorfuQueueMetadataMsg> corfuQueue =
+                shimStore.openQueue(someNamespace, "testQueue",
+                        ExampleSchemas.ExampleValue.class,
+                        TableOptions.builder().build());
+        ArrayList<Long> validator = new ArrayList<>(numThreads * numIterations);
+        ReentrantLock lock = new ReentrantLock();
+
+        scheduleConcurrently(numThreads, t ->
+        {
+            for (Long i = 0L; i < numIterations; i++) {
+                String queueDataStr = t.toString() + ":" + i.toString();
+                ExampleSchemas.ExampleValue queueData = ExampleSchemas.ExampleValue.newBuilder()
+                        .setPayload(queueDataStr)
+                        .setAnotherKey(i).build();
+                try {
+                    ManagedTxnContext txn = shimStore.txn(someNamespace);
+                    Long coinToss = new Random().nextLong() % numConflictKeys;
+                    Messages.Uuid conflictKey = Messages.Uuid.newBuilder().setMsb(coinToss).build();
+                    txn.putRecord(conflictTable, conflictKey, conflictKey);
+                    txn.enqueue(corfuQueue, queueData);
+                    // Each transaction may or may not sleep to simulate out of order between enQ & commit
+                    TimeUnit.MILLISECONDS.sleep(coinToss);
+                    lock.lock();
+                    final long streamOffset = txn.commit();
+                    validator.add(i);
+                    log.debug("ENQ: {} => {} at {}", i, queueData, streamOffset);
+                    lock.unlock();
+                } catch (TransactionAbortedException txException) {
+                    log.debug("{} ---> Abort!!! ", queueData);
+                    // Half the transactions are expected to abort
+                    lock.unlock();
+                }
+            }
+        });
+        executeScheduled(numThreads, PARAMETERS.TIMEOUT_LONG);
+
+        // After all concurrent transactions are complete, validate that number of Queue entries
+        // are the same as the number of successful transactions.
+        List<Table.CorfuQueueRecord> records;
+        try (ManagedTxnContext query = shimStore.txn(someNamespace)) {
+            records = corfuQueue.entryList();
+        }
+        assertThat(validator.size()).isEqualTo(records.size());
+
+        // Also validate that the order of the queue matches that of the commit order.
+        for (int i = 0; i < validator.size(); i++) {
+            log.debug("Entry:" + records.get(i).getRecordId());
+            Long order = ((ExampleSchemas.ExampleValue)records.get(i).getEntry()).getAnotherKey();
+            assertThat(order).isEqualTo(validator.get(i));
+        }
     }
 
     //Assist the test that the log address values are not in the same order of enqueue.

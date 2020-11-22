@@ -90,11 +90,11 @@ public class CorfuStoreShim {
      * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
      */
     @Nonnull
-    public <V extends Message, M extends Message>
-    Table<Queue.CorfuQueueIdMsg, V, M> openQueue(@Nonnull String namespace,
-                                                 @Nonnull String queueName,
-                                                 @Nonnull Class<V> vClass,
-                                                 @Nonnull TableOptions tableOptions)
+    public <V extends Message>
+    Table<Queue.CorfuGuidMsg, V, Queue.CorfuQueueMetadataMsg> openQueue(@Nonnull String namespace,
+                                                                        @Nonnull String queueName,
+                                                                        @Nonnull Class<V> vClass,
+                                                                        @Nonnull TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
         return corfuStore.openQueue(namespace, queueName, vClass, tableOptions);
     }

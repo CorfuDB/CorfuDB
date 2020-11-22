@@ -5,8 +5,10 @@ import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.ExampleSchemas;
 import org.corfudb.runtime.ExampleSchemas.ExampleValue;
 import org.corfudb.runtime.Messages;
+import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -16,8 +18,10 @@ import org.corfudb.runtime.Messages.Uuid;
 import org.corfudb.runtime.view.Address;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -602,5 +606,79 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(TransactionalContext.isInTransaction()).isTrue();
         long commitAddress = corfuRuntime.getObjectsView().TXEnd();
         assertThat(commitAddress).isNotEqualTo(Address.NON_ADDRESS);
+    }
+
+    /**
+     * This test validates that the CorfuQueue api via the CorfuStore layer binds the fate and order of the
+     * queue operations with that of its parent transaction.
+     * @throws Exception could be a corfu runtime exception if bad things happen.
+     */
+    @Test
+    public void queueOrderInTxnContext() throws Exception {
+        final int numIterations = 1000;
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String conflictTableName = "ConflictTable";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Messages.Uuid, Messages.Uuid, Message> conflictTable =
+                shimStore.openTable(
+                        someNamespace,
+                        conflictTableName,
+                        Messages.Uuid.class,
+                        Messages.Uuid.class,
+                        null,
+                        // TableOptions includes option to choose - Memory/Disk based corfu table.
+                        TableOptions.builder().build());
+
+        Messages.Uuid key = Messages.Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
+        ExampleSchemas.ManagedMetadata value = ExampleSchemas.ManagedMetadata.newBuilder().setCreateUser("simpleValue").build();
+
+        Table<Queue.CorfuGuidMsg, ExampleSchemas.ExampleValue, Queue.CorfuQueueMetadataMsg> corfuQueue =
+                shimStore.openQueue(someNamespace, "testQueue",
+                        ExampleSchemas.ExampleValue.class,
+                        TableOptions.builder().build());
+        ArrayList<Long> validator = new ArrayList<>(numIterations);
+        for (long i = 0L; i < numIterations; i++) {
+            ExampleSchemas.ExampleValue queueData = ExampleSchemas.ExampleValue.newBuilder()
+                    .setPayload(""+i)
+                    .setAnotherKey(i).build();
+            final int two = 2;
+            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+                long coinToss = new Random().nextLong() % two;
+                Messages.Uuid conflictKey = Messages.Uuid.newBuilder().setMsb(coinToss).build();
+                txn.putRecord(conflictTable, conflictKey, conflictKey);
+                txn.enqueue(corfuQueue, queueData);
+                if (coinToss > 0) {
+                    final long streamOffset = txn.commit();
+                    validator.add(i);
+                    log.debug("ENQ: {} => {} at {}", i, queueData, streamOffset);
+                } else {
+                    txn.txAbort();
+                }
+            }
+        }
+        // After all tentative transactions are complete, validate that number of Queue entries
+        // are the same as the number of successful transactions.
+        List<Table.CorfuQueueRecord> records;
+        try (ManagedTxnContext query = shimStore.txn(someNamespace)) {
+            records = corfuQueue.entryList();
+        }
+        assertThat(validator.size()).isEqualTo(records.size());
+
+        // Also validate that the order of the queue matches that of the commit order.
+        for (int i = 0; i < validator.size(); i++) {
+            log.debug("Entry:" + records.get(i).getRecordId());
+            Long order = ((ExampleSchemas.ExampleValue)records.get(i).getEntry()).getAnotherKey();
+            assertThat(order).isEqualTo(validator.get(i));
+        }
     }
 }
