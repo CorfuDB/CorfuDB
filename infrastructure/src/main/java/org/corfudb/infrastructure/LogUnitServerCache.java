@@ -4,11 +4,17 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.annotations.VisibleForTesting;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+
+import java.util.Optional;
+import java.util.function.Supplier;
 
 import static org.corfudb.util.MetricsUtils.sizeOf;
 
@@ -32,23 +38,31 @@ public class LogUnitServerCache {
     //Empirical threshold of number of streams in a logdata beyond which server performance may be slow
     private final int MAX_STREAM_THRESHOLD = 20;
 
+    private final Optional<Timer> readTimer;
+
     public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
         this.streamLog = streamLog;
         this.dataCache = Caffeine.newBuilder()
                 .<Long, ILogData>weigher((addr, logData) -> getLogDataTotalSize(logData))
                 .maximumWeight(config.getMaxCacheSize())
+                .recordStats()
                 .removalListener(this::handleEviction)
                 .build(this::handleRetrieval);
+
+        MeterRegistryProvider.getInstance().ifPresent(registry ->
+                CaffeineCacheMetrics.monitor(registry, dataCache, "logunit.read_cache"));
+        readTimer = MeterRegistryProvider.getInstance().map(registry ->
+                Timer.builder("logunit.read.timer").register(registry));
     }
 
     private int getLogDataTotalSize(ILogData logData) {
         if (logData.getStreams().size() > MAX_STREAM_THRESHOLD) {
             log.warn("Number of streams in this data is higher that threshold {}." +
-                "This may impact the server performance", MAX_STREAM_THRESHOLD);
+                    "This may impact the server performance", MAX_STREAM_THRESHOLD);
         }
         return logData.getSizeEstimate() +
-            (int)(sizeOf.deepSizeOf(logData.getMetadataMap())) +
-            KEY_SIZE;
+                (int)(sizeOf.deepSizeOf(logData.getMetadataMap())) +
+                KEY_SIZE;
     }
 
     /**
@@ -62,7 +76,9 @@ public class LogUnitServerCache {
      * as un-written (null).
      */
     private ILogData handleRetrieval(long address) {
-        LogData entry = streamLog.read(address);
+        Supplier<LogData> readSupplier = () -> streamLog.read(address);
+        LogData entry = readTimer.map(timer -> timer.record(readSupplier))
+                .orElseGet(() -> readSupplier.get());
         log.trace("handleRetrieval: Retrieved[{} : {}]", address, entry);
         return entry;
     }

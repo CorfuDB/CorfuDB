@@ -1,7 +1,9 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Timer;
 import com.google.common.collect.ImmutableMap;
+import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Builder;
 import lombok.Builder.Default;
@@ -9,6 +11,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressRequest;
@@ -37,10 +40,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Supplier;
 
 /**
  * This server implements the sequencer functionality of Corfu.
@@ -139,7 +144,7 @@ public class SequencerServer extends AbstractServer {
 
     private final ExecutorService executor;
 
-
+    private final Optional<Timer> txResolutionTimer;
     /**
      * Returns a new SequencerServer.
      *
@@ -155,7 +160,8 @@ public class SequencerServer extends AbstractServer {
 
         globalLogTail = Address.getMinAddress();
         this.cache = new SequencerServerCache(config.getCacheSize(), globalLogTail - 1);
-        setUpTimerNameCache();
+        this.txResolutionTimer = MeterRegistryProvider.getInstance().map(registry ->
+                registry.timer("sequencer.tx-resolution.timer"));
     }
 
     @Override
@@ -182,16 +188,6 @@ public class SequencerServer extends AbstractServer {
             return false;
         }
         return true;
-    }
-
-    /**
-     * Initialized the HashMap with the name of timers for different types of requests
-     */
-    private void setUpTimerNameCache() {
-        timerNameCache.put(TokenRequest.TK_QUERY, CorfuComponent.INFRA_SEQUENCER + "query-token");
-        timerNameCache.put(TokenRequest.TK_RAW, CorfuComponent.INFRA_SEQUENCER + "raw-token");
-        timerNameCache.put(TokenRequest.TK_MULTI_STREAM, CorfuComponent.INFRA_SEQUENCER + "multi-stream-token");
-        timerNameCache.put(TokenRequest.TK_TX, CorfuComponent.INFRA_SEQUENCER + "tx-token");
     }
 
     /**
@@ -360,7 +356,7 @@ public class SequencerServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.BOOTSTRAP_SEQUENCER)
     public void resetServer(CorfuPayloadMsg<SequencerRecoveryMsg> msg,
-                                         ChannelHandlerContext ctx, IServerRouter r) {
+                            ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Reset sequencer server.");
         final Map<UUID, StreamAddressSpace> addressSpaceMap = msg.getPayload().getStreamsAddressMap();
         final long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
@@ -404,6 +400,8 @@ public class SequencerServer extends AbstractServer {
         // It is necessary because we reset the sequencer.
         if (!bootstrapWithoutTailsUpdate) {
             globalLogTail = msg.getPayload().getGlobalTail();
+            MeterRegistryProvider.deregisterServerMeter(cache.getConflictKeysCounterName(),
+                    Tags.empty(), Meter.Type.GAUGE);
             cache = new SequencerServerCache(cache.getCacheSize(), globalLogTail - 1);
             // Clear the existing map as it could have been populated by an earlier reset.
             streamTailToGlobalTailMap = new HashMap<>();
@@ -465,44 +463,28 @@ public class SequencerServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.TOKEN_REQ)
     public void tokenRequest(CorfuPayloadMsg<TokenRequest> msg,
-                                          ChannelHandlerContext ctx, IServerRouter r) {
+                             ChannelHandlerContext ctx, IServerRouter r) {
         log.trace("Token request. Msg: {}", msg);
 
         TokenRequest req = msg.getPayload();
-        final Timer timer = getTimer(req.getReqType());
-
         // dispatch request handler according to request type while collecting the timer metrics
-        try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
-            switch (req.getReqType()) {
-                case TokenRequest.TK_QUERY:
-                    handleTokenQuery(msg, ctx, r);
-                    return;
+        switch (req.getReqType()) {
+            case TokenRequest.TK_QUERY:
+                handleTokenQuery(msg, ctx, r);
+                return;
 
-                case TokenRequest.TK_RAW:
-                    handleRawToken(msg, ctx, r);
-                    return;
+            case TokenRequest.TK_RAW:
+                handleRawToken(msg, ctx, r);
+                return;
 
-                case TokenRequest.TK_TX:
-                    handleTxToken(msg, ctx, r);
-                    return;
+            case TokenRequest.TK_TX:
+                handleTxToken(msg, ctx, r);
+                return;
 
-                default:
-                    handleAllocation(msg, ctx, r);
-                    return;
-            }
+            default:
+                handleAllocation(msg, ctx, r);
+                return;
         }
-    }
-
-    /**
-     * Return a timer based on the type of request. It will take the name from the cache
-     * initialized at construction of the sequencer server to avoid String concatenation.
-     *
-     * @param reqType type of a {@link TokenRequest} instance
-     * @return an instance {@link Timer} corresponding to the provided {@param reqType}
-     */
-    private Timer getTimer(byte reqType) {
-        final String timerName = timerNameCache.getOrDefault(reqType, CorfuComponent.INFRA_SEQUENCER + "unknown");
-        return ServerContext.getMetrics().timer(timerName);
     }
 
     /**
@@ -543,7 +525,9 @@ public class SequencerServer extends AbstractServer {
         // in the TK_TX request type, the sequencer is utilized for transaction conflict-resolution.
         // Token allocation is conditioned on commit.
         // First, we check if the transaction can commit.
-        TxResolutionResponse txResolutionResponse = txnCanCommit(req.getTxnResolution());
+        Supplier<TxResolutionResponse> txResponseSupplier = () -> txnCanCommit(req.getTxnResolution());
+        TxResolutionResponse txResolutionResponse = txResolutionTimer.map(timer -> timer.record(txResponseSupplier))
+                .orElseGet(() -> txResponseSupplier.get());
         if (txResolutionResponse.getTokenType() != TokenType.NORMAL) {
             // If the txn aborts, then DO NOT hand out a token.
             Token newToken = new Token(sequencerEpoch, txResolutionResponse.getAddress());
@@ -701,7 +685,7 @@ public class SequencerServer extends AbstractServer {
 
         public static Config parse(Map<String, Object> opts) {
             int cacheSize = (int)(opts.containsKey("--sequencer-cache-size") ?
-            Integer.parseInt((String)opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE);
+                    Integer.parseInt((String)opts.get("--sequencer-cache-size")) : DEFAULT_CACHE_SIZE);
             return Config.builder()
                     .cacheSize(cacheSize)
                     .build();

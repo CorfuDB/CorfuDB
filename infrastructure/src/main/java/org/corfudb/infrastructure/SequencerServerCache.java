@@ -3,19 +3,21 @@ package org.corfudb.infrastructure;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.util.MetricsUtils;
 
+import javax.annotation.concurrent.NotThreadSafe;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.PriorityQueue;
 import java.util.UUID;
-import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Sequencer server cache.
  * Contains transaction conflict-resolution data structures.
- *
+ * <p>
  * The cache map maps conflict keys (stream id + key) to versions (long), illustrated below:
  * Conflict Key | ck1 | ck2 | ck3 | ck4
  * Version | v1 | v1 | v2 | v3
@@ -25,10 +27,10 @@ import javax.annotation.concurrent.NotThreadSafe;
  * this eviction policy is FIFO on the version number. The simple FIFO approach in Caffein etc doesn't work here,
  * as it may evict ck1, but not ck2. Notice that we also can't evict ck3 before the keys for v1,
  * that's because it will create holes in the resolution window and can lead to incorrect resolutions.
- *
+ * <p>
  * We use priority queue as a sliding window on the versions, where a version can map to multiple keys,
  * so we also need to maintain the beginning of the window which is the maxConflictWildcard variable.
- *
+ * <p>
  * SequencerServerCache achieves consistency by using single threaded cache. It's done by following code:
  * `.executor(Runnable::run)`
  */
@@ -43,7 +45,6 @@ public class SequencerServerCache {
     // As the sequencer cache is used by a single thread, it is safe to use hashmap.
     private final HashMap<ConflictTxStream, Long> conflictKeys;
     private final PriorityQueue<ConflictTxStream> cacheEntries; //sorted according to address
-
     @Getter
     private final int cacheSize; // the max number of entries in SequencerServerCache
 
@@ -72,6 +73,8 @@ public class SequencerServerCache {
     //As calculating object size is expensive, used the value calculated by deepSize
     private final int CONFLICTTXSTREAM_OBJ_SIZE = 80; //by calculated by deepSize
 
+    @Getter
+    private final String conflictKeysCounterName = "sequencer.conflict-keys.size";
     /**
      * The cache limited by size.
      * For a synchronous cache we are using a same-thread executor (Runnable::run)
@@ -81,11 +84,17 @@ public class SequencerServerCache {
      */
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
-        conflictKeys = new HashMap();
+
         cacheEntries = new PriorityQueue(cacheSize, Comparator.comparingLong
-                (a -> ((ConflictTxStream)a).txVersion));
+                (a -> ((ConflictTxStream) a).txVersion));
         maxConflictWildcard = maxConflictNewSequencer;
         this.maxConflictNewSequencer = maxConflictNewSequencer;
+        conflictKeys = MeterRegistryProvider
+                .getInstance()
+                .map(registry ->
+                        registry.gauge(conflictKeysCounterName, Collections.emptyList(),
+                                new HashMap<ConflictTxStream, Long>(), HashMap::size))
+                .orElse(new HashMap<>());
     }
 
     /**
@@ -166,7 +175,7 @@ public class SequencerServerCache {
         log.debug("the cache has {} entries,  the object size used {}, calculated by beepSize {}",
                 size(), CONFLICTTXSTREAM_OBJ_SIZE,
                 cacheEntries.isEmpty() ? 0 : MetricsUtils.sizeOf.deepSizeOf(cacheEntries.peek()));
-        return size()*(ENTRY_OVERHEAD + CONFLICTTXSTREAM_OBJ_SIZE);
+        return size() * (ENTRY_OVERHEAD + CONFLICTTXSTREAM_OBJ_SIZE);
     }
 
     /*

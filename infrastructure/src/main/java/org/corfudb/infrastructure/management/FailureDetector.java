@@ -4,11 +4,14 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
+import io.micrometer.core.instrument.Timer;
 import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.RemoteMonitoringService;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
@@ -27,6 +30,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -97,6 +101,10 @@ public class FailureDetector implements IDetector {
                 layout.getEpoch(), layout.getClusterId(), allServers, routerMap, sequencerMetrics,
                 ImmutableList.copyOf(layout.getUnresponsiveServers())
         );
+    }
+
+    private void registerTimerForNodeIfNeeded(String node) {
+        MeterRegistryProvider.getInstance().ifPresent(registry -> registry.timer("failure-detector.ping-latency", "node", node));
     }
 
     /**
@@ -276,8 +284,13 @@ public class FailureDetector implements IDetector {
         Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
         allServers.forEach(s -> {
             try {
-                clusterState.put(s, new ManagementClient(clientRouters.get(s), epoch, clusterId)
-                        .sendNodeStateRequest());
+                registerTimerForNodeIfNeeded(s);
+                Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
+                CompletableFuture<NodeState> nodeStateFuture =
+                        MicroMeterUtils.timeWhenCompletes(new ManagementClient(clientRouters.get(s), epoch, clusterId)
+                                        .sendNodeStateRequest(), sample,
+                                "failure-detector.ping-latency", "node", s);
+                clusterState.put(s, nodeStateFuture);
             } catch (Exception e) {
                 CompletableFuture<NodeState> cf = new CompletableFuture<>();
                 cf.completeExceptionally(e);
