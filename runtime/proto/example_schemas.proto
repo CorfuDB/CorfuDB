@@ -14,6 +14,11 @@ message ManagedMetadata {
     string last_modified_user = 5;
 }
 
+message Uuid {
+    fixed64 msb = 1;
+    fixed64 lsb = 2;
+}
+
 message ExampleValue {
     option (org.corfudb.runtime.table_schema).stream_tag = "searchStreamer";
     option (org.corfudb.runtime.table_schema).stream_tag = "slowStreamer";
@@ -22,4 +27,5 @@ message ExampleValue {
 
     string payload = 1;
     fixed64 anotherKey = 2 [(org.corfudb.runtime.schema).secondary_key = true];
+    Uuid uuid = 3 [(org.corfudb.runtime.schema).secondary_key = true];
 }

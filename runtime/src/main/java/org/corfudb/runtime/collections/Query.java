@@ -204,7 +204,7 @@ public class Query {
      */
     @Nonnull
     @Deprecated
-    public <K extends Message, V extends Message, M extends Message, I extends Comparable<I>>
+    public <K extends Message, V extends Message, M extends Message, I>
     QueryResult<Entry<K, V>> getByIndex(@Nonnull final String tableName,
                                         @Nonnull final String indexName,
                                         @Nonnull final I indexKey) {

@@ -451,7 +451,7 @@ public class TxnContext implements AutoCloseable {
      * @return Result of the query.
      */
     @Nonnull
-    public <K extends Message, V extends Message, M extends Message, I extends Comparable<I>>
+    public <K extends Message, V extends Message, M extends Message, I>
     List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull Table<K, V, M> table,
                                               @Nonnull final String indexName,
                                               @Nonnull final I indexKey) {
@@ -472,7 +472,7 @@ public class TxnContext implements AutoCloseable {
      * @return Result of the query.
      */
     @Nonnull
-    public <K extends Message, V extends Message, M extends Message, I extends Comparable<I>>
+    public <K extends Message, V extends Message, M extends Message, I>
     List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull String tableName,
                                               @Nonnull final String indexName,
                                               @Nonnull final I indexKey) {

@@ -164,12 +164,17 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         ManagedMetadata user_1 = ManagedMetadata.newBuilder().setCreateUser("user_1").build();
 
         final long eventTime = 123L;
+        UUID randomUUID = UUID.randomUUID();
+        ExampleSchemas.Uuid uuidSecondaryKey = ExampleSchemas.Uuid.newBuilder()
+                .setMsb(randomUUID.getMostSignificantBits()).setLsb(randomUUID.getLeastSignificantBits())
+                .build();
 
         try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
             txn.putRecord(tableName, key1,
                     ExampleValue.newBuilder()
                             .setPayload("abc")
                             .setAnotherKey(eventTime)
+                            .setUuid(uuidSecondaryKey)
                             .build(),
                     user_1);
             txn.commit();
@@ -178,6 +183,14 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
             List<CorfuStoreEntry<Uuid, ExampleValue, ManagedMetadata>> entries = readWriteTxn
                     .getByIndex(table, "anotherKey", eventTime);
+            assertThat(entries.size()).isEqualTo(1);
+            assertThat(entries.get(0).getPayload().getPayload()).isEqualTo("abc");
+            readWriteTxn.commit();
+        }
+
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleValue, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(table, "uuid", uuidSecondaryKey);
             assertThat(entries.size()).isEqualTo(1);
             assertThat(entries.get(0).getPayload().getPayload()).isEqualTo("abc");
             readWriteTxn.commit();
