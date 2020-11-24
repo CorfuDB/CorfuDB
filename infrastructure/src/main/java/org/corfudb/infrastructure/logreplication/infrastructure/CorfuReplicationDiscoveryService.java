@@ -782,7 +782,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Override
     public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
-        if (ClusterRole.ACTIVE == localClusterDescriptor.getRole()) {
+        if (localClusterDescriptor == null) {
+            log.warn("Cluster configuration has not been pushed to current LR node.");
+            return null;
+        } else if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             Map<String, LogReplicationMetadata.ReplicationStatusVal> mapReplicationStatus = logReplicationMetadataManager.getReplicationRemainingEntries();
             Map<String, LogReplicationMetadata.ReplicationStatusVal> mapToSend = new HashMap<>(mapReplicationStatus);
             // If map contains local cluster, remove (as it might have been added by the SinkManager) but this node
@@ -792,7 +795,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 mapToSend.remove(localClusterDescriptor.getClusterId());
             }
             return mapToSend;
-        } else if (ClusterRole.STANDBY == localClusterDescriptor.getRole()) {
+        } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
             return logReplicationMetadataManager.getDataConsistentOnStandby();
         }
         log.error("Received Replication Status Query in Incorrect Role {}.", localClusterDescriptor.getRole());
