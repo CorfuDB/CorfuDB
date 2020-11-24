@@ -51,7 +51,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
-import ch.qos.logback.classic.LoggerContext;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -68,6 +67,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.logging.LogManager;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -860,10 +860,10 @@ public class CorfuRuntime {
         CorfuRuntimeParameters.MicroMeterRuntimeConfig microMeterRuntimeConfig =
                 this.parameters.getMicroMeterRuntimeConfig();
         if (microMeterRuntimeConfig.metricsEnabled) {
-            LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
-            registry = Optional.ofNullable(loggerContext.exists(microMeterRuntimeConfig.configuredLoggerName))
-                    .map(logger -> MeterRegistryProvider.MeterRegistryInitializer.newInstance(logger,
-                            microMeterRuntimeConfig.loggingInterval, parameters.clientId));
+            org.slf4j.Logger logger = LoggerFactory.getLogger(microMeterRuntimeConfig.configuredLoggerName);
+
+            registry = Optional.of(MeterRegistryProvider.MeterRegistryInitializer.newInstance(logger,
+                    microMeterRuntimeConfig.loggingInterval, parameters.clientId));
         }
         else {
             registry = Optional.empty();
