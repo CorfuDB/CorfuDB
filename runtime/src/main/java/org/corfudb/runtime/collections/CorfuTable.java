@@ -106,7 +106,6 @@ public class CorfuTable<K, V> implements
         this.secondaryIndexes = new HashMap<>();
         this.mainMap = streamingMapSupplier.get();
         this.versionPolicy = versionPolicy;
-
         this.optimisticTable = new CorfuTable<>(this.mainMap.getOptimisticMap(), this.indexSpec,
                 this.secondaryIndexes, null);
 
@@ -371,7 +370,7 @@ public class CorfuTable<K, V> implements
     @Override
     @Accessor
     public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
-        try (Stream<Map.Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
+        try (Stream<Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
             return pool.submit(() -> entries
                     .map(Entry::getValue).filter(valuePredicate)
                     .collect(Collectors.toCollection(ArrayList::new))).join();

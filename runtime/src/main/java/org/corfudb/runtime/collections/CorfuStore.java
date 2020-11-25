@@ -1,14 +1,6 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
-
-import java.lang.reflect.InvocationTargetException;
-import java.util.Collection;
-import java.util.List;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
 import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -16,6 +8,14 @@ import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.view.TableRegistry;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.lang.reflect.InvocationTargetException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
@@ -32,6 +32,7 @@ public class CorfuStore {
     @Getter
     private final CorfuRuntime runtime;
 
+    private final Optional<AtomicLong> openTableCounter;
     /**
      * Creates a new CorfuStore.
      *
@@ -52,6 +53,9 @@ public class CorfuStore {
     public CorfuStore(@Nonnull final CorfuRuntime runtime, boolean enableTxLogging) {
         runtime.setTransactionLogging(enableTxLogging);
         this.runtime = runtime;
+        openTableCounter = runtime.getRegistry()
+                .map(registry ->
+                        registry.gauge("open_tables.count", new AtomicLong(0L)));
     }
 
     /**
@@ -95,8 +99,10 @@ public class CorfuStore {
                              @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-
-        return runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
+        Table table =
+                runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
+        openTableCounter.ifPresent(count -> count.getAndIncrement());
+        return table;
     }
 
     /**
