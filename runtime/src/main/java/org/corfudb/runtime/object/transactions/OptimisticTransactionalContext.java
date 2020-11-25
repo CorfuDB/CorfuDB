@@ -1,5 +1,12 @@
 package org.corfudb.runtime.object.transactions;
 
+import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -11,11 +18,6 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
-
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 /** A Corfu optimistic transaction context.
  *
@@ -178,6 +180,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Override
     public void logUpdate(UUID streamId, SMREntry updateEntry) {
         addToWriteSet(streamId, updateEntry);
+    }
+
+    @Override
+    public void logUpdate(UUID streamId, List<SMREntry> updateEntries) {
+        addToWriteSet(streamId, updateEntries);
     }
 
     /**

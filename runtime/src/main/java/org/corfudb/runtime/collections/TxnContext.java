@@ -313,6 +313,18 @@ public class TxnContext implements AutoCloseable {
     }
 
     /**
+     * Apply a list of Corfu SMREntries directly to a stream. This can be used for replaying the mutations
+     * directly into the underlying stream bypassing the object layer entirely.
+     * @param streamId - UUID of the stream on which the logUpdate is being added to.
+     * @param updateEntries - the actual State Machine Replicated entries.
+     */
+    public void logUpdate(UUID streamId, List<SMREntry> updateEntries) {
+        operations.add(() -> {
+            TransactionalContext.getCurrentContext().logUpdate(streamId, updateEntries);
+        });
+    }
+
+    /**
      * Clears the entire table.
      *
      * @param table Table object to perform the delete on.
