@@ -1,3 +1,8 @@
+### Runtime metrics configuration
+
+In order to enable runtime metrics in the client code, a logging configuration *.xml file should 
+be provided with a configured logger. Logger name should be "org.corfudb.metricsdata".
+
 ### Current metrics collected for LR:
 
   * Message size in bytes (throughput, mean and max), distinguished by replication type (snapshot, logentry): **logreplication.message.size.bytes**.
