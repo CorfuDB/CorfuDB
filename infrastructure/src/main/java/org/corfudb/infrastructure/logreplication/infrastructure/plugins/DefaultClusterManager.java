@@ -93,7 +93,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString("localhost:9000")
                 .connect();
-        corfuStore = new CorfuStore(corfuRuntime, false);
+        corfuStore = new CorfuStore(corfuRuntime);
         CorfuStoreMetadata.Timestamp ts = corfuStore.getTimestamp();
         try {
             Table<Messages.Uuid, Messages.Uuid, Messages.Uuid> table = corfuStore.openTable(
