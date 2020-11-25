@@ -212,11 +212,11 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
         replicationEnded.set(true);
 
-        Boolean txStreamEmpty = consumerState.get(timeout, TimeUnit.SECONDS);
-        assertThat(txStreamEmpty).isTrue();
+        Boolean txStreamNotEmpty = consumerState.get(timeout, TimeUnit.SECONDS);
+        assertThat(txStreamNotEmpty).isTrue();
     }
 
-    private Future<Boolean>  subscribeTransactionStream() {
+    private Future<Boolean> subscribeTransactionStream() {
 
         ExecutorService consumer = Executors.newSingleThreadExecutor();
         List<CorfuRuntime> consumerRts = new ArrayList<>();
@@ -250,9 +250,8 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
             System.out.println("Total Transaction Stream updates, count=" + counter);
             log.info("Total Tx Stream updates = {}", counter);
 
-            // This one update accounts for the REPLICATION_EVENT_TABLE which forces an entry to the
-            // TableRegistry
-            return counter == 1;
+            // We should have Txn Stream Updates
+            return counter != 0;
         });
     }
 

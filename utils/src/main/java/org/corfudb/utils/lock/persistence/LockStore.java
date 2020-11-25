@@ -62,7 +62,7 @@ public class LockStore {
      * @throws InvocationTargetException
      */
     public LockStore(CorfuRuntime runtime, UUID clientUuid) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
-        this.corfuStore = new CorfuStore(runtime, false);
+        this.corfuStore = new CorfuStore(runtime);
         this.table = this.corfuStore.openTable(namespace,
                 tableName,
                 LockId.class,
