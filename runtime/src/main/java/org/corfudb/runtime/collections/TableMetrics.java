@@ -23,6 +23,7 @@ public class TableMetrics {
     private final Counter numCounts;
     private final Counter numKeySets;
     private final Counter numScans;
+    private final Counter numEntryLists;
     private final Counter numJoins;
     private final Counter numGetByIndex;
     private final Counter numTxnAborts;
@@ -71,6 +72,10 @@ public class TableMetrics {
         numScans.inc();
     }
 
+    public void incNumEntryLists() {
+        numEntryLists.inc();
+    }
+
     public void incNumJoins() {
         numJoins.inc();
     }
@@ -110,6 +115,7 @@ public class TableMetrics {
         this.numCounts = registry.counter(fullTableName+"_numCounts");
         this.numKeySets = registry.counter(fullTableName+"_numKeySets");
         this.numScans = registry.counter(fullTableName+"_numScans");
+        this.numEntryLists = registry.counter(fullTableName+"_numEntryLists");
         this.numJoins = registry.counter(fullTableName+"_numJoins");
         this.numGetByIndex = registry.counter(fullTableName+"_numGetByIndex");
         this.numTxnAborts = registry.counter(fullTableName+"_numTxnAborts");
@@ -137,6 +143,7 @@ public class TableMetrics {
         json.addProperty("numKeySets", numKeySets.getCount());
         json.addProperty("numGetByIndex", numGetByIndex.getCount());
         json.addProperty("numScans", numScans.getCount());
+        json.addProperty("numEntryLists", numEntryLists.getCount());
         json.addProperty("numJoins", numJoins.getCount());
         json.addProperty("numTxnAborts", numTxnAborts.getCount());
         json.add("writeOnlyTxTimes", writeOnlyTxnTimes.asJsonObject());

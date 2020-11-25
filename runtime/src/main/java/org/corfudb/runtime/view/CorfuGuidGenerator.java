@@ -1,17 +1,23 @@
 package org.corfudb.runtime.view;
 
-import com.google.common.reflect.TypeToken;
+import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.Queue.CorfuGuidMsg;
+import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.CorfuStoreEntry;
+import org.corfudb.runtime.collections.Table;
+import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-import org.corfudb.runtime.object.transactions.TransactionType;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.util.serializer.Serializers;
 
+import java.lang.reflect.InvocationTargetException;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Globally Unique Identity generator that returns ids
@@ -98,12 +104,10 @@ class CorfuGuid {
 @Slf4j
 public class CorfuGuidGenerator implements OrderedGuidGenerator {
     private final String GUID_STREAM_NAME = "CORFU_GUID_COUNTER_STREAM";
-    private final Integer GUID_STREAM_KEY = 0xdeadbeef;
 
-    private final CorfuTable<Integer, Long> distributedCounter;
+    private Table<CorfuGuidMsg, CorfuGuidMsg, Message> distributedCounter;
 
-    private final CorfuRuntime runtime;
-
+    private final CorfuStore corfuStore;
 
     /**
      * Initialize timestamp & correction to MAX to force an update on the instance id on first call.
@@ -117,14 +121,38 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     private static CorfuGuidGenerator singletonCorfuGuidGenerator;
 
     private CorfuGuidGenerator(CorfuRuntime rt) {
-        runtime = rt;
-        distributedCounter = rt.getObjectsView().build()
-                .setTypeToken(new TypeToken<CorfuTable<Integer, Long>>() {})
-                .setStreamName(GUID_STREAM_NAME)
-                .setSerializer(Serializers.getDefaultSerializer())
-                .open();
+        corfuStore = new CorfuStore((rt));
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        boolean success;
+        try {
+            success = executorService.submit(() -> {
+                try {
+                    distributedCounter = corfuStore.openTable(TableRegistry.CORFU_SYSTEM_NAMESPACE, GUID_STREAM_NAME,
+                            CorfuGuidMsg.class,
+                            CorfuGuidMsg.class,
+                            null,
+                            TableOptions.builder().build());
+                } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+                    log.error("CorfuGuidGenerator: failed to open the instanceId table", e);
+                    return false;
+                }
+                return true;
+            }).get();
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("CorfuGuidGenerator: failed to initialize", e);
+            success = false;
+        }
+        if (!success) {
+            throw new RuntimeException("Unable to initialize the Guid Generator");
+        }
     }
 
+    /**
+     * Singleton initialization of the CorfuGuidGenerator.
+     *
+     * @param rt - CorfuRuntime initialized with connectivity to a live corfu cluster.
+     * @return - singleton instance of the CorfuGuidGenerator on success
+     */
     public synchronized static CorfuGuidGenerator getInstance(CorfuRuntime rt) {
         if (singletonCorfuGuidGenerator == null) {
             singletonCorfuGuidGenerator = new CorfuGuidGenerator(rt);
@@ -140,35 +168,49 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
     /** Sync up with the distributed state using a Corfu Transaction
      * Synchronous Network RPCs among other overheads
      **/
-    private long updateInstanceId() {
-        long nextInstanceId;
-        while(true) {
-            try {
-                TransactionType txnType;
-                if (TransactionalContext.isInTransaction()) {
-                    txnType = TransactionalContext.getCurrentContext()
-                            .getTransaction().getType();
-                } else { // Pick default type as OPTIMISTIC
-                    txnType = TransactionType.OPTIMISTIC;
+    private void updateInstanceId() {
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        final long badInstanceId = -1L;
+        long nextInstanceID;
+        try {
+            nextInstanceID = executorService.submit(() -> {
+                long reasonableNumberOfRetries = 64;
+                while (reasonableNumberOfRetries-- > 0) {
+                    try (TxnContext txn = corfuStore.txn(TableRegistry.CORFU_SYSTEM_NAMESPACE)) {
+                        final int GUID_INSTANCE_ID_KEY = 0xdeadbeef;
+                        CorfuGuidMsg key = CorfuGuidMsg.newBuilder()
+                                .setInstanceId(GUID_INSTANCE_ID_KEY).build();
 
+                        CorfuStoreEntry<CorfuGuidMsg, CorfuGuidMsg, Message> prevEntry;
+                        prevEntry = txn.getRecord(distributedCounter, key);
+                        if (prevEntry.getPayload() == null) {
+                            final long startingInstanceId = 1L;
+                            txn.putRecord(distributedCounter, key,
+                                    CorfuGuidMsg.newBuilder().setInstanceId(startingInstanceId).build(),
+                                    null);
+                            txn.commit();
+                            return startingInstanceId;
+                        }
+                        txn.putRecord(distributedCounter, key,
+                                CorfuGuidMsg.newBuilder().setInstanceId(prevEntry.getPayload().getInstanceId() + 1)
+                                        .build(),
+                                null);
+                        txn.commit();
+                        return prevEntry.getPayload().getInstanceId() + 1;
+                    } catch (TransactionAbortedException e) {
+                        log.error("updateInstanceId: Transaction aborted while updating GUID counter", e);
+                    }
                 }
-                runtime.getObjectsView().TXBuild()
-                        .type(txnType)
-                        .build()
-                        .begin();
-
-                nextInstanceId = distributedCounter.getOrDefault(GUID_STREAM_KEY, 1L) + 1;
-                distributedCounter.put(GUID_STREAM_KEY, nextInstanceId);
-
-                runtime.getObjectsView().TXEnd();
-                break;
-            } catch (TransactionAbortedException e) {
-                log.error("updateInstanceId: Transaction aborted while updating GUID counter", e);
-            }
+                return badInstanceId;
+            }).get(); // run it in a separate thread since we do not want the parent transaction to abort on retries.
+        } catch (InterruptedException | ExecutionException e) {
+            log.error("updateInstanceId: Interrupted while updating GUID counter", e);
+            nextInstanceID = badInstanceId;
         }
-
-        instanceId = nextInstanceId;
-        return nextInstanceId;
+        if (nextInstanceID == badInstanceId) {
+            throw new RuntimeException("CorfuGuidGenerator: unable to get a new globally unique instance id!");
+        }
+        this.instanceId = nextInstanceID;
     }
 
     /**
@@ -209,7 +251,7 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
         if (currentTimestamp < previousTimestamp) {
             driftCorrection++;
             if (driftCorrection > CorfuGuid.MAX_CORRECTION) {
-                log.info("updateInstanceId: Time went backward too many times "+
+                log.warn("updateInstanceId: Time went backward too many times "+
                                 " timestamp={} previousTimestamp={} correction={} instanceId={}",
                         currentTimestamp, previousTimestamp, driftCorrection, instanceId);
                 driftCorrection = 0;
