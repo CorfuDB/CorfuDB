@@ -5,7 +5,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
@@ -15,6 +14,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ConflictParameterClass;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.serializer.ICorfuHashable;
@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
+
 
 /**
  * Created by mwei on 11/16/16.
@@ -210,8 +211,8 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
                 .open();
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
-                .matches(m -> {
-                    if (m.getMsgType().equals(CorfuMsgType.WRITE)) {
+                .requestMatches(m -> {
+                    if (m.getPayload().getPayloadCase().equals(RequestPayloadMsg.PayloadCase.WRITE_LOG_REQUEST)) {
                         rtReader.getStreamsView().get(streamID).next();
                         return true;
                     } else {
@@ -253,8 +254,9 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         retry[0] = 0;
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
-                .matches(m -> {
-                    if (m.getMsgType().equals(CorfuMsgType.WRITE) && retry[0] < rtSlowWriter.getParameters().getWriteRetry()) {
+                .requestMatches(m -> {
+                    if (m.getPayload().getPayloadCase().equals(RequestPayloadMsg.PayloadCase.WRITE_LOG_REQUEST)
+                            && retry[0] < rtSlowWriter.getParameters().getWriteRetry()) {
                         rtIntersect.getAddressSpaceView().write(new Token(0, retry[0]), "hello world".getBytes());
                         retry[0]++;
                         return true;
@@ -292,8 +294,8 @@ public class OptimisticTransactionContextTest extends AbstractTransactionContext
         retry[0] = 0;
         // Add rule to force a read on the assigned token before actually writing to that position
         TestRule testRule = new TestRule()
-                .matches(m -> {
-                    if (m.getMsgType().equals(CorfuMsgType.WRITE)) {
+                .requestMatches(m -> {
+                    if (m.getPayload().getPayloadCase().equals(RequestPayloadMsg.PayloadCase.WRITE_LOG_REQUEST)) {
                         rtPropagateWrite.getAddressSpaceView().write(new Token(0, 0), "hello world".getBytes());
                         retry[0]++;
                         return true;

@@ -16,7 +16,12 @@ import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.view.Layout;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -109,10 +114,12 @@ public class TestServerRouter implements IServerRouter {
                 .allMatch(x -> x.evaluate(newResponse, this))) {
             if (ctx instanceof TestChannelContext) {
                 ctx.writeAndFlush(newResponse);
-                log.info("sendResponse: Sent response - {}", TextFormat.shortDebugString(response));
+                log.info("sendResponse: Sent {} - {}", response.getPayload().getPayloadCase(),
+                        TextFormat.shortDebugString(response.getHeader()));
             } else {
                 this.protoResponseMessages.add(newResponse);
-                log.info("sendResponse: Added response - {} to protoResponseMessages List.", TextFormat.shortDebugString(response));
+                log.info("sendResponse: Added response - {} to protoResponseMessages List.",
+                        TextFormat.shortDebugString(response.getHeader()));
             }
         }
     }
@@ -127,9 +134,8 @@ public class TestServerRouter implements IServerRouter {
                 log.trace("Registered {} to handle messages of type {}", server, x);
             });
         } catch (UnsupportedOperationException ex) {
-            log.error("No registered CorfuMsg handler for server {}", server, ex);
+            log.trace("No registered CorfuMsg handler for server {}", server, ex);
         }
-
 
         server.getHandlerMethods().getHandledTypes().forEach(x -> {
             requestTypeHandlerMap.put(x, server);

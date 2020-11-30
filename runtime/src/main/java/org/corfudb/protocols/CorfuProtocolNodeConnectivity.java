@@ -15,7 +15,7 @@ import org.corfudb.runtime.proto.NodeConnectivity.NodeConnectivityType;
  * defined in node_connectivity.proto. Used by Management during a
  * QUERY_NODE operation.
  */
-public class CorfuProtocolNodeConnectivity {
+public final class CorfuProtocolNodeConnectivity {
     // Prevent class from being instantiated
     private CorfuProtocolNodeConnectivity() {}
 

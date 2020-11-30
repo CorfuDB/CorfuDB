@@ -1,12 +1,8 @@
 package org.corfudb.protocols.wireprotocol;
 
-import io.netty.buffer.ByteBuf;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.Getter;
-
-import java.util.ArrayList;
 import java.util.List;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
 /**
  * A response message containing a list of uncommitted addresses.
@@ -14,25 +10,8 @@ import java.util.List;
  * Created by WenbinZhu on 5/4/20.
  */
 @AllArgsConstructor
-public class InspectAddressesResponse implements ICorfuPayload<InspectAddressesResponse> {
+public class InspectAddressesResponse {
 
     @Getter
     List<Long> emptyAddresses;
-
-    public InspectAddressesResponse(ByteBuf buf) {
-        emptyAddresses = ICorfuPayload.listFromBuffer(buf, Long.class);
-    }
-
-    public InspectAddressesResponse() {
-        emptyAddresses = new ArrayList<>();
-    }
-
-    public void add(long address) {
-        emptyAddresses.add(address);
-    }
-
-    @Override
-    public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, emptyAddresses);
-    }
 }

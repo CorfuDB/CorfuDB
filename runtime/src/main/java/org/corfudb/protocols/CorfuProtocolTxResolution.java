@@ -24,7 +24,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
  * by the several RPCs with Sequencer ones being the main one.
  */
 @Slf4j
-public class CorfuProtocolTxResolution {
+public final class CorfuProtocolTxResolution {
     /**
      * Returns the Java conflicts Map of UUID to a set of bytes array from the list of Protobuf
      * {@link UuidToListOfBytesPairMsg} objects.

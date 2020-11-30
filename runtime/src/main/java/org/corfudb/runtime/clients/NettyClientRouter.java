@@ -292,7 +292,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
                         log.trace("Registered {} to handle messages of type {}", client, x);
                     });
         } catch (UnsupportedOperationException ex) {
-            log.error("No registered CorfuMsg handler for client {}", client, ex);
+            log.trace("No registered CorfuMsg handler for client {}", client, ex);
         }
 
         if (!client.getHandledCases().isEmpty()) {

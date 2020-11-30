@@ -40,7 +40,7 @@ import static org.corfudb.protocols.CorfuProtocolWorkflows.getRestoreRedundancyM
  * handled by the Management server and Orchestrator.
  */
 @Slf4j
-public class CorfuProtocolManagement {
+public final class CorfuProtocolManagement {
     // Prevent class from being instantiated
     private CorfuProtocolManagement() {}
 

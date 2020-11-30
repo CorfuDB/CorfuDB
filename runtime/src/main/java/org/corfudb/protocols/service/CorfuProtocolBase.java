@@ -29,7 +29,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
  * handled by the Base server, as well as the handshake.
  */
 @Slf4j
-public class CorfuProtocolBase {
+public final class CorfuProtocolBase {
     // Prevent class from being instantiated
     private CorfuProtocolBase() {}
 

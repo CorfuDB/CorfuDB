@@ -71,7 +71,7 @@ public class LogReplicationServerRouter implements IServerRouter {
             try {
                 server.getHandler().getHandledTypes().forEach(x -> handlerMap.put(x, server));
             } catch (UnsupportedOperationException ex) {
-                log.error("No registered CorfuMsg handler for server {}", server, ex);
+                log.trace("No registered CorfuMsg handler for server {}", server, ex);
             }
         });
 
