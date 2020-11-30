@@ -385,6 +385,7 @@ public class LogUnitServer extends AbstractServer {
     private void handleFlushCacheRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("handleFlushCacheRequest: received a cache flush request {}", msg);
         dataCache.invalidateAll();
+
         r.sendResponse(ctx, msg, CorfuMsgType.ACK.msg());
     }
 
