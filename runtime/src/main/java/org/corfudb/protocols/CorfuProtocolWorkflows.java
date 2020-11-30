@@ -25,7 +25,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
  * in workflows.proto. These are used by the Management client and server
  * to perform RPCs handled by the Orchestrator.
  */
-public class CorfuProtocolWorkflows {
+public final class CorfuProtocolWorkflows {
     // Prevent class from being instantiated
     private CorfuProtocolWorkflows() {}
 

@@ -23,7 +23,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getLayoutMsg;
  * handled by the Layout server.
  */
 @Slf4j
-public class CorfuProtocolLayout {
+public final class CorfuProtocolLayout {
     // Prevent class from being instantiated
     private CorfuProtocolLayout() {}
 

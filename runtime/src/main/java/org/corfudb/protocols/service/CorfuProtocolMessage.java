@@ -25,7 +25,7 @@ import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
  * client and server.
  */
 @Slf4j
-public class CorfuProtocolMessage {
+public final class CorfuProtocolMessage {
     // Prevent class from being instantiated
     private CorfuProtocolMessage() {}
 
@@ -100,21 +100,6 @@ public class CorfuProtocolMessage {
                 .mergeFrom(header)
                 .setIgnoreClusterId(ignoreClusterId)
                 .setIgnoreEpoch(ignoreEpoch)
-                .build();
-    }
-
-    /**
-     * Returns a header containing information common to all service RPCs.
-     * Use by the server to increase the priority of certain requests.
-     *
-     * @param header   the original request header
-     * @return         a HeaderMsg containing the same field values as the provided
-     *                 header, but modifying the priority level to HIGH
-     */
-    public static HeaderMsg getHighPriorityHeaderMsg(HeaderMsg header) {
-        return HeaderMsg.newBuilder()
-                .mergeFrom(header)
-                .setPriority(CorfuMessage.PriorityLevel.HIGH)
                 .build();
     }
 
