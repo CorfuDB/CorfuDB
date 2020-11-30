@@ -3,10 +3,13 @@ package org.corfudb.runtime.view.stream;
 import static org.assertj.core.api.Java6Assertions.assertThat;
 
 
+import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.view.Address;
 import org.junit.Test;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 public class StreamAddressSpaceTest {
 
@@ -42,5 +45,16 @@ public class StreamAddressSpaceTest {
         LongStream.range(streamBTrimMark + 1, numStreamBEntries).forEach(address ->
                 assertThat(streamA.getAddressMap().contains(address)).isTrue()
         );
+    }
+
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void testAddressesInRange() {
+        StreamAddressSpace sas = new StreamAddressSpace();
+        sas.addAddresses(1L, 3L, 5L, 7L, 9L);
+        StreamAddressRange range = new StreamAddressRange(UUID.randomUUID(), 7, 3);
+        Roaring64NavigableMap rangeResult = sas.getAddressesInRange(range);
+        assertThat(rangeResult.getLongCardinality()).isEqualTo(2L);
+        assertThat(rangeResult.toArray()).containsExactlyInAnyOrder(7L, 5L);
     }
 }

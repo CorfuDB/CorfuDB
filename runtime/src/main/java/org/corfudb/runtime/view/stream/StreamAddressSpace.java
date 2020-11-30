@@ -112,6 +112,14 @@ public class StreamAddressSpace {
     }
 
     /**
+     * Add an array of addresses to the stream address space
+     * @param addresses add addresses to the underlying bitmap
+     */
+    void addAddresses(long... addresses) {
+        addressMap.add(addresses);
+    }
+
+    /**
      * Remove addresses from the stream's address map
      * and set the new trim mark (to the greatest of all addresses to remove).
      */
@@ -167,17 +175,31 @@ public class StreamAddressSpace {
     public Roaring64NavigableMap getAddressesInRange(StreamAddressRange range) {
         Roaring64NavigableMap addressesInRange = new Roaring64NavigableMap();
         if (range.getStart() > range.getEnd()) {
-            addressMap.forEach(address -> {
-                // Because our search is referenced to the stream's tail => (end < start]
-                if (address > range.getEnd() && address <= range.getStart()) {
-                    addressesInRange.add(address);
+            // Ideally a bitwise "add" and "and" should be used to implement a more efficient
+            // range query, but those operations are not supported for Roaring64NavigableMap
+            // and using a different bitmap container type requires a more elaborate refactoring
+            // because this class leaks the Roaring64NavigableMap and it is consumed from multiple
+            // places
+            LongIterator iterator = addressMap.getReverseLongIterator();
+
+            while (iterator.hasNext()) {
+                long currentAddress = iterator.next();
+                if (currentAddress > range.getEnd() && currentAddress <= range.getStart()) {
+                    addressesInRange.add(currentAddress);
+                } else if (currentAddress <= range.getEnd()) {
+                    break;
                 }
-            });
+            }
         }
 
-        log.trace("getAddressesInRange[{}]: address map in range [{}-{}] has a total of {} addresses.",
-                Utils.toReadableId(range.getStreamID()), range.getEnd(),
-                range.getStart(), addressesInRange.getLongCardinality());
+    if (log.isTraceEnabled()) {
+      log.trace(
+          "getAddressesInRange[{}]: address map in range [{}-{}] has a total of {} addresses.",
+          Utils.toReadableId(range.getStreamID()),
+          range.getEnd(),
+          range.getStart(),
+          addressesInRange.getLongCardinality());
+        }
 
         return addressesInRange;
     }

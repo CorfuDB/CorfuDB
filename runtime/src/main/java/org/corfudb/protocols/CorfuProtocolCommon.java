@@ -197,8 +197,6 @@ public class CorfuProtocolCommon {
         try (ByteString.Output bso = ByteString.newOutput()) {
             try (DataOutputStream dos = new DataOutputStream(bso)) {
                 Roaring64NavigableMap rm = addressSpace.getAddressMap();
-                // Improve compression
-                rm.runOptimize();
                 rm.serialize(dos);
                 addressSpaceMsgBuilder.setAddressMap(bso.toByteString());
             }

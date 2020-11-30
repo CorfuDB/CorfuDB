@@ -397,8 +397,6 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(streamRange.getEnd());
         } else if (payload instanceof Roaring64NavigableMap) {
             Roaring64NavigableMap mrb = (Roaring64NavigableMap) payload;
-            // Improve compression
-            mrb.runOptimize();
             try (ByteBufOutputStream outputStream = new ByteBufOutputStream(buffer);
                  DataOutputStream dataOutputStream =  new DataOutputStream(outputStream)){
                 mrb.serialize(dataOutputStream);
