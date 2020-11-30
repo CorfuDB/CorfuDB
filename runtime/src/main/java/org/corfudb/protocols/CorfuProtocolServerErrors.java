@@ -3,7 +3,9 @@ package org.corfudb.protocols;
 import com.google.protobuf.ByteString;
 import lombok.extern.slf4j.Slf4j;
 import java.io.ObjectOutputStream;
+import java.util.stream.Collectors;
 
+import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.ServerErrors.BootstrappedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.DataCorruptionErrorMsg;
@@ -14,8 +16,11 @@ import org.corfudb.runtime.proto.ServerErrors.OverwriteErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.TrimmedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.UnknownErrorMsg;
+import org.corfudb.runtime.proto.ServerErrors.ValueAdoptedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.WrongClusterErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.WrongEpochErrorMsg;
+
+import static org.corfudb.protocols.CorfuProtocolLogData.getReadResponseMsg;
 
 /**
  * This class provides methods for creating the Protobuf objects defined
@@ -103,8 +108,22 @@ public class CorfuProtocolServerErrors {
                 .build();
     }
 
-    // Method below will be added in later PR with other LogUnit updates
-    // public static ServerErrorMsg getValueAdoptedErrorMsg(ReadResponse rr)
+    /**
+     * Returns the Protobuf representation of a VALUE_ADOPTED error.
+     *
+     * @param rr  a ReadResponse containing the entry already present at
+     *            the address that triggered the exception
+     * @return    a ServerErrorMsg containing the VALUE_ADOPTED error
+     */
+    public static ServerErrorMsg getValueAdoptedErrorMsg(ReadResponse rr) {
+        return ServerErrorMsg.newBuilder()
+                .setValueAdoptedError(ValueAdoptedErrorMsg.newBuilder()
+                        .addAllResponse(rr.getAddresses().entrySet().stream()
+                                .map(e -> getReadResponseMsg(e.getKey(), e.getValue()))
+                                .collect(Collectors.toList()))
+                        .build())
+                .build();
+    }
 
     /**
      * Returns the Protobuf representation of a DATA_CORRUPTION error.

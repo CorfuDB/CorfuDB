@@ -31,40 +31,6 @@ public enum CorfuMsgType {
     // Layout Messages
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true, false),
 
-    // Logging Unit Messages
-    WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),
-    READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}),
-    READ_RESPONSE(32, new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
-    INSPECT_ADDRESSES_REQUEST(36, new TypeToken<CorfuPayloadMsg<InspectAddressesRequest>>() {}),
-    INSPECT_ADDRESSES_RESPONSE(37, new TypeToken<CorfuPayloadMsg<InspectAddressesResponse>>() {}),
-    PREFIX_TRIM(38, new TypeToken<CorfuPayloadMsg<TrimRequest>>() {}),
-    TAIL_REQUEST(41, new TypeToken<CorfuPayloadMsg<TailsRequest>>(){}),
-    TAIL_RESPONSE(42, new TypeToken<CorfuPayloadMsg<TailsResponse>>(){}),
-    COMPACT_REQUEST(43, TypeToken.of(CorfuMsg.class), true, false),
-    FLUSH_CACHE(44, TypeToken.of(CorfuMsg.class), true, false),
-    TRIM_MARK_REQUEST(45, TypeToken.of(CorfuMsg.class)),
-    TRIM_MARK_RESPONSE(46, new TypeToken<CorfuPayloadMsg<Long>>(){}),
-    RESET_LOGUNIT(47, new TypeToken<CorfuPayloadMsg<Long>>(){}, true, false),
-    LOG_ADDRESS_SPACE_REQUEST(48, TypeToken.of(CorfuMsg.class)),
-    LOG_ADDRESS_SPACE_RESPONSE(49, new TypeToken<CorfuPayloadMsg<StreamsAddressResponse>>(){}),
-
-    WRITE_OK(50, TypeToken.of(CorfuMsg.class)),
-    ERROR_TRIMMED(51, TypeToken.of(CorfuMsg.class)),
-    ERROR_OVERWRITE(52, new TypeToken<CorfuPayloadMsg<Integer>>(){}, true, false),
-    ERROR_OOS(53, TypeToken.of(CorfuMsg.class)),
-    ERROR_RANK(54, TypeToken.of(CorfuMsg.class)),
-    ERROR_NOENTRY(55, TypeToken.of(CorfuMsg.class)),
-    RANGE_WRITE(56, new TypeToken<CorfuPayloadMsg<RangeWriteMsg>>(){}),
-    ERROR_DATA_CORRUPTION(57, new TypeToken<CorfuPayloadMsg<Long>>(){}),
-
-    // EXTRA CODES
-    COMMITTED_TAIL_REQUEST(64, TypeToken.of(CorfuMsg.class)),
-    COMMITTED_TAIL_RESPONSE(65, new TypeToken<CorfuPayloadMsg<Long>>(){}),
-    UPDATE_COMMITTED_TAIL(66, new TypeToken<CorfuPayloadMsg<Long>>(){}),
-
-    KNOWN_ADDRESS_REQUEST(86, new TypeToken<CorfuPayloadMsg<KnownAddressRequest>>() {}),
-    KNOWN_ADDRESS_RESPONSE(87, new TypeToken<CorfuPayloadMsg<KnownAddressResponse>>() {}),
-
     ERROR_SERVER_EXCEPTION(200, new TypeToken<CorfuPayloadMsg<ExceptionMsg>>() {}, true, false),
 
     LOG_REPLICATION_ENTRY(201, new TypeToken<CorfuPayloadMsg<LogReplicationEntry>>() {}, true, true),
@@ -74,7 +40,6 @@ public enum CorfuMsgType {
     LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE(205, new TypeToken<CorfuPayloadMsg<LogReplicationQueryLeaderShipResponse>>(){}, true, true),
     LOG_REPLICATION_LEADERSHIP_LOSS(206, new TypeToken<CorfuPayloadMsg<LogReplicationLeadershipLoss>>(){}, true, true),
     ;
-
 
     public final int type;
     public final TypeToken<? extends CorfuMsg> messageType;
@@ -128,5 +93,4 @@ public enum CorfuMsgType {
             throw new RuntimeException(e);
         }
     }
-
 }

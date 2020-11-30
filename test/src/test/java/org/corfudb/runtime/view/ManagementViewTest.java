@@ -22,6 +22,7 @@ import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.NodeStatus;
@@ -1456,8 +1457,8 @@ public class ManagementViewTest extends AbstractViewTest {
 
         // Since the fast loader will retrieve the tails from the head node,
         // we need to drop all tail requests to hang the FastObjectLoaders
-        addServerRule(SERVERS.PORT_0, new TestRule().matches(m -> {
-            if (m.getMsgType().equals(CorfuMsgType.LOG_ADDRESS_SPACE_RESPONSE)) {
+        addServerRule(SERVERS.PORT_0, new TestRule().responseMatches(m -> {
+            if (m.getPayload().getPayloadCase().equals(ResponsePayloadMsg.PayloadCase.LOG_ADDRESS_SPACE_RESPONSE)) {
                 semaphore.release();
                 return true;
             }
@@ -1522,8 +1523,8 @@ public class ManagementViewTest extends AbstractViewTest {
                 .setSystemDownHandlerTriggerLimit(sysDownTriggerLimit);
 
         // Add rule to drop all read responses to hang the FastObjectLoaders.
-        addServerRule(SERVERS.PORT_0, new TestRule().matches(m -> m.getMsgType()
-                .equals(CorfuMsgType.READ_RESPONSE)).drop());
+        addServerRule(SERVERS.PORT_0, new TestRule().responseMatches(m -> m.getPayload().getPayloadCase()
+                .equals(ResponsePayloadMsg.PayloadCase.READ_LOG_RESPONSE)).drop());
 
         getManagementServer(SERVERS.PORT_0).getManagementAgent()
                 .getCorfuRuntime().getLayoutManagementView()
@@ -1604,8 +1605,9 @@ public class ManagementViewTest extends AbstractViewTest {
 
         writeRandomEntryToTable(table);
         // Block the writes so that we only fetch a sequencer token but not persist the entry on the LogUnit.
-        addClientRule(corfuRuntime, new TestRule().matches(corfuMsg -> corfuMsg.getMsgType() == CorfuMsgType.WRITE)
-                .drop());
+        addClientRule(corfuRuntime, new TestRule().requestMatches(m ->
+                m.getPayload().getPayloadCase().equals(PayloadCase.WRITE_LOG_REQUEST)).drop());
+
         CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
             writeRandomEntryToTable(table);
             return true;
