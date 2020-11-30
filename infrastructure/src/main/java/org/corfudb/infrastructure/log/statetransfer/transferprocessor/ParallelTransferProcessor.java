@@ -1,6 +1,9 @@
 package org.corfudb.infrastructure.log.statetransfer.transferprocessor;
 
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.exceptions.StateTransferBatchProcessorException;
@@ -50,6 +53,8 @@ public class ParallelTransferProcessor {
                                                        Semaphore semaphore)
             throws InterruptedException {
         semaphore.acquire();
+        Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
+
         CompletableFuture<Void> batchTransferResult =
                 stateTransferBatchProcessor
                         .transfer(request)
@@ -65,7 +70,14 @@ public class ParallelTransferProcessor {
                             }
                         });
 
-        allFutures = CFUtils.allOfOrTerminateExceptionally(allFutures, batchTransferResult);
+        CompletableFuture<Void> future = MicroMeterUtils
+                .timeWhenCompletes(
+                        batchTransferResult,
+                        sample,
+                        "state-transfer.timer", "type", "committed"
+                );
+
+        allFutures = CFUtils.allOfOrTerminateExceptionally(allFutures, future);
 
         return allFutures;
     }
@@ -98,6 +110,9 @@ public class ParallelTransferProcessor {
             while (iterator.hasNext() && !allFutures.isCompletedExceptionally()) {
                 try {
                     TransferBatchRequest request = iterator.next();
+                    MeterRegistryProvider.getInstance().ifPresent(registry ->
+                            registry.counter("state-transfer.read.throughput", "type", "committed")
+                                    .increment(request.getAddresses().size()));
                     allFutures = handleBatchRequest(request, allFutures, semaphore);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();

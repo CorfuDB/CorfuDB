@@ -372,6 +372,16 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
+    public static Process runPersistentServer(String address, int port, boolean singleNode, String metricsConfigFile) throws IOException {
+        return new CorfuServerRunner()
+                .setHost(address)
+                .setPort(port)
+                .setLogPath(getCorfuServerLogPath(address, port))
+                .setMetricsConfigFile(metricsConfigFile)
+                .setSingle(singleNode)
+                .runServer();
+    }
+
     public static CorfuRuntime createRuntime(String endpoint) {
         CorfuRuntime rt = new CorfuRuntime(endpoint)
                 .setCacheDisabled(true)
@@ -440,7 +450,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
         private String host = DEFAULT_HOST;
         private int port = DEFAULT_PORT;
-
+        private String metricsConfigFile = "";
         private boolean single = true;
         private boolean tlsEnabled = false;
         private boolean noAutoCommit = true;
@@ -466,6 +476,10 @@ public class AbstractIT extends AbstractCorfuTest {
                 command.append(" -l ").append(logPath);
             } else {
                 command.append(" -m");
+            }
+
+            if (!metricsConfigFile.isEmpty()) {
+                command.append(" --metrics ");
             }
 
             if (single) {
@@ -509,18 +523,36 @@ public class AbstractIT extends AbstractCorfuTest {
          */
         public Process runServer() throws IOException {
             final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
-
             File logPath = new File(getCorfuServerLogPath(host, port));
             if (!logPath.exists()) {
                 logPath.mkdir();
             }
             ProcessBuilder builder = new ProcessBuilder();
-            builder.command("sh", "-c", "bin/corfu_server " + getOptionsString());
+
+            if (!metricsConfigFile.isEmpty()) {
+                addMetricsToProcessBuilder(builder, "corfu_server");
+            }
+            else {
+                builder.command("sh", "-c", "bin/corfu_server " + getOptionsString());
+            }
             builder.directory(new File(CORFU_PROJECT_DIR));
             Process corfuServerProcess = builder.start();
             StreamGobbler streamGobbler = new StreamGobbler(corfuServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuServerProcess;
+        }
+
+        private void addMetricsToProcessBuilder(ProcessBuilder builder, String runnable) throws IOException {
+            URL resource = AbstractIT.class.getResource("/" + metricsConfigFile);
+            try {
+                String configPath = Paths.get(resource.toURI()).toAbsolutePath().toString();
+                String exportMetricsConfigFile = "export METRICS_CONFIG_FILE=" + configPath + ";";
+                builder.command("sh", "-c", exportMetricsConfigFile + " bin/" + runnable + " "
+                        + getOptionsString());
+            }
+            catch (URISyntaxException use) {
+                throw new IOException(use);
+            }
         }
     }
 
@@ -616,7 +648,7 @@ public class AbstractIT extends AbstractCorfuTest {
             ProcessBuilder builder = new ProcessBuilder();
 
             if (!metricsConfigFile.isEmpty()) {
-                addMetricsToProcessBuilder(builder);
+                addMetricsToProcessBuilder(builder, "corfu_replication_server");
             }
             else {
                 builder.command("sh", "-c", "bin/corfu_replication_server " + getOptionsString());
@@ -629,12 +661,12 @@ public class AbstractIT extends AbstractCorfuTest {
             return corfuReplicationServerProcess;
         }
 
-        private void addMetricsToProcessBuilder(ProcessBuilder builder) throws IOException {
+        private void addMetricsToProcessBuilder(ProcessBuilder builder, String runnable) throws IOException {
             URL resource = AbstractIT.class.getResource("/" + metricsConfigFile);
             try {
                 String configPath = Paths.get(resource.toURI()).toAbsolutePath().toString();
                 String exportMetricsConfigFile = "export METRICS_CONFIG_FILE=" + configPath + ";";
-                builder.command("sh", "-c", exportMetricsConfigFile + " bin/corfu_replication_server "
+                builder.command("sh", "-c", exportMetricsConfigFile + " bin/" + runnable + " "
                         + getOptionsString());
             }
             catch (URISyntaxException use) {

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <property name="CORFU_DIRECTORY" value="/tmp/corfu" />
+
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %20.20thread{20} | %50.50(%logger.%M:%L) | %msg%n%xException
+            </pattern>
+        </encoder>
+    </appender>
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${user.home}/corfudb.log</file>
+        <encoder>
+            <pattern>
+                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %-5level | %20.20thread{20} | %50.50(%logger.%M:%L) | %msg%n%xException
+            </pattern>
+        </encoder>
+    </appender>
+    <appender name="MetricsRollingFile" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${CORFU_DIRECTORY}/corfu-metrics.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>${LOG_DIRECTORY}/corfu-metrics.%i.log.gz</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>30</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>700MB</maxFileSize>
+        </triggeringPolicy>
+        <encoder>
+            <pattern>
+                %msg%n%xException
+            </pattern>
+        </encoder>
+    </appender>
+
+    <appender name="AsyncMetricsRollingFile" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="MetricsRollingFile" />
+        <queueSize>1024</queueSize>
+    </appender>
+
+
+
+
+    <!-- Control logging levels for individual components here. -->
+    <logger name="org.corfudb.runtime.object" level="INFO"/>
+    <logger name="org.corfudb.runtime.clients" level="INFO"/>
+    <logger name="org.corfudb.infrastructure" level="INFO"/>
+    <logger name="io.netty.util" level="INFO"/>
+    <logger name="io.netty.util.internal" level="INFO"/>
+    <logger name="io.netty.buffer" level="INFO"/>
+
+    <logger name="org.corfudb.metricsdata" level="INFO">
+        <!--<appender-ref ref="MetricsRollingFile" />-->
+    </logger>
+
+    <logger name="org.corfudb.metricsdata1" level="DEBUG" additivity="false">
+        <appender-ref ref="AsyncMetricsRollingFile" />
+    </logger>
+
+
+    <root level="INFO">
+        <!--<appender-ref ref="FILE" />-->
+        <appender-ref ref="STDOUT" />
+        <!--<appender-ref ref="MetricsRollingFile" />-->
+    </root>
+</configuration>

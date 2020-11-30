@@ -1,7 +1,10 @@
 package org.corfudb.infrastructure.log.statetransfer.transferprocessor;
 
+import io.micrometer.core.instrument.Timer;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchRequest;
 import org.corfudb.infrastructure.log.statetransfer.batch.TransferBatchResponse;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.StateTransferBatchProcessor;
@@ -30,8 +33,14 @@ public class BasicTransferProcessor {
         return CompletableFuture.supplyAsync(() -> {
             while (iterator.hasNext()) {
                 TransferBatchRequest request = iterator.next();
-
-                TransferBatchResponse result = batchProcessor.transfer(request).join();
+                MeterRegistryProvider.getInstance().ifPresent(registry ->
+                        registry.counter("state-transfer.read.throughput", "type", "protocol")
+                                .increment(request.getAddresses().size()));
+                Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
+                CompletableFuture<TransferBatchResponse> transferFuture =
+                        MicroMeterUtils.timeWhenCompletes(batchProcessor.transfer(request), sample,
+                        "state-transfer.timer", "type", "protocol");
+                TransferBatchResponse result = transferFuture.join();
                 if (result.getStatus() == TransferBatchResponse.TransferStatus.FAILED) {
                     String errorMessage = "Failed to transfer: " +
                             result.getTransferBatchRequest();

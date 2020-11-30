@@ -1,5 +1,6 @@
 package org.corfudb.runtime;
 
+import ch.qos.logback.classic.LoggerContext;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -46,9 +47,7 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
-import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.spi.LoggerFactoryBinder;
 
 import javax.annotation.Nonnull;
 import java.time.Duration;
@@ -285,8 +284,8 @@ public class CorfuRuntime {
             private Codec.Type codecType = Codec.Type.ZSTD;
             private MetricRegistry metricRegistry = null;
             private MicroMeterRuntimeConfig microMeterRuntimeConfig =
-                    new MicroMeterRuntimeConfig(false,
-                    "org.corfudb.metricsdata", Duration.ofMinutes(1));
+                    new MicroMeterRuntimeConfig(true,
+                    "org.corfudb.client.metricsdata", Duration.ofMinutes(1));
 
             public CorfuRuntimeParametersBuilder configureMicroMeterMetrics(
                     MicroMeterRuntimeConfig microMeterRuntimeConfig) {
@@ -662,7 +661,7 @@ public class CorfuRuntime {
     private final AtomicReference<TableRegistry> tableRegistry = new AtomicReference<>(null);
 
     @Getter
-    private final Optional<MeterRegistry> registry;
+    private Optional<MeterRegistry> registry;
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
@@ -848,14 +847,12 @@ public class CorfuRuntime {
                 this.parameters.getMicroMeterRuntimeConfig();
 
         if (microMeterRuntimeConfig.metricsEnabled) {
-            registry = Optional.ofNullable(LoggerFactory.getLogger(microMeterRuntimeConfig.configuredLoggerName))
-                    .map(logger ->
-                            MeterRegistryProvider.MeterRegistryInitializer
-                                    .newInstance(logger,
-                                            microMeterRuntimeConfig.loggingInterval,
-                                            parameters.clientId));
+            LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
+            registry = Optional.ofNullable(context.exists(microMeterRuntimeConfig.configuredLoggerName))
+                    .map(logger -> MeterRegistryProvider.MeterRegistryInitializer.newInstance(logger,
+                            microMeterRuntimeConfig.loggingInterval, parameters.clientId));
             if (!registry.isPresent()) {
-                log.warn("Configured logger could not be found.");
+                log.warn("Logger was not found to enable metrics.");
             }
         }
         else {

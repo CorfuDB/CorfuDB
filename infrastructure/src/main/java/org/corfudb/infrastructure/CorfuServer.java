@@ -9,6 +9,7 @@ import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.common.metrics.MetricsServer;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -18,7 +19,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 
 
 /**
@@ -191,6 +194,9 @@ public class CorfuServer {
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
+    private static final String DEFAULT_METRICS_LOGGER_NAME = "org.corfudb.metricsdata";
+
+    private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL = Duration.ofMinutes(1);
     /**
      * Main program entry point.
      *
@@ -218,6 +224,15 @@ public class CorfuServer {
         } catch (Throwable err) {
             log.error("Exit. Unrecoverable error", err);
             throw err;
+        }
+    }
+
+    public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
+        if ((boolean) opts.get("--metrics")) {
+            LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
+            Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
+                    .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.init(logger,
+                            DEFAULT_METRICS_LOGGING_INTERVAL, localEndpoint));
         }
     }
 
@@ -260,7 +275,7 @@ public class CorfuServer {
         while (!shutdownServer) {
             final ServerContext serverContext = new ServerContext(opts);
             try {
-                setupMetrics(opts);
+                configureMetrics(opts, serverContext.getLocalEndpoint());
                 activeServer = new CorfuServerNode(serverContext);
                 activeServer.startAndListen();
             } catch (Throwable th) {

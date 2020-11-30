@@ -12,6 +12,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -340,10 +341,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
     public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
         if ((boolean) opts.get("--metrics")) {
-            org.slf4j.Logger logger = LoggerFactory.getLogger(DEFAULT_METRICS_LOGGER_NAME);
-            MeterRegistryProvider.MeterRegistryInitializer
-                    .init(logger, DEFAULT_METRICS_LOGGING_INTERVAL_DURATION,
-                            localEndpoint);
+            LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
+            Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
+                    .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.init(logger,
+                            DEFAULT_METRICS_LOGGING_INTERVAL_DURATION, localEndpoint));
         }
     }
 
