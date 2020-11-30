@@ -1,8 +1,25 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.protobuf.TextFormat;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Timer;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.BatchWriterOperation.Type;
+import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.CorfuProtocolLogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.exceptions.QuotaExceededException;
+import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 
-import java.io.IOException;
+import javax.annotation.Nonnull;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
@@ -12,26 +29,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nonnull;
+import java.util.stream.Collectors;
 
-import io.micrometer.core.instrument.DistributionSummary;
-import io.micrometer.core.instrument.Timer;
-import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.BatchWriterOperation.Type;
-import org.corfudb.infrastructure.log.StreamLog;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.PriorityLevel;
-import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsRequest;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.protocols.wireprotocol.TrimRequest;
-import org.corfudb.protocols.wireprotocol.WriteRequest;
-import org.corfudb.runtime.exceptions.QuotaExceededException;
-import org.corfudb.runtime.exceptions.WrongEpochException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import static org.corfudb.protocols.CorfuProtocolLogData.getLogData;
+import static org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 
 /**
  * This class manages access for operations that need ordering while executing against
@@ -40,22 +41,16 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 @Slf4j
 public class BatchProcessor implements AutoCloseable {
 
-    final private int BATCH_SIZE = 50;
+    private final int BATCH_SIZE;
+    private final boolean sync;
+    private final StreamLog streamLog;
+    private final BlockingQueue<BatchWriterOperation> operationsQueue;
+    private final ExecutorService processorService;
 
-    final private boolean sync;
-
-    final private StreamLog streamLog;
-
-    final private BlockingQueue<BatchWriterOperation> operationsQueue;
-
-    private ExecutorService processorService = Executors
-            .newSingleThreadExecutor(new ThreadFactoryBuilder()
-                    .setDaemon(false)
-                    .setNameFormat("LogUnit-BatchProcessor-%d")
-                    .build());
     private final Optional<Timer> writeRecordTimer;
     private final Optional<Timer> writeRecordsTimer;
     private final Optional<DistributionSummary> queueSizeDist;
+
     /**
      * The sealEpoch is the epoch up to which all operations have been sealed. Any
      * BatchWriterOperation arriving after the sealEpoch with an epoch less than the sealEpoch
@@ -67,16 +62,16 @@ public class BatchProcessor implements AutoCloseable {
     /**
      * Returns a new BatchProcessor for a stream log.
      *
-     * @param streamLog      stream log for writes (can be in memory or file)
-     * @param sealEpoch All operations stamped with epoch less than the epochWaterMark are
-     *                       discarded.
-     * @param streamLog the backing log (can be in memory or file)
-     * @param sync    If true, the batch writer will sync writes to secondary storage
+     * @param streamLog stream log for writes (can be in memory or file)
+     * @param sealEpoch All operations stamped with epoch less than the epochWaterMark are discarded.
+     * @param sync      If true, the batch writer will sync writes to secondary storage
      */
     public BatchProcessor(StreamLog streamLog, long sealEpoch, boolean sync) {
         this.sealEpoch = sealEpoch;
         this.sync = sync;
         this.streamLog = streamLog;
+
+        BATCH_SIZE = 50;
         operationsQueue = new LinkedBlockingQueue<>();
         writeRecordTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("logunit.write.timer")
@@ -91,19 +86,14 @@ public class BatchProcessor implements AutoCloseable {
                         .publishPercentileHistogram()
                         .baseUnit("op")
                         .register(registry));
-        processorService.submit(this::processor);
-    }
 
-    /**
-     * Add a task to the processor.
-     * @param type The request type
-     * @param msg The request message
-     * @return returns a future result for the request, if it expects one
-     */
-    public <T> CompletableFuture <T> addTask(@Nonnull Type type, @Nonnull CorfuPayloadMsg msg) {
-        BatchWriterOperation<T> operation = new BatchWriterOperation<>(type, msg);
-        operationsQueue.add(operation);
-        return operation.getFutureResult();
+        processorService = Executors
+                .newSingleThreadExecutor(new ThreadFactoryBuilder()
+                        .setDaemon(false)
+                        .setNameFormat("LogUnit-BatchProcessor-%d")
+                        .build());
+
+        processorService.submit(this::process);
     }
 
     private void recordRunnable(Runnable fsyncRunnable, Optional<Timer> fsyncTimer) {
@@ -114,127 +104,152 @@ public class BatchProcessor implements AutoCloseable {
         }
     }
 
-    private void processor() {
+    /**
+     * Add a task to the processor.
+     *
+     * @param type The request type
+     * @param req  The request message
+     * @return     returns a future result for the request, if it expects one
+     */
+    public <T> CompletableFuture<T> addTask(@Nonnull Type type, @Nonnull RequestMsg req) {
+        BatchWriterOperation<T> op = new BatchWriterOperation<>(type, req);
+        operationsQueue.add(op);
+        return op.getFutureResult();
+    }
 
+    private void process() {
         if (!sync) {
             log.warn("batchWriteProcessor: writes configured to not sync with secondary storage");
         }
 
         try {
             BatchWriterOperation lastOp = null;
-            int processed = 0;
             List<BatchWriterOperation> res = new LinkedList<>();
+            int numProcessed = 0;
 
             while (true) {
-                BatchWriterOperation currOp;
+                BatchWriterOperation currentOp;
                 queueSizeDist.ifPresent(dist -> dist.record(operationsQueue.size()));
+
                 if (lastOp == null) {
-                    currOp = operationsQueue.take();
+                    currentOp = operationsQueue.take();
                 } else {
-                    currOp = operationsQueue.poll();
+                    currentOp = operationsQueue.poll();
 
-                    if (currOp == null || processed == BATCH_SIZE
-                            || currOp == BatchWriterOperation.SHUTDOWN) {
+                    if (currentOp == null || numProcessed == BATCH_SIZE || currentOp == BatchWriterOperation.SHUTDOWN) {
                         streamLog.sync(sync);
-                        log.trace("Completed {} operations", processed);
-
-                        for (BatchWriterOperation operation : res) {
-                            if (!operation.getFutureResult().isCompletedExceptionally()
-                            && !operation.getFutureResult().isCancelled()) {
-                                // At this point we need to complete the requests
-                                // that completed successfully (i.e. haven't failed)
-                                operation.getFutureResult().complete(operation.getResultValue());
+                        if (log.isTraceEnabled()) {
+                            log.trace("batchWriteProcessor: completed {} operations", numProcessed);
+                        }
+                        // At this point we need to complete the requests
+                        // that completed successfully (i.e. haven't failed)
+                        for (BatchWriterOperation op : res) {
+                            if (!op.getFutureResult().isCompletedExceptionally()
+                                    && !op.getFutureResult().isCancelled()) {
+                                op.getFutureResult().complete(op.getResultValue());
                             }
                         }
+
                         res.clear();
-                        processed = 0;
+                        numProcessed = 0;
                     }
                 }
 
-                if (currOp == null) {
+                if (currentOp == null) {
                     lastOp = null;
-                } else if (currOp == BatchWriterOperation.SHUTDOWN) {
-                    log.warn("Shutting down the write processor");
+                } else if (currentOp == BatchWriterOperation.SHUTDOWN) {
+                    log.warn("batchWriteProcessor: shutting down the write processor");
                     streamLog.sync(true);
                     break;
-                } else if (streamLog.quotaExceeded() && currOp.getMsg().getPriorityLevel() != PriorityLevel.HIGH) {
-                    currOp.getFutureResult().completeExceptionally(
-                            new QuotaExceededException("Quota of "
-                                    + streamLog.quotaLimitInBytes() + " bytes"));
-                    log.warn("batchprocessor: quota exceeded, dropping msg {}", currOp.getMsg());
-                } else if (currOp.getType() == Type.SEAL && currOp.getMsg().getEpoch() >= sealEpoch) {
-                    log.info("batchWriteProcessor: updating from {} to {}", sealEpoch, currOp.getMsg().getEpoch());
-                    sealEpoch = currOp.getMsg().getEpoch();
-                    res.add(currOp);
-                    processed++;
-                    lastOp = currOp;
-                } else if (currOp.getMsg().getEpoch() != sealEpoch) {
-                    log.warn("batchWriteProcessor: wrong epoch on {} msg, seal epoch is {}, and msg epoch is {}",
-                            currOp.getType(), sealEpoch, currOp.getMsg().getEpoch());
-                    currOp.getFutureResult().completeExceptionally(new WrongEpochException(sealEpoch));
-                    res.add(currOp);
-                    processed++;
-                    lastOp = currOp;
+                } else if (streamLog.quotaExceeded() &&
+                        (currentOp.getRequest().getHeader().getPriority() != PriorityLevel.HIGH)) {
+                    currentOp.getFutureResult().completeExceptionally(
+                            new QuotaExceededException("Quota of " + streamLog.quotaLimitInBytes() + " bytes"));
+
+                    log.warn("batchWriteProcessor: quota exceeded, dropping request {}",
+                            TextFormat.shortDebugString(currentOp.getRequest()));
+                } else if (currentOp.getType() == BatchWriterOperation.Type.SEAL &&
+                        (currentOp.getRequest().getPayload().getSealRequest().getEpoch() >= sealEpoch)) {
+                    log.info("batchWriteProcessor: updating epoch from {} to {}",
+                            sealEpoch, currentOp.getRequest().getPayload().getSealRequest().getEpoch());
+
+                    sealEpoch = currentOp.getRequest().getPayload().getSealRequest().getEpoch();
+                    res.add(currentOp);
+                    numProcessed++;
+                    lastOp = currentOp;
+                } else if (currentOp.getRequest().getHeader().getEpoch() != sealEpoch) {
+                    log.warn("batchWriteProcessor: wrong epoch on {} request, seal epoch is {}, and request epoch is {}",
+                            currentOp.getType(), sealEpoch, currentOp.getRequest().getHeader().getEpoch());
+
+                    currentOp.getFutureResult().completeExceptionally(new WrongEpochException(sealEpoch));
+                    res.add(currentOp);
+                    numProcessed++;
+                    lastOp = currentOp;
                 } else {
                     try {
-                        switch (currOp.getType()) {
+                        RequestPayloadMsg payload =  currentOp.getRequest().getPayload();
+                        switch (currentOp.getType()) {
                             case PREFIX_TRIM:
-                                TrimRequest prefixTrim = (TrimRequest) currOp.getMsg().getPayload();
-                                streamLog.prefixTrim(prefixTrim.getAddress().getSequence());
+                                final long addr = payload.getTrimLogRequest().getAddress().getSequence();
+                                streamLog.prefixTrim(addr);
                                 break;
                             case WRITE:
-                                WriteRequest write = (WriteRequest) currOp.getMsg().getPayload();
-                                Runnable append =
-                                        () -> streamLog.append(write.getGlobalAddress(), (LogData) write.getData());
+                                LogData logData = getLogData(payload.getWriteLogRequest().getLogData());
+                                Runnable append = () -> streamLog.append(logData.getGlobalAddress(), logData);
                                 recordRunnable(append, writeRecordsTimer);
                                 break;
                             case RANGE_WRITE:
-                                RangeWriteMsg writeRange = (RangeWriteMsg) currOp.getMsg().getPayload();
-                                Runnable appendMultiple = () -> streamLog.append(writeRange.getEntries());
+                                List<LogData> range = payload.getRangeWriteLogRequest().getLogDataList()
+                                        .stream().map(CorfuProtocolLogData::getLogData).collect(Collectors.toList());
+                                Runnable appendMultiple = () -> streamLog.append(range);
                                 recordRunnable(appendMultiple, writeRecordsTimer);
                                 break;
                             case RESET:
                                 streamLog.reset();
                                 break;
                             case TAILS_QUERY:
-                                TailsRequest tailsRequest = (TailsRequest)currOp.getMsg().getPayload();
-                                TailsResponse tails;
+                                final TailsResponse tails;
 
-                                switch (tailsRequest.getReqType()) {
-                                    case TailsRequest.LOG_TAIL:
+                                switch (payload.getTailRequest().getReqType()) {
+                                    case LOG_TAIL:
                                         tails = new TailsResponse(streamLog.getLogTail());
                                         break;
-
-                                    case TailsRequest.STREAMS_TAILS:
-                                        tails = streamLog.getTails(tailsRequest.getStreams());
+                                    case STREAMS_TAILS:
+                                        tails = streamLog.getTails(currentOp.getRequest()
+                                                .getPayload()
+                                                .getTailRequest()
+                                                .getStreamList()
+                                                .stream()
+                                                .map(CorfuProtocolCommon::getUUID)
+                                                .collect(Collectors.toList()));
                                         break;
-
                                     default:
                                         tails = streamLog.getAllTails();
                                         break;
                                 }
 
                                 tails.setEpoch(sealEpoch);
-                                currOp.setResultValue(tails);
+                                currentOp.setResultValue(tails);
                                 break;
                             case LOG_ADDRESS_SPACE_QUERY:
                                 // Retrieve the address space for every stream in the log.
                                 StreamsAddressResponse resp = streamLog.getStreamsAddressSpace();
                                 resp.setEpoch(sealEpoch);
-                                currOp.setResultValue(resp);
+                                currentOp.setResultValue(resp);
                                 break;
                             default:
-                                log.warn("Unknown BatchWriterOperation {}", currOp);
+                                log.warn("batchWriteProcessor: unknown operation {}", currentOp);
                         }
                     } catch (Exception e) {
-                        log.error("Stream log error. Batch [queue size={}]. StreamLog: [trim mark: {}].",
-                                operationsQueue.size(), streamLog.getTrimMark(), e);
-                        currOp.getFutureResult().completeExceptionally(e);
-                    }
-                    res.add(currOp);
+                        log.error("batchWriteProcessor: stream log error. Batch: [queue size={}]. " +
+                                "StreamLog: [trim mark={}].", operationsQueue.size(), streamLog.getTrimMark(), e);
 
-                    processed++;
-                    lastOp = currOp;
+                        currentOp.getFutureResult().completeExceptionally(e);
+                    }
+
+                    res.add(currentOp);
+                    numProcessed++;
+                    lastOp = currentOp;
                 }
             }
         } catch (Exception e) {
@@ -245,10 +260,10 @@ public class BatchProcessor implements AutoCloseable {
     @Override
     public void close() {
         operationsQueue.add(BatchWriterOperation.SHUTDOWN);
+
         processorService.shutdown();
         try {
-            processorService.awaitTermination(ServerContext.SHUTDOWN_TIMER.toMillis(),
-                    TimeUnit.MILLISECONDS);
+            processorService.awaitTermination(ServerContext.SHUTDOWN_TIMER.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             throw new UnrecoverableCorfuInterruptedError("BatchProcessor close interrupted.", e);
         }

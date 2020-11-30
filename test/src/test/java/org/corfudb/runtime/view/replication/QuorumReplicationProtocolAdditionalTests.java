@@ -10,16 +10,16 @@ import org.corfudb.infrastructure.LogUnitServer;
 import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
-import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
@@ -33,13 +33,18 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getWriteLogRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 import static org.junit.Assert.assertNotNull;
+
 
 /**
  * Created by Konstantin Spirov on 1/30/2017.
  */
 public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
-
 
     public static final UUID testClientId = UUID.nameUUIDFromBytes("TEST_CLIENT".getBytes());
     private Layout layout = null;
@@ -96,9 +101,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void checkRecoveryWriteTriggeredFromReadRecoversDataWhenTheQuorumIsLost()
-            throws Exception {
-
+    public void checkRecoveryWriteTriggeredFromReadRecoversDataWhenTheQuorumIsLost() throws Exception {
         //configure the layout accordingly
         CorfuRuntime r = getDefaultRuntime();
 
@@ -111,14 +114,12 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
         //write at 0
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
-        WriteRequest m = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(ADDRESS_0);
-        m.setRank(new IMetadata.DataRank(0));
-        m.setBackpointerMap(Collections.emptyMap());
-        sendMessage(u1, CorfuMsgType.WRITE.payloadMsg(m));
-        sendMessage(u2, CorfuMsgType.WRITE.payloadMsg(m));
+        LogData ld = new LogData(DataType.DATA, b);
+        ld.setGlobalAddress(ADDRESS_0);
+        ld.setRank(new IMetadata.DataRank(0));
+        ld.setBackpointerMap(Collections.emptyMap());
+        sendWriteMessage(u1, getWriteLogRequestMsg(ld));
+        sendWriteMessage(u2, getWriteLogRequestMsg(ld));
         u2.shutdown();
 
         LogUnitServerAssertions.assertThat(u0)
@@ -135,13 +136,9 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
     }
 
-
-
     @Test
     @SuppressWarnings("unchecked")
-    public void checkReadOnEmptyPosition()
-            throws Exception {
-
+    public void checkReadOnEmptyPosition() throws Exception {
         //configure the layout accordingly
         CorfuRuntime r = getDefaultRuntime();
 
@@ -175,12 +172,9 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
     }
 
-
-
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWrite()
-            throws Exception {
+    public void canReadWrite() throws Exception {
         CorfuRuntime r = getDefaultRuntime();
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         byte[] testPayload = "hello world".getBytes();
@@ -202,8 +196,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWriteConcurrent()
-            throws Exception {
+    public void canReadWriteConcurrent() throws Exception {
         CorfuRuntime r = getDefaultRuntime();
 
         final int numberThreads = 5;
@@ -234,10 +227,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void canReadWriteToMultiple()
-            throws Exception {
-
-
+    public void canReadWriteToMultiple() throws Exception {
         //configure the layout accordingly
         CorfuRuntime r = getDefaultRuntime();
 
@@ -261,10 +251,7 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    public void ensureAllUnitsContainData()
-            throws Exception {
-
-
+    public void ensureAllUnitsContainData() throws Exception {
         //configure the layout accordingly
         CorfuRuntime r = getDefaultRuntime();
 
@@ -289,14 +276,14 @@ public class QuorumReplicationProtocolAdditionalTests extends AbstractViewTest {
                 .matchesDataAtAddress(0, testPayload);
     }
 
-
-
-    public void sendMessage(LogUnitServer s, CorfuMsg message) {
+    private void sendWriteMessage(LogUnitServer s, RequestPayloadMsg payload) {
         TestServerRouter router = new TestServerRouter();
         router.addServer(s);
-        message.setClientID(testClientId);
-        message.setRequestID(requestCounter.getAndIncrement());
-        router.sendServerMessage(message);
+
+        HeaderMsg header = getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL,
+                0L, getUuidMsg(DEFAULT_UUID), getUuidMsg(testClientId), false, false);
+
+        router.sendServerMessage(getRequestMsg(header, payload));
     }
 
     private AtomicInteger requestCounter = new AtomicInteger(0);

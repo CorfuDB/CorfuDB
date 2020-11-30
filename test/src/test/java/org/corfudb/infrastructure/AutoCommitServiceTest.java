@@ -1,13 +1,14 @@
 package org.corfudb.infrastructure;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
@@ -275,8 +276,8 @@ public class AutoCommitServiceTest extends AbstractViewTest {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         AtomicBoolean ruleExecuted = new AtomicBoolean(false);
 
-        addServerRule(SERVERS.PORT_2, new TestRule().matches(msg -> {
-            if (msg.getMsgType().equals(CorfuMsgType.INSPECT_ADDRESSES_RESPONSE)) {
+        addServerRule(SERVERS.PORT_2, new TestRule().responseMatches(msg -> {
+            if (msg.getPayload().getPayloadCase().equals(ResponsePayloadMsg.PayloadCase.INSPECT_ADDRESSES_RESPONSE)) {
                 try {
                     if (ruleExecuted.getAndSet(true)) {
                         return true;
@@ -411,8 +412,8 @@ public class AutoCommitServiceTest extends AbstractViewTest {
         }
 
         // Remove and add log unit server 2 to split the segment.
-        addClientRule(autoCommitService.getCorfuRuntime(), new TestRule().matches(msg -> {
-            if (msg.getMsgType().equals(CorfuMsgType.UPDATE_COMMITTED_TAIL)) {
+        addClientRule(autoCommitService.getCorfuRuntime(), new TestRule().requestMatches(msg -> {
+            if (msg.getPayload().getPayloadCase().equals(RequestPayloadMsg.PayloadCase.UPDATE_COMMITTED_TAIL_REQUEST)) {
                 if (runtime.getLayoutView().getLayout().getSegments().size() > 1) {
                     return true;
                 }
@@ -496,8 +497,8 @@ public class AutoCommitServiceTest extends AbstractViewTest {
         long epoch = runtime.getLayoutView().getLayout().getEpoch();
         AtomicBoolean ruleExecuted = new AtomicBoolean(false);
 
-        addClientRule(autoCommitService.getCorfuRuntime(), new TestRule().matches(msg -> {
-            if (msg.getMsgType().equals(CorfuMsgType.INSPECT_ADDRESSES_REQUEST)) {
+        addClientRule(autoCommitService.getCorfuRuntime(), new TestRule().requestMatches(msg -> {
+            if (msg.getPayload().getPayloadCase().equals(RequestPayloadMsg.PayloadCase.INSPECT_ADDRESSES_REQUEST)) {
                 if (ruleExecuted.getAndSet(true)) {
                     return true;
                 }

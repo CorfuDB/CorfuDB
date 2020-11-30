@@ -4,20 +4,16 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.ReadRequest;
-import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TrimRequest;
-import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.proto.service.LogUnit.TailRequestMsg.Type;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.Serializers;
@@ -39,6 +35,10 @@ import java.util.concurrent.CompletableFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadLogRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTailRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimLogRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getWriteLogRequestMsg;
 import static org.junit.Assert.fail;
 
 /**
@@ -69,17 +69,10 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         setServer(s1);
         setContext(sc);
-        TailsResponse req1 = (TailsResponse) sendRequest(CorfuMsgType.TAIL_REQUEST
-                .payloadMsg(new TailsRequest(TailsRequest.LOG_TAIL)))
-                .join();
 
-        TailsResponse req2 = (TailsResponse) sendRequest(CorfuMsgType.TAIL_REQUEST
-                .payloadMsg(new TailsRequest(TailsRequest.STREAMS_TAILS)))
-                .join();
-
-        TailsResponse req3 = (TailsResponse) sendRequest(CorfuMsgType.TAIL_REQUEST
-                .payloadMsg(new TailsRequest(TailsRequest.ALL_STREAMS_TAIL)))
-                .join();
+        TailsResponse req1 = (TailsResponse) sendRequest(getTailRequestMsg(Type.LOG_TAIL), false, false).join();
+        TailsResponse req2 = (TailsResponse) sendRequest(getTailRequestMsg(Type.STREAMS_TAILS), false, false).join();
+        TailsResponse req3 = (TailsResponse) sendRequest(getTailRequestMsg(Type.ALL_STREAMS_TAIL), false, false).join();
 
         assertThat(req1.getEpoch()).isEqualTo(sc.getCurrentLayout().getEpoch());
         assertThat(req2.getEpoch()).isEqualTo(sc.getCurrentLayout().getEpoch());
@@ -107,29 +100,24 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         final long ADDRESS_0 = 0L;
         final long ADDRESS_1 = 100L;
-        //write at 0
+        // write at 0
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
-        WriteRequest m = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(ADDRESS_0);
-        m.setBackpointerMap(Collections.emptyMap());
-        sendRequest(CorfuMsgType.WRITE.payloadMsg(m)).join();
+        LogData ld = new LogData(DataType.DATA, b);
+        ld.setGlobalAddress(ADDRESS_0);
+        ld.setBackpointerMap(Collections.emptyMap());
+        sendRequest(getWriteLogRequestMsg(ld), false, false).join();
         assertThat(s1)
                 .containsDataAtAddress(ADDRESS_0);
         assertThat(s1)
                 .isEmptyAtAddress(ADDRESS_1);
 
-
         // repeat: this should throw an exception
-        WriteRequest m2 = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m2.setGlobalAddress(ADDRESS_0);
-        m2.setBackpointerMap(Collections.emptyMap());
+        LogData ld2 = new LogData(DataType.DATA, b);
+        ld2.setGlobalAddress(ADDRESS_0);
+        ld2.setBackpointerMap(Collections.emptyMap());
 
-        CompletableFuture<Boolean> future = sendRequest(CorfuMsgType.WRITE.payloadMsg(m2));
+        CompletableFuture<Boolean> future = sendRequest(getWriteLogRequestMsg(ld2), false, false);
         assertThatThrownBy(future::join).hasCauseExactlyInstanceOf(OverwriteException.class);
     }
 
@@ -252,13 +240,11 @@ public class LogUnitServerTest extends AbstractServerTest {
     protected CompletableFuture<Boolean> rawWrite(long addr, String s, String streamName) {
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize(s.getBytes(), b);
-        WriteRequest m = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(addr);
-        m.setBackpointerMap(Collections.singletonMap(CorfuRuntime.getStreamID(streamName),
+        LogData ld = new LogData(DataType.DATA, b);
+        ld.setGlobalAddress(addr);
+        ld.setBackpointerMap(Collections.singletonMap(CorfuRuntime.getStreamID(streamName),
                 Address.NO_BACKPOINTER));
-        return sendRequest(CorfuMsgType.WRITE.payloadMsg(m));
+        return sendRequest(getWriteLogRequestMsg(ld), false, false);
     }
 
     @Test
@@ -396,17 +382,15 @@ public class LogUnitServerTest extends AbstractServerTest {
         for (long i = maxAddress; i >= minAddress; i--) {
             ByteBuf b = Unpooled.buffer();
             Serializers.CORFU.serialize("Payload".getBytes(), b);
-            WriteRequest m = WriteRequest.builder()
-                    .data(new LogData(DataType.DATA, b))
-                    .build();
-            m.setGlobalAddress(i);
+            LogData ld = new LogData(DataType.DATA, b);
+            ld.setGlobalAddress(i);
             long backpointer = i - 1;
             if (i == minAddress) {
                 // Last entry, backpointer is -6 (non-exist).
                 backpointer = Address.NON_EXIST;
             }
-            m.setBackpointerMap(Collections.singletonMap(streamID, backpointer));
-            futures.add(sendRequest(CorfuMsgType.WRITE.payloadMsg(m)));
+            ld.setBackpointerMap(Collections.singletonMap(streamID, backpointer));
+            futures.add(sendRequest(getWriteLogRequestMsg(ld), false, false));
         }
 
         futures.forEach(CompletableFuture::join);
@@ -429,8 +413,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         // Trim the log, and verify that trim mark is updated on log unit
         newServer.prefixTrim(trimMark);
-        sendRequest(CorfuMsgType.PREFIX_TRIM.payloadMsg(new TrimRequest(new Token(0l, trimMark)))).join();
-
+        sendRequest(getTrimLogRequestMsg(new Token(0L, trimMark)), false, false).join();
 
         // Retrieve address space from current log unit server (after a prefix trim)
         addressSpace = newServer.getStreamAddressSpace(streamID);
@@ -459,17 +442,15 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
-        WriteRequest m = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
+        LogData ld = new LogData(DataType.DATA, b);
         final Long globalAddress = 0L;
-        m.setGlobalAddress(globalAddress);
-        Map<UUID, Long> uuidLongMap = new HashMap();
+        ld.setGlobalAddress(globalAddress);
+        Map<UUID, Long> uuidLongMap = new HashMap<>();
         UUID uuid = new UUID(1, 1);
         final Long address = 5L;
         uuidLongMap.put(uuid, address);
-        m.setBackpointerMap(uuidLongMap);
-        sendRequest(CorfuMsgType.WRITE.payloadMsg(m)).join();
+        ld.setBackpointerMap(uuidLongMap);
+        sendRequest(getWriteLogRequestMsg(ld), false, false).join();
 
         s1 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
@@ -546,7 +527,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogUnitServer logunit = new LogUnitServer(context);
     }
 
-
     @Test
     public void checkOverwriteExceptionIsNotThrownWhenTheRankIsHigher() {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
@@ -571,13 +551,11 @@ public class LogUnitServerTest extends AbstractServerTest {
         //write at 0
         ByteBuf b = Unpooled.buffer();
         Serializers.CORFU.serialize("0".getBytes(), b);
-        WriteRequest m = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(ADDRESS_0);
-        m.setRank(new IMetadata.DataRank(0));
-        m.setBackpointerMap(Collections.emptyMap());
-        sendRequest(CorfuMsgType.WRITE.payloadMsg(m)).join();
+        LogData ld = new LogData(DataType.DATA, b);
+        ld.setGlobalAddress(ADDRESS_0);
+        ld.setRank(new IMetadata.DataRank(0));
+        ld.setBackpointerMap(Collections.emptyMap());
+        sendRequest(getWriteLogRequestMsg(ld), false, false).join();
         assertThat(s1)
                 .containsDataAtAddress(ADDRESS_0);
         assertThat(s1)
@@ -588,22 +566,16 @@ public class LogUnitServerTest extends AbstractServerTest {
         b.clear();
         b = Unpooled.buffer();
         Serializers.CORFU.serialize("1".getBytes(), b);
-        m = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(ADDRESS_0);
-        m.setBackpointerMap(Collections.emptyMap());
+        ld = new LogData(DataType.DATA, b);
+        ld.setGlobalAddress(ADDRESS_0);
+        ld.setBackpointerMap(Collections.emptyMap());
 
+        LogData ld2 = new LogData(DataType.DATA, b);
+        ld2.setGlobalAddress(ADDRESS_0);
+        ld2.setRank(new IMetadata.DataRank(1));
+        ld2.setBackpointerMap(Collections.emptyMap());
 
-        WriteRequest m2 = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-
-        m2.setGlobalAddress(ADDRESS_0);
-        m2.setRank(new IMetadata.DataRank(1));
-        m2.setBackpointerMap(Collections.emptyMap());
-
-        assertThat(sendRequest(CorfuMsgType.WRITE.payloadMsg(m2)).join()).isEqualTo(true);
+        assertThat(sendRequest(getWriteLogRequestMsg(ld2), false, false).join()).isEqualTo(true);
 
         // now let's read again and see what we have, we should have the second value (not the first)
 
@@ -653,17 +625,14 @@ public class LogUnitServerTest extends AbstractServerTest {
             ByteBuf buf = Unpooled.buffer();
             Serializers.CORFU.serialize(Integer.toString(i).getBytes(), buf);
             LogData ld = new LogData(DataType.DATA, buf);
-            WriteRequest m = WriteRequest.builder()
-                    .data(ld)
-                    .build();
             ADDRESS = i;
-            m.setGlobalAddress(ADDRESS);
-            m.setRank(new IMetadata.DataRank(0));
-            m.setBackpointerMap(populateBackpointerMap());
-            m.setCheckpointedStreamId(UUID.randomUUID());
-            m.setCheckpointedStreamId(UUID.randomUUID());
-            m.setCheckpointId(UUID.randomUUID());
-            sendRequest(CorfuMsgType.WRITE.payloadMsg(m)).join();
+            ld.setGlobalAddress(ADDRESS);
+            ld.setRank(new IMetadata.DataRank(0));
+            ld.setBackpointerMap(populateBackpointerMap());
+            ld.setCheckpointedStreamId(UUID.randomUUID());
+            ld.setCheckpointedStreamId(UUID.randomUUID());
+            ld.setCheckpointId(UUID.randomUUID());
+            sendRequest(getWriteLogRequestMsg(ld), false, false).join();
         }
         long end = System.currentTimeMillis();
         System.out.println("Total Write Time - " + (end - start));
@@ -671,7 +640,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         start = System.currentTimeMillis();
         for (int i = 0; i < iterations; i++) {
             ADDRESS = i;
-            sendRequest(CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(ADDRESS, true))).join();
+            sendRequest(getReadLogRequestMsg(Collections.singletonList(ADDRESS), true), false, false).join();
         }
         end = System.currentTimeMillis();
         System.out.println("Total Read Time -" + (end - start));
@@ -686,4 +655,3 @@ public class LogUnitServerTest extends AbstractServerTest {
         return backPointerMap;
     }
 }
-
