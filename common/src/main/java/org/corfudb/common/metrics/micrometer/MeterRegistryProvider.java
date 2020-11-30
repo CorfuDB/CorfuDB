@@ -1,6 +1,9 @@
 package org.corfudb.common.metrics.micrometer;
 
+import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
 import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
 import org.slf4j.Logger;
@@ -17,7 +20,7 @@ import static org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegis
  */
 public class MeterRegistryProvider {
     private static Optional<MeterRegistry> meterRegistry = Optional.empty();
-
+    private static Optional<String> endpoint = Optional.empty();
     private MeterRegistryProvider() {
 
     }
@@ -58,6 +61,7 @@ public class MeterRegistryProvider {
                 LoggingMeterRegistryWithHistogramSupport registry =
                         new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, INFLUX);
                 registry.config().commonTags("endpoint", localEndpoint);
+                endpoint = Optional.of(localEndpoint);
                 return Optional.of(registry);
             };
 
@@ -73,11 +77,39 @@ public class MeterRegistryProvider {
     }
 
     /**
+     * Register timer if needed.
+     * @param name Name of a timer.
+     * @param tags Tags for a timer. 
+     */
+    public static void timer(String name, String... tags) {
+        MeterRegistryProvider.getInstance().ifPresent(registry -> registry.timer(name, tags));
+    }
+
+    /**
      * Get the previously configured meter registry.
      * If the registry has not been previously configured, return an empty option.
      * @return An optional configured meter registry.
      */
     public static synchronized Optional<MeterRegistry> getInstance() {
         return meterRegistry;
+    }
+
+    /**
+     * Remove the meter by id.
+     * @param name Name of a meter.
+     * @param tags Tags.
+     * @param type Type of a meter.
+     */
+    public static synchronized void deregisterServerMeter(String name, Tags tags, Meter.Type type) {
+        if (!meterRegistry.isPresent()) {
+            return;
+        }
+        if (!endpoint.isPresent()) {
+            throw new IllegalStateException("Endpoint must be present to deregister meters.");
+        }
+        String server = endpoint.get();
+        Tags tagsToLookFor = tags.and(Tag.of("endpoint", server));
+        Meter.Id id = new Meter.Id(name, tagsToLookFor, null, null, type);
+        meterRegistry.ifPresent(registry -> registry.remove(id));
     }
 }

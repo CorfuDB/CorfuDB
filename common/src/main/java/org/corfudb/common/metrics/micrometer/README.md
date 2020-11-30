@@ -1,7 +1,9 @@
 ### Runtime metrics configuration
 
-In order to enable runtime metrics in the client code, a logging configuration *.xml file should 
-be provided with a configured logger. Logger name should be "org.corfudb.metricsdata".
+* In order to enable corfu runtime metrics, a logging configuration *.xml file should be provided with a configured logger. 
+Logger name should be "org.corfudb.client.metricsdata".
+* To enable server metrics a logging configuration *.xml file should be provided with a configured logger. Logger name should be
+"org.corfudb.metricsdata".
 
 ### Current metrics collected for LR:
 
