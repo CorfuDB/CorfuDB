@@ -1,6 +1,5 @@
 package org.corfudb.runtime;
 
-import ch.qos.logback.classic.LoggerContext;
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -849,8 +848,7 @@ public class CorfuRuntime {
                 this.parameters.getMicroMeterRuntimeConfig();
 
         if (microMeterRuntimeConfig.metricsEnabled) {
-            LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
-            registry = Optional.ofNullable(context.exists(microMeterRuntimeConfig.configuredLoggerName))
+            registry = Optional.ofNullable(LoggerFactory.getILoggerFactory().getLogger(microMeterRuntimeConfig.configuredLoggerName))
                     .map(logger -> MeterRegistryProvider.MeterRegistryInitializer.newInstance(logger,
                             microMeterRuntimeConfig.loggingInterval, parameters.clientId));
             if (!registry.isPresent()) {
