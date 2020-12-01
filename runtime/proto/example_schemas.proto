@@ -28,4 +28,105 @@ message ExampleValue {
     string payload = 1;
     fixed64 anotherKey = 2 [(org.corfudb.runtime.schema).secondary_key = true];
     Uuid uuid = 3 [(org.corfudb.runtime.schema).secondary_key = true];
+    fixed64 entryIndex = 4;
+    NonPrimitiveValue non_primitive_field_level_0 = 5 [(org.corfudb.runtime.schema).nested_secondary_keys =
+                                                   "non_primitive_field_level_0.key_1_level_1, non_primitive_field_level_0.key_2_level_1.key_1_level_2"];
+}
+
+message NonPrimitiveValue {
+    fixed64 key_1_level_1 = 1;
+    NonPrimitiveNestedValue key_2_level_1 = 2;
+}
+
+message NonPrimitiveNestedValue {
+    string key_1_level_2 = 1;
+    fixed64 level_number = 2;
+}
+
+message InvalidExampleValue {
+    string field1 = 1;
+    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_keys =
+                                                   "field1.key1Level1, field2.key2Level1.key1Level2"];
+}
+
+message InvalidNestedSecondaryIndex {
+    string field1 = 1;
+    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_keys =
+                                  "field2.key_1_level_1, field2.key_2_level_1.deprecated"];
+}
+
+message InvalidFullNestedSecondaryIndex {
+    string field1 = 1;
+    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_keys =
+                                  "field2.key_1_level_1.key_1_level_2, field2.key_2_level_1.key_1_level_2"];
+}
+
+message NotNestedSecondaryIndex {
+    string field1 = 1;
+    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_keys = "field2"];
+    fixed64 field3 = 3 [(org.corfudb.runtime.schema).nested_secondary_keys = "field3"];
+}
+
+message ClassRoom {
+    repeated Student students = 1 [(org.corfudb.runtime.schema).nested_secondary_keys = "students.age"];
+    Infrastructure classInfra = 2;
+}
+
+message Student {
+    string name = 1;
+    fixed64 age = 2;
+}
+
+message Person {
+    string name = 1;
+    fixed64 age = 2;
+    PhoneNumber phoneNumber = 3 [(org.corfudb.runtime.schema).nested_secondary_keys = "phoneNumber.mobile"];
+}
+
+message PhoneNumber {
+    repeated string mobile = 1;
+    string home = 2;
+}
+
+message Office {
+    repeated Department departments = 1 [(org.corfudb.runtime.schema).nested_secondary_keys = "departments.members.phoneNumbers"];
+}
+
+message Company {
+    repeated Office office = 1 [(org.corfudb.runtime.schema).nested_secondary_keys = "office.departments"];
+}
+
+message Department {
+    repeated Member members = 1;
+}
+
+message Member {
+    string name = 1;
+    fixed64 age = 2;
+    repeated string phoneNumbers = 3;
+}
+
+message School {
+    repeated ClassRoom classRooms = 1 [(org.corfudb.runtime.schema).nested_secondary_keys = "classRooms.classInfra.numberDesks, classRooms.classInfra.others"];
+}
+
+message Infrastructure {
+    fixed64 numberDesks = 1;
+    repeated string others = 2;
+    fixed64 roomSizeInMeters = 3;
+}
+
+message Network {
+    repeated Device devices = 1 [(org.corfudb.runtime.schema).nested_secondary_keys = "devices.router"];
+}
+
+message Device {
+    Router router = 2;
+}
+
+message Router {
+    string brand = 1;
+    repeated string interfaces = 2;
+    string cpu = 3;
+    string ram = 4;
 }
