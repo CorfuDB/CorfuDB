@@ -1,6 +1,7 @@
 package org.corfudb.runtime.clients;
 
 import com.google.protobuf.ByteString;
+import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
 import java.io.ObjectInputStream;
 import java.lang.invoke.MethodHandles;
@@ -151,7 +152,7 @@ public class BaseHandler implements IClient {
      */
     @ResponseHandler(type = PayloadCase.PING_RESPONSE)
     private static Object handlePingResponse(ResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        log.debug("Received PING_RESPONSE from the server - {}", msg);
+        log.debug("Received PING_RESPONSE from the server - {}", TextFormat.shortDebugString(msg));
         return true;
     }
 
@@ -178,7 +179,7 @@ public class BaseHandler implements IClient {
      */
     @ResponseHandler(type = PayloadCase.RESET_RESPONSE)
     private static Object handleResetResponse(ResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        log.info("Received RESET_RESPONSE from the server - {}", msg);
+        log.info("Received RESET_RESPONSE from the server - {}", TextFormat.shortDebugString(msg));
         return true;
     }
 

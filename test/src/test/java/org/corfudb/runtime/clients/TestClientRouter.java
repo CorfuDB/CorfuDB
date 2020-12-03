@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import com.google.protobuf.TextFormat;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.ByteBufOutputStream;
@@ -313,7 +314,7 @@ public class TestClientRouter implements IClientRouter {
 
         // Evaluate rules.
         if (rules.stream().allMatch(x -> x.evaluate(request, this))) {
-            log.trace(Thread.currentThread().getId() + ":Sent request: {}", request);
+            log.trace(Thread.currentThread().getId() + ":Sent request: {}", TextFormat.shortDebugString(request));
             // Write the message out to the channel
             try {
                 RequestMsg requestMsg = simulateSerialization(request);
@@ -378,7 +379,7 @@ public class TestClientRouter implements IClientRouter {
 
         // Evaluate rules.
         if (rules.stream().allMatch(x -> x.evaluate(request, this))) {
-            log.trace(Thread.currentThread().getId() + ":Sent request: {}", request);
+            log.trace(Thread.currentThread().getId() + ":Sent request: {}", TextFormat.shortDebugString(request));
             // Write the message out to the channel
             try {
                 RequestMsg requestMsg = simulateSerialization(request);
@@ -417,7 +418,7 @@ public class TestClientRouter implements IClientRouter {
         // Check if the message is intended for us. If not, drop the message.
         if (!protoClientId.equals(CorfuProtocolCommon.getUuidMsg(clientID))) {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!",
-                    protoClientId, clientID);
+                    TextFormat.shortDebugString(protoClientId), clientID);
             return false;
         }
         return true;

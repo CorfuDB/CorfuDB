@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -133,7 +134,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         ctx.writeAndFlush(response, ctx.voidPromise());
 
         if(log.isTraceEnabled()) {
-            log.trace("Sent response: {}", response);
+            log.trace("Sent response: {}", TextFormat.shortDebugString(response));
         }
     }
 
@@ -187,7 +188,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
                 if (validateRequest(request, ctx)) {
                     if (log.isTraceEnabled()) {
                         log.trace("channelRead: Request routed to {}: {}",
-                                handler.getClass().getSimpleName(), request);
+                                handler.getClass().getSimpleName(), TextFormat.shortDebugString(request));
                     }
 
                     try {

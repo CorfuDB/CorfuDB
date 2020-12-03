@@ -4,6 +4,7 @@ import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.protobuf.TextFormat;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -593,7 +594,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
         // Write this message out on the channel
         channel.writeAndFlush(request, channel.voidPromise());
-        log.trace("Sent request message: {}", request.getHeader());
+        if (log.isTraceEnabled()) {
+            log.trace("Sent request message: {}", TextFormat.shortDebugString(request.getHeader()));
+        }
 
         // Generate a benchmarked future to measure the underlying request
         final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
@@ -614,7 +617,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
                 outstandingRequests.remove(thisRequestId);
                 log.debug(
                         "sendRequestAndGetCompletable: Remove request {} to {} due to timeout! Request:{}",
-                        thisRequestId, node, request.getHeader());
+                        thisRequestId, node, TextFormat.shortDebugString(request.getHeader()));
             }
             return null;
         });
@@ -666,7 +669,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
         // Write this message out on the channel
         channel.writeAndFlush(request, channel.voidPromise());
-        log.trace("Sent one-way request message: {}", request.getHeader());
+        log.trace("Sent one-way request message: {}", TextFormat.shortDebugString(request.getHeader()));
     }
 
     /**
@@ -730,7 +733,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         // Check if the message is intended for us. If not, drop the message.
         if (!clientId.equals(CorfuProtocolCommon.getUuidMsg(parameters.getClientId()))) {
             log.warn("Incoming message intended for client {}, our id is {}, dropping!",
-                    clientId, parameters.getClientId());
+                    TextFormat.shortDebugString(clientId), parameters.getClientId());
             return false;
         }
         return true;
@@ -767,13 +770,13 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
                 if (handler == null) {
                     // The message was unregistered, we are dropping it.
-                    log.warn("Received unregistered message {}, dropping", responseMsg);
+                    log.warn("Received unregistered message {}, dropping", TextFormat.shortDebugString(responseMsg));
                 } else {
                     if (validateClientId(responseMsg.getHeader().getClientId())) {
                         // Route the message to the handler.
                         if (log.isTraceEnabled()) {
                             log.trace("Message routed to {}: {}",
-                                    handler.getClass().getSimpleName(), responseMsg);
+                                    handler.getClass().getSimpleName(), TextFormat.shortDebugString(responseMsg));
                         }
                         handler.handleMessage(responseMsg, ctx);
                     }

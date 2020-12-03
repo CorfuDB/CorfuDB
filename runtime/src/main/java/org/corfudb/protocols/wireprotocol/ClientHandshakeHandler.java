@@ -1,5 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -107,7 +108,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
         ResponseMsg response = ((ResponseMsg) m);
 
         if (!response.getPayload().hasHandshakeResponse()) {
-            log.warn("channelRead: Non-Handshake Response received. Message - {}", response);
+            log.warn("channelRead: Non-Handshake Response received. Message - {}", TextFormat.shortDebugString(response));
             if (this.handshakeState.completed()) {
                 // Only send upstream if handshake is complete.
                 super.channelRead(ctx, m);

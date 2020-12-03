@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
 import java.util.List;
 import java.util.Optional;
@@ -209,8 +210,11 @@ public interface IServerRouter {
         ResponseMsg response = getResponseMsg(responseHeader, getWrongEpochErrorMsg(correctEpoch));
         sendResponse(response, ctx);
 
-        log.trace("sendWrongEpochError[{}]: Incoming request received with wrong epoch, got {}, expected {}, " +
-                "request was {}", requestHeader.getRequestId(), requestHeader.getEpoch(), correctEpoch, requestHeader);
+        if (log.isTraceEnabled()) {
+            log.trace("sendWrongEpochError[{}]: Incoming request received with wrong epoch, got {}, expected {}, " +
+                            "request was {}", requestHeader.getRequestId(), requestHeader.getEpoch(),
+                    correctEpoch, TextFormat.shortDebugString(requestHeader));
+        }
     }
 
     /**
@@ -224,8 +228,10 @@ public interface IServerRouter {
         ResponseMsg response = getResponseMsg(responseHeader, getNotBootstrappedErrorMsg());
         sendResponse(response, ctx);
 
-        log.trace("sendNoBootstrapError[{}]: Received request but not bootstrapped! Request was {}",
-                requestHeader.getRequestId(), requestHeader);
+        if (log.isTraceEnabled()) {
+            log.trace("sendNoBootstrapError[{}]: Received request but not bootstrapped! Request was {}",
+                    requestHeader.getRequestId(), TextFormat.shortDebugString(requestHeader));
+        }
     }
 
     /**
@@ -243,7 +249,9 @@ public interface IServerRouter {
         sendResponse(response, ctx);
 
         log.trace("sendWrongClusterError[{}]: Incoming request with a wrong cluster id, got {}, expected {}, " +
-                "request was: {}", requestHeader.getRequestId(), requestHeader.getClusterId(), clusterId, requestHeader);
+                "request was: {}", requestHeader.getRequestId(),
+                TextFormat.shortDebugString(requestHeader.getClusterId()),
+                TextFormat.shortDebugString(clusterId), TextFormat.shortDebugString(requestHeader));
     }
 
     /**

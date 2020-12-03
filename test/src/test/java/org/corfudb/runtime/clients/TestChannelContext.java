@@ -2,6 +2,7 @@ package org.corfudb.runtime.clients;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+import com.google.protobuf.TextFormat;
 import io.netty.buffer.*;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -270,7 +271,7 @@ public class TestChannelContext implements ChannelHandlerContext {
                 requestMsg.writeTo(requestOutputStream);
             } catch (IOException e) {
                 log.error("simulateSerialization: Exception occurred when encoding request {}, caused by {}",
-                        requestMsg, e.getCause(), e);
+                        TextFormat.shortDebugString(requestMsg), e.getCause(), e);
             }
         } else if (message instanceof ResponseMsg) {
             ResponseMsg responseMsg = (ResponseMsg) message;
@@ -280,7 +281,7 @@ public class TestChannelContext implements ChannelHandlerContext {
                 responseMsg.writeTo(requestOutputStream);
             } catch (IOException e) {
                 log.error("simulateSerialization: Exception occurred when encoding response {}, caused by {}",
-                        responseMsg, e.getCause(), e);
+                        TextFormat.shortDebugString(responseMsg), e.getCause(), e);
             }
         } else {
             throw new UnsupportedOperationException("Test framework does not support serialization of object type "

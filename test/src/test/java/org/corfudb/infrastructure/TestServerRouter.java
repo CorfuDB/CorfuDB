@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
@@ -108,10 +109,10 @@ public class TestServerRouter implements IServerRouter {
                 .allMatch(x -> x.evaluate(newResponse, this))) {
             if (ctx instanceof TestChannelContext) {
                 ctx.writeAndFlush(newResponse);
-                log.info("sendResponse: Sent response - {}", response);
+                log.info("sendResponse: Sent response - {}", TextFormat.shortDebugString(response));
             } else {
                 this.protoResponseMessages.add(newResponse);
-                log.info("sendResponse: Added response - {} to protoResponseMessages List.", response);
+                log.info("sendResponse: Added response - {} to protoResponseMessages List.", TextFormat.shortDebugString(response));
             }
         }
     }
