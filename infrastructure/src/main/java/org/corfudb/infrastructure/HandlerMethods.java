@@ -209,8 +209,12 @@ public class HandlerMethods {
         timerNameCache.computeIfAbsent(type,
                                        aType -> (CorfuComponent.INFRA_MSG_HANDLER +
                                                  aType.name().toLowerCase()));
+        double[] percentiles = new double[]{0.50, 0.95, 0.99};
 
         return MeterRegistryProvider.getInstance()
-                .map(registry -> Timer.builder(timerNameCache.get(type)).register(registry));
+                .map(registry -> Timer.builder(timerNameCache.get(type))
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
     }
 }
