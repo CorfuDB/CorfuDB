@@ -23,14 +23,14 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
         Message>> {
 
     private final HashMap<String,
-            Index.Spec<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>>
+            Index.Spec<Message, CorfuRecord<Message, Message>, ?>>
             indices = new HashMap<>();
 
     ProtobufIndexer(Message payloadSchema) {
         payloadSchema.getDescriptorForType().getFields().forEach(this::registerIndices);
     }
 
-    private <T extends Comparable<T>> Index.Spec<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>
+    private <T> Index.Spec<Message, CorfuRecord<Message, Message>, ?>
     getIndex(String indexName, FieldDescriptor fieldDescriptor) {
 
         return new Index.Spec<>(
@@ -52,14 +52,13 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
 
     @Override
     public Optional<
-            Index.Spec<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>
+            Index.Spec<Message, CorfuRecord<Message, Message>, ?>
             > get(Index.Name name) {
         return Optional.ofNullable(name).map(indexName -> indices.get(indexName));
     }
 
     @Override
-    public Iterator<Index.Spec<Message, CorfuRecord<Message, Message>, ? extends Comparable<?>>> iterator() {
+    public Iterator<Index.Spec<Message, CorfuRecord<Message, Message>, ?>> iterator() {
         return indices.values().iterator();
-
     }
 }

@@ -41,8 +41,7 @@ message EventInfo {
     optional uint32 port = 3;
     optional int64 event_time = 4 [(org.corfudb.runtime.schema).secondary_key = true];
     optional uint32 frequency = 5;
-    // TODO: Need to make the following work.. looking for ideas..
-    // optional Uuid uuid = 6 [(org.corfudb.runtime.schema).secondary_key = true];
+    optional Uuid uuid = 6 [(org.corfudb.runtime.schema).secondary_key = true];
 }
 
 message Uuid {

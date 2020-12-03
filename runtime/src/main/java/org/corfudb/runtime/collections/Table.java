@@ -536,7 +536,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @return Collection of entries filtered by the secondary index.
      */
     @Nonnull
-    <I extends Comparable<I>>
+    <I>
     List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull final String indexName,
                     @Nonnull final I indexKey) {
         return corfuTable.getByIndex(() -> indexName, indexKey).stream()
@@ -555,7 +555,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
      * @return Collection of entries filtered by the secondary index.
      */
     @Nonnull
-    protected <I extends Comparable<I>>
+    protected <I>
     Collection<Map.Entry<K, V>> getByIndexAsQueryResult(@Nonnull final String indexName,
                                                         @Nonnull final I indexKey) {
         return corfuTable.getByIndex(() -> indexName, indexKey).stream()
