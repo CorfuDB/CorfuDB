@@ -126,7 +126,7 @@ public class TestServerRouter implements IServerRouter {
                 log.trace("Registered {} to handle messages of type {}", server, x);
             });
         } catch (UnsupportedOperationException ex) {
-            // Ignore
+            log.error("No registered CorfuMsg handler for server {}", server, ex);
         }
 
 

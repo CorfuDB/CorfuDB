@@ -18,7 +18,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.junit.After;
 import org.junit.Test;
 
-import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -44,7 +43,7 @@ public class ManagementHandlerTest extends AbstractClientTest {
                 .setServerRouter(serverRouter)
                 .setPort(SERVERS.PORT_0)
                 .build();
-        server = new ManagementServer(serverContext);
+        server = new ManagementServer(serverContext, new ManagementServer.ManagementServerInitializer());
         serverRouter.setServerContext(serverContext);
         MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
         return new ImmutableSet.Builder<AbstractServer>()

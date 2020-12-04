@@ -67,7 +67,8 @@ public class CorfuServerNode implements AutoCloseable {
                         .put(SequencerServer.class, new SequencerServer(serverContext))
                         .put(LayoutServer.class, new LayoutServer(serverContext))
                         .put(LogUnitServer.class, new LogUnitServer(serverContext))
-                        .put(ManagementServer.class, new ManagementServer(serverContext))
+                        .put(ManagementServer.class, new ManagementServer(serverContext,
+                                new ManagementServer.ManagementServerInitializer()))
                         .build()
         );
     }

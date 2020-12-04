@@ -19,14 +19,6 @@ public class ForceRemoveNodeRequest extends RemoveNodeRequest {
         super(endpoint);
     }
 
-    /**
-     * Create a force remove request from a byte array.
-     * @param buf the serialized request
-     */
-    public ForceRemoveNodeRequest(@Nonnull byte[] buf) {
-        super(buf);
-    }
-
     @Override
     public OrchestratorRequestType getType() {
         return FORCE_REMOVE_NODE;
