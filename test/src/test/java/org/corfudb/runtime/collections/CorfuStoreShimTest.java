@@ -19,6 +19,7 @@ import org.corfudb.runtime.view.Address;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -27,6 +28,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * To ensure that feature changes in CorfuStore do not break verticals,
@@ -128,7 +130,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     }
 
     /**
-     * Simple example to see how secondary indexes work. Please see sample_schema.proto.
+     * Simple example to see how secondary indexes work. Please see example_schemas.proto.
      *
      * @throws Exception exception
      */
@@ -193,6 +195,836 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                     .getByIndex(table, "uuid", uuidSecondaryKey);
             assertThat(entries.size()).isEqualTo(1);
             assertThat(entries.get(0).getPayload().getPayload()).isEqualTo("abc");
+            readWriteTxn.commit();
+        }
+
+        log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Simple example to see how nested secondary indexes work. Please see example_schemas.proto.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testNestedSecondaryIndexes() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "ManagedMetadata";
+
+        // Create & Register the table.
+        Table<Uuid, ExampleValue, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleValue.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        // Create 100 records
+        final int totalRecords = 100;
+        final long even = 0L;
+        final long odd = 1L;
+        List<Long> evenRecordIndexes = new ArrayList<>();
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for(int i=0; i<totalRecords; i++) {
+            if(i % 2 == 0) {
+                evenRecordIndexes.add(Long.valueOf(i));
+            }
+
+            UUID uuid = UUID.randomUUID();
+            Uuid key = Uuid.newBuilder()
+                    .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
+                    .build();
+
+            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+                txn.putRecord(tableName, key,
+                        ExampleValue.newBuilder()
+                                .setPayload("payload_" + i)
+                                .setAnotherKey(System.currentTimeMillis())
+                                .setEntryIndex(i)
+                                .setNonPrimitiveFieldLevel0(ExampleSchemas.NonPrimitiveValue.newBuilder()
+                                .setKey1Level1(i % 2 == 0 ? even : odd)
+                                .setKey2Level1(ExampleSchemas.NonPrimitiveNestedValue.newBuilder()
+                                        .setKey1Level2(i < (totalRecords/2) ? "lower half" : "upper half")
+                                        .setLevelNumber(2)
+                                        .build()))
+                                .build(),
+                        user);
+                txn.commit();
+            }
+        }
+
+        // Get by secondary index, retrieve from database all even entries
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleValue, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(table, "non_primitive_field_level_0.key_1_level_1", even);
+            assertThat(entries.size()).isEqualTo(totalRecords/2);
+            Iterator<CorfuStoreEntry<Uuid, ExampleValue, ManagedMetadata>> it = entries.iterator();
+            while(it.hasNext()) {
+                CorfuStoreEntry<Uuid, ExampleValue, ManagedMetadata> entry = it.next();
+                assertThat(evenRecordIndexes).contains(entry.getPayload().getEntryIndex());
+                evenRecordIndexes.remove(entry.getPayload().getEntryIndex());
+            }
+
+            assertThat(evenRecordIndexes).isEmpty();
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index from second level (nested), retrieve from database 'upper half'
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleValue, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(table, "non_primitive_field_level_0.key_2_level_1.key_1_level_2", "upper half");
+            assertThat(entries.size()).isEqualTo(totalRecords/2);
+            long sum = 0;
+            Iterator<CorfuStoreEntry<Uuid, ExampleValue, ManagedMetadata>> it = entries.iterator();
+            while(it.hasNext()) {
+                sum = sum + it.next().getPayload().getEntryIndex();
+            }
+
+            // Assert sum of consecutive numbers of "upper half" match the expected value
+            assertThat(sum).isEqualTo(((totalRecords/2) / 2)*((totalRecords/2) + (totalRecords-1)));
+            readWriteTxn.commit();
+        }
+
+        log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Simple example to see how nested secondary indexes work on repeated fields. Please see example_schemas.proto.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testNestedSecondaryIndexesRepeatedField() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "ManagedMetadata";
+
+        // Create & Register the table.
+        Table<Uuid, ExampleSchemas.ClassRoom, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.ClassRoom.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        // Create records for 40 classRooms
+        final int totalClassRooms = 40;
+        final long youngStudent = 15L;
+        final long olderStudent = 25L;
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < totalClassRooms; i++) {
+            UUID uuid = UUID.randomUUID();
+            Uuid key = Uuid.newBuilder()
+                    .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
+                    .build();
+
+            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+                txn.putRecord(tableName, key,
+                        ExampleSchemas.ClassRoom.newBuilder()
+                                // Student 1 per ClassRoom
+                                .addStudents(ExampleSchemas.Student.newBuilder()
+                                .setName("MaleStudent_" + i)
+                                .setAge(i % 2 == 0 ? youngStudent : olderStudent).build())
+                                // Student 2 pero ClassRoom
+                                .addStudents(ExampleSchemas.Student.newBuilder()
+                                        .setName("FemaleStudent_" + i)
+                                        .setAge(i % 2 == 0 ? youngStudent : olderStudent).build())
+                                .build(),
+                        user);
+                txn.commit();
+            }
+        }
+
+        // Get by secondary index, retrieve from database all classRooms that have young students
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.ClassRoom, ManagedMetadata>> classRooms = readWriteTxn
+                    .getByIndex(table, "students.age", youngStudent);
+            // Since only even indexed classRooms have youngStudents, we expect half of them to appear
+            assertThat(classRooms.size()).isEqualTo(totalClassRooms/2);
+            readWriteTxn.commit();
+        }
+
+        log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Test the case of a nested secondary index on repeated fields followed by a non-primitive indexed value
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testNestedSecondaryIndexesRepeatedFieldNonPrimitiveIndexed() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "California";
+        // Define table name.
+        final String tableName = "CA-Networks";
+
+        // Create & Register the table.
+        Table<Uuid, ExampleSchemas.Network, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.Network.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        final int totalNetworks = 10;
+
+        // Even indexed networks will have Router_A
+        ExampleSchemas.Router routerA = ExampleSchemas.Router.newBuilder()
+                .setBrand("Brand_A")
+                .addInterfaces("eth0")
+                .build();
+
+        // Odd indexed networks will have Router_B
+        ExampleSchemas.Router routerB = ExampleSchemas.Router.newBuilder()
+                .setBrand("Brand_B")
+                .addInterfaces("wlan0")
+                .build();
+
+        // All networks will have a Router_C
+        ExampleSchemas.Router routerC = ExampleSchemas.Router.newBuilder()
+                .setBrand("Brand_C")
+                .addInterfaces("eth1")
+                .build();
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < totalNetworks; i++) {
+            UUID id = UUID.randomUUID();
+            Uuid networkId = Uuid.newBuilder()
+                    .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
+                    .build();
+
+            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+                txn.putRecord(tableName, networkId,
+                        ExampleSchemas.Network.newBuilder()
+                                // Device 1
+                                .addDevices(ExampleSchemas.Device.newBuilder()
+                                        .setRouter(i % 2 == 0 ? routerA : routerB)
+                                        .build())
+                                // Device 2
+                                .addDevices(ExampleSchemas.Device.newBuilder()
+                                        .setRouter(routerC)
+                                        .build())
+                                .build(),
+                        user);
+                txn.commit();
+            }
+        }
+
+        // Get by secondary index, retrieve from database all networks which have RouterA
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Network, ManagedMetadata>> networks = readWriteTxn
+                    .getByIndex(table, "devices.router", routerA);
+            assertThat(networks.size()).isEqualTo(totalNetworks/2);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve from database all networks which have RouterC
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Network, ManagedMetadata>> networks = readWriteTxn
+                    .getByIndex(table, "devices.router", routerC);
+            assertThat(networks.size()).isEqualTo(totalNetworks);
+            readWriteTxn.commit();
+        }
+
+        log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Test the case of a nested secondary index on REPEATED fields followed by a REPEATED non-primitive field which
+     * is directly the indexed value
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testNestedSecondaryIndexesWhenIndexedIsNonPrimitiveAndRepeated() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "Companies-Namespace";
+        // Define table name.
+        final String tableName = "Company";
+
+        // Create & Register the table.
+        Table<Uuid, ExampleSchemas.Company, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.Company.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        final int totalCompanies = 100;
+
+        // Department 1 for office_A and office_C
+        ExampleSchemas.Department dpt_1 = ExampleSchemas.Department.newBuilder()
+                .addMembers(ExampleSchemas.Member.newBuilder()
+                        .addPhoneNumbers("111-111-1111")
+                        .setName("Member_DPT1")
+                        .build())
+                .build();
+
+        // Department 2 for office_B
+        ExampleSchemas.Department dpt_2 = ExampleSchemas.Department.newBuilder()
+                .addMembers(ExampleSchemas.Member.newBuilder()
+                        .addPhoneNumbers("222-222-2222")
+                        .setName("Member_DPT2")
+                        .build())
+                .build();
+
+        // Department 3 for office_B
+        ExampleSchemas.Department dpt_3 = ExampleSchemas.Department.newBuilder()
+                .addMembers(ExampleSchemas.Member.newBuilder()
+                        .addPhoneNumbers("333-333-3333")
+                        .setName("Member_DPT3")
+                        .build())
+                .build();
+
+        // Department 4 for all offices
+        ExampleSchemas.Department dpt_4 = ExampleSchemas.Department.newBuilder()
+                .addMembers(ExampleSchemas.Member.newBuilder()
+                        .addPhoneNumbers("444-444-4444")
+                        .setName("Member_DPT4")
+                        .build())
+                .build();
+
+        // Even indexed companies will have Office_A and Office_C
+        ExampleSchemas.Office office_A = ExampleSchemas.Office.newBuilder()
+                .addDepartments(dpt_1)
+                .addDepartments(dpt_4)
+                .build();
+
+        // Odd indexed companies will have Office_B
+        ExampleSchemas.Office office_B = ExampleSchemas.Office.newBuilder()
+                .addDepartments(dpt_2)
+                .addDepartments(dpt_3)
+                .addDepartments(dpt_4)
+                .build();
+
+        ExampleSchemas.Office office_C = ExampleSchemas.Office.newBuilder()
+                .addDepartments(dpt_1)
+                .addDepartments(dpt_4)
+                .build();
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < totalCompanies; i++) {
+            UUID id = UUID.randomUUID();
+            Uuid networkId = Uuid.newBuilder()
+                    .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
+                    .build();
+
+            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+                if (i % 2 == 0) {
+                    txn.putRecord(tableName, networkId,
+                            ExampleSchemas.Company.newBuilder()
+                                    .addOffice(office_A)
+                                    .addOffice(office_C)
+                                    .build(),
+                            user);
+                } else {
+                    txn.putRecord(tableName, networkId,
+                            ExampleSchemas.Company.newBuilder()
+                                    .addOffice(office_B)
+                                    .build(),
+                            user);
+                }
+                txn.commit();
+            }
+        }
+
+        // Get by secondary index, retrieve from database all Companies that have Department of type 1
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Company, ManagedMetadata>> companiesDepartmentType1 = readWriteTxn
+                    .getByIndex(table, "office.departments", dpt_1);
+            assertThat(companiesDepartmentType1.size()).isEqualTo(totalCompanies/2);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve from database all Companies that have Department of Type 4 (all)
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Company, ManagedMetadata>> companiesDepartmentType4 = readWriteTxn
+                    .getByIndex(table, "office.departments", dpt_4);
+            assertThat(companiesDepartmentType4.size()).isEqualTo(totalCompanies);
+            readWriteTxn.commit();
+        }
+
+        log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Simple example to see how nested secondary indexes work on repeated fields, when the repeated field is
+     * not the root level but a nested level. Please see example_schemas.proto.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testNestedSecondaryIndexesNestedRepeatedField() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "Company-Personal";
+
+        // Create & Register the table.
+        Table<Uuid, ExampleSchemas.Person, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.Person.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        // Create 10 records
+        final int people = 10;
+        final String mobileForEvens = "650-123-4567";
+        final String mobileForOdds = "408-987-6543";
+        final String mobileCommonBoth = "491-999-1111";
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < people; i++) {
+            UUID uuid = UUID.randomUUID();
+            Uuid key = Uuid.newBuilder()
+                    .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
+                    .build();
+
+            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+                txn.putRecord(tableName, key,
+                        ExampleSchemas.Person.newBuilder()
+                                .setName("Name_" + i)
+                                .setAge(i)
+                                .setPhoneNumber(ExampleSchemas.PhoneNumber.newBuilder()
+                                        .setHome(UUID.randomUUID().toString())
+                                        .addMobile(i % 2 == 0 ? mobileForEvens : mobileForOdds)
+                                        .addMobile(mobileCommonBoth)
+                                        .build())
+                                .build(),
+                        user);
+                txn.commit();
+            }
+        }
+
+        // Get by secondary index, retrieve from database all even entries
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Person, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(table, "phoneNumber.mobile", mobileForEvens);
+            assertThat(entries.size()).isEqualTo(people/2);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve from database all entries with common mobile number
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Person, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(table, "phoneNumber.mobile", mobileCommonBoth);
+            assertThat(entries.size()).isEqualTo(people);
+            readWriteTxn.commit();
+        }
+
+        log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Example to see how nested secondary indexes work on recursive 'repeated' fields. Please see example_schemas.proto.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testNestedSecondaryIndexesRecursiveRepeatedFields() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "Offices";
+
+        // Create & Register the table.
+        Table<Uuid, ExampleSchemas.Office, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.Office.class,
+                ManagedMetadata.class,
+                // TableOptions includes option to choose - Memory/Disk based corfu table.
+                TableOptions.builder().build());
+
+        // Create 10 records
+        final int numOffices = 6;
+        // Phone number for even index offices
+        final String evenPhoneNumber = "222-222-2222";
+        // Phone number for odd index offices
+        final String oddPhoneNumber = "333-333-3333";
+        // Common phone number for all offices
+        final String commonPhoneNumber = "000-000-0000";
+        // Common home phone number for all offices
+        final String homePhoneNumber = "N/A";
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < numOffices; i++) {
+            UUID id = UUID.randomUUID();
+            Uuid officeId = Uuid.newBuilder()
+                    .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
+                    .build();
+
+            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+                txn.putRecord(tableName, officeId,
+                        ExampleSchemas.Office.newBuilder()
+                                // Department 1 per Office
+                                .addDepartments(ExampleSchemas.Department.newBuilder()
+                                        // Department 1 - Member 1
+                                        .addMembers(ExampleSchemas.Member.newBuilder()
+                                                .setName("Office_" + i + "_Dpt.1_Member_1")
+                                                .addPhoneNumbers(i % 2 == 0 ? evenPhoneNumber : oddPhoneNumber)
+                                                .addPhoneNumbers(homePhoneNumber)
+                                                .addPhoneNumbers(commonPhoneNumber)
+                                                .build())
+                                        // Department 1 - Member 2
+                                        .addMembers(ExampleSchemas.Member.newBuilder()
+                                                .setName("Office_" + i + "_Dpt.1_Member_2")
+                                                .addPhoneNumbers(commonPhoneNumber)
+                                                .build())
+                                        .build())
+                                // Department 2 per Office
+                                .addDepartments(ExampleSchemas.Department.newBuilder()
+                                        // Department 2 - Member 1
+                                        .addMembers(ExampleSchemas.Member.newBuilder()
+                                                .setName("Office_" + i + "_Dpt.2_Member_1")
+                                                .addPhoneNumbers(commonPhoneNumber)
+                                                .build())
+                                        .build())
+                                .build(),
+                        user);
+                txn.commit();
+            }
+        }
+
+        // Get by secondary index, retrieve from database all offices which have an evenPhoneNumber
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Office, ManagedMetadata>> offices = readWriteTxn
+                    .getByIndex(table, "departments.members.phoneNumbers", evenPhoneNumber);
+            assertThat(offices.size()).isEqualTo(numOffices/2);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve from database all entries with common mobile number
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Office, ManagedMetadata>> offices = readWriteTxn
+                    .getByIndex(table, "departments.members.phoneNumbers", commonPhoneNumber);
+            assertThat(offices.size()).isEqualTo(numOffices);
+            readWriteTxn.commit();
+        }
+
+        log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Example to see how nested secondary indexes work on repeated fields, when followed by a non-primitive type and ending
+     * with a primitive index.
+     * Please see example_schemas.proto.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testNestedSecondaryIndexesRepeatedFieldFollowedByNonPrimitive() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "School";
+
+        // Create & Register the table.
+        Table<Uuid, ExampleSchemas.School, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.School.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        final int numSchools = 10;
+        final long evenNumDesks = 40L;
+        final long oddNumDesks = 35L;
+        final long noDesks = 0L;
+        final long maxNumDesks = 50L;
+        String[] others = {"windows", "a/c", "stand up desks", "computers", "tv"};
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < numSchools; i++) {
+            UUID id = UUID.randomUUID();
+            Uuid schoolId = Uuid.newBuilder()
+                    .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
+                    .build();
+
+            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+                txn.putRecord(tableName, schoolId,
+                        ExampleSchemas.School.newBuilder()
+                                // ClassRoom 1
+                                .addClassRooms(ExampleSchemas.ClassRoom.newBuilder()
+                                        .setClassInfra(ExampleSchemas.Infrastructure.newBuilder()
+                                                .setNumberDesks(i % 2 == 0 ? evenNumDesks : oddNumDesks)
+                                                .addOthers(others[i % others.length])
+                                                .addOthers("Others_" + i)
+                                                .build())
+                                        .build())
+                                // ClassRoom 2
+                                .addClassRooms(ExampleSchemas.ClassRoom.newBuilder()
+                                        .setClassInfra(ExampleSchemas.Infrastructure.newBuilder()
+                                                .setNumberDesks(maxNumDesks)
+                                                .build())
+                                        .build())
+                                .build(),
+                        user);
+                txn.commit();
+            }
+        }
+
+        // Add one additional school with 1 classRoom and no Desks
+        UUID id = UUID.randomUUID();
+        Uuid schoolId = Uuid.newBuilder()
+                .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
+                .build();
+
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, schoolId,
+                    ExampleSchemas.School.newBuilder()
+                            // ClassRoom 1
+                            .addClassRooms(ExampleSchemas.ClassRoom.newBuilder()
+                                    .setClassInfra(ExampleSchemas.Infrastructure.newBuilder()
+                                            .setNumberDesks(noDesks)
+                                            .build())
+                                    .build())
+                            .build(),
+                    user);
+            txn.commit();
+        }
+
+        // Get by secondary index, retrieve number of schools that have classrooms with odd number of desks
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.School, ManagedMetadata>> schools = readWriteTxn
+                    .getByIndex(table, "classRooms.classInfra.numberDesks", oddNumDesks);
+            assertThat(schools.size()).isEqualTo(numSchools/2);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve number of schools that have classrooms with no desks
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.School, ManagedMetadata>> schools = readWriteTxn
+                    .getByIndex(table, "classRooms.classInfra.numberDesks", noDesks);
+            assertThat(schools.size()).isEqualTo(1);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve number of schools that have classrooms with computers (repeated primitive field)
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.School, ManagedMetadata>> schools = readWriteTxn
+                    .getByIndex(table, "classRooms.classInfra.others", "computers");
+            assertThat(schools.size()).isEqualTo(numSchools/others.length);
+            readWriteTxn.commit();
+        }
+
+        log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * Simple example to prove an invalid nested secondary index definition will
+     * throw an error on openTable (the name is invalid from the root of the secondary index).
+     * Please see example_schemas.proto.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testInvalidNestedSecondaryIndexRoot() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "ManagedMetadata";
+
+        // Create & Register the table.
+        assertThrows(IllegalArgumentException.class, () -> shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.InvalidExampleValue.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build()));
+    }
+
+    /**
+     * Simple example to prove an invalid nested secondary index definition will
+     * throw an error on openTable (the name is invalid from lower in the chain of the secondary index definition).
+     * Please see example_schemas.proto.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testInvalidNestedSecondaryIndexLowerLevel() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "ManagedMetadata";
+
+        // Create & Register the table.
+        assertThrows(IllegalArgumentException.class, () -> shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.InvalidNestedSecondaryIndex.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build()));
+    }
+
+    /**
+     * Simple example to prove an invalid nested secondary index definition will
+     * throw an error on openTable (the full path is invalid as it is indexed beyond a primitive type).
+     * Please see example_schemas.proto.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testInvalidNestedSecondaryIndexFullPath() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "ManagedMetadata";
+
+        // Create & Register the table.
+        assertThrows(UnsupportedOperationException.class, () -> shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.InvalidFullNestedSecondaryIndex.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build()));
+    }
+
+    /**
+     * Simple example to prove that a nested secondary index definition with no inner object definition, defaults to
+     * the behavior of the secondary_key annotation (true/false).
+     * Please see example_schemas.proto.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testNestedSecondaryIndexNotNested() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "ManagedMetadata";
+
+        // Create & Register the table.
+        Table<Uuid, ExampleSchemas.NotNestedSecondaryIndex, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.NotNestedSecondaryIndex.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        UUID id = UUID.randomUUID();
+        Uuid key1 = Uuid.newBuilder()
+                .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
+                .build();
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+            txn.putRecord(tableName, key1,
+                    ExampleSchemas.NotNestedSecondaryIndex.newBuilder()
+                            .setField1("record_1")
+                            .setField2(ExampleSchemas.NonPrimitiveValue.newBuilder()
+                                    .setKey1Level1(0L)
+                                    .setKey2Level1(ExampleSchemas.NonPrimitiveNestedValue.newBuilder()
+                                            .setKey1Level2("random")
+                                            .setLevelNumber(2)
+                                            .build()))
+                            .setField3(0L)
+                            .build(),
+                    user);
+            txn.commit();
+        }
+
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.NotNestedSecondaryIndex, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(table, "field3", 0L);
+            assertThat(entries.size()).isEqualTo(1);
+            assertThat(entries.get(0).getPayload().getField1()).isEqualTo("record_1");
             readWriteTxn.commit();
         }
 

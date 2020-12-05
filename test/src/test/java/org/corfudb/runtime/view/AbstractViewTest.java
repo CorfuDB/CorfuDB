@@ -37,6 +37,8 @@ import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
 
+import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.util.NodeLocator;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -49,6 +51,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.junit.BeforeClass;
+
+import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getBootstrapManagementRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 
 /**
  * This class serves as a base class for most higher-level Corfu unit tests
@@ -136,6 +144,19 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     public void simulateEndpointDisconnected(CorfuRuntime runtime) {
         ((TestClientRouter) runtime.getRouter(getDefaultEndpoint()))
                 .simulateDisconnectedEndpoint();
+    }
+
+    /**
+     * A helper method that creates a basic message header populated
+     * with default values.
+     *
+     * @param ignoreClusterId   indicates if the message is clusterId aware
+     * @param ignoreEpoch       indicates if the message is epoch aware
+     * @return                  the corresponding HeaderMsg
+     */
+    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+        return getHeaderMsg(1L, CorfuMessage.PriorityLevel.NORMAL, 0L,
+                getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
 
     /**
@@ -291,9 +312,9 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
                     e.getValue().layoutServer
                             .handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)),
                                     null, e.getValue().serverRouter);
-                    e.getValue().managementServer
-                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l),
-                                    null, e.getValue().serverRouter);
+                    e.getValue().managementServer.handleMessage(getRequestMsg(
+                                    getBasicHeader(true, true),
+                                    getBootstrapManagementRequestMsg(l)), null, e.getValue().serverRouter);
                 });
         TestServer primarySequencerNode = testServerMap.get(l.getSequencers().get(0));
         primarySequencerNode.sequencerServer
@@ -498,7 +519,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
-            this.managementServer = new ManagementServer(serverContext);
+            this.managementServer = new ManagementServer(serverContext,
+                    new ManagementServer.ManagementServerInitializer());
 
             this.serverRouter.addServer(baseServer);
             this.serverRouter.addServer(sequencerServer);

@@ -15,15 +15,9 @@ enum NodeConnectivityType {
   UNAVAILABLE = 3;
 }
 
-enum ConnectionStatus {
-  CONNECTION_STATUS_INVALID = 0;
-  OK = 1;
-  FAILED = 2;
-}
-
 message ConnectivityEntryMsg {
   string node = 1;
-  ConnectionStatus status = 2;
+  bool status_ok = 2;
 }
 
 // Represents the number of connections a node has to other nodes.

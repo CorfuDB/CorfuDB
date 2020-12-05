@@ -44,7 +44,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @Slf4j
-public class CorfuBaseServerTest {
+public class BaseServerTest {
 
     @Rule
     public MockitoRule mockito = MockitoJUnit.rule();

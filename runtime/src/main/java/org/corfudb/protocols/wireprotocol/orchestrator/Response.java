@@ -10,10 +10,4 @@ public interface Response {
      * @return type of response
      */
     OrchestratorResponseType getType();
-
-    /**
-     * Serialize this response into a byte array
-     * @return serialized bytes of the response
-     */
-    byte[] getSerialized();
 }
