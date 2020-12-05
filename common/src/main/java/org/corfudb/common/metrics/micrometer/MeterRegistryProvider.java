@@ -1,5 +1,8 @@
 package org.corfudb.common.metrics.micrometer;
 
+import static org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport.DataProtocol.INFLUX;
+
+
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
@@ -13,8 +16,6 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
-
-import static org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport.DataProtocol.INFLUX;
 
 /**
  * A configuration class for a meter (metrics) registry.
@@ -64,7 +65,9 @@ public class MeterRegistryProvider {
                         new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, INFLUX);
                 registry.config().commonTags("endpoint", localEndpoint);
                 endpoint = Optional.of(localEndpoint);
-                return Optional.of(registry);
+                Optional<MeterRegistry> ret = Optional.of(registry);
+                JVMMetrics.register(ret);
+                return ret;
             };
 
             init(supplier);
