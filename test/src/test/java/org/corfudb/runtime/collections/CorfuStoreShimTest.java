@@ -19,6 +19,7 @@ import org.corfudb.runtime.view.Address;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -878,6 +879,108 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         log.debug(table.getMetrics().toString());
     }
+
+    /**
+     * Example to see how nested secondary indexes work on 'oneOf' fields.
+     *
+     * Please see example_schemas.proto.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testNestedSecondaryIndexesOneOfFields() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "TeamContactBooks";
+
+        // Create & Register the table.
+        Table<Uuid, ExampleSchemas.ContactBook, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.ContactBook.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        final int totalContactBooks = 4;
+        final int contactsWithPhoneNumber1 = 4; // odd number of entries / 2 (two potential values)
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        ExampleSchemas.Address address1 = ExampleSchemas.Address.newBuilder()
+                .setNumber(1)
+                .setStreet("Arches")
+                .setUnit("556")
+                .build();
+
+        ExampleSchemas.Contact contactWithAddress = ExampleSchemas.Contact.newBuilder()
+                .setName("Jhon")
+                .setAddress(address1)
+                .build();
+
+        ExampleSchemas.PhoneNumber phoneNumber1 = ExampleSchemas.PhoneNumber.newBuilder()
+                .setHome("352-546-890")
+                .build();
+
+        ExampleSchemas.PhoneNumber phoneNumber2 = ExampleSchemas.PhoneNumber.newBuilder()
+                .setHome("111-11-1111")
+                .build();
+
+        ExampleSchemas.Contact contactWithPhoneNumber1 = ExampleSchemas.Contact.newBuilder()
+                .setName("Steven")
+                .setNumber(phoneNumber1)
+                .build();
+
+        ExampleSchemas.Contact contactWithPhoneNumber2 = ExampleSchemas.Contact.newBuilder()
+                .setName("Rose")
+                .setNumber(phoneNumber2)
+                .build();
+
+        List<ExampleSchemas.Contact> contactsWithPhoneNumber = Arrays.asList(contactWithPhoneNumber1, contactWithPhoneNumber2);
+
+        for (int i = 0; i < totalContactBooks; i++) {
+            UUID id = UUID.randomUUID();
+            Uuid contactBookId = Uuid.newBuilder()
+                    .setMsb(id.getMostSignificantBits()).setLsb(id.getLeastSignificantBits())
+                    .build();
+
+            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+                txn.putRecord(tableName, contactBookId,
+                        ExampleSchemas.ContactBook.newBuilder()
+                                .addContacts(i % 2 == 0 ? contactWithAddress : contactsWithPhoneNumber.get(i % 2))
+                                .build(),
+                        user);
+                txn.commit();
+            }
+        }
+
+        // Get by secondary index, retrieve number of contactBooks that have contacts with address1
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.ContactBook, ManagedMetadata>> contactBooks = readWriteTxn
+                    .getByIndex(table, "contacts.address", address1);
+            assertThat(contactBooks.size()).isEqualTo(totalContactBooks/2);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve number of contactBooks that have contacts with phoneNumber1
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.ContactBook, ManagedMetadata>> contactBooks = readWriteTxn
+                    .getByIndex(table, "contacts.number", phoneNumber1);
+            assertThat(contactBooks.size()).isEqualTo(totalContactBooks/contactsWithPhoneNumber1);
+            readWriteTxn.commit();
+        }
+
+        log.debug(table.getMetrics().toString());
+    }
+
 
     /**
      * Simple example to prove an invalid nested secondary index definition will

@@ -130,3 +130,21 @@ message Router {
     string cpu = 3;
     string ram = 4;
 }
+
+message ContactBook {
+    repeated Contact contacts = 1  [(org.corfudb.runtime.schema).nested_secondary_keys = "contacts.number, contacts.address"];
+}
+
+message Contact {
+    string name = 1;
+    oneof contactInformation {
+        PhoneNumber number = 2;
+        Address address = 3;
+    }
+}
+
+message Address {
+    fixed64 number = 1;
+    string street = 2;
+    string unit = 3;
+}
