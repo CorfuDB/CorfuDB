@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
 import org.slf4j.Logger;
 
@@ -18,6 +19,7 @@ import static org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegis
 /**
  * A configuration class for a meter (metrics) registry.
  */
+@Slf4j
 public class MeterRegistryProvider {
     private static Optional<MeterRegistry> meterRegistry = Optional.empty();
     private static Optional<String> endpoint = Optional.empty();
@@ -79,7 +81,7 @@ public class MeterRegistryProvider {
     /**
      * Register timer if needed.
      * @param name Name of a timer.
-     * @param tags Tags for a timer. 
+     * @param tags Tags for a timer.
      */
     public static void timer(String name, String... tags) {
         MeterRegistryProvider.getInstance().ifPresent(registry -> registry.timer(name, tags));

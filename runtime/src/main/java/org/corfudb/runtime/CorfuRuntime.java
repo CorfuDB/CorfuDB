@@ -1,6 +1,5 @@
 package org.corfudb.runtime;
 
-import ch.qos.logback.classic.LoggerContext;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.SharedMetricRegistries;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -17,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.clients.BaseClient;
@@ -47,6 +47,7 @@ import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
@@ -847,13 +848,16 @@ public class CorfuRuntime {
                 this.parameters.getMicroMeterRuntimeConfig();
 
         if (microMeterRuntimeConfig.metricsEnabled) {
-            LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
-            registry = Optional.ofNullable(context.exists(microMeterRuntimeConfig.configuredLoggerName))
-                    .map(logger -> MeterRegistryProvider.MeterRegistryInitializer.newInstance(logger,
-                            microMeterRuntimeConfig.loggingInterval, parameters.clientId));
-            if (!registry.isPresent()) {
-                log.warn("Logger was not found to enable metrics.");
+            Logger logger = LoggerFactory.getLogger(microMeterRuntimeConfig.configuredLoggerName);
+            if (logger.isDebugEnabled()) {
+                registry = Optional.of(MeterRegistryInitializer.newInstance(logger,
+                        microMeterRuntimeConfig.loggingInterval, parameters.clientId));
             }
+            else {
+                registry = Optional.empty();
+                log.warn("No registered metrics logger provided.");
+            }
+
         }
         else {
             registry = Optional.empty();
