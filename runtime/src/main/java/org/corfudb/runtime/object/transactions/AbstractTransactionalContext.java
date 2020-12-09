@@ -2,6 +2,13 @@ package org.corfudb.runtime.object.transactions;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import javax.annotation.Nullable;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -25,14 +32,6 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
-
-import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Represents a transactional context. Transactional contexts
@@ -170,7 +169,7 @@ public abstract class AbstractTransactionalContext implements
     private final Timer.Context txOpDurationContext;
 
     AbstractTransactionalContext(Transaction transaction) {
-        transactionID = UUID.randomUUID();
+        transactionID = Utils.genPseudorandomUUID();
         this.transaction = transaction;
 
         startTime = System.currentTimeMillis();
