@@ -138,28 +138,34 @@ public class SequencerServerCache {
         return cacheEntries.peek().txVersion;
     }
 
-    /**
-     * Invalidate the records with the minAddress. It could be one or multiple records
-     * @return the number of entries has been invalidated and removed from the cache.
-     */
-    private int invalidateSmallestTxVersion() {
-        ConflictTxStream firstEntry = cacheEntries.peek();
-        if (cacheEntries.size() == 0) {
-            return 0;
-        }
-
-        int numEntries = 0;
-
-        while (firstAddress() == firstEntry.txVersion) {
-            log.debug("evict items " + numEntries + " with address " + firstAddress());
-            ConflictTxStream entry = cacheEntries.poll();
-            conflictKeys.remove(entry);
-            numEntries++;
-        }
-        log.trace("Evict {} entries", numEntries);
-        maxConflictWildcard = Math.max(maxConflictWildcard, firstEntry.txVersion);
-        return numEntries;
+  /**
+   * Invalidate the records with the minAddress. It could be one or multiple records
+   *
+   * @return the number of entries has been invalidated and removed from the cache.
+   */
+  private int invalidateSmallestTxVersion() {
+    ConflictTxStream firstEntry = cacheEntries.peek();
+    if (cacheEntries.size() == 0) {
+      return 0;
     }
+
+    int numEntries = 0;
+
+    while (firstAddress() == firstEntry.txVersion) {
+      if (log.isTraceEnabled()) {
+        log.trace(
+            "invalidateSmallestTxVersion: items evicted {} min address {}",
+            numEntries,
+            firstAddress());
+      }
+      ConflictTxStream entry = cacheEntries.poll();
+      conflictKeys.remove(entry);
+      numEntries++;
+    }
+
+    maxConflictWildcard = Math.max(maxConflictWildcard, firstEntry.txVersion);
+    return numEntries;
+  }
 
     /**
      * Invalidate all records up to a trim mark (not included).
