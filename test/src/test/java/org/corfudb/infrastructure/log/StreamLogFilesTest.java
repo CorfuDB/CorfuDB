@@ -42,7 +42,8 @@ import org.junit.Test;
 /**
  * Created by maithem on 11/2/16.
  */
-public class StreamLogFilesTest extends AbstractCorfuTest {
+public class
+StreamLogFilesTest extends AbstractCorfuTest {
 
     private String getDirPath() {
         return PARAMETERS.TEST_TEMP_DIR;
