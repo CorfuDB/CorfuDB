@@ -341,10 +341,15 @@ public class CorfuInterClusterReplicationServer implements Runnable {
 
     public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
         if ((boolean) opts.get("--metrics")) {
-            LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
-            Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
-                    .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.init(logger,
-                            DEFAULT_METRICS_LOGGING_INTERVAL_DURATION, localEndpoint));
+            try {
+                LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
+                Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
+                        .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.init(logger,
+                                DEFAULT_METRICS_LOGGING_INTERVAL_DURATION, localEndpoint));
+            }
+            catch (IllegalStateException ise) {
+                log.warn("Registry has been previously initialized. Skipping.");
+            }
         }
     }
 

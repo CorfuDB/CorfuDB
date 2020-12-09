@@ -50,7 +50,7 @@
     <root level="info">
         <appender-ref ref="async_file"/>
     </root>
-    <logger additivity="false" level="info" name="org.corfudb.metricsdata">
+    <logger additivity="false" level="debug" name="org.corfudb.metricsdata">
         <appender-ref ref="async_metrics_file"/>
     </logger>
 </configuration>
