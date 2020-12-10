@@ -1,5 +1,8 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.util.MetricsUtils.sizeOf;
+
+
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -9,17 +12,14 @@ import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
+import java.util.Optional;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
-
-import java.util.Optional;
-import java.util.function.Supplier;
-
-import static org.corfudb.util.MetricsUtils.sizeOf;
 
 /**
  * LogUnit server cache.
@@ -55,6 +55,7 @@ public class LogUnitServerCache {
                 .<Long, ILogData>weigher((addr, logData) -> getLogDataTotalSize(logData))
                 .maximumWeight(config.getMaxCacheSize())
                 .recordStats()
+                .executor(Runnable::run)
                 .removalListener(this::handleEviction)
                 .build(this::handleRetrieval);
 
@@ -105,7 +106,9 @@ public class LogUnitServerCache {
     }
 
     private void handleEviction(long address, ILogData entry, RemovalCause cause) {
-        log.trace("handleEviction: Eviction[{}]: {}", address, cause);
+        if (log.isTraceEnabled()) {
+            log.trace("handleEviction: Eviction[{}]: {}", address, cause);
+        }
     }
 
     /**
