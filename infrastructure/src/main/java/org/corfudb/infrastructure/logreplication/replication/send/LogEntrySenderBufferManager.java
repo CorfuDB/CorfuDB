@@ -1,12 +1,17 @@
 package org.corfudb.infrastructure.logreplication.replication.send;
 
+import com.google.common.collect.ImmutableList;
+import io.micrometer.core.instrument.Tag;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -21,7 +26,7 @@ public class LogEntrySenderBufferManager extends SenderBufferManager {
      * @param dataSender
      */
     public LogEntrySenderBufferManager(DataSender dataSender, LogReplicationAckReader ackReader) {
-        super(dataSender);
+        super(dataSender, configureAcksCounter());
         this.ackReader = ackReader;
     }
 
@@ -68,5 +73,12 @@ public class LogEntrySenderBufferManager extends SenderBufferManager {
     @Override
     public void updateAck(LogReplicationEntry entry) {
         updateAck(entry.getMetadata().getTimestamp());
+    }
+
+    private static Optional<AtomicLong> configureAcksCounter() {
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> registry.gauge("logreplication.acks",
+                        ImmutableList.of(Tag.of("replication.type", "logentry")),
+                        new AtomicLong(0)));
     }
 }

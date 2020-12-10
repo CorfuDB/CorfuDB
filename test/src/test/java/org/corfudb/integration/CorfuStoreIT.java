@@ -17,7 +17,7 @@ import org.corfudb.runtime.collections.PersistedStreamingMap;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
@@ -111,10 +111,9 @@ public class CorfuStoreIT extends AbstractIT {
                 .setMsb(metadataUuid)
                 .setLsb(metadataUuid)
                 .build();
-        TxBuilder tx = store.tx("namespace");
-        tx.create("table", uuidKey, uuidVal, metadata)
-                .update("table", uuidKey, uuidVal, metadata)
-                .commit();
+        TxnContext tx = store.txn("namespace");
+        tx.putRecord(table, uuidKey, uuidVal, metadata);
+        tx.commit();
         CorfuRecord record = table.get(uuidKey);
         assertThat(record.getPayload()).isEqualTo(uuidVal);
         assertThat(record.getMetadata()).isEqualTo(metadata);
@@ -125,7 +124,7 @@ public class CorfuStoreIT extends AbstractIT {
     /**
      * This test is divided into 3 phases.
      * Phase 1: Writes data to CorfuStore in a Table using the transaction builder.
-     * Phase 2: Using DynamicMessages, we try to read and edit the message. The lsb in the metadata is updated.
+     * Phase 2: Using DynamicMessages, we try to read and edit the message. The lsb in the metadata is putd.
      * Phase 3: Using the corfuStore the message is read back to ensure, the schema wasn't altered and the
      * serialization isn't broken. The 'lsb' value of the metadata is asserted.
      */
@@ -143,7 +142,7 @@ public class CorfuStoreIT extends AbstractIT {
 
         CorfuStore store = new CorfuStore(runtime);
 
-        store.openTable(
+        final Table<Uuid, Uuid, ManagedResources> table = store.openTable(
                 namespace,
                 tableName,
                 Uuid.class,
@@ -166,10 +165,9 @@ public class CorfuStoreIT extends AbstractIT {
         ManagedResources metadata = ManagedResources.newBuilder()
                 .setCreateTimestamp(keyUuid)
                 .build();
-        TxBuilder tx = store.tx(namespace);
-        tx.create(tableName, uuidKey, uuidVal, metadata)
-                .update(tableName, uuidKey, uuidVal, metadata)
-                .commit();
+        TxnContext tx = store.txn(namespace);
+        tx.putRecord(table, uuidKey, uuidVal, metadata);
+        tx.commit();
 
         runtime.shutdown();
 
@@ -223,6 +221,7 @@ public class CorfuStoreIT extends AbstractIT {
 
         runtime.getAddressSpaceView().prefixTrim(trimPoint);
         runtime.getAddressSpaceView().gc();
+        Serializers.clearCustomSerializers();
         runtime.shutdown();
 
         // PHASE 3
@@ -231,19 +230,22 @@ public class CorfuStoreIT extends AbstractIT {
         final CorfuStore store3 = new CorfuStore(runtime);
 
         // Attempting to open an unopened table with the short form should throw the IllegalArgumentException
-        assertThatThrownBy(() -> store3.openTable(namespace, tableName)).
+        assertThatThrownBy(() -> store3.getTable(namespace, tableName)).
         isExactlyInstanceOf(IllegalArgumentException.class);
 
         // Attempting to open a non-existent table should throw NoSuchElementException
-        assertThatThrownBy(() -> store3.openTable(namespace, "NonExistingTableName")).
+        assertThatThrownBy(() -> store3.getTable(namespace, "NonExistingTableName")).
                 isExactlyInstanceOf(NoSuchElementException.class);
 
-        store3.openTable(namespace, tableName, Uuid.class, Uuid.class, ManagedResources.class,
+        Table<Uuid, Uuid, ManagedResources> table1 = store3.openTable(namespace,
+                tableName, Uuid.class, Uuid.class, ManagedResources.class,
                 TableOptions.builder().build());
         CorfuRecord<Uuid, ManagedResources> record = store3.query(namespace).getRecord(tableName, uuidKey);
         assertThat(record.getMetadata().getCreateTimestamp()).isEqualTo(newMetadataUuid);
 
-        store3.tx(namespace).update(tableName, uuidKey, uuidVal, metadata).commit();
+        tx = store3.txn(namespace);
+        tx.putRecord(table1, uuidKey, uuidVal, metadata);
+        tx.commit();
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
@@ -330,7 +332,7 @@ public class CorfuStoreIT extends AbstractIT {
 
         String tempDiskPath = com.google.common.io.Files.createTempDir()
                 .getAbsolutePath();
-        store.openTable(namespace, tableName,
+        final Table<Uuid, Uuid, ManagedResources> table = store.openTable(namespace, tableName,
                 Uuid.class, Uuid.class, ManagedResources.class,
                 TableOptions.builder().persistentDataPath(Paths.get(tempDiskPath)).build());
 
@@ -339,11 +341,10 @@ public class CorfuStoreIT extends AbstractIT {
         ManagedResources metadata = ManagedResources.newBuilder()
                 .setCreateTimestamp(aLong).build();
         for (int i = numRecords; i > 0; --i) {
-            TxBuilder tx = store.tx(namespace);
+            TxnContext tx = store.txn(namespace);
             Uuid uuidKey = Uuid.newBuilder().setMsb(aLong+i).setLsb(aLong+i).build();
-            tx.create(tableName, uuidKey, uuidVal, metadata)
-                    .update(tableName, uuidKey, uuidVal, metadata)
-                    .commit();
+            tx.putRecord(table, uuidKey, uuidVal, metadata);
+            tx.commit();
         }
         final int TEN = 10;
         Set<Uuid> keys = store.query(namespace).keySet(tableName, null);
@@ -361,11 +362,11 @@ public class CorfuStoreIT extends AbstractIT {
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStore store2 = new CorfuStore(runtime);
         // PHASE 3 - verify that count is same after checkpoint and trim
-        Table<Uuid, Uuid, ManagedResources> table = store2.openTable(namespace, tableName,
+        Table<Uuid, Uuid, ManagedResources> table2 = store2.openTable(namespace, tableName,
                 Uuid.class, Uuid.class, ManagedResources.class,
                 TableOptions.builder().persistentDataPath(Paths.get(
                         com.google.common.io.Files.createTempDir().getAbsolutePath())).build());
-        assertThat(table.count()).isEqualTo(numRecords);
+        assertThat(table2.count()).isEqualTo(numRecords);
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
@@ -409,16 +410,16 @@ public class CorfuStoreIT extends AbstractIT {
         SampleSchema.EventInfo value = SampleSchema.EventInfo.newBuilder().setName("simpleValue").build();
 
         long timestamp = System.currentTimeMillis();
-        corfuStore.tx(nsxManager)
-                .create(tableName, key, value,
+        TxnContext tx = corfuStore.txn(nsxManager);
+        tx.putRecord(table, key, value,
                         ManagedResources.newBuilder()
-                                .setCreateTimestamp(timestamp).build())
-                .commit();
+                                .setCreateTimestamp(timestamp).build());
+        tx.commit();
 
-        corfuStore.tx(nsxManager)
-                .update(tableName, key, value,
-                        ManagedResources.newBuilder().setCreateUser("CreateUser").build())
-                .commit();
+        tx = corfuStore.txn(nsxManager);
+        tx.putRecord(table, key, value,
+                ManagedResources.newBuilder().setCreateUser("CreateUser").build());
+        tx.commit();
 
         corfuStore.deleteTable(nsxManager, tableName);
 
@@ -450,10 +451,10 @@ public class CorfuStoreIT extends AbstractIT {
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
 
-        corfuStore.tx(nsxManager)
-                .update(tableName, value, value,
-                        ManagedResources.newBuilder().setCreateUser("CreateUser").build())
-                .commit();
+        tx = corfuStore.txn(nsxManager);
+        tx.putRecord(tableV2, value, value,
+                ManagedResources.newBuilder().setCreateUser("CreateUser").build());
+        tx.commit();
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }

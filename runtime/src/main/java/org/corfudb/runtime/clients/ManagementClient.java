@@ -1,29 +1,28 @@
 package org.corfudb.runtime.clients;
 
-import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
-
 import javax.annotation.Nonnull;
-
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.DetectorMsg;
 import org.corfudb.protocols.wireprotocol.NodeState;
-import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
-import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.RestoreRedundancyMergeSegmentsRequest;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorMsg;
-import org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.QueryRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
-import org.corfudb.protocols.wireprotocol.orchestrator.RemoveNodeRequest;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.CFUtils;
+
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getAddNodeRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getBootstrapManagementRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getForceRemoveNodeRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getHealFailureRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getHealNodeRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getManagementLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getQueryNodeRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getQueryWorkflowRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getRemoveNodeRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getReportFailureRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getRestoreRedundancyMergeSegmentsRequestMsg;
 
 /**
  * A client to the Management Server.
@@ -47,33 +46,33 @@ public class ManagementClient extends AbstractClient {
      * bootstrap was successful, false otherwise.
      */
     public CompletableFuture<Boolean> bootstrapManagement(Layout l) {
-        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l));
+        return sendRequestWithFuture(getBootstrapManagementRequestMsg(l), true, true);
     }
 
     /**
      * Sends the failure detected to the relevant management server.
      *
-     * @param failedNodes The failed nodes set to be handled.
-     * @return A future which will be return TRUE if completed successfully else returns FALSE.
+     * @param detectorEpoch  The epoch in which the polling was conducted
+     * @param failedNodes    The failed nodes set to be handled.
+     * @return               A future which will return TRUE if completed successfully else returns FALSE.
      */
     public CompletableFuture<Boolean> handleFailure(long detectorEpoch, Set<String> failedNodes) {
-        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED
-                .payloadMsg(new DetectorMsg(detectorEpoch, failedNodes, Collections.emptySet())));
+        return sendRequestWithFuture(getReportFailureRequestMsg(detectorEpoch, failedNodes), false, true);
     }
 
     /**
      * Sends the healed nodes detected to the relevant management server.
      *
-     * @param healedNodes The healed nodes set to be handled.
-     * @return A future which will be return TRUE if completed successfully else returns FALSE.
+     * @param detectorEpoch  The epoch in which the polling was conducted
+     * @param healedNodes    The healed nodes set to be handled.
+     * @return               A future which will be return TRUE if completed successfully else returns FALSE.
      */
     public CompletableFuture<Boolean> handleHealing(long detectorEpoch, Set<String> healedNodes) {
-        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_HEALING_DETECTED
-                .payloadMsg(new DetectorMsg(detectorEpoch, Collections.emptySet(), healedNodes)));
+        return sendRequestWithFuture(getHealFailureRequestMsg(detectorEpoch, healedNodes), false, true);
     }
 
     public CompletableFuture<NodeState> sendNodeStateRequest() {
-        return sendMessageWithFuture(CorfuMsgType.NODE_STATE_REQUEST.msg());
+        return sendRequestWithFuture(getQueryNodeRequestMsg(), false, false);
     }
 
     /**
@@ -82,7 +81,7 @@ public class ManagementClient extends AbstractClient {
      * @return A future which returns the layout persisted by the management server on completion.
      */
     public CompletableFuture<Layout> getLayout() {
-        return sendMessageWithFuture(CorfuMsgType.MANAGEMENT_LAYOUT_REQUEST.msg());
+        return sendRequestWithFuture(getManagementLayoutRequestMsg(), false, true);
     }
 
     /**
@@ -92,11 +91,12 @@ public class ManagementClient extends AbstractClient {
      * @throws TimeoutException when the rpc times out
      */
     public CreateWorkflowResponse addNodeRequest(@Nonnull String endpoint) throws TimeoutException {
-        OrchestratorMsg req = new OrchestratorMsg(new AddNodeRequest(endpoint));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
-                .ORCHESTRATOR_REQUEST
-                .payloadMsg(req));
-        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();
+        RequestPayloadMsg payload = getAddNodeRequestMsg(endpoint);
+
+        return CFUtils.getUninterruptibly(
+                sendRequestWithFuture(payload, true, true),
+                TimeoutException.class
+        );
     }
 
     /**
@@ -115,16 +115,14 @@ public class ManagementClient extends AbstractClient {
                                                   boolean isSequencerServer,
                                                   boolean isLogUnitServer,
                                                   int stripeIndex) throws TimeoutException {
-        OrchestratorMsg req = new OrchestratorMsg(
-                new HealNodeRequest(endpoint,
-                        isLayoutServer,
-                        isSequencerServer,
-                        isLogUnitServer,
-                        stripeIndex));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
-                .ORCHESTRATOR_REQUEST
-                .payloadMsg(req));
-        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();
+
+        RequestPayloadMsg payload = getHealNodeRequestMsg(endpoint,
+                stripeIndex, isLayoutServer, isSequencerServer, isLogUnitServer);
+
+        return CFUtils.getUninterruptibly(
+                sendRequestWithFuture(payload, true, true),
+                TimeoutException.class
+        );
     }
 
     /**
@@ -135,11 +133,12 @@ public class ManagementClient extends AbstractClient {
      * @throws TimeoutException when the rpc times out
      */
     public CreateWorkflowResponse mergeSegments(@Nonnull String endpoint) throws TimeoutException {
-        OrchestratorMsg req = new OrchestratorMsg(new RestoreRedundancyMergeSegmentsRequest(endpoint));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
-                .ORCHESTRATOR_REQUEST
-                .payloadMsg(req));
-        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();
+        RequestPayloadMsg payload = getRestoreRedundancyMergeSegmentsRequestMsg(endpoint);
+
+        return CFUtils.getUninterruptibly(
+                sendRequestWithFuture(payload, true, true),
+                TimeoutException.class
+        );
     }
 
     /**
@@ -149,11 +148,12 @@ public class ManagementClient extends AbstractClient {
      * @throws TimeoutException when the rpc times out
      */
     public QueryResponse queryRequest(@Nonnull UUID workflowId) throws TimeoutException {
-        OrchestratorMsg req = new OrchestratorMsg(new QueryRequest(workflowId));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
-                .ORCHESTRATOR_REQUEST
-                .payloadMsg(req));
-        return (QueryResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();
+        RequestPayloadMsg payload = getQueryWorkflowRequestMsg(workflowId);
+
+        return CFUtils.getUninterruptibly(
+                sendRequestWithFuture(payload, true, true),
+                TimeoutException.class
+        );
     }
 
     /**
@@ -163,11 +163,12 @@ public class ManagementClient extends AbstractClient {
      * @throws TimeoutException when the rpc times out
      */
     public CreateWorkflowResponse removeNode(@Nonnull String endpoint) throws TimeoutException {
-        OrchestratorMsg req = new OrchestratorMsg(new RemoveNodeRequest(endpoint));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
-                .ORCHESTRATOR_REQUEST
-                .payloadMsg(req));
-        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();
+        RequestPayloadMsg payload = getRemoveNodeRequestMsg(endpoint);
+
+        return CFUtils.getUninterruptibly(
+                sendRequestWithFuture(payload, true, true),
+                TimeoutException.class
+        );
     }
 
     /**
@@ -179,10 +180,11 @@ public class ManagementClient extends AbstractClient {
      * @throws TimeoutException when the rpc times out
      */
     public CreateWorkflowResponse forceRemoveNode(@Nonnull String endpoint) throws TimeoutException {
-        OrchestratorMsg req = new OrchestratorMsg(new ForceRemoveNodeRequest(endpoint));
-        CompletableFuture<OrchestratorResponse> resp = sendMessageWithFuture(CorfuMsgType
-                .ORCHESTRATOR_REQUEST
-                .payloadMsg(req));
-        return (CreateWorkflowResponse) CFUtils.getUninterruptibly(resp, TimeoutException.class).getResponse();
+        RequestPayloadMsg payload = getForceRemoveNodeRequestMsg(endpoint);
+
+        return CFUtils.getUninterruptibly(
+                sendRequestWithFuture(payload, true, true),
+                TimeoutException.class
+        );
     }
 }

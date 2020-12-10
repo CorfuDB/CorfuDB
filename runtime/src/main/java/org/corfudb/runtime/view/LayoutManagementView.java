@@ -6,6 +6,7 @@ import static org.corfudb.util.Utils.getLogTail;
 import com.google.common.collect.Sets;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -14,8 +15,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 import javax.annotation.Nonnull;
+
+import io.micrometer.core.instrument.Timer;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
@@ -34,10 +38,15 @@ import org.corfudb.util.Utils;
 public class LayoutManagementView extends AbstractView {
 
     public LayoutManagementView(@NonNull CorfuRuntime runtime) {
+
         super(runtime);
+        this.consensusTimer = MeterRegistryProvider.getInstance().map(registry ->
+                registry.timer("layout-management-view.consensus"));
     }
 
     private volatile long prepareRank = 1L;
+
+    private final Optional<Timer> consensusTimer;
 
     private final ReentrantLock recoverSequencerLock = new ReentrantLock();
 
@@ -269,9 +278,9 @@ public class LayoutManagementView extends AbstractView {
         if (currentLayout.getAllServers().contains(endpoint)) {
             LayoutBuilder builder = new LayoutBuilder(currentLayout);
             newLayout = builder.removeLayoutServer(endpoint)
+                    .removeLogunitServer(endpoint)
                     .removeSequencerServer(endpoint)
                     .assignResponsiveSequencerAsPrimary(Collections.emptySet())
-                    .removeLogunitServer(endpoint)
                     .removeUnresponsiveServer(endpoint)
                     .setEpoch(currentLayout.getEpoch() + 1)
                     .build();
@@ -359,7 +368,13 @@ public class LayoutManagementView extends AbstractView {
             throws OutrankedException {
         // Attempts to update all the layout servers with the modified layout.
         try {
-            runtime.getLayoutView().updateLayout(layout, prepareRank);
+            Runnable consensusRunnable = () -> runtime.getLayoutView().updateLayout(layout, prepareRank);
+            if (consensusTimer.isPresent()) {
+                consensusTimer.get().record(consensusRunnable);
+            }
+            else {
+                consensusRunnable.run();
+            }
             prepareRank = 1L;
         } catch (OutrankedException oe) {
             // Update rank since outranked.

@@ -13,6 +13,7 @@ import java.util.UUID;
 import com.google.common.reflect.TypeToken;
 import org.apache.commons.io.FileUtils;
 
+import org.corfudb.runtime.collections.TxnContext;
 import org.junit.jupiter.api.Test;
 
 import org.corfudb.runtime.CorfuRuntime;
@@ -21,12 +22,12 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.test.SampleSchema.EventInfo;
 
+import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Simple performance test to insert data into corfu via regular table.put() and CorfuStore protobufs
  */
@@ -84,8 +85,9 @@ public class CorfuStorePerfIT extends  AbstractIT {
         long start = System.currentTimeMillis();
         // Create & Register the table.
         // This is required to initialize the table for the current corfu client.
+        Table<Uuid, EventInfo, ManagedResources> table = null;
         try {
-            Table<Uuid, EventInfo, ManagedResources> table = corfuStore.openTable(
+            table = corfuStore.openTable(
                 nsxManager,
                 tableName,
                 Uuid.class,
@@ -93,11 +95,7 @@ public class CorfuStorePerfIT extends  AbstractIT {
                 ManagedResources.class,
                 // TableOptions includes option to choose - Memory/Disk based corfu table.
                 TableOptions.builder().build());
-        } catch (NoSuchMethodException e) {
-            e.printStackTrace();
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
+        } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             e.printStackTrace();
         }
         List<Uuid> uuids = new ArrayList<>();
@@ -109,11 +107,14 @@ public class CorfuStorePerfIT extends  AbstractIT {
         ManagedResources metadata = ManagedResources.newBuilder().setCreateUser("Pan").build();
 
         // Creating a transaction builder.
-        TxBuilder tx = corfuStore.tx(nsxManager);
-        tx.create(tableName, Uuid.newBuilder().setLsb(0L).setMsb(0L).build(),
+        TxnContext tx = corfuStore.txn(nsxManager);
+        assertThat(table).isNotNull();
+        tx.putRecord(table, Uuid.newBuilder().setLsb(0L).setMsb(0L).build(),
             SampleSchema.EventInfo.newBuilder().setName("simpleCRUD").build(),
             metadata);
+        tx.commit();
         for (int i = 0; i < count; i++) {
+            TxnContext txn = corfuStore.txn(nsxManager);
             UUID uuid = UUID.nameUUIDFromBytes(Integer.toString(i).getBytes());
             Uuid uuidMsg = Uuid.newBuilder()
                 .setMsb(uuid.getMostSignificantBits())
@@ -127,8 +128,8 @@ public class CorfuStorePerfIT extends  AbstractIT {
                 .setEventTime(i)
                 .build());
 
-            tx.update(tableName, uuids.get(i), events.get(i), metadata);
-            tx.commit();
+            txn.putRecord(table, uuids.get(i), events.get(i), metadata);
+            txn.commit();
         }
 
         long end = System.currentTimeMillis();

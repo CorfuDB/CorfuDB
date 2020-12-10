@@ -10,10 +10,13 @@ import ch.qos.logback.core.joran.spi.JoranException;
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
@@ -195,6 +198,10 @@ public class CorfuInterClusterReplicationServer implements Runnable {
     // Error code required to detect an ungraceful shutdown.
     private static final int EXIT_ERROR_CODE = 100;
 
+    private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL_DURATION = Duration.ofMinutes(1);
+
+    private static final String DEFAULT_METRICS_LOGGER_NAME = "LogReplicationMetrics";
+
     // Getter for testing
     @Getter
     private CorfuReplicationClusterManagerAdapter clusterManagerAdapter;
@@ -235,6 +242,8 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         log.info("Started with arguments: {}", opts);
 
         ServerContext serverContext = getServerContext(opts);
+
+        configureMetrics(opts, serverContext.getLocalEndpoint());
 
         // Register shutdown handler
         Thread shutdownThread = new Thread(this::cleanShutdown);
@@ -328,6 +337,20 @@ public class CorfuInterClusterReplicationServer implements Runnable {
         final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         final Level level = Level.toLevel(((String) opts.get("--log-level")).toUpperCase());
         root.setLevel(level);
+    }
+
+    public static void configureMetrics(Map<String, Object> opts, String localEndpoint) {
+        if ((boolean) opts.get("--metrics")) {
+            try {
+                LoggerContext context =  (LoggerContext) LoggerFactory.getILoggerFactory();
+                Optional.ofNullable(context.exists(DEFAULT_METRICS_LOGGER_NAME))
+                        .ifPresent(logger -> MeterRegistryProvider.MeterRegistryInitializer.init(logger,
+                                DEFAULT_METRICS_LOGGING_INTERVAL_DURATION, localEndpoint));
+            }
+            catch (IllegalStateException ise) {
+                log.warn("Registry has been previously initialized. Skipping.");
+            }
+        }
     }
 
     /**

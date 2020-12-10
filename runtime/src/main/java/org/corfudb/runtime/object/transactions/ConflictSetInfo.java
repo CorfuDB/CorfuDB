@@ -8,6 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 
 import lombok.Getter;
@@ -57,7 +58,7 @@ public class ConflictSetInfo {
     }
 
     /** Add an operation into this conflict set. */
-    public void add(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
+    public <T extends ICorfuSMR<T>> void add(ICorfuSMRProxyInternal<T> proxy, Object[] conflictObjects) {
         if (conflictObjects == null) {
             return;
         }

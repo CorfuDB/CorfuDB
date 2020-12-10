@@ -13,7 +13,7 @@ import java.util.Optional;
 public class StringMultiIndexer implements Index.Registry<String, String> {
     public static final Index.Name BY_EACH_WORD = () -> "BY_EACH_WORD";
 
-    private static final Index.Spec<String, String, ? extends Comparable<?>> BY_WORD_INDEX =
+    private static final Index.Spec<String, String, ?> BY_WORD_INDEX =
             new Index.Spec<>(BY_EACH_WORD,
                     (Index.MultiValueFunction<String, String, String>) (key, val) -> keySetOWords(val));
 
@@ -22,7 +22,7 @@ public class StringMultiIndexer implements Index.Registry<String, String> {
     }
 
     @Override
-    public Optional<Index.Spec<String, String, ? extends Comparable<?>>> get(Index.Name name) {
+    public Optional<Index.Spec<String, String, ?>> get(Index.Name name) {
         String indexName = (name != null) ? name.get() : null;
         if (BY_EACH_WORD.get().equals(indexName)) {
             return Optional.of(BY_WORD_INDEX);
@@ -32,10 +32,9 @@ public class StringMultiIndexer implements Index.Registry<String, String> {
     }
 
     @Override
-    public Iterator<Index.Spec<String, String, ? extends Comparable<?>>> iterator() {
-        final List<Index.Spec<String, String, ? extends Comparable<?>>> indices = new ArrayList<>();
+    public Iterator<Index.Spec<String, String, ?>> iterator() {
+        final List<Index.Spec<String, String, ?>> indices = new ArrayList<>();
         indices.add(BY_WORD_INDEX);
         return indices.iterator();
-
     }
 }

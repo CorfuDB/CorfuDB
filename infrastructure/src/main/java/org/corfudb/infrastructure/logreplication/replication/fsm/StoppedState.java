@@ -10,8 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class StoppedState implements LogReplicationState {
 
+    private final LogReplicationFSM fsm;
 
-    public StoppedState () {
+    public StoppedState (LogReplicationFSM fsm) {
+        this.fsm = fsm;
     }
 
     @Override
@@ -21,6 +23,8 @@ public class StoppedState implements LogReplicationState {
 
     @Override
     public void onEntry(LogReplicationState from) {
+        fsm.getAckReader().getOngoing().set(false);
+        fsm.getAckReader().markSyncStatusError();
         log.info("Unrecoverable error or explicit shutdown. " +
                 "Log Replication is terminated from state {}. To resume, restart the JVM.", from.getType());
     }

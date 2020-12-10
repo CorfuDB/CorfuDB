@@ -1,9 +1,7 @@
 package org.corfudb.protocols.wireprotocol.orchestrator;
 
-import lombok.Getter;
-
-import java.nio.ByteBuffer;
 import java.util.UUID;
+import lombok.Getter;
 
 import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorRequestType.QUERY;
 
@@ -21,21 +19,13 @@ public class QueryRequest implements Request {
         this.id = id;
     }
 
-    public QueryRequest(byte[] buf) {
-        ByteBuffer bytes = ByteBuffer.wrap(buf);
-        this.id = new UUID(bytes.getLong(), bytes.getLong());
-    }
-
     @Override
     public OrchestratorRequestType getType() {
         return QUERY;
     }
 
     @Override
-    public byte[] getSerialized() {
-        ByteBuffer buf = ByteBuffer.allocate(Long.BYTES * 2);
-        buf.putLong(id.getMostSignificantBits());
-        buf.putLong(id.getLeastSignificantBits());
-        return buf.array();
+    public String getEndpoint() {
+        throw new UnsupportedOperationException("This operation is not supported for a QueryRequest");
     }
 }

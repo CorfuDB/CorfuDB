@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
-import java.util.Map;
+import java.util.Set;
 
 /**
  * This Interface must be implemented by any external
@@ -12,7 +12,10 @@ import java.util.Map;
  */
 public interface ILogReplicationConfigAdapter {
 
-    Map<String, String> fetchStreamsToReplicate();
+    /*
+     * Returns a set of fully qualified stream names to replicate
+     */
+    Set<String> fetchStreamsToReplicate();
 
     String getVersion();
 }

@@ -32,7 +32,11 @@
                             <includeStdTypes>true</includeStdTypes>
                             <inputDirectories>
                                 <include>proto</include>
+                                <include>proto/service</include>
                             </inputDirectories>
+                            <includeDirectories>
+                                <includeDirectory>proto</includeDirectory>
+                            </includeDirectories>
                             <outputDirectory>
                                 target/generated-sources
                             </outputDirectory>
@@ -43,7 +47,7 @@
             <plugin>
                 <groupId>pl.project13.maven</groupId>
                 <artifactId>git-commit-id-plugin</artifactId>
-                <version>2.1.15</version>
+                <version>4.0.2</version>
                 <executions>
                     <execution>
                         <goals>
@@ -163,6 +167,7 @@
             <version>6.0.53</version>
             <scope>provided</scope>
         </dependency>
+
     </dependencies>
 
 </project>

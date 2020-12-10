@@ -14,6 +14,7 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationLeadershi
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
@@ -47,8 +48,15 @@ public class LogReplicationServer extends AbstractServer {
 
     private final AtomicBoolean isActive = new AtomicBoolean(false);
 
-    @Getter
+    @Getter(onMethod_={@Override})
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /**
+     * RequestHandlerMethods for the LogReplication server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     public LogReplicationServer(@Nonnull ServerContext context, @Nonnull  LogReplicationConfig logReplicationConfig,
                                 @Nonnull LogReplicationMetadataManager metadataManager, String corfuEndpoint,
@@ -71,6 +79,11 @@ public class LogReplicationServer extends AbstractServer {
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         executor.submit(() -> getHandler().handle(msg, ctx, r));
+    }
+
+    @Override
+    protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
     @Override
@@ -118,9 +131,19 @@ public class LogReplicationServer extends AbstractServer {
                     metadataMgr.getLastProcessedLogEntryTimestamp());
             log.info("Send Metadata response :: {}", response);
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_METADATA_RESPONSE.payloadMsg(response));
+
+            // If a snapshot apply is pending, start (if not started already)
+            if (isSnapshotApplyPending(metadataMgr) && !sinkManager.getOngoingApply().get()) {
+                sinkManager.resumeSnapshotApply();
+            }
         } else {
             log.warn("Dropping metadata request as this node is not the leader.");
         }
+    }
+
+    private boolean isSnapshotApplyPending(LogReplicationMetadataManager metadataMgr) {
+        return (metadataMgr.getLastStartedSnapshotTimestamp() == metadataMgr.getLastTransferredSnapshotTimestamp()) &&
+                metadataMgr.getLastTransferredSnapshotTimestamp() > metadataMgr.getLastAppliedSnapshotTimestamp();
     }
 
     @ServerHandler(type = CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP)

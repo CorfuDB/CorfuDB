@@ -1,14 +1,17 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
-import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent.LogReplicationRuntimeEventType;
+import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
+import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverterUtils;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
@@ -18,8 +21,8 @@ import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
-import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
-import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
+import org.corfudb.runtime.proto.RpcCommon;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.util.CFUtils;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
@@ -41,7 +44,6 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * This Client Router is used when a custom (client-defined) transport layer is specified for
  * Log Replication Server communication.
- *
  */
 @Slf4j
 public class LogReplicationClientRouter implements IClientRouter {
@@ -90,6 +92,8 @@ public class LogReplicationClientRouter implements IClientRouter {
      * The outstanding requests on this router.
      */
     public final Map<Long, CompletableFuture> outstandingRequests;
+
+    private Optional<Timer.Sample> requestSample = Optional.empty();
 
     /**
      * Adapter to the channel implementation
@@ -140,11 +144,15 @@ public class LogReplicationClientRouter implements IClientRouter {
         client.setRouter(this);
 
         // Iterate through all types of CorfuMsgType, registering the handler
-        client.getHandledTypes().stream()
-                .forEach(x -> {
-                    handlerMap.put(x, client);
-                    log.info("Registered client to handle messages of type {}", x);
-                });
+        try {
+            client.getHandledTypes().stream()
+                    .forEach(x -> {
+                        handlerMap.put(x, client);
+                        log.info("Registered client to handle messages of type {}", x);
+                    });
+        } catch (UnsupportedOperationException ex) {
+            log.error("No registered CorfuMsg handler for client {}", client, ex);
+        }
 
         // Register this type
         clientList.add(client);
@@ -187,7 +195,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                     }
 
                     // Get Remote Leader
-                    if(runtimeFSM.getRemoteLeader().isPresent()) {
+                    if (runtimeFSM.getRemoteLeader().isPresent()) {
                         endpoint = runtimeFSM.getRemoteLeader().get();
                     } else {
                         log.error("Leader not found to remote cluster {}", remoteClusterId);
@@ -200,6 +208,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                 // In the case the message is intended for a specific endpoint, we do not
                 // block on connection future, this is the case of leader verification.
                 log.info("Send message to {}, type={}", endpoint, message.getMsgType());
+                this.requestSample = MeterRegistryProvider.getInstance().map(Timer::start);
                 channelAdapter.send(endpoint, CorfuMessageConverterUtils.toProtoBuf(message));
 
             } catch (NetworkException ne) {
@@ -238,6 +247,27 @@ public class LogReplicationClientRouter implements IClientRouter {
     }
 
     /**
+     * Send a request message and get a completable future to be fulfilled by the reply.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     * @param <T> The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply,
+     * or a timeout in the case there is no response.
+     */
+    @Override
+    public  <T> CompletableFuture<T> sendRequestAndGetCompletable(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
+                                                                  org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
+                                                                  boolean ignoreClusterId, boolean ignoreEpoch) {
+        // This is an empty stub. This method is not being used anywhere in the LR framework.
+        return null;
+    }
+
+    /**
      * Send a one way message, without adding a completable future.
      *
      * @param message The message to send.
@@ -247,14 +277,32 @@ public class LogReplicationClientRouter implements IClientRouter {
         // Get the next request ID.
         message.setRequestID(requestID.getAndIncrement());
         // Get Remote Leader
-        if(runtimeFSM.getRemoteLeader().isPresent()) {
+        if (runtimeFSM.getRemoteLeader().isPresent()) {
             String remoteLeader = runtimeFSM.getRemoteLeader().get();
+            this.requestSample = MeterRegistryProvider.getInstance().map(Timer::start);
             channelAdapter.send(remoteLeader, CorfuMessageConverterUtils.toProtoBuf(message));
             log.trace("Sent one-way message: {}", message);
         } else {
             log.error("Leader not found to remote cluster {}, dropping {}", remoteClusterId, message.getMsgType());
             runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
         }
+    }
+
+    /**
+     * Send a one way message, without adding a completable future.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     */
+    @Override
+    public void sendRequest(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
+                            org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
+                            boolean ignoreClusterId, boolean ignoreEpoch) {
+        // This is an empty stub. This method is not being used anywhere in the LR framework.
     }
 
     @Override
@@ -328,6 +376,12 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public void receive(CorfuMessage msg) {
         try {
+            requestSample.flatMap(sample -> MeterRegistryProvider.getInstance()
+                            .map(registry -> {
+                                Timer timer = registry
+                                        .timer("logreplication.rtt.seconds");
+                                return sample.stop(timer);
+                            }));
             CorfuMsg corfuMsg = CorfuMessageConverterUtils.fromProtoBuf(msg);
 
             // If it is a Leadership Loss Message re-trigger leadership discovery

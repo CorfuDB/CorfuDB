@@ -4,6 +4,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
 import java.util.Map;
+import java.util.UUID;
 
 public interface CorfuReplicationDiscoveryServiceAdapter {
 
@@ -22,7 +23,7 @@ public interface CorfuReplicationDiscoveryServiceAdapter {
     /**
      * Enforce snapshotFullSync
      */
-    void forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
+    UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
 
 
     LogReplicationClusterInfo.ClusterRole getLocalClusterRoleType();

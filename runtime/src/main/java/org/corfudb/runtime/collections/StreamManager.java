@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -34,7 +35,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
  * A simple thread based subscription engine where each subscriber or listener gets
  * a thread which will listen on the tables of interest to it and moves at a rate
  * which is the same as the consumption.
- *
+ * <p>
  * Created by hisundar on 04/28/2020.
  */
 @Slf4j
@@ -88,12 +89,12 @@ public class StreamManager {
     /**
      * Subscribe to updates.
      *
-     * @param streamListener   Client listener.
-     * @param namespace        Namespace of interest.
-     * @param tablesOfInterest Only updates from these tables will be returned.
-     * @param startAddress     Address to start the notifications from.
+     * @param streamListener   client listener
+     * @param namespace        namespace of interest
+     * @param tablesOfInterest only updates from these tables will be returned
+     * @param startAddress     address to start the notifications from
      */
-    public synchronized <K extends Message, V extends Message, M extends Message>
+    synchronized <K extends Message, V extends Message, M extends Message>
     void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
                    @Nonnull List<TableSchema<K, V, M>> tablesOfInterest, long startAddress) {
         if (subscriptions.containsKey(streamListener)) {
@@ -114,6 +115,9 @@ public class StreamManager {
             throw new StreamSubscriptionException(
                     "StreamManager: too many (" + MAX_SUBSCRIBERS + ") subscriptions");
         }
+        tablesOfInterest.forEach(t -> {
+            log.info("table name = {} ID {}", t.getTableName(), CorfuRuntime.getStreamID(t.getTableName()));
+        });
         log.info("StreamManager::subscribe {}, startAddress {}, namespace {}, tables {}",
                 streamListener, startAddress, namespace, tablesOfInterest.toString());
         SubscriberTask task = new SubscriberTask(this,
@@ -124,11 +128,40 @@ public class StreamManager {
     }
 
     /**
+     * Subscribe to updates.
+     *
+     * @param streamListener   client listener
+     * @param namespace        namespace of interest
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables will be returned
+     * @param startAddress     address to start the notifications from
+     * @throws NoSuchElementException   if any table of interest is never registered
+     * @throws IllegalArgumentException if any table of interest is not opened before subscription
+     */
+    synchronized <K extends Message, V extends Message, M extends Message>
+    void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                   @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                   long startAddress) {
+        TableRegistry registry = runtime.getTableRegistry();
+        List<TableSchema<K, V, M>> tableSchemas = tablesOfInterest
+                .stream()
+                .map(tName -> {
+                    // The table should be opened full schema before subscription.
+                    Table<K, V, M> table = registry.getTable(namespace, tName);
+                    return new TableSchema<>(tName,
+                            table.getKeyClass(), table.getValueClass(), table.getMetadataClass());
+                })
+                .collect(Collectors.toList());
+
+        subscribe(streamListener, namespace, tableSchemas, startAddress);
+    }
+
+    /**
      * Unsubscribe a prior subscription.
      *
      * @param streamListener Client listener.
      */
-    public void unsubscribe(@Nonnull StreamListener streamListener) {
+    void unsubscribe(@Nonnull StreamListener streamListener) {
         StreamSubscriber streamSubscriber = unsubscribeInternal(streamListener);
         if (streamSubscriber != null) {
             streamSubscriber.getScheduledFuture().cancel(false);
@@ -137,6 +170,7 @@ public class StreamManager {
 
     /**
      * Internal method that can be safely invoked from the same thread executing the task.
+     *
      * @param streamListener client's listener object.
      * @return - returns the stream subscriber context for lifecycle management.
      */
@@ -176,7 +210,7 @@ public class StreamManager {
 
         /**
          * Tables of interest.
-         *
+         * <p>
          * Map of (Stream Id - TableSchema)
          */
         @Getter
@@ -188,6 +222,7 @@ public class StreamManager {
          */
         @Getter
         private final IStreamView txnStream;
+
         public <K extends Message, V extends Message, M extends Message>
         SubscriberTask(@Nonnull StreamManager streamManager,
                        @Nonnull StreamListener listener,

@@ -3,6 +3,8 @@ package org.corfudb.runtime.clients;
 import java.util.concurrent.CompletableFuture;
 
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 
 /**
  * This is an interface in which all client routers must implement.
@@ -23,6 +25,7 @@ public interface IClientRouter {
     IClientRouter addClient(IClient client);
 
     /**
+     * @deprecated [RM]
      * Send a message and get a completable future to be fulfilled by the reply.
      *
      * @param message The message to send.
@@ -30,14 +33,47 @@ public interface IClientRouter {
      * @return A completable future which will be fulfilled by the reply,
      * or a timeout in the case there is no response.
      */
+    @Deprecated
     <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message);
 
     /**
+     * Send a request message and get a completable future to be fulfilled by the reply.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     * @param <T> The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply,
+     * or a timeout in the case there is no response.
+     */
+    <T> CompletableFuture<T> sendRequestAndGetCompletable(CorfuMessage.RequestPayloadMsg payload, long epoch,
+                                                          UuidMsg clusterId, CorfuMessage.PriorityLevel priority,
+                                                          boolean ignoreClusterId, boolean ignoreEpoch);
+
+    /**
+     * @deprecated [RM]
      * Send a one way message, without adding a completable future.
      *
      * @param message The message to send.
      */
+    @Deprecated
     void sendMessage(CorfuMsg message);
+
+    /**
+     * Send a one way message, without adding a completable future.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     */
+    void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch, UuidMsg clusterId,
+                     CorfuMessage.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch);
 
     /**
      * Complete a given outstanding request with a completion value.

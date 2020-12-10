@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -29,9 +30,8 @@ public class ClusterDescriptor {
     @Getter
     private int corfuPort;    // Port on which Corfu DB runs on this cluster
 
-    public ClusterDescriptor(String clusterId, ClusterRole role) {
+    public ClusterDescriptor(String clusterId) {
         this.clusterId = clusterId;
-        this.role = role;
     }
 
     public ClusterDescriptor(ClusterConfigurationMsg clusterConfig) {
@@ -90,12 +90,21 @@ public class ClusterDescriptor {
      * Get descriptor for a specific endpoint
      *
      * @param endpoint node's endpoint
+     * @param nodeId node's id
      * @return endpoint's node descriptor or null if it does not belong to this cluster.
      */
-    public NodeDescriptor getNode(String endpoint) {
-        for (NodeDescriptor node : nodesDescriptors) {
-            if(node.getEndpoint().equals(endpoint)) {
-                return node;
+    public NodeDescriptor getNode(String endpoint, Optional<String> nodeId) {
+        if (!nodeId.isPresent()) {
+            for (NodeDescriptor node : nodesDescriptors) {
+                if(node.getEndpoint().equals(endpoint)) {
+                    return node;
+                }
+            }
+        } else {
+            for (NodeDescriptor node : nodesDescriptors) {
+                if(node.getNodeId().toString().equals(nodeId.get())) {
+                    return node;
+                }
             }
         }
 
