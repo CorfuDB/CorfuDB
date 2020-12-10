@@ -124,6 +124,8 @@ public class StateTransferIT extends AbstractIT {
         Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
         Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
         Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+
+
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);
 
         // bootstrap cluster with 2 nodes

@@ -3,6 +3,7 @@ package org.corfudb.integration;
 
 import lombok.Getter;
 
+import org.assertj.core.util.Lists;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -33,6 +34,7 @@ public class StreamingIT extends AbstractIT {
     private static String corfuSingleNodeHost;
     private static int corfuStringNodePort;
     private static String singleNodeEndpoint;
+    private final static String defaultStreamTag = "default_stream_tag";
 
     /* A helper method that takes host and port specification, start a single server and
      *  returns a process. */
@@ -137,13 +139,13 @@ public class StreamingIT extends AbstractIT {
         for (int i = 0; i < numUpdates; i++) {
             Uuid uuid = Uuid.newBuilder().setMsb(i).setLsb(i).build();
             TxnContext tx = store.txn("n1");
-            tx.put(n1t1, uuid, uuid, uuid).commit();
+            tx.putRecord(n1t1, uuid, uuid, uuid);
+            tx.commit();
         }
 
         // Subscribe to streaming updates from the table.
         StreamListenerImpl s1n1t1 = new StreamListenerImpl("s1n1t1");
-        store.subscribe(s1n1t1, "n1",
-                Collections.singletonList(new TableSchema("t1", Uuid.class, Uuid.class, Uuid.class)), ts1);
+        store.subscribe(s1n1t1, "n1", defaultStreamTag, Collections.singletonList("t1"), ts1);
 
         // After a brief wait verify that the listener gets all the updates.
         TimeUnit.SECONDS.sleep(2);
@@ -164,8 +166,7 @@ public class StreamingIT extends AbstractIT {
 
         // Add another subscriber to the same table starting now.
         StreamListenerImpl s2n1t1 = new StreamListenerImpl("s2n1t1");
-        store.subscribe(s2n1t1, "n1",
-                Collections.singletonList(new TableSchema("t1", Uuid.class, Uuid.class, Uuid.class)), null);
+        store.subscribe(s2n1t1, "n1", defaultStreamTag, Collections.singletonList("t1"), null);
 
         TxnContext tx = store.txn("n1");
         Uuid uuid0 = Uuid.newBuilder().setMsb(0).setLsb(0).build();
@@ -265,19 +266,19 @@ public class StreamingIT extends AbstractIT {
         for (int i = 0; i < numUpdates; i++) {
             Uuid uuid = Uuid.newBuilder().setMsb(i).setLsb(i).build();
             TxnContext tx = store.txn("n1");
-            tx.put(n1t1, uuid, uuid, uuid).commit();
+            tx.putRecord(n1t1, uuid, uuid, uuid);
+            tx.commit();
             TxnContext tx2 = store.txn("n2");
-            tx2.put(n2t1, uuid, uuid, uuid).commit();
+            tx2.putRecord(n2t1, uuid, uuid, uuid);
+            tx2.commit();
         }
 
         // Subscribe to streaming updates from the table1.
         StreamListenerImpl s1n1t1 = new StreamListenerImpl("s1n1t1");
         // Subscribe to streaming updates from the table2.
         StreamListenerImpl s2n2t1 = new StreamListenerImpl("s2n2t1");
-        store.subscribe(s1n1t1, "n1",
-                Collections.singletonList(new TableSchema("t1", Uuid.class, Uuid.class, Uuid.class)), ts1);
-        store.subscribe(s2n2t1, "n2",
-                Collections.singletonList(new TableSchema("t1", Uuid.class, Uuid.class, Uuid.class)), ts1);
+        store.subscribe(s1n1t1, "n1", defaultStreamTag, Collections.singletonList("t1"), ts1);
+        store.subscribe(s2n2t1, "n2", defaultStreamTag, Collections.singletonList("t1"), ts1);
 
         // After a brief wait verify that the listener gets all the updates.
         TimeUnit.SECONDS.sleep(2);
@@ -368,35 +369,55 @@ public class StreamingIT extends AbstractIT {
         Uuid t1Uuid = Uuid.newBuilder().setMsb(t1_uuid).setLsb(t1_uuid).build();
         Uuid t2Uuid = Uuid.newBuilder().setMsb(t2_uuid).setLsb(t2_uuid).build();
         TxnContext txnContext = store.txn("n1");
-        txnContext.put(n1t1, t1Uuid, t1Uuid, t1Uuid);
-        txnContext.put(n1t2, t2Uuid, t2Uuid, t2Uuid);
+        txnContext.putRecord(n1t1, t1Uuid, t1Uuid, t1Uuid);
+        txnContext.putRecord(n1t2, t2Uuid, t2Uuid, t2Uuid);
         txnContext.commit();
 
         // Subscribe to both tables
-        List<TableSchema<Uuid, Uuid, Uuid>> tablesSubscribed = new ArrayList<>();
         TableSchema schema1 = new TableSchema("t1", Uuid.class, Uuid.class, Uuid.class);
         TableSchema schema2 = new TableSchema("t2", Uuid.class, Uuid.class, Uuid.class);
+        StreamListenerImpl listener1 = new StreamListenerImpl("n1_listener_1");
+        StreamListenerImpl listener2 = new StreamListenerImpl("n1_listener_2");
+
+        List<TableSchema<Uuid, Uuid, Uuid>> tablesSubscribed = new ArrayList<>();
         tablesSubscribed.add(schema1);
         tablesSubscribed.add(schema2);
-        StreamListenerImpl listener = new StreamListenerImpl("n1_listener");
-        store.subscribe(listener, "n1", tablesSubscribed, ts1);
+
+        // Testing both the old and new version of subscribe API.
+        store.subscribe(listener1, "n1", defaultStreamTag, Lists.newArrayList("t1", "t2"), ts1);
+        store.subscribe(listener2, "n1", tablesSubscribed, ts1);
 
         // Verify that both updates come to the subscriber in the same StreamEntry
         TimeUnit.SECONDS.sleep(2);
-        LinkedList<CorfuStreamEntries> updates = listener.getUpdates();
-        assertThat(updates.size()).isEqualTo(1);
-        assertThat(updates.getFirst().getEntries().entrySet().size()).isEqualTo(2);
+        LinkedList<CorfuStreamEntries> updates1 = listener1.getUpdates();
+        assertThat(updates1.size()).isEqualTo(1);
+        assertThat(updates1.getFirst().getEntries().entrySet().size()).isEqualTo(2);
 
         // Check the entries and operations in each
-        assertThat(updates.getFirst().getEntries().get(schema1).get(0).getKey()).isEqualTo(t1Uuid);
-        assertThat(updates.getFirst().getEntries().get(schema1).get(0).getPayload()).isEqualTo(t1Uuid);
-        assertThat(updates.getFirst().getEntries().get(schema1).get(0).getMetadata()).isEqualTo(t1Uuid);
-        assertThat(updates.getFirst().getEntries().get(schema1).get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
+        assertThat(updates1.getFirst().getEntries().get(schema1).get(0).getKey()).isEqualTo(t1Uuid);
+        assertThat(updates1.getFirst().getEntries().get(schema1).get(0).getPayload()).isEqualTo(t1Uuid);
+        assertThat(updates1.getFirst().getEntries().get(schema1).get(0).getMetadata()).isEqualTo(t1Uuid);
+        assertThat(updates1.getFirst().getEntries().get(schema1).get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
 
-        assertThat(updates.getFirst().getEntries().get(schema2).get(0).getKey()).isEqualTo(t2Uuid);
-        assertThat(updates.getFirst().getEntries().get(schema2).get(0).getPayload()).isEqualTo(t2Uuid);
-        assertThat(updates.getFirst().getEntries().get(schema2).get(0).getMetadata()).isEqualTo(t2Uuid);
-        assertThat(updates.getFirst().getEntries().get(schema2).get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
+        assertThat(updates1.getFirst().getEntries().get(schema2).get(0).getKey()).isEqualTo(t2Uuid);
+        assertThat(updates1.getFirst().getEntries().get(schema2).get(0).getPayload()).isEqualTo(t2Uuid);
+        assertThat(updates1.getFirst().getEntries().get(schema2).get(0).getMetadata()).isEqualTo(t2Uuid);
+        assertThat(updates1.getFirst().getEntries().get(schema2).get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
+
+        LinkedList<CorfuStreamEntries> updates2 = listener1.getUpdates();
+        assertThat(updates2.size()).isEqualTo(1);
+        assertThat(updates2.getFirst().getEntries().entrySet().size()).isEqualTo(2);
+
+        // Check the entries and operations in each
+        assertThat(updates2.getFirst().getEntries().get(schema1).get(0).getKey()).isEqualTo(t1Uuid);
+        assertThat(updates2.getFirst().getEntries().get(schema1).get(0).getPayload()).isEqualTo(t1Uuid);
+        assertThat(updates2.getFirst().getEntries().get(schema1).get(0).getMetadata()).isEqualTo(t1Uuid);
+        assertThat(updates2.getFirst().getEntries().get(schema1).get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
+
+        assertThat(updates2.getFirst().getEntries().get(schema2).get(0).getKey()).isEqualTo(t2Uuid);
+        assertThat(updates2.getFirst().getEntries().get(schema2).get(0).getPayload()).isEqualTo(t2Uuid);
+        assertThat(updates2.getFirst().getEntries().get(schema2).get(0).getMetadata()).isEqualTo(t2Uuid);
+        assertThat(updates2.getFirst().getEntries().get(schema2).get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }

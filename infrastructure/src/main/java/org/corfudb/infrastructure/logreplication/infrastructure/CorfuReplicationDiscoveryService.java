@@ -22,6 +22,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
@@ -319,23 +320,24 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * - Start Log Replication Server (receiver component)
      */
     private void bootstrapLogReplicationService() {
-        // Through LogReplicationConfigAdapter retrieve system-specific configurations (including streams to replicate)
+        // Through LogReplicationConfigAdapter retrieve system-specific configurations
+        // such as streams to replicate and version
         LogReplicationConfig logReplicationConfig = getLogReplicationConfiguration(getCorfuRuntime());
 
         logReplicationMetadataManager = new LogReplicationMetadataManager(getCorfuRuntime(),
-                topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
+            topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
 
         logReplicationServerHandler = new LogReplicationServer(serverContext, logReplicationConfig,
-                logReplicationMetadataManager, localCorfuEndpoint, topologyDescriptor.getTopologyConfigId());
+            logReplicationMetadataManager, localCorfuEndpoint, topologyDescriptor.getTopologyConfigId());
         logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
 
         interClusterReplicationService = new CorfuInterClusterReplicationServerNode(serverContext,
-                logReplicationServerHandler, logReplicationConfig);
+            logReplicationServerHandler, logReplicationConfig);
 
         // Pass server's channel context through the Log Replication Context, for shared objects between the server
         // and the client channel (specific requirements of the transport implementation)
         replicationContext = new LogReplicationContext(logReplicationConfig, topologyDescriptor,
-                localCorfuEndpoint, interClusterReplicationService.getRouter().getServerAdapter().getChannelContext());
+            localCorfuEndpoint, interClusterReplicationService.getRouter().getServerAdapter().getChannelContext());
 
         // Unblock server initialization & register to Log Replication Lock, to attempt lock / leadership acquisition
         serverCallback.complete(interClusterReplicationService);
@@ -404,21 +406,26 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     private LogReplicationConfig getLogReplicationConfiguration(CorfuRuntime runtime) {
 
-        LogReplicationStreamNameTableManager replicationStreamNameTableManager =
+        try {
+            LogReplicationStreamNameTableManager replicationStreamNameTableManager =
                 new LogReplicationStreamNameTableManager(runtime, serverContext.getPluginConfigFilePath());
 
-        Set<String> streamsToReplicate = replicationStreamNameTableManager.getStreamsToReplicate();
+            Set<String> streamsToReplicate = replicationStreamNameTableManager.getStreamsToReplicate();
 
-        // TODO pankti: Check if version does not match. If it does not, create an event for site discovery to
-        //  do a snapshot sync.
-        boolean upgraded = replicationStreamNameTableManager
+            // TODO pankti: Check if version does not match. If it does not, create an event for site discovery to
+            //  do a snapshot sync.
+            boolean upgraded = replicationStreamNameTableManager
                 .isUpgraded();
 
-        if (upgraded) {
-            input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
-        }
+            if (upgraded) {
+                input(new DiscoveryServiceEvent(DiscoveryServiceEvent.DiscoveryServiceEventType.UPGRADE));
+            }
 
-        return new LogReplicationConfig(streamsToReplicate, serverContext.getLogReplicationMaxNumMsgPerBatch(), serverContext.getLogReplicationMaxDataMessageSize());
+            return new LogReplicationConfig(streamsToReplicate, serverContext.getLogReplicationMaxNumMsgPerBatch(), serverContext.getLogReplicationMaxDataMessageSize());
+        } catch (Throwable t) {
+            log.error("Exception when fetching the Replication Config", t);
+            throw t;
+        }
     }
 
     /**
@@ -631,7 +638,15 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         log.debug("Received topology change, topology={}", event.getTopologyConfig());
 
         TopologyDescriptor discoveredTopology = new TopologyDescriptor(event.getTopologyConfig());
-        boolean isValid = processDiscoveredTopology(discoveredTopology, localClusterDescriptor == null);
+
+        boolean isValid;
+        try {
+            isValid = processDiscoveredTopology(discoveredTopology, localClusterDescriptor == null);
+        } catch (Throwable t) {
+            log.error("Exception when processing the discovered topology", t);
+            stopLogReplication();
+            return;
+        }
 
         if (isValid) {
             if (clusterRoleChanged(discoveredTopology)) {
@@ -767,7 +782,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     @Override
     public Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus() {
-        if (ClusterRole.ACTIVE == localClusterDescriptor.getRole()) {
+        if (localClusterDescriptor == null) {
+            log.warn("Cluster configuration has not been pushed to current LR node.");
+            return null;
+        } else if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
             Map<String, LogReplicationMetadata.ReplicationStatusVal> mapReplicationStatus = logReplicationMetadataManager.getReplicationRemainingEntries();
             Map<String, LogReplicationMetadata.ReplicationStatusVal> mapToSend = new HashMap<>(mapReplicationStatus);
             // If map contains local cluster, remove (as it might have been added by the SinkManager) but this node
@@ -777,7 +795,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
                 mapToSend.remove(localClusterDescriptor.getClusterId());
             }
             return mapToSend;
-        } else if (ClusterRole.STANDBY == localClusterDescriptor.getRole()) {
+        } else if (localClusterDescriptor.getRole() == ClusterRole.STANDBY) {
             return logReplicationMetadataManager.getDataConsistentOnStandby();
         }
         log.error("Received Replication Status Query in Incorrect Role {}.", localClusterDescriptor.getRole());

@@ -6,3 +6,11 @@ message CorfuQueueIdMsg {
     optional int64 txSequence = 1;
     optional int64 entryId = 2;
 }
+
+message CorfuGuidMsg {
+    optional int64 instanceId = 1;
+}
+
+message CorfuQueueMetadataMsg {
+    optional int64 txSequence = 1;
+}

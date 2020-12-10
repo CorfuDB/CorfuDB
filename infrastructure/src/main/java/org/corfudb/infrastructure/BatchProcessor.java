@@ -1,8 +1,11 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -10,7 +13,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
+
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -46,7 +53,9 @@ public class BatchProcessor implements AutoCloseable {
                     .setDaemon(false)
                     .setNameFormat("LogUnit-BatchProcessor-%d")
                     .build());
-
+    private final Optional<Timer> writeRecordTimer;
+    private final Optional<Timer> writeRecordsTimer;
+    private final Optional<DistributionSummary> queueSizeDist;
     /**
      * The sealEpoch is the epoch up to which all operations have been sealed. Any
      * BatchWriterOperation arriving after the sealEpoch with an epoch less than the sealEpoch
@@ -69,6 +78,19 @@ public class BatchProcessor implements AutoCloseable {
         this.sync = sync;
         this.streamLog = streamLog;
         operationsQueue = new LinkedBlockingQueue<>();
+        writeRecordTimer = MeterRegistryProvider.getInstance().map(registry ->
+                Timer.builder("logunit.write.timer")
+                        .tags("type", "single").register(registry));
+        writeRecordsTimer = MeterRegistryProvider.getInstance().map(registry ->
+                Timer.builder("logunit.write.timer")
+                        .tags("type", "multiple").register(registry));
+        queueSizeDist = MeterRegistryProvider.getInstance().map(registry ->
+                DistributionSummary
+                        .builder("logunit.queue.size")
+                        .publishPercentiles(0.50, 0.95, 0.99)
+                        .publishPercentileHistogram()
+                        .baseUnit("op")
+                        .register(registry));
         processorService.submit(this::processor);
     }
 
@@ -84,6 +106,14 @@ public class BatchProcessor implements AutoCloseable {
         return operation.getFutureResult();
     }
 
+    private void recordRunnable(Runnable fsyncRunnable, Optional<Timer> fsyncTimer) {
+        if (fsyncTimer.isPresent()) {
+            fsyncTimer.get().record(fsyncRunnable);
+        } else {
+            fsyncRunnable.run();
+        }
+    }
+
     private void processor() {
 
         if (!sync) {
@@ -97,7 +127,7 @@ public class BatchProcessor implements AutoCloseable {
 
             while (true) {
                 BatchWriterOperation currOp;
-
+                queueSizeDist.ifPresent(dist -> dist.record(operationsQueue.size()));
                 if (lastOp == null) {
                     currOp = operationsQueue.take();
                 } else {
@@ -154,11 +184,14 @@ public class BatchProcessor implements AutoCloseable {
                                 break;
                             case WRITE:
                                 WriteRequest write = (WriteRequest) currOp.getMsg().getPayload();
-                                streamLog.append(write.getGlobalAddress(), (LogData) write.getData());
+                                Runnable append =
+                                        () -> streamLog.append(write.getGlobalAddress(), (LogData) write.getData());
+                                recordRunnable(append, writeRecordsTimer);
                                 break;
                             case RANGE_WRITE:
                                 RangeWriteMsg writeRange = (RangeWriteMsg) currOp.getMsg().getPayload();
-                                streamLog.append(writeRange.getEntries());
+                                Runnable appendMultiple = () -> streamLog.append(writeRange.getEntries());
+                                recordRunnable(appendMultiple, writeRecordsTimer);
                                 break;
                             case RESET:
                                 streamLog.reset();

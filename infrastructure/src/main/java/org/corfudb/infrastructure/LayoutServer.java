@@ -21,6 +21,7 @@ import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.protocols.wireprotocol.LayoutProposeResponse;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.view.Layout;
 
 import java.util.Optional;
@@ -66,9 +67,16 @@ public class LayoutServer extends AbstractServer {
     /**
      * HandlerMethod for this server.
      */
-    @Getter
+    @Getter(onMethod_={@Override})
     private final HandlerMethods handler =
             HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /**
+     * RequestHandlerMethods for the Layout server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     @NonNull
     private final ExecutorService executor;
@@ -109,11 +117,15 @@ public class LayoutServer extends AbstractServer {
     }
 
     @Override
+    protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
+    }
+
+    @Override
     public void shutdown() {
         super.shutdown();
         executor.shutdown();
     }
-
 
     private boolean isBootstrapped(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         if (getCurrentLayout() == null) {

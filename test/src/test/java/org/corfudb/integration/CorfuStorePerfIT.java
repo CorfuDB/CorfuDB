@@ -27,6 +27,7 @@ import org.corfudb.test.SampleSchema.ManagedResources;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.corfudb.test.SampleSchema.EventInfo;
 
+import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Simple performance test to insert data into corfu via regular table.put() and CorfuStore protobufs
  */
@@ -107,10 +108,11 @@ public class CorfuStorePerfIT extends  AbstractIT {
 
         // Creating a transaction builder.
         TxnContext tx = corfuStore.txn(nsxManager);
-        assert table != null;
-        tx.put(table, Uuid.newBuilder().setLsb(0L).setMsb(0L).build(),
+        assertThat(table).isNotNull();
+        tx.putRecord(table, Uuid.newBuilder().setLsb(0L).setMsb(0L).build(),
             SampleSchema.EventInfo.newBuilder().setName("simpleCRUD").build(),
-            metadata).commit();
+            metadata);
+        tx.commit();
         for (int i = 0; i < count; i++) {
             TxnContext txn = corfuStore.txn(nsxManager);
             UUID uuid = UUID.nameUUIDFromBytes(Integer.toString(i).getBytes());
@@ -126,7 +128,7 @@ public class CorfuStorePerfIT extends  AbstractIT {
                 .setEventTime(i)
                 .build());
 
-            txn.put(table, uuids.get(i), events.get(i), metadata);
+            txn.putRecord(table, uuids.get(i), events.get(i), metadata);
             txn.commit();
         }
 

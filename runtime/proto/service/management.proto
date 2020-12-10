@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto.service";
+
+import "rpc_common.proto";
+import "workflows.proto";
+import "node_connectivity.proto";
+
+/**
+ * Protobuf definitions for the Management server RPCs. These
+ * include request and response payloads for: QUERY_NODE,
+ * REPORT_FAILURE, HEAL_FAILURE, ORCHESTRATOR, BOOTSTRAP_MANAGEMENT,
+ * and MANAGEMENT_LAYOUT.
+ */
+
+message QueryNodeRequestMsg {
+}
+
+message QueryNodeResponseMsg {
+  SequencerMetricsMsg sequencer_metrics = 1;
+  NodeConnectivityMsg node_connectivity = 2;
+}
+
+// Trigger sent to the management server with the failures detected.
+message ReportFailureRequestMsg {
+  int64 detector_epoch = 1;
+  repeated string failed_node = 2;
+}
+
+message ReportFailureResponseMsg {
+  bool handling_successful = 1;
+}
+
+message HealFailureRequestMsg {
+  int64 detector_epoch = 1;
+  repeated string healed_node = 2;
+}
+
+message HealFailureResponseMsg {
+  bool handling_successful = 1;
+}
+
+// A message container that encapsulates all the orchestrator's requests.
+message OrchestratorRequestMsg {
+  oneof payload {
+    QueryWorkflowMsg query = 1;
+    AddNodeWorkflowMsg add_node = 2;
+    RemoveNodeWorkflowMsg remove_node = 3;
+    HealNodeWorkflowMsg heal_node = 4;
+    ForceRemoveNodeWorkflowMsg force_remove_node = 5;
+    RestoreRedundancyMergeSegmentsWorkflowMsg restore_redundancy_merge_segments = 6;
+  }
+}
+
+// A message container that encapsulates all the orchestrator's responses.
+message OrchestratorResponseMsg {
+  oneof payload {
+    QueriedWorkflowMsg query_result = 1;
+    CreatedWorkflowMsg workflow_created = 2;
+  }
+}
+
+message BootstrapManagementRequestMsg {
+  LayoutMsg layout = 1;
+}
+
+message BootstrapManagementResponseMsg {
+  bool bootstrapped = 1;
+}
+
+message ManagementLayoutRequestMsg {
+}
+
+message ManagementLayoutResponseMsg {
+  LayoutMsg layout = 1;
+}

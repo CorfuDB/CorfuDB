@@ -521,7 +521,7 @@ public class ClusterReconfigIT extends AbstractIT {
         IClientRouter router = new NettyClientRouter(NodeLocator
                 .parseString(corfuSingleNodeHost + ":" + PORT_0),
                 CorfuRuntime.CorfuRuntimeParameters.builder().build());
-        router.addClient(new LayoutHandler()).addClient(new BaseHandler());
+        router.addClient(new LayoutHandler()).addClient(new BaseHandler()).addClient(new ManagementHandler());
         retryBootstrapOperation(() -> CFUtils.getUninterruptibly(
                 new LayoutClient(router, layout.getEpoch(), layout.getClusterId()).bootstrapLayout(layout)));
         retryBootstrapOperation(() -> CFUtils.getUninterruptibly(

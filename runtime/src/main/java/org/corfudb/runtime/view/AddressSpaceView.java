@@ -1,7 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.codahale.metrics.Gauge;
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -12,21 +10,11 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.UncheckedExecutionException;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import io.netty.handler.timeout.TimeoutException;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.NavigableSet;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
@@ -47,10 +35,26 @@ import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.NavigableSet;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 
 /**
@@ -68,12 +72,20 @@ public class AddressSpaceView extends AbstractView {
      * A cache for read results.
      */
     private final Cache<Long, ILogData> readCache;
+    private final Optional<Timer> multiReadTimer;
+    private final Optional<Timer> singleReadTimer;
+    private final Optional<Timer> writeTimer;
+    private final Optional<DistributionSummary> logSizeDist;
     private final ReadOptions defaultReadOptions = ReadOptions.builder()
             .ignoreTrim(false)
             .waitForHole(true)
             .clientCacheable(true)
             .serverCacheable(true)
             .build();
+
+    private final Optional<Gauge> missRatio;
+    private final Optional<Gauge> loadCount;
+    private final Optional<Gauge> loadExceptionCount;
 
     /**
      * Constructor for the Address Space View.
@@ -112,14 +124,47 @@ public class AddressSpaceView extends AbstractView {
                 .recordStats()
                 .build();
 
-        MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-        final String pfx = String.format("%s0x%x.cache.", CorfuComponent.ADDRESS_SPACE_VIEW.toString(),
-                this.hashCode());
-        metrics.register(pfx + "cache-size", (Gauge<Long>) readCache::size);
-        metrics.register(pfx + "evictions", (Gauge<Long>) () -> readCache.stats().evictionCount());
-        metrics.register(pfx + "hit-rate", (Gauge<Double>) () -> readCache.stats().hitRate());
-        metrics.register(pfx + "hits", (Gauge<Long>) () -> readCache.stats().hitCount());
-        metrics.register(pfx + "misses", (Gauge<Long>) () -> readCache.stats().missCount());
+        Optional<MeterRegistry> metricsRegistry = runtime.getRegistry();
+
+        missRatio = metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.miss_ratio",
+                readCache,
+                cache -> cache.stats().missRate()).register(registry));
+
+        loadCount = metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.load_count",
+                readCache, cache -> cache.stats().loadCount()).register(registry));
+
+        loadExceptionCount = metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.load_exception_count",
+                readCache, cache -> cache.stats().loadExceptionCount()).register(registry));
+
+        double[] percentiles = new double[]{0.50, 0.95, 0.99};
+
+        multiReadTimer = metricsRegistry
+                .map(registry -> Timer.builder("address_space.read.latency")
+                        .tag("type", "multi")
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
+
+        singleReadTimer = metricsRegistry
+                .map(registry -> Timer.builder("address_space.read.latency")
+                        .tag("type", "single")
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
+
+        writeTimer = metricsRegistry
+                .map(registry -> Timer.builder("address_space.write.latency")
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
+
+        logSizeDist = metricsRegistry
+                .map(registry -> DistributionSummary.builder("address_space.log_data.size.bytes")
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .baseUnit("bytes")
+                        .register(registry));
+
     }
 
     private void handleEviction(RemovalNotification<Long, ILogData> notification) {
@@ -185,57 +230,68 @@ public class AddressSpaceView extends AbstractView {
      * @throws WrongEpochException If the token epoch is invalid.
      */
     public void write(@Nonnull IToken token, @Nonnull Object data, @Nonnull CacheOption cacheOption) {
-        ILogData ld;
-        if (data instanceof ILogData) {
-            ld = (ILogData) data;
-        } else {
-            ld = new LogData(DataType.DATA, data, runtime.getParameters().getCodecType());
-        }
 
-        layoutHelper(e -> {
-            Layout l = e.getLayout();
-            // Check if the token issued is in the same
-            // epoch as the layout we are about to write
-            // to.
-            if (token.getEpoch() != l.getEpoch()) {
-                throw new StaleTokenException(l.getEpoch());
+        Runnable writeRunnable = () -> {
+            ILogData ld;
+            if (data instanceof ILogData) {
+                ld = (ILogData) data;
+            } else {
+                ld = new LogData(DataType.DATA, data, runtime.getParameters().getCodecType());
             }
 
-            // Set the data to use the token
-            ld.useToken(token);
-            ld.setId(runtime.getParameters().getClientId());
-
-            // Do the write
-            try {
-                l.getReplicationMode(token.getSequence())
-                        .getReplicationProtocol(runtime)
-                        .write(e, ld);
-            } catch (OverwriteException ex) {
-                if (ex.getOverWriteCause() == OverwriteCause.SAME_DATA) {
-                    // If we have an overwrite exception with the SAME_DATA cause, it means that the
-                    // server suspects our data has already been written, in this case we need to
-                    // validate the state of the write.
-                    validateStateOfWrittenEntry(token.getSequence(), ld);
-                } else {
-                    // If we have an Overwrite exception with a different cause than SAME_DATA
-                    // we do not need to validate the state of the write, as we know we have been
-                    // certainly overwritten either by other data, by a hole or the address was trimmed.
-                    // Large writes are also rejected right away.
-                    throw ex;
+            logSizeDist.ifPresent(dist -> dist.record(ld.getSizeEstimate()));
+            layoutHelper(e -> {
+                Layout l = e.getLayout();
+                // Check if the token issued is in the same
+                // epoch as the layout we are about to write
+                // to.
+                if (token.getEpoch() != l.getEpoch()) {
+                    throw new StaleTokenException(l.getEpoch());
                 }
-            } catch (WriteSizeException | QuotaExceededException ie) {
-                log.warn("write: write failed", ie);
-                throw ie;
-            } catch (RuntimeException re) {
-                log.error("write: Got exception during replication protocol write with token: {}", token, re);
-                validateStateOfWrittenEntry(token.getSequence(), ld);
-            }
-            return null;
-        }, true);
 
-        // Cache the successful write
-        if (cacheOption == CacheOption.WRITE_THROUGH) {
-            readCache.put(token.getSequence(), ld);
+                // Set the data to use the token
+                ld.useToken(token);
+                ld.setId(runtime.getParameters().getClientId());
+
+                // Do the write
+                try {
+                    l.getReplicationMode(token.getSequence())
+                            .getReplicationProtocol(runtime)
+                            .write(e, ld);
+                } catch (OverwriteException ex) {
+                    if (ex.getOverWriteCause() == OverwriteCause.SAME_DATA) {
+                        // If we have an overwrite exception with the SAME_DATA cause, it means that the
+                        // server suspects our data has already been written, in this case we need to
+                        // validate the state of the write.
+                        validateStateOfWrittenEntry(token.getSequence(), ld);
+                    } else {
+                        // If we have an Overwrite exception with a different cause than SAME_DATA
+                        // we do not need to validate the state of the write, as we know we have been
+                        // certainly overwritten either by other data, by a hole or the address was trimmed.
+                        // Large writes are also rejected right away.
+                        throw ex;
+                    }
+                } catch (WriteSizeException | QuotaExceededException ie) {
+                    log.warn("write: write failed", ie);
+                    throw ie;
+                } catch (RuntimeException re) {
+                    log.error("write: Got exception during replication protocol write with token: {}", token, re);
+                    validateStateOfWrittenEntry(token.getSequence(), ld);
+                }
+                return null;
+            }, true);
+
+            // Cache the successful write
+            if (cacheOption == CacheOption.WRITE_THROUGH) {
+                readCache.put(token.getSequence(), ld);
+            }
+        };
+
+        if (writeTimer.isPresent()) {
+            Timer timer = writeTimer.get();
+            timer.record(writeRunnable);
+        } else {
+            writeRunnable.run();
         }
     }
 
@@ -299,17 +355,24 @@ public class AddressSpaceView extends AbstractView {
         // 5. Thread B finishes loading and caches the loaded value replacing
         //    the cached value from step 4 (i.e. loss of undo records computed
         //    by thread A)
-        ILogData data = readCache.getIfPresent(address);
-        if (data == null) {
-            // Loading a value without the cache loader can result in
-            // redundant loading calls (i.e. multiple threads try to
-            // load the same value), but currently a redundant RPC
-            // is much cheaper than the cost of a NoRollBackException, therefore
-            // this trade-off is reasonable
-            final ILogData loadedVal = fetch(address);
-            return cacheLoadAndGet(readCache, address, loadedVal, options);
-        }
-        return data;
+
+        Supplier<ILogData> logDataSupplier = () -> {
+            ILogData data = readCache.getIfPresent(address);
+            if (data == null) {
+                // Loading a value without the cache loader can result in
+                // redundant loading calls (i.e. multiple threads try to
+                // load the same value), but currently a redundant RPC
+                // is much cheaper than the cost of a NoRollBackException, therefore
+                // this trade-off is reasonable
+                final ILogData loadedVal = fetch(address);
+                return cacheLoadAndGet(readCache, address, loadedVal, options);
+            }
+            logSizeDist.ifPresent(dist -> dist.record(data.getSizeEstimate()));
+            return data;
+        };
+
+        return singleReadTimer.map(timer -> timer.record(logDataSupplier)).orElseGet(() -> logDataSupplier.get());
+
     }
 
     /**
@@ -335,7 +398,8 @@ public class AddressSpaceView extends AbstractView {
                 Map<Long, ILogData> mapAddresses = read(batch, options);
                 data = mapAddresses.get(nextRead);
             }
-
+            final ILogData finalData = data;
+            logSizeDist.ifPresent(dist -> dist.record(finalData.getSizeEstimate()));
             return data;
         }
 
@@ -411,30 +475,35 @@ public class AddressSpaceView extends AbstractView {
      * @return A map of addresses read, which will be cached if caching is enabled
      */
     public Map<Long, ILogData> read(Iterable<Long> addresses, @NonNull ReadOptions options) {
-        final Map<Long, ILogData> cachedData = readCache.getAllPresent(addresses);
-        final Set<Long> addressesToFetch = Sets.difference(
-                Sets.newHashSet(addresses), cachedData.keySet());
+        Supplier<Map<Long, ILogData>> readSupplier = () -> {
+            final Map<Long, ILogData> cachedData = readCache.getAllPresent(addresses);
+            final Set<Long> addressesToFetch = Sets.difference(
+                    Sets.newHashSet(addresses), cachedData.keySet());
 
-        final Map<Long, ILogData> uncachedData = fetchAll(addressesToFetch, options);
-        final List<Long> trimmedAddresses = filterTrimmedAddresses(uncachedData);
-        trimmedAddresses.forEach(uncachedData::remove);
+            final Map<Long, ILogData> uncachedData = fetchAll(addressesToFetch, options);
+            final List<Long> trimmedAddresses = filterTrimmedAddresses(uncachedData);
+            trimmedAddresses.forEach(uncachedData::remove);
 
-        final Map<Long, ILogData> result = uncachedData.entrySet().stream()
-                .collect(Collectors.toMap(Entry::getKey, entry ->
-                        cacheLoadAndGet(readCache, entry.getKey(), entry.getValue(), options)));
-        result.putAll(cachedData);
+            final Map<Long, ILogData> result = uncachedData.entrySet().stream()
+                    .collect(Collectors.toMap(Entry::getKey, entry ->
+                            cacheLoadAndGet(readCache, entry.getKey(), entry.getValue(), options)));
+            result.putAll(cachedData);
 
-        if (!trimmedAddresses.isEmpty()) {
-            if (!options.isIgnoreTrim()) {
-                throw new TrimmedException(trimmedAddresses);
+            if (!trimmedAddresses.isEmpty()) {
+                if (!options.isIgnoreTrim()) {
+                    throw new TrimmedException(trimmedAddresses);
+                }
+
+                // During streaming this message can flood logs, so modify log level with care.
+                log.debug("read: ignoring trimmed addresses {}", trimmedAddresses);
             }
+            logSizeDist.ifPresent(dist ->
+                    result.values().forEach(value -> dist.record(value.getSizeEstimate())));
 
-            // During streaming this message can flood logs, so modify log level with care.
-            log.debug("read: ignoring trimmed addresses {}", trimmedAddresses);
-        }
+            return result;
+        };
 
-
-        return result;
+        return multiReadTimer.map(timer -> timer.record(readSupplier)).orElseGet(() -> readSupplier.get());
     }
 
     /**

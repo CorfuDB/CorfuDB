@@ -1,14 +1,9 @@
 package org.corfudb.infrastructure;
 
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
-
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
 import io.netty.channel.ChannelHandlerContext;
+import java.util.concurrent.CompletableFuture;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
-
 import org.assertj.core.api.Assertions;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -24,6 +19,10 @@ import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 import org.mockito.Mockito;
+
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
+import static org.corfudb.protocols.service.CorfuProtocolBase.getSealRequestMsg;
 
 /**
  * Created by mwei on 12/14/15.
@@ -543,7 +542,10 @@ public class LayoutServerTest extends AbstractServerTest {
 
     private void commitReturnsAck(LayoutServer s1, Integer reboot, long baseEpoch, Layout bootstrappedLayout) {
         long newEpoch = baseEpoch + reboot;
-        sendRequestWithClusterId(new CorfuPayloadMsg<>(CorfuMsgType.SEAL, newEpoch), bootstrappedLayout.getClusterId()).join();
+        sendRequestWithClusterId(getSealRequestMsg(newEpoch),
+                bootstrappedLayout.getClusterId(),
+                false,
+                true).join();
 
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         layout.setEpoch(newEpoch);
@@ -588,7 +590,7 @@ public class LayoutServerTest extends AbstractServerTest {
     }
 
     private CompletableFuture<Boolean> setEpoch(long epoch, UUID clusterId) {
-        return sendRequestWithClusterId(new CorfuPayloadMsg<>(CorfuMsgType.SEAL, epoch), clusterId);
+        return sendRequestWithClusterId(getSealRequestMsg(epoch), clusterId, false, true);
     }
 
     private CompletableFuture<LayoutPrepareResponse> sendPrepare(long epoch, long rank, UUID clusterId) {

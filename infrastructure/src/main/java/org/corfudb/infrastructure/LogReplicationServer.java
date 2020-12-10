@@ -14,6 +14,7 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationLeadershi
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
@@ -47,8 +48,15 @@ public class LogReplicationServer extends AbstractServer {
 
     private final AtomicBoolean isActive = new AtomicBoolean(false);
 
-    @Getter
+    @Getter(onMethod_={@Override})
     private final HandlerMethods handler = HandlerMethods.generateHandler(MethodHandles.lookup(), this);
+
+    /**
+     * RequestHandlerMethods for the LogReplication server
+     */
+    @Getter
+    private final RequestHandlerMethods handlerMethods =
+            RequestHandlerMethods.generateHandler(MethodHandles.lookup(), this);
 
     public LogReplicationServer(@Nonnull ServerContext context, @Nonnull  LogReplicationConfig logReplicationConfig,
                                 @Nonnull LogReplicationMetadataManager metadataManager, String corfuEndpoint,
@@ -71,6 +79,11 @@ public class LogReplicationServer extends AbstractServer {
     @Override
     protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         executor.submit(() -> getHandler().handle(msg, ctx, r));
+    }
+
+    @Override
+    protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
     @Override

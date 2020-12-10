@@ -468,7 +468,7 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
         TxnContext tx = corfuStore.txn(namespace);
 
         Streams.zip(ids.stream(), events.stream(), SimpleEntry::new)
-                .forEach(pair -> tx.put(table, pair.getKey(), pair.getValue(), metadata));
+                .forEach(pair -> tx.putRecord(table, pair.getKey(), pair.getValue(), metadata));
         tx.commit();
 
         SimpleEntry<Uuid, EventInfo> sample = Streams
