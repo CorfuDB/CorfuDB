@@ -1,5 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.protobuf.TextFormat;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.channel.ChannelHandlerContext;
@@ -48,7 +49,8 @@ public class NettyCorfuMessageEncoder extends MessageToByteEncoder<Object> {
                         request.writeTo(requestOutputStream);
                     } catch (IOException e) {
                         log.warn("encode[{}]: Exception occurred when encoding request {}, caused by {}",
-                                request.getHeader().getRequestId(), request.getHeader(), e.getCause(), e);
+                                request.getHeader().getRequestId(), TextFormat.shortDebugString(request.getHeader()),
+                                e.getCause(), e);
                     }
                 }
             } else if (object instanceof ResponseMsg) {
@@ -61,7 +63,8 @@ public class NettyCorfuMessageEncoder extends MessageToByteEncoder<Object> {
                         response.writeTo(responseOutputStream);
                     } catch (IOException e) {
                         log.warn("encode[{}]: Exception occurred when encoding response {}, caused by {}",
-                                response.getHeader().getRequestId(), response.getHeader(), e.getCause(), e);
+                                response.getHeader().getRequestId(), TextFormat.shortDebugString(response.getHeader()),
+                                e.getCause(), e);
                     }
                 }
             } else {
