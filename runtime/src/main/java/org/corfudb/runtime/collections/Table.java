@@ -584,6 +584,29 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                         Optional.ofNullable(previousMetadata.getField(fieldDescriptor))
                                 .map(previousVersion -> (isCreate ? 0L : ((Long) previousVersion) + 1))
                                 .orElse(0L));
+            } else if (fieldDescriptor.isRepeated()) {
+                if (userMetadata != null) {
+                    try {
+                        // If newUserMetadata has the repeated field, set these explicitly
+                        // Since there is no API that allows to validate if a Message has a repeated field, we
+                        // rely on the getRepeatedFieldCount, which throws an IllegalArgumentException in the case
+                        // the field is not a repeated field.
+                        int count = userMetadata.getRepeatedFieldCount(fieldDescriptor);
+                        for (int i = 0; i < count; i++) {
+                            builder.setRepeatedField(fieldDescriptor, i,
+                                    userMetadata.getRepeatedField(fieldDescriptor, i));
+                        }
+                    } catch (IllegalArgumentException iae) {
+                        // If newUserMetadata does not contain this field, explicitly
+                        // set the values of previousMetadata
+
+                        int count = previousMetadata.getRepeatedFieldCount(fieldDescriptor);
+                        for (int i = 0; i < count; i++) {
+                            builder.setRepeatedField(fieldDescriptor, i,
+                                    previousMetadata.getRepeatedField(fieldDescriptor, i));
+                        }
+                    }
+                }
             } else if (userMetadata != null) { // Non-revision fields must retain previous values..
                 if (!userMetadata.hasField(fieldDescriptor)) { // ..iff not explicitly set..
                     builder.setField(fieldDescriptor, previousMetadata.getField(fieldDescriptor));
