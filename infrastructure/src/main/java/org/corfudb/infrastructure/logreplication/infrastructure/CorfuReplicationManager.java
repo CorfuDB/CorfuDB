@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.runtime.CorfuRuntime;
@@ -225,6 +226,9 @@ public class CorfuReplicationManager {
      */
     public void updateStatusAsNotStarted() {
         runtimeToRemoteCluster.values().forEach(corfuLogReplicationRuntime ->
-                corfuLogReplicationRuntime.getSourceManager().getAckReader().markSyncStatusNotStarted());
+                corfuLogReplicationRuntime
+                        .getSourceManager()
+                        .getAckReader()
+                        .markSyncStatus(LogReplicationMetadata.SyncStatus.NOT_STARTED));
     }
 }

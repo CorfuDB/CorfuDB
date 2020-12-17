@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
 /**
  * This class represents the stopped state of the Log Replication State Machine.
@@ -24,7 +25,7 @@ public class StoppedState implements LogReplicationState {
     @Override
     public void onEntry(LogReplicationState from) {
         fsm.getAckReader().getOngoing().set(false);
-        fsm.getAckReader().markSyncStatusError();
+        fsm.getAckReader().markSyncStatus(LogReplicationMetadata.SyncStatus.ERROR);
         log.info("Unrecoverable error or explicit shutdown. " +
                 "Log Replication is terminated from state {}. To resume, restart the JVM.", from.getType());
     }
