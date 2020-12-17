@@ -112,6 +112,13 @@ public class LayoutServer extends AbstractServer {
 
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
+        // Don't process layout server requests unless the server is bootstrapped
+        if (!req.getPayload().getPayloadCase().equals(RequestPayloadMsg.PayloadCase.BOOTSTRAP_LAYOUT_REQUEST)
+                && !isBootstrapped(req)) {
+            r.sendNoBootstrapError(req.getHeader(), ctx);
+            return;
+        }
+
         executor.submit(() -> getHandlerMethods().handle(req, ctx, r));
     }
 
@@ -141,11 +148,6 @@ public class LayoutServer extends AbstractServer {
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.LAYOUT_REQUEST)
     public void handleLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
                                     @Nonnull IServerRouter r) {
-        if (!isBootstrapped(req)) {
-            r.sendNoBootstrapError(req.getHeader(), ctx);
-            return;
-        }
-
         final long payloadEpoch = req.getPayload().getLayoutRequest().getEpoch();
         final long serverEpoch = getServerEpoch();
 
@@ -230,11 +232,6 @@ public class LayoutServer extends AbstractServer {
         final HeaderMsg requestHeader = req.getHeader();
         final PrepareLayoutRequestMsg payload = req.getPayload().getPrepareLayoutRequest();
 
-        if (!isBootstrapped(req)) {
-            r.sendNoBootstrapError(req.getHeader(), ctx);
-            return;
-        }
-
         final long payloadEpoch = payload.getEpoch();;
         final long serverEpoch = getServerEpoch();
 
@@ -289,11 +286,6 @@ public class LayoutServer extends AbstractServer {
                                            @Nonnull IServerRouter r) {
         final HeaderMsg requestHeader = req.getHeader();
         final ProposeLayoutRequestMsg payload = req.getPayload().getProposeLayoutRequest();
-
-        if (!isBootstrapped(req)) {
-            r.sendNoBootstrapError(req.getHeader(), ctx);
-            return;
-        }
 
         final long payloadEpoch = payload.getEpoch();
         final long serverEpoch = getServerEpoch();
@@ -438,11 +430,6 @@ public class LayoutServer extends AbstractServer {
 
         if (payload.getForced()) {
             forceLayout(req, ctx, r);
-            return;
-        }
-
-        if (!isBootstrapped(req)) {
-            r.sendNoBootstrapError(req.getHeader(), ctx);
             return;
         }
 
