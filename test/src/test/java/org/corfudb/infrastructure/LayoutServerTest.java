@@ -5,24 +5,27 @@ import java.util.concurrent.CompletableFuture;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
-import org.corfudb.protocols.wireprotocol.LayoutCommittedRequest;
-import org.corfudb.protocols.wireprotocol.LayoutPrepareRequest;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
-import org.corfudb.protocols.wireprotocol.LayoutProposeRequest;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 import org.mockito.Mockito;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.corfudb.infrastructure.LayoutServerAssertions.assertThat;
+import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getSealRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getBootstrapLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getPrepareLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getProposeLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getCommitLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
 
 /**
  * Created by mwei on 12/14/15.
@@ -513,20 +516,15 @@ public class LayoutServerTest extends AbstractServerTest {
         spyLayoutServer.getServerContext().setServerEpoch(newLayout.getEpoch(), router);
 
         // Run the prepare phase (Phase I).
-        LayoutPrepareRequest prepareRequest = new LayoutPrepareRequest(
-                newLayout.getEpoch(), msgRank);
-        CorfuPayloadMsg<LayoutPrepareRequest> prepareRequestMsg =
-                new CorfuPayloadMsg<>(CorfuMsgType.LAYOUT_PREPARE, prepareRequest);
-        spyLayoutServer.handleMessageLayoutPrepare(prepareRequestMsg, context, router);
+        CorfuMessage.RequestMsg prepareReq = getRequest(getPrepareLayoutRequestMsg(newLayout.getEpoch(), msgRank));
+        spyLayoutServer.handlePrepareLayoutRequest(prepareReq, context, router);
 
         // Run the propose phase (Phase II). This function call will in turn call
         // LayoutServer:::setPhase2Data(...) which has been instrumented
         // with Mockito.doAnswer(...) to bump up the epoch.
-        LayoutProposeRequest proposeRequest = new LayoutProposeRequest(
-                newLayout.getEpoch(), msgRank, newLayout);
-        CorfuPayloadMsg<LayoutProposeRequest> layoutProposeRequestMsg =
-                new CorfuPayloadMsg<>(CorfuMsgType.LAYOUT_PROPOSE, proposeRequest);
-        spyLayoutServer.handleMessageLayoutPropose(layoutProposeRequestMsg, context, router);
+        CorfuMessage.RequestMsg proposeReq = getRequest(getProposeLayoutRequestMsg(newLayout.getEpoch(), msgRank, newLayout));
+        spyLayoutServer.handleProposeLayoutRequest(proposeReq, context, router);
+
 
         // Make sure the epoch has actually changed.
         Assertions.assertThat(newSealEpoch)
@@ -581,37 +579,47 @@ public class LayoutServerTest extends AbstractServerTest {
         return s1;
     }
 
+    private CorfuMessage.RequestMsg getRequest(CorfuMessage.RequestPayloadMsg payloadMsg) {
+        CorfuMessage.HeaderMsg header = getHeaderMsg(0, CorfuMessage.PriorityLevel.NORMAL, 0,
+                DEFAULT_UUID, DEFAULT_UUID, true, true);
+        return getRequestMsg(header, payloadMsg);
+    }
+
     private void bootstrapServer(Layout l) {
-        sendRequest(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l))).join();
+        sendRequest(getBootstrapLayoutRequestMsg(l), true, true).join();
     }
 
     private CompletableFuture<Layout> requestLayout(long epoch) {
-        return sendRequest(CorfuMsgType.LAYOUT_REQUEST.payloadMsg(epoch));
+        return sendRequest(getLayoutRequestMsg(epoch), true, true);
     }
 
     private CompletableFuture<Boolean> setEpoch(long epoch, UUID clusterId) {
-        return sendRequestWithClusterId(getSealRequestMsg(epoch), clusterId, false, true);
+        return sendRequestWithClusterId(getSealRequestMsg(epoch),
+                clusterId, false, true);
     }
 
     private CompletableFuture<LayoutPrepareResponse> sendPrepare(long epoch, long rank, UUID clusterId) {
-        return sendRequestWithClusterId(CorfuMsgType.LAYOUT_PREPARE.payloadMsg(new LayoutPrepareRequest(epoch, rank)), clusterId);
+        return sendRequestWithClusterId(getPrepareLayoutRequestMsg(epoch, rank),
+                clusterId, false, true);
     }
 
     private CompletableFuture<Boolean> sendPropose(long epoch, long rank, Layout layout, UUID clusterId) {
-        return sendRequestWithClusterId(CorfuMsgType.LAYOUT_PROPOSE.payloadMsg(new LayoutProposeRequest(epoch, rank, layout)), clusterId);
+        return sendRequestWithClusterId(getProposeLayoutRequestMsg(epoch, rank, layout),
+                clusterId, false, true);
     }
 
     private CompletableFuture<Boolean> sendCommitted(long epoch, Layout layout, UUID clusterId) {
-        return sendRequestWithClusterId(CorfuMsgType.LAYOUT_COMMITTED.payloadMsg(new LayoutCommittedRequest(epoch, layout)), clusterId);
+        return sendRequestWithClusterId(getCommitLayoutRequestMsg(false, epoch, layout),
+                clusterId, false, true);
     }
 
     private CompletableFuture<LayoutPrepareResponse> sendPrepare(UUID clientId, long epoch, long rank, UUID clusterId) {
-        return sendRequestWithClusterId(clientId, CorfuMsgType.LAYOUT_PREPARE.payloadMsg(new LayoutPrepareRequest(epoch, rank)),
-                clusterId);
+        return sendRequestWithClientId(clientId, getPrepareLayoutRequestMsg(epoch, rank),
+                clusterId, false, true);
     }
 
     private CompletableFuture<Boolean> sendPropose(UUID clientId, long epoch, long rank, Layout layout, UUID clusterId) {
-        return sendRequestWithClusterId(clientId, CorfuMsgType.LAYOUT_PROPOSE
-                .payloadMsg(new LayoutProposeRequest(epoch,rank, layout)), clusterId);
+        return sendRequestWithClientId(clientId, getProposeLayoutRequestMsg(epoch, rank, layout),
+                clusterId, false, true);
     }
 }
