@@ -116,6 +116,13 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         return clientRouter.sendMessageAndGetCompletable(msg);
     }
 
+    public <T> CompletableFuture<T> sendRequestWithClientId(UUID clientId, RequestPayloadMsg payload, UUID clusterId,
+                                                            boolean ignoreClusterId, boolean ignoreEpoch) {
+        clientRouter.setClientID(clientId);
+        return clientRouter.sendRequestAndGetCompletable(payload, 0L, getUuidMsg(clusterId),
+                CorfuMessage.PriorityLevel.NORMAL, ignoreClusterId, ignoreEpoch);
+    }
+
 
     public TestClientRouter getClientRouter() {
         TestClientRouter tcn = new TestClientRouter(router);

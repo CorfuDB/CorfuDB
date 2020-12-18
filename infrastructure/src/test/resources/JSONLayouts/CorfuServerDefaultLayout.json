@@ -1,0 +1,28 @@
+{
+  "layoutServers": [
+    "localhost:9000",
+    "localhost:9001",
+    "localhost:9002"
+  ],
+  "sequencers": [
+    "localhost:9000"
+  ],
+  "segments": [
+    {
+      "replicationMode": "CHAIN_REPLICATION",
+      "start": 0,
+      "end": -1,
+      "stripes": [
+        {
+          "logServers": [
+            "localhost:9000",
+            "localhost:9001",
+            "localhost:9002"
+          ]
+        }
+      ]
+    }
+  ],
+  "epoch": 0,
+  "clusterId": "00000000-0000-0000-0000-000000000000"
+}

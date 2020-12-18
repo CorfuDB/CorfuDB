@@ -410,8 +410,8 @@ public class StateTransferTest extends AbstractViewTest {
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
 
-        addServerRule(SERVERS.PORT_2, new TestRule().matches(
-                msg -> !msg.getMsgType().equals(CorfuMsgType.LAYOUT_BOOTSTRAP)).drop());
+        addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(
+                msg -> !msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_LAYOUT_REQUEST)).drop());
         addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(
                 msg -> !msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_MANAGEMENT_REQUEST)).drop());
 
@@ -1273,8 +1273,8 @@ public class StateTransferTest extends AbstractViewTest {
             addServer(SERVERS.PORT_2, sc2);
 
             // Add rule to drop all msgs except for service discovery ones
-            addServerRule(SERVERS.PORT_2, new TestRule().matches(
-                    msg -> !msg.getMsgType().equals(CorfuMsgType.LAYOUT_BOOTSTRAP)).drop());
+            addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(
+                    msg -> !msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_LAYOUT_REQUEST)).drop());
             addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(
                     msg -> !msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_MANAGEMENT_REQUEST)).drop());
 

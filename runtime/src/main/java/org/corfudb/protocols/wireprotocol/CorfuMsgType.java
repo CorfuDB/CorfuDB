@@ -29,15 +29,6 @@ public enum CorfuMsgType {
     WRONG_CLUSTER_ID(28, new TypeToken<CorfuPayloadMsg<WrongClusterMsg>>(){}, true, false),
 
     // Layout Messages
-    LAYOUT_REQUEST(10, new TypeToken<CorfuPayloadMsg<Long>>(){}, true, true),
-    LAYOUT_RESPONSE(11, TypeToken.of(LayoutMsg.class), true, false),
-    LAYOUT_PREPARE(12, new TypeToken<CorfuPayloadMsg<LayoutPrepareRequest>>(){}, true, false),
-    LAYOUT_PREPARE_REJECT(13, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}),
-    LAYOUT_PROPOSE(14, new TypeToken<CorfuPayloadMsg<LayoutProposeRequest>>(){}, true, false),
-    LAYOUT_PROPOSE_REJECT(15, new TypeToken<CorfuPayloadMsg<LayoutProposeResponse>>(){}),
-    LAYOUT_COMMITTED(16, new TypeToken<CorfuPayloadMsg<LayoutCommittedRequest>>(){}, true, false),
-    LAYOUT_QUERY(17, new TypeToken<CorfuPayloadMsg<Long>>(){}),
-    LAYOUT_BOOTSTRAP(18, new TypeToken<CorfuPayloadMsg<LayoutBootstrapRequest>>(){}, true, true),
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true, false),
 
     // Sequencer Messages
@@ -79,8 +70,6 @@ public enum CorfuMsgType {
     ERROR_VALUE_ADOPTED(59,new TypeToken<CorfuPayloadMsg<ReadResponse>>() {}),
 
     // EXTRA CODES
-    LAYOUT_ALREADY_BOOTSTRAP(60, TypeToken.of(CorfuMsg.class), true, false),
-    LAYOUT_PREPARE_ACK(61, new TypeToken<CorfuPayloadMsg<LayoutPrepareResponse>>(){}, true, false),
     COMMITTED_TAIL_REQUEST(64, TypeToken.of(CorfuMsg.class)),
     COMMITTED_TAIL_RESPONSE(65, new TypeToken<CorfuPayloadMsg<Long>>(){}),
     UPDATE_COMMITTED_TAIL(66, new TypeToken<CorfuPayloadMsg<Long>>(){}),

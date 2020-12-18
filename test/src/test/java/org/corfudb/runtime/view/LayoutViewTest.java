@@ -4,7 +4,6 @@ import java.util.UUID;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestLayoutBuilder;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
@@ -20,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -367,20 +368,20 @@ public class LayoutViewTest extends AbstractViewTest {
         assertThat(getLayoutServer(SERVERS.PORT_3).getCurrentLayout()).isEqualTo(newLayout);
     }
 
-    private final Map<String, Map<CorfuMsgType, List<Semaphore>>> messageLocks =
+    private final Map<String, Map<RequestPayloadMsg.PayloadCase, List<Semaphore>>> messageLocks =
             new ConcurrentHashMap<>();
 
     private void holdMessage(CorfuRuntime corfuRuntime, String clientRouterEndpoint,
-                             CorfuMsgType corfuMsgType) {
+                             RequestPayloadMsg.PayloadCase payloadCase) {
         Semaphore lock = new Semaphore(0);
-        addClientRule(corfuRuntime, clientRouterEndpoint, new TestRule().matches(msg -> {
-            if (msg.getMsgType().equals(corfuMsgType)) {
-                Map<CorfuMsgType, List<Semaphore>> lockMap =
+        addClientRule(corfuRuntime, clientRouterEndpoint, new TestRule().requestMatches(msg -> {
+            if (msg.getPayload().getPayloadCase().equals(payloadCase)) {
+                Map<RequestPayloadMsg.PayloadCase, List<Semaphore>> lockMap =
                         messageLocks.getOrDefault(clientRouterEndpoint, new HashMap<>());
-                List<Semaphore> lockList = lockMap.getOrDefault(corfuMsgType, new ArrayList<>());
+                List<Semaphore> lockList = lockMap.getOrDefault(payloadCase, new ArrayList<>());
                 lockList.add(lock);
 
-                lockMap.put(corfuMsgType, lockList);
+                lockMap.put(payloadCase, lockList);
                 messageLocks.put(clientRouterEndpoint, lockMap);
 
                 try {
@@ -393,9 +394,9 @@ public class LayoutViewTest extends AbstractViewTest {
         }));
     }
 
-    private void releaseMessages(String clientRouterEndpoint, CorfuMsgType corfuMsgType) {
+    private void releaseMessages(String clientRouterEndpoint, RequestPayloadMsg.PayloadCase payloadCase) {
         messageLocks.computeIfPresent(clientRouterEndpoint, (s, corfuMsgTypeListMap) -> {
-            corfuMsgTypeListMap.computeIfPresent(corfuMsgType, (msgType, semaphores) -> {
+            corfuMsgTypeListMap.computeIfPresent(payloadCase, (msgType, semaphores) -> {
                 semaphores.forEach(Semaphore::release);
                 return null;
             });
@@ -615,13 +616,13 @@ public class LayoutViewTest extends AbstractViewTest {
         addClientRule(corfuRuntime1, SERVERS.ENDPOINT_2, new TestRule().drop().always());
 
         // Add rule to hold the propose message sent to PORT_1.
-        addClientRule(corfuRuntime1, SERVERS.ENDPOINT_1, new TestRule().matches(msg -> {
-            if (msg.getMsgType().equals(CorfuMsgType.LAYOUT_PROPOSE)) {
+        addClientRule(corfuRuntime1, SERVERS.ENDPOINT_1, new TestRule().requestMatches(msg -> {
+            if (msg.getPayload().getPayloadCase().equals(RequestPayloadMsg.PayloadCase.PROPOSE_LAYOUT_REQUEST)) {
                 proposeLock.release();
             }
             return true;
         }));
-        holdMessage(corfuRuntime1, SERVERS.ENDPOINT_1, CorfuMsgType.LAYOUT_PROPOSE);
+        holdMessage(corfuRuntime1, SERVERS.ENDPOINT_1, RequestPayloadMsg.PayloadCase.PROPOSE_LAYOUT_REQUEST);
 
         // Asynchronously send a propose message to PORT_0 and PORT_1 (PORT_2 is disabled)
         Future<Boolean> future = executorService.submit(() -> {
@@ -635,8 +636,10 @@ public class LayoutViewTest extends AbstractViewTest {
         });
 
         AtomicBoolean proposalRejected = new AtomicBoolean(false);
-        addServerRule(SERVERS.PORT_1, new TestRule().matches(msg -> {
-            if (msg.getMsgType().equals(CorfuMsgType.LAYOUT_PROPOSE_REJECT)) {
+        addServerRule(SERVERS.PORT_1, new TestRule().responseMatches(msg -> {
+            if (msg.getPayload().getPayloadCase()
+                    .equals(ResponsePayloadMsg.PayloadCase.PROPOSE_LAYOUT_RESPONSE)
+                && !msg.getPayload().getProposeLayoutResponse().getProposed()) {
                 proposalRejected.set(true);
             }
             return true;
@@ -653,7 +656,7 @@ public class LayoutViewTest extends AbstractViewTest {
             Thread.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
         // release the held propose message
-        releaseMessages(SERVERS.ENDPOINT_1, CorfuMsgType.LAYOUT_PROPOSE);
+        releaseMessages(SERVERS.ENDPOINT_1, RequestPayloadMsg.PayloadCase.PROPOSE_LAYOUT_REQUEST);
         try {
             alreadyProposedLayout2 = corfuRuntime2.getLayoutView().propose(l2.getEpoch(), rank2, l2);
             assertThat(alreadyProposedLayout2).isEqualTo(l2);
