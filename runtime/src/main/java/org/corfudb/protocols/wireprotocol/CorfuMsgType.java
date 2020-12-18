@@ -31,16 +31,6 @@ public enum CorfuMsgType {
     // Layout Messages
     LAYOUT_NOBOOTSTRAP(19, TypeToken.of(CorfuMsg.class), true, false),
 
-    // Sequencer Messages
-    TOKEN_REQ(20, new TypeToken<CorfuPayloadMsg<TokenRequest>>(){}),
-    TOKEN_RES(21, new TypeToken<CorfuPayloadMsg<TokenResponse>>(){}),
-    BOOTSTRAP_SEQUENCER(22, new TypeToken<CorfuPayloadMsg<SequencerRecoveryMsg>>(){}),
-    SEQUENCER_TRIM_REQ(23, new TypeToken<CorfuPayloadMsg<Long>>() {}),
-    SEQUENCER_METRICS_REQUEST(24, TypeToken.of(CorfuMsg.class), true, false),
-    SEQUENCER_METRICS_RESPONSE(25, new TypeToken<CorfuPayloadMsg<SequencerMetrics>>(){}, true, false),
-    STREAMS_ADDRESS_REQUEST(26, new TypeToken<CorfuPayloadMsg<StreamsAddressRequest>>(){}),
-    STREAMS_ADDRESS_RESPONSE(27, new TypeToken<CorfuPayloadMsg<StreamsAddressResponse>>(){}),
-
     // Logging Unit Messages
     WRITE(30, new TypeToken<CorfuPayloadMsg<WriteRequest>>() {}),
     READ_REQUEST(31, new TypeToken<CorfuPayloadMsg<ReadRequest>>() {}),

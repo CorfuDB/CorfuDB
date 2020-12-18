@@ -1,10 +1,5 @@
 package org.corfudb.infrastructure;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.Map;
-import java.util.UUID;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
@@ -20,6 +15,12 @@ import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Before;
+
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 
@@ -97,6 +98,13 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
                 .setEpoch(0L);
         clientRouter.setClientID(testClientId);
         return clientRouter.sendMessageAndGetCompletable(msg);
+    }
+
+    public <T> CompletableFuture<T> sendRequestWithEpoch(RequestPayloadMsg payload, long epoch,
+                                                         boolean ignoreClusterId, boolean ignoreEpoch) {
+        clientRouter.setClientID(testClientId);
+        return clientRouter.sendRequestAndGetCompletable(payload, epoch, getUuidMsg(Layout.INVALID_CLUSTER_ID),
+                CorfuMessage.PriorityLevel.NORMAL, ignoreClusterId, ignoreEpoch);
     }
 
     public <T> CompletableFuture<T> sendRequestWithClusterId(RequestPayloadMsg payload, UUID clusterId,
