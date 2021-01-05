@@ -22,7 +22,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
@@ -597,7 +597,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
 
         // Reset the Replication Status on Active and Standby
-        logReplicationMetadataManager.resetReplicationStatus();
+        resetReplicationStatusTableWithRetry();
 
         log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
@@ -913,6 +913,25 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             }
         } else {
             log.warn("setupLocalNodeId failed, because nodeId file path is missing!");
+        }
+    }
+
+    private void resetReplicationStatusTableWithRetry() {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    logReplicationMetadataManager.resetReplicationStatus();
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to resetReplicationStatusTable in DiscoveryService's role change", tae);
+                    throw new RetryNeededException();
+                }
+
+                log.debug("resetReplicationStatusTable succeeds");
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to resetReplicationStatusTable in DiscoveryService's role change.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
 }
