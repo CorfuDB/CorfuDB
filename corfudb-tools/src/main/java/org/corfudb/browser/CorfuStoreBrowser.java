@@ -142,9 +142,11 @@ public class CorfuStoreBrowser {
                     builder = new StringBuilder("\nKey:\n")
                             .append(JsonFormat.printer().print(entry.getKey().getKey()))
                             .append("\nPayload:\n")
-                            .append(JsonFormat.printer().print(entry.getValue().getPayload()))
+                            .append(entry.getValue() != null && entry.getValue().getPayload() != null ?
+                                JsonFormat.printer().print(entry.getValue().getPayload()) : "")
                             .append("\nMetadata:\n")
-                            .append(JsonFormat.printer().print(entry.getValue().getMetadata()))
+                            .append(entry.getValue() != null && entry.getValue().getMetadata() != null ?
+                                JsonFormat.printer().print(entry.getValue().getMetadata()) : "")
                             .append("\n====================\n");
                     log.info(builder.toString());
                 } catch (InvalidProtocolBufferException e) {

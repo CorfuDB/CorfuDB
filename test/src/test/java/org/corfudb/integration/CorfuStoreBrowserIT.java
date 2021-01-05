@@ -136,6 +136,82 @@ public class CorfuStoreBrowserIT extends AbstractIT {
     }
 
     /**
+     * Create a table with no metadata schema and add data to it.
+     * Verify that the browser tool is able to read its contents accurately.
+     * @throws IOException
+     * @throws NoSuchMethodException
+     * @throws IllegalAccessException
+     * @throws InvocationTargetException
+     */
+    @Test
+    public void browserTestWithNullMetadata() throws
+        IOException,
+        NoSuchMethodException,
+        IllegalAccessException,
+        InvocationTargetException {
+        final String namespace = "namespace";
+        final String tableName = "table";
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
+            corfuStringNodePort);
+
+        // Start a Corfu runtime
+        runtime = createRuntime(singleNodeEndpoint);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        // Null schema for the metadata
+        store.openTable(
+            namespace,
+            tableName,
+            SampleSchema.Uuid.class,
+            SampleSchema.Uuid.class,
+            null,
+            TableOptions.builder().build());
+
+        final long keyUuid = 1L;
+        final long valueUuid = 3L;
+
+        SampleSchema.Uuid uuidKey = SampleSchema.Uuid.newBuilder()
+            .setMsb(keyUuid)
+            .setLsb(keyUuid)
+            .build();
+        SampleSchema.Uuid uuidVal = SampleSchema.Uuid.newBuilder()
+            .setMsb(valueUuid)
+            .setLsb(valueUuid)
+            .build();
+
+        TxBuilder tx = store.tx(namespace);
+        tx.create(tableName, uuidKey, uuidVal, null)
+            .update(tableName, uuidKey, uuidVal, null)
+            .commit();
+        runtime.shutdown();
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        // Invoke listTables and verify table count
+        Assert.assertEquals(browser.listTables(namespace), 1);
+
+        // Invoke the browser and go through each item
+        CorfuTable table = browser.getTable(namespace, tableName);
+        Assert.assertEquals(browser.printTable(namespace, tableName), 1);
+        for(Object obj : table.values()) {
+            CorfuDynamicRecord record = (CorfuDynamicRecord)obj;
+            Assert.assertEquals(
+                UnknownFieldSet.newBuilder().build(),
+                record.getPayload().getUnknownFields());
+        }
+
+        // Invoke tableInfo and verify size
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), 1);
+        // Invoke dropTable and verify size
+        Assert.assertEquals(browser.dropTable(namespace, tableName), 1);
+        // Invoke tableInfo and verify size
+        Assert.assertEquals(browser.printTableInfo(namespace, tableName), 0);
+        // TODO: Remove this once serializers move into the runtime
+        Serializers.clearCustomSerializers();
+    }
+
+    /**
      * Create a table and add data to it using the loadTable command.
      * @throws IOException
      */
