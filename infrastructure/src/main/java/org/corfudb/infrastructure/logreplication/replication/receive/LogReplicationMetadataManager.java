@@ -344,6 +344,8 @@ public class LogReplicationMetadataManager {
     /**
      * Update replication status table's snapshot sync info as ongoing.
      *
+     * Note: TransactionAbortedException has been handled by upper level.
+     *
      * @param clusterId standby cluster id
      */
     public void updateSnapshotSyncInfo(String clusterId, boolean forced, UUID eventId,
@@ -378,6 +380,8 @@ public class LogReplicationMetadataManager {
 
     /**
      * Update replication status table's snapshot sync info as completed.
+     *
+     * Note: TransactionAbortedException has been handled by upper level.
      *
      * @param clusterId standby cluster id
      */
@@ -418,6 +422,8 @@ public class LogReplicationMetadataManager {
     /**
      * Update replication status table's sync status
      *
+     * Note: TransactionAbortedException has been handled by upper level.
+     *
      * @param clusterId standby cluster id
      */
     public void updateSyncStatus(String clusterId, ReplicationStatusVal.SyncType lastSyncType, LogReplicationMetadata.SyncStatus status) {
@@ -453,6 +459,8 @@ public class LogReplicationMetadataManager {
     /**
      * Set replication status table.
      * If the current sync type is log entry sync, keep Snapshot Sync Info.
+     *
+     * Note: TransactionAbortedException has been handled by upper level.
      *
      * @param clusterId standby cluster id
      * @param remainingEntries num of remaining entries to send
@@ -538,15 +546,13 @@ public class LogReplicationMetadataManager {
         return replicationStatusMap;
     }
 
-    public ReplicationStatusVal getReplicationRemainingEntries(String clusterId) {
-        ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
-        CorfuRecord record = corfuStore.query(NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
-        if (record == null) {
-            return null;
-        }
-        return (ReplicationStatusVal)record.getPayload();
-    }
-
+    /**
+     * set DataConsistent filed in status table on standby side.
+     *
+     * Note: TransactionAbortedException has been handled by upper level.
+     *
+     * @param isConsistent data is consistent or not
+     */
     public void setDataConsistentOnStandby(boolean isConsistent) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build();
         ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
@@ -557,7 +563,9 @@ public class LogReplicationMetadataManager {
         txBuilder.update(REPLICATION_STATUS_TABLE, key, val, null);
         txBuilder.commit();
 
-        log.trace("setDataConsistentOnStandby: localClusterId: {}, isConsistent: {}", localClusterId, isConsistent);
+        if (log.isTraceEnabled()) {
+            log.trace("setDataConsistentOnStandby: localClusterId: {}, isConsistent: {}", localClusterId, isConsistent);
+        }
     }
 
     public Map<String, ReplicationStatusVal> getDataConsistentOnStandby() {
