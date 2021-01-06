@@ -24,10 +24,10 @@
         <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
             <fileNamePattern>${LOG_DIRECTORY}/corfu-metrics.%i.log.gz</fileNamePattern>
             <minIndex>1</minIndex>
-            <maxIndex>30</maxIndex>
+            <maxIndex>25</maxIndex>
         </rollingPolicy>
         <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <maxFileSize>200MB</maxFileSize>
+            <maxFileSize>25MB</maxFileSize>
         </triggeringPolicy>
         <encoder>
             <pattern>
