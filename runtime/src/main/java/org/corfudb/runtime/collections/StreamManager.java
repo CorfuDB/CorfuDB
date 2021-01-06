@@ -1,5 +1,6 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.collect.Sets;
 import com.google.protobuf.Message;
 
 import lombok.AllArgsConstructor;
@@ -256,6 +257,10 @@ public class StreamManager {
                     ILogData logData = txnStream.nextUpTo(Address.MAX);
                     if (logData == null) {
                         break; // Stream is all caught up, sleep for a bit.
+                    }
+                    // Avoid LogData decompression/deserialization if no table of interest contained.
+                    if (Sets.intersection(logData.getStreams(), tablesOfInterest.keySet()).isEmpty()) {
+                        continue;
                     }
                     MultiObjectSMREntry multiObjSMREntry = (MultiObjectSMREntry) logData.getPayload(runtime);
                     long epoch = logData.getEpoch();
