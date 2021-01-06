@@ -46,27 +46,41 @@ public class Index {
      */
     public static class Spec<K, V, I> {
         private final Name name;
+        private final Name alias;
         private final MultiValueFunction<K, V, I> indexFunction;
 
         public Spec(Name name, Function<K, V, I> indexFunction) {
+            this(name, name, indexFunction);
+        }
+
+        public Spec(Name name, Name alias, Function<K, V, I> indexFunction) {
             this.name = name;
+            this.alias = alias;
             this.indexFunction =
                     (k, v) -> Collections.singletonList(indexFunction.apply(k, v));
         }
 
-        public Spec(Name name, MultiValueFunction<K, V, I> indexFunction) {
+        public Spec(Name name, Name alias, MultiValueFunction<K, V, I> indexFunction) {
             this.name = name;
+            this.alias = alias;
             this.indexFunction = indexFunction;
+        }
+
+        public Spec(Name name, MultiValueFunction<K, V, I> indexFunction) {
+            this(name, name, indexFunction);
         }
 
         public Name getName() {
             return name;
         }
 
+        public Name getAlias() {
+            return alias;
+        }
+
         public MultiValueFunction<K, V, I> getMultiValueIndexFunction() {
             return indexFunction;
         }
-
 
         @Override
         public boolean equals(Object o) {
@@ -88,8 +102,7 @@ public class Index {
      * @param <K> type of the record key associated with {@code Index}.
      * @param <V> type of the record value associated with {@code Index}.
      */
-    public interface Registry<K, V>
-            extends Iterable<Spec<K, V, ?>> {
+    public interface Registry<K, V> extends Iterable<Spec<K, V, ?>> {
 
         Registry<?, ?> EMPTY = new Registry<Object, Object>() {
             @Override
