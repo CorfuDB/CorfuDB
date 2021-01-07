@@ -138,8 +138,9 @@ public class LayoutServer extends AbstractServer {
      * @param ctx              netty ChannelHandlerContext
      * @param r                server router
      */
+    @VisibleForTesting
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.LAYOUT_REQUEST)
-    public void handleLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
+    void handleLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
                                     @Nonnull IServerRouter r) {
         if (!isBootstrapped(req)) {
             r.sendNoBootstrapError(req.getHeader(), ctx);
@@ -170,8 +171,9 @@ public class LayoutServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
+    @VisibleForTesting
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.BOOTSTRAP_LAYOUT_REQUEST)
-    public void handleBootstrapLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
+    void handleBootstrapLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
                                              @Nonnull IServerRouter r) {
         final HeaderMsg requestHeader = req.getHeader();
         HeaderMsg responseHeader;
@@ -224,8 +226,9 @@ public class LayoutServer extends AbstractServer {
      * @param r   server router
      */
     // TODO this can work under a separate lock for this step as it does not change the global components
+    @VisibleForTesting
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.PREPARE_LAYOUT_REQUEST)
-    public void handlePrepareLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
+    void handlePrepareLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
                                            @Nonnull IServerRouter r) {
         final HeaderMsg requestHeader = req.getHeader();
         final PrepareLayoutRequestMsg payload = req.getPayload().getPrepareLayoutRequest();
@@ -284,9 +287,10 @@ public class LayoutServer extends AbstractServer {
      * @param ctx netty ChannelHandlerContext
      * @param r   server router
      */
+    @VisibleForTesting
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.PROPOSE_LAYOUT_REQUEST)
-    public void handleProposeLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
-                                           @Nonnull IServerRouter r) {
+    void handleProposeLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
+                                    @Nonnull IServerRouter r) {
         final HeaderMsg requestHeader = req.getHeader();
         final ProposeLayoutRequestMsg payload = req.getPayload().getProposeLayoutRequest();
 
@@ -431,8 +435,9 @@ public class LayoutServer extends AbstractServer {
     // TODO as this message is not set to ignore EPOCH.
     // TODO How do we handle holes in history if we let in layout commit message. Maybe we have a
     // TODO hole filling process
+    @VisibleForTesting
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.COMMIT_LAYOUT_REQUEST)
-    public void handleCommitLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
+    void handleCommitLayoutRequest(@Nonnull RequestMsg req, @Nonnull ChannelHandlerContext ctx,
                                           @Nonnull IServerRouter r) {
         final CommitLayoutRequestMsg payload = req.getPayload().getCommitLayoutRequest();
 

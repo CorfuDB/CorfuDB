@@ -6,7 +6,6 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.proto.RpcCommon.LayoutMsg;
@@ -17,6 +16,8 @@ import org.corfudb.runtime.proto.RpcCommon.StreamAddressSpaceMsg;
 import org.corfudb.runtime.proto.RpcCommon.TokenMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidToStreamAddressSpacePairMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
+import org.corfudb.runtime.proto.service.Sequencer.StreamsAddressResponseMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.roaringbitmap.longlong.Roaring64NavigableMap;
@@ -26,7 +27,6 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -40,7 +40,8 @@ import java.util.stream.Collectors;
 @Slf4j
 public class CorfuProtocolCommon {
     // Prevent class from being instantiated
-    private CorfuProtocolCommon() {}
+    private CorfuProtocolCommon() {
+    }
 
     private static final EnumMap<SequencerMetrics.SequencerStatus, SequencerStatus> sequencerStatusTypeMap =
             new EnumMap<>(ImmutableMap.of(
@@ -48,22 +49,21 @@ public class CorfuProtocolCommon {
                     SequencerMetrics.SequencerStatus.NOT_READY, SequencerStatus.NOT_READY,
                     SequencerMetrics.SequencerStatus.UNKNOWN, SequencerStatus.UNKNOWN));
 
-    // Temporary message header markers indicating message type.
-    @AllArgsConstructor
-    public enum MessageMarker {
-        LEGACY_MSG_MARK(0x1),
-        PROTO_REQUEST_MSG_MARK(0x2),
-        PROTO_RESPONSE_MSG_MARK(0x3);
-
-        private final int value;
-
-        public byte asByte() {
-            return (byte) value;
-        }
-
-        public static final Map<Byte, MessageMarker> typeMap =
-                Arrays.<MessageMarker>stream(MessageMarker.values())
-                    .collect(Collectors.toMap(MessageMarker::asByte, Function.identity()));
+    /**
+     * Returns the Protobuf object from the parameters.
+     * end is exclusive and start is inclusive i.e. (end, start]
+     *
+     * @param streamId the stream id for which the range of addresses are required
+     * @param start    start bound of the address map
+     * @param end      end bound of the address map
+     * @return the Protobuf StreamAddressRange object
+     */
+    public static StreamAddressRangeMsg getStreamAddressRange(UUID streamId, long start, long end) {
+        return StreamAddressRangeMsg.newBuilder()
+                .setStreamId(getUuidMsg(streamId))
+                .setStart(start)
+                .setEnd(end)
+                .build();
     }
 
     public static final UUID DEFAULT_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
@@ -71,8 +71,8 @@ public class CorfuProtocolCommon {
     /**
      * Returns the Protobuf representation of a UUID.
      *
-     * @param uuid   the desired Java UUID object
-     * @return       an equivalent Protobuf UUID message
+     * @param uuid the desired Java UUID object
+     * @return an equivalent Protobuf UUID message
      */
     public static UuidMsg getUuidMsg(UUID uuid) {
         return UuidMsg.newBuilder()
@@ -229,10 +229,23 @@ public class CorfuProtocolCommon {
     }
 
     /**
+     * Returns the Java representation of a {@link StreamAddressRangeMsg} Protobuf object.
+     *
+     * @param streamAddressRangeMsg the desired Protobuf {@link StreamAddressRangeMsg} object
+     * @return an equivalent Java {@link StreamAddressRange} object
+     */
+    public static StreamAddressRange getStreamAddressRange(StreamAddressRangeMsg streamAddressRangeMsg) {
+        return new StreamAddressRange(
+                getUUID(streamAddressRangeMsg.getStreamId()),
+                streamAddressRangeMsg.getStart(),
+                streamAddressRangeMsg.getEnd());
+    }
+
+    /**
      * Returns the Protobuf representation of a StreamAddressRange object.
      *
-     * @param streamAddressRange   the desired Java StreamAddressRange object
-     * @return                     an equivalent Protobuf StreamAddressRange message
+     * @param streamAddressRange the desired Java StreamAddressRange object
+     * @return an equivalent Protobuf StreamAddressRange message
      */
     public static StreamAddressRangeMsg getStreamAddressRangeMsg(StreamAddressRange streamAddressRange) {
         return StreamAddressRangeMsg.newBuilder()
@@ -243,19 +256,48 @@ public class CorfuProtocolCommon {
     }
 
     /**
-     * Returns a StreamAddressResponse object from its log tail and List
-     * of address map entries, each consisting of a UUID and a StreamAddressSpace,
-     * represented in Protobuf.
+     * Returns a new {@link ResponsePayloadMsg} Protobuf object consisting of a
+     * {@link StreamsAddressResponseMsg} object with the logTail, epoch and addressMap
+     * set from the parameters.
      *
-     * @param tail   the log tail
-     * @param map    a list of address map entries represented in Protobuf
-     * @return       an equivalent StreamsAddressResponse object
+     * @param logTail    the logTail to be set on the {@link StreamsAddressResponseMsg} object
+     * @param epoch      the epoch to be set on the {@link StreamsAddressResponseMsg} object
+     * @param addressMap addressMap of the {@link StreamsAddressResponseMsg} object
+     * @return a new {@link ResponsePayloadMsg} Protobuf object
      */
-    public static StreamsAddressResponse getStreamsAddressResponse(long tail, List<UuidToStreamAddressSpacePairMsg> map) {
-        return new StreamsAddressResponse(tail, map.stream()
-                .collect(Collectors.<UuidToStreamAddressSpacePairMsg, UUID, StreamAddressSpace>toMap(
-                        entry -> getUUID(entry.getStreamUuid()),
-                        entry -> getStreamAddressSpace(entry.getAddressSpace()))
-                ));
+    public static ResponsePayloadMsg getStreamsAddressResponseMsg(
+            long logTail,
+            long epoch,
+            Map<UUID, StreamAddressSpace> addressMap) {
+        return ResponsePayloadMsg.newBuilder()
+                .setStreamsAddressResponse(StreamsAddressResponseMsg.newBuilder()
+                        .setLogTail(logTail)
+                        .setEpoch(epoch)
+                        .addAllAddressMap(addressMap.entrySet()
+                                .stream()
+                                .map(entry -> UuidToStreamAddressSpacePairMsg.newBuilder()
+                                        .setStreamUuid(getUuidMsg(entry.getKey()))
+                                        .setAddressSpace(getStreamAddressSpaceMsg(entry.getValue()))
+                                        .build())
+                                .collect(Collectors.toList()))
+                        .build())
+                .build();
+    }
+
+    // Temporary message header markers indicating message type.
+    @AllArgsConstructor
+    public enum MessageMarker {
+        LEGACY_MSG_MARK(0x1),
+        PROTO_REQUEST_MSG_MARK(0x2),
+        PROTO_RESPONSE_MSG_MARK(0x3);
+
+        public static final Map<Byte, MessageMarker> typeMap =
+                Arrays.stream(MessageMarker.values())
+                        .collect(Collectors.toMap(MessageMarker::asByte, Function.identity()));
+        private final int value;
+
+        public byte asByte() {
+            return (byte) value;
+        }
     }
 }
