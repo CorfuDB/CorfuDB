@@ -970,6 +970,161 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     }
 
     /**
+     * Simple example to prove we can access a secondary index based on a custom alias or the default alias.
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testSecondaryIndexAlias() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "alias-namespace";
+        // Define table name.
+        final String tableName = "Adults";
+        final int adultCount = 50;
+        final long adultBaseAge = 30L;
+        final long kidsBaseAge = 4L;
+
+        // Create & Register the table.
+        Table<Uuid, ExampleSchemas.Adult, ManagedMetadata> adultsTable = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.Adult.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        for (int i = 0; i < adultCount; i++) {
+            UUID adultId = UUID.randomUUID();
+            Uuid adultKey = Uuid.newBuilder()
+                    .setMsb(adultId.getMostSignificantBits()).setLsb(adultId.getLeastSignificantBits())
+                    .build();
+
+            try (ManagedTxnContext txn = shimStore.txn(someNamespace)) {
+                long adultAge = i % 2 == 0 ? adultBaseAge : adultBaseAge*2;
+                long kidsAge = i % 2 == 0 ? kidsBaseAge : kidsBaseAge*2;
+                txn.putRecord(tableName, adultKey,
+                        ExampleSchemas.Adult.newBuilder()
+                        .setPerson(ExampleSchemas.Person.newBuilder()
+                                .setName("Name_" + i)
+                                .setAge(adultAge)
+                                .setPhoneNumber(ExampleSchemas.PhoneNumber.newBuilder()
+                                        .setHome(UUID.randomUUID().toString())
+                                        .build())
+                                .setChildren(ExampleSchemas.Children.newBuilder()
+                                .addChild(ExampleSchemas.Child.newBuilder().setName("Child_" + i).setAge(kidsAge)).build())
+                                .build()).build(),
+                        user);
+                txn.commit();
+            }
+        }
+
+
+        // Get by secondary index (default alias), retrieve from database all adults with adultsBaseAge
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(adultsTable, "age", adultBaseAge);
+            assertThat(entries.size()).isEqualTo(adultCount/2);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index (using fully qualified name), retrieve from database all adults with adultsBaseAge
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(adultsTable, "person.age", adultBaseAge);
+            assertThat(entries.size()).isEqualTo(adultCount/2);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index (custom alias), retrieve from database all adults with kids on age 'kidsBaseAge'
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(adultsTable, "kidsAge", kidsBaseAge);
+            assertThat(entries.size()).isEqualTo(adultCount/2);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index (fully qualified name), retrieve from database all adults with kids on age 'kidsBaseAge'
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(adultsTable, "person.children.child.age", kidsBaseAge);
+            assertThat(entries.size()).isEqualTo(adultCount/2);
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index (custom alias), retrieve from database all adults with kids on age '2' (non existent)
+        try (ManagedTxnContext readWriteTxn = shimStore.txn(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.Adult, ManagedMetadata>> entries = readWriteTxn
+                    .getByIndex(adultsTable, "kidsAge", 2);
+            assertThat(entries.size()).isZero();
+            readWriteTxn.commit();
+        }
+    }
+
+    /**
+     * Simple example to prove we can't register a table with non unique (default) alias
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testInvalidAlias() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "InvalidAdultTable";
+
+        // Create & Register the table.
+        assertThrows(IllegalArgumentException.class, () -> shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.InvalidAdultDefaultIndexName.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build()));
+    }
+
+    /**
+     * Simple example to prove we can't register a table with non-unique alias (user-defined)
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testInvalidAliasUserDefined() throws Exception {
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getTestRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "InvalidAdultTable";
+
+        // Create & Register the table.
+        assertThrows(IllegalArgumentException.class, () -> shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.InvalidAdultCustomIndexName.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build()));
+    }
+
+    /**
      * Simple example to prove that a nested secondary index definition with no inner object definition, defaults to
      * the behavior of the secondary_key annotation (true/false).
      * Please see example_schemas.proto.

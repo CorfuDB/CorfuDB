@@ -17,8 +17,15 @@ message SchemaOptions {
     optional bool is_federated = 4;
     // Tag tables with unique stream listener tags for selectivity in receiving change notifications.
     repeated string stream_tag = 5;
-    // String of comma-separated nested secondary keys
-    optional string nested_secondary_keys = 6;
+    // Nested Secondary Key (repeated field)
+    repeated NestedSecondaryIndex nested_secondary_key = 6;
+}
+
+message NestedSecondaryIndex {
+    // Full Qualified Name / Path
+    required string index_path = 1;
+    // Index Name (alias)
+    optional string index_name = 2;
 }
 
 // Field options to be extended in the user's protobuf fields.
