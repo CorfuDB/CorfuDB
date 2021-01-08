@@ -113,8 +113,7 @@ public class LayoutHandlerTest {
 
         layoutHandler.handleMessage(response, mockChannelHandlerContext);
 
-        // Verify that the correct request was completed (once) with the appropriate value,
-        // and that we did not complete exceptionally.
+        // Verify that the request was completed exceptionally with the expected exception type.
         verify(mockClientRouter).completeExceptionally(anyLong(), any(SerializerException.class));
     }
 
