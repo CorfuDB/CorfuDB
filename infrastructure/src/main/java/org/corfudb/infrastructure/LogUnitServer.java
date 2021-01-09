@@ -164,8 +164,8 @@ public class LogUnitServer extends AbstractServer {
      */
     @RequestHandler(type = PayloadCase.TAIL_REQUEST)
     private void handleTailRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
-        if (log.isDebugEnabled()) {
-            log.debug("handleTailRequest[{}]: received a tail request {}",
+        if (log.isTraceEnabled()) {
+            log.trace("handleTailRequest[{}]: received a tail request {}",
                     req.getHeader().getRequestId(), TextFormat.shortDebugString(req));
         }
 

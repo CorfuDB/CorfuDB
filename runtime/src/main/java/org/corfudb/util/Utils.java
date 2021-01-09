@@ -329,7 +329,9 @@ public class Utils {
               resp.getStreamTails().forEach((k, v) -> streamTails.merge(k, v, Long::max));
             });
 
-    log.debug("getAllTails: nodes selected {} stream tails {}", segmentsHeadNodes, streamTails);
+    if (log.isTraceEnabled()) {
+        log.trace("getAllTails: nodes selected {} stream tails {}", segmentsHeadNodes, streamTails);
+    }
 
     return new TailsResponse(runtimeLayout.getLayout().getEpoch(), globalTail.get(), streamTails);
   }

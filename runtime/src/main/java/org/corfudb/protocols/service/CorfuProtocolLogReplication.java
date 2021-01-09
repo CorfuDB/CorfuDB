@@ -163,20 +163,20 @@ public final class CorfuProtocolLogReplication {
     }
 
     public static ResponseMsg getLeadershipResponse(
-            HeaderMsg header, boolean isLeader, String endpoint) {
+            HeaderMsg header, boolean isLeader, String nodeId) {
         LogReplication.LogReplicationLeadershipResponseMsg request = LogReplication.LogReplicationLeadershipResponseMsg
                 .newBuilder()
                 .setIsLeader(isLeader)
-                .setEndpoint(endpoint).build();
+                .setNodeId(nodeId).build();
         ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder()
                 .setLrLeadershipResponse(request).build();
         return getResponseMsg(header, payload);
     }
 
-    public static ResponseMsg getLeadershipLoss(HeaderMsg header, String endpoint) {
+    public static ResponseMsg getLeadershipLoss(HeaderMsg header, String nodeId) {
         LogReplication.LogReplicationLeadershipLossResponseMsg response = LogReplication.LogReplicationLeadershipLossResponseMsg
                 .newBuilder()
-                .setEndpoint(endpoint)
+                .setNodeId(nodeId)
                 .build();
         ResponsePayloadMsg payload = ResponsePayloadMsg.newBuilder()
                 .setLrLeadershipLoss(response).build();
