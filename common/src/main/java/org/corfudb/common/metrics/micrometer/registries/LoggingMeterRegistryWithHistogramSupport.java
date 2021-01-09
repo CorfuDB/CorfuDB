@@ -1,75 +1,150 @@
 package org.corfudb.common.metrics.micrometer.registries;
 
 import io.micrometer.core.instrument.Clock;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.FunctionTimer;
+import io.micrometer.core.instrument.LongTaskTimer;
+import io.micrometer.core.instrument.Measurement;
 import io.micrometer.core.instrument.Meter;
-import io.micrometer.core.instrument.binder.BaseUnits;
-import io.micrometer.core.instrument.config.NamingConvention;
-import io.micrometer.core.instrument.distribution.HistogramSnapshot;
+import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
 import io.micrometer.core.instrument.step.StepMeterRegistry;
+import io.micrometer.core.instrument.util.DoubleFormat;
 import io.micrometer.core.instrument.util.NamedThreadFactory;
-import io.micrometer.core.instrument.util.TimeUtils;
+import io.micrometer.core.instrument.util.StringUtils;
+import io.micrometer.influx.InfluxNamingConvention;
 
-import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
+import java.util.stream.Stream;
 
-import static io.micrometer.core.instrument.util.DoubleFormat.decimalOrNan;
 import static java.util.stream.Collectors.joining;
 
 /**
- * The source code is copied from LoggingMeterRegistry with some additional modification added:
- * - Influx logging printer.
+ * The source code is copied from LoggingMeterRegistry and InfluxMeterRegistry with some additional modification added:
  * - Enable percentiles and histograms.
  */
 public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry {
     private final LoggingRegistryConfig config;
     private final Consumer<String> loggingSink;
-    private final Function<Meter, String> meterIdPrinter;
-
-    public LoggingMeterRegistryWithHistogramSupport(LoggingRegistryConfig config, Consumer<String> loggingSink) {
-        this(config, loggingSink, DataProtocol.DEFAULT);
-    }
 
     public LoggingMeterRegistryWithHistogramSupport(LoggingRegistryConfig config,
-                                                    Consumer<String> loggingSink,
-                                                    DataProtocol dataProtocol) {
+                                                    Consumer<String> loggingSink) {
         super(config, Clock.SYSTEM);
         this.config = config;
         this.loggingSink = loggingSink;
-        this.meterIdPrinter = getPrinter(dataProtocol);
-        config().namingConvention(NamingConvention.dot);
+        config().namingConvention(new InfluxNamingConvention());
         start(new NamedThreadFactory("logging-metrics-publisher"));
     }
 
-    public enum DataProtocol {
-        DEFAULT,
-        INFLUX,
-    }
-
-    private Function<Meter, String> getPrinter(DataProtocol dataProtocol) {
-        switch (dataProtocol) {
-            case INFLUX:
-                return influxMeterIdPrinter();
-            case DEFAULT:
-                return defaultMeterIdPrinter();
-            default:
-                return defaultMeterIdPrinter();
+    Stream<String> writeMeter(Meter m) {
+        List<Field> fields = new ArrayList<>();
+        for (Measurement measurement : m.measure()) {
+            double value = measurement.getValue();
+            if (!Double.isFinite(value)) {
+                continue;
+            }
+            String fieldKey = measurement.getStatistic().getTagValueRepresentation()
+                    .replaceAll("(.)(\\p{Upper})", "$1_$2").toLowerCase();
+            fields.add(new Field(fieldKey, value));
         }
+        if (fields.isEmpty()) {
+            return Stream.empty();
+        }
+        Meter.Id id = m.getId();
+        return Stream.of(influxLineProtocol(id, id.getType().name().toLowerCase(), fields.stream()));
     }
 
-    private Function<Meter, String> defaultMeterIdPrinter() {
-        return (meter) -> getConventionName(meter.getId()) + getConventionTags(meter.getId()).stream()
-                .map(t -> t.getKey() + "=" + t.getValue())
-                .collect(joining(",", "{", "}"));
+    private Stream<String> writeLongTaskTimer(LongTaskTimer timer) {
+        Stream<Field> fields = Stream.of(
+                new Field("active_tasks", timer.activeTasks()),
+                new Field("duration", timer.duration(getBaseTimeUnit()))
+        );
+        return Stream.of(influxLineProtocol(timer.getId(), "long_task_timer", fields));
     }
 
-    private Function<Meter, String> influxMeterIdPrinter() {
-        return meter -> getConventionName(meter.getId()) + "," + getConventionTags(meter.getId()).stream()
-                .map(t -> t.getKey() + "=" + t.getValue()).collect(Collectors.joining(","));
+    Stream<String> writeCounter(Meter.Id id, double count) {
+        if (Double.isFinite(count)) {
+            return Stream.of(influxLineProtocol(id, "counter", Stream.of(new Field("value", count))));
+        }
+        return Stream.empty();
+    }
+
+    Stream<String> writeGauge(Meter.Id id, Double value) {
+        if (Double.isFinite(value)) {
+            return Stream.of(influxLineProtocol(id, "gauge", Stream.of(new Field("value", value))));
+        }
+        return Stream.empty();
+    }
+
+    Stream<String> writeFunctionTimer(FunctionTimer timer) {
+        double sum = timer.totalTime(getBaseTimeUnit());
+        if (Double.isFinite(sum)) {
+            Stream.Builder<Field> builder = Stream.builder();
+            builder.add(new Field("sum", sum));
+            builder.add(new Field("count", timer.count()));
+            double mean = timer.mean(getBaseTimeUnit());
+            if (Double.isFinite(mean)) {
+                builder.add(new Field("mean", mean));
+            }
+            return Stream.of(influxLineProtocol(timer.getId(), "histogram", builder.build()));
+        }
+        return Stream.empty();
+    }
+
+    private Stream<String> writeTimer(Timer timer) {
+        final Stream<Field> fields = Stream.of(
+                new Field("sum", timer.totalTime(getBaseTimeUnit())),
+                new Field("count", timer.count()),
+                new Field("mean", timer.mean(getBaseTimeUnit())),
+                new Field("upper", timer.max(getBaseTimeUnit()))
+        );
+
+        return Stream.of(influxLineProtocol(timer.getId(), "histogram", fields));
+    }
+
+    private Stream<String> writeSummary(DistributionSummary summary) {
+        final Stream<Field> fields = Stream.of(
+                new Field("sum", summary.totalAmount()),
+                new Field("count", summary.count()),
+                new Field("mean", summary.mean()),
+                new Field("upper", summary.max())
+        );
+
+        return Stream.of(influxLineProtocol(summary.getId(), "histogram", fields));
+    }
+
+    private String influxLineProtocol(Meter.Id id, String metricType, Stream<Field> fields) {
+        String tags = getConventionTags(id).stream()
+                .filter(t -> StringUtils.isNotBlank(t.getValue()))
+                .map(t -> "," + t.getKey() + "=" + t.getValue())
+                .collect(joining(""));
+
+        return getConventionName(id)
+                + tags + ",metric_type=" + metricType + " "
+                + fields.map(Field::toString).collect(joining(","))
+                + " " + clock.wallTime();
+    }
+
+    static class Field {
+        final String key;
+        final double value;
+
+        Field(String key, double value) {
+            // `time` cannot be a field key or tag key
+            if (key.equals("time")) {
+                throw new IllegalArgumentException("'time' is an invalid field key in InfluxDB");
+            }
+            this.key = key;
+            this.value = value;
+        }
+
+        @Override
+        public String toString() {
+            return key + "=" + DoubleFormat.decimalOrNan(value);
+        }
     }
 
     @Override
@@ -83,130 +158,25 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
                         }
                         return typeComp;
                     })
-                    .forEach(m -> {
-                        Printer print = new Printer(m);
-                        m.use(
-                                gauge -> {
-                                    loggingSink.accept(print.id() + " value=" + print.value(gauge.value()));
-                                },
-                                counter -> {
-                                    double count = counter.count();
-                                    if (!config.logInactive() && count == 0) return;
-                                    loggingSink.accept(print.id() + " throughput=" + print.rate(count));
-                                },
-                                timer -> {
-                                    HistogramSnapshot snapshot = timer.takeSnapshot();
-                                    long count = snapshot.count();
-                                    if (!config.logInactive() && count == 0) return;
-                                    loggingSink.accept(print.id() + " throughput=" + print.unitlessRate(count) +
-                                            " mean=" + print.time(snapshot.mean(getBaseTimeUnit())) +
-                                            " max=" + print.time(snapshot.max(getBaseTimeUnit())));
-                                },
-                                summary -> {
-                                    HistogramSnapshot snapshot = summary.takeSnapshot();
-                                    long count = snapshot.count();
-                                    if (!config.logInactive() && count == 0) return;
-                                    loggingSink.accept(print.id() + " throughput=" + print.unitlessRate(count) +
-                                            " mean=" + print.value(snapshot.mean()) +
-                                            " max=" + print.value(snapshot.max()));
-                                },
-                                longTaskTimer -> {
-                                    int activeTasks = longTaskTimer.activeTasks();
-                                    if (!config.logInactive() && activeTasks == 0) return;
-                                    loggingSink.accept(print.id() +
-                                            " active=" + print.value(activeTasks) +
-                                            " duration=" + print.time(longTaskTimer.duration(getBaseTimeUnit())));
-                                },
-                                timeGauge -> {
-                                    double value = timeGauge.value(getBaseTimeUnit());
-                                    if (!config.logInactive() && value == 0) return;
-                                    loggingSink.accept(print.id() + " value=" + print.time(value));
-                                },
-                                counter -> {
-                                    double count = counter.count();
-                                    if (!config.logInactive() && count == 0) return;
-                                    loggingSink.accept(print.id() + " throughput=" + print.rate(count));
-                                },
-                                timer -> {
-                                    double count = timer.count();
-                                    if (!config.logInactive() && count == 0) return;
-                                    loggingSink.accept(print.id() + " throughput=" + print.rate(count) +
-                                            " mean=" + print.time(timer.mean(getBaseTimeUnit())));
-                                },
-                                meter -> loggingSink.accept(writeMeter(meter, print))
-                        );
-                    });
+                    .flatMap(meter -> meter.match(
+                            gauge -> writeGauge(gauge.getId(), gauge.value()),
+                            counter -> writeCounter(counter.getId(), counter.count()),
+                            this::writeTimer,
+                            this::writeSummary,
+                            this::writeLongTaskTimer,
+                            gauge -> writeGauge(gauge.getId(), gauge.value(getBaseTimeUnit())),
+                            counter -> writeCounter(counter.getId(), counter.count()),
+                            this::writeFunctionTimer,
+                            this::writeMeter
+                    )).forEach(x -> {
+                System.out.println("Got: " + x);
+                loggingSink.accept(x);
+            });
         }
-    }
-
-    String writeMeter(Meter meter, Printer print) {
-        return StreamSupport.stream(meter.measure().spliterator(), false)
-                .map(ms -> {
-                    String msLine = ms.getStatistic().getTagValueRepresentation() + "=";
-                    switch (ms.getStatistic()) {
-                        case TOTAL:
-                        case MAX:
-                        case VALUE:
-                            return msLine + print.value(ms.getValue());
-                        case TOTAL_TIME:
-                        case DURATION:
-                            return msLine + print.time(ms.getValue());
-                        case COUNT:
-                            return "throughput=" + print.rate(ms.getValue());
-                        default:
-                            return msLine + decimalOrNan(ms.getValue());
-                    }
-                })
-                .collect(joining(", ", print.id() + " ", ""));
     }
 
     @Override
     protected TimeUnit getBaseTimeUnit() {
         return TimeUnit.MILLISECONDS;
-    }
-
-    class Printer {
-        private final Meter meter;
-
-        Printer(Meter meter) {
-            this.meter = meter;
-        }
-
-        String id() {
-            return meterIdPrinter.apply(meter);
-        }
-
-        String time(double time) {
-            return TimeUtils.format(Duration.ofNanos((long) TimeUtils.convert(time, getBaseTimeUnit(), TimeUnit.NANOSECONDS)));
-        }
-
-        String rate(double rate) {
-            return humanReadableBaseUnit(rate / (double) config.step().getSeconds()) + "/s";
-        }
-
-        String unitlessRate(double rate) {
-            return decimalOrNan(rate / (double) config.step().getSeconds()) + "/s";
-        }
-
-        String value(double value) {
-            return humanReadableBaseUnit(value);
-        }
-
-        // see https://stackoverflow.com/a/3758880/510017
-        String humanReadableByteCount(double bytes) {
-            int unit = 1024;
-            if (bytes < unit || Double.isNaN(bytes)) return decimalOrNan(bytes) + " B";
-            int exp = (int) (Math.log(bytes) / Math.log(unit));
-            String pre = "KMGTPE".charAt(exp - 1) + "i";
-            return decimalOrNan(bytes / Math.pow(unit, exp)) + " " + pre + "B";
-        }
-
-        String humanReadableBaseUnit(double value) {
-            String baseUnit = meter.getId().getBaseUnit();
-            if (BaseUnits.BYTES.equals(baseUnit)) {
-                return humanReadableByteCount(value);
-            }
-            return decimalOrNan(value) + (baseUnit != null ? " " + baseUnit : "");
-        }
     }
 }

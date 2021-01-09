@@ -1,8 +1,5 @@
 package org.corfudb.common.metrics.micrometer;
 
-import static org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport.DataProtocol.INFLUX;
-
-
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
@@ -45,7 +42,7 @@ public class MeterRegistryProvider {
                                                 UUID clientId) {
             LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
             LoggingMeterRegistryWithHistogramSupport registry =
-                    new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, INFLUX);
+                    new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
             registry.config().commonTags("clientId", clientId.toString());
             return registry;
         }
@@ -62,7 +59,7 @@ public class MeterRegistryProvider {
             Supplier<Optional<MeterRegistry>> supplier = () -> {
                 LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
                 LoggingMeterRegistryWithHistogramSupport registry =
-                        new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, INFLUX);
+                        new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
                 registry.config().commonTags("endpoint", localEndpoint);
                 endpoint = Optional.of(localEndpoint);
                 Optional<MeterRegistry> ret = Optional.of(registry);
