@@ -36,13 +36,13 @@ message LogReplicationMetadataResponse {
 }
 
 message LogReplicationLeadershipLoss {
-    string endpoint = 1;
+    string nodeId = 1;
 }
 
 message LogReplicationQueryLeadershipResponse {
     int64 epoch = 1;
     bool isLeader = 2;
-    string endpoint = 3;
+    string nodeId = 3;
 }
 
 message LogReplicationEntryMetadata {

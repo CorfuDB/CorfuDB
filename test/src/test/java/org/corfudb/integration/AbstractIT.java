@@ -592,7 +592,7 @@ public class AbstractIT extends AbstractCorfuTest {
             command.append("-a ").append(host);
 
             if (msg_size != 0) {
-                command.append(" --max-data-message-size=").append(msg_size);
+                command.append(" --max-replication-data-message-size=").append(msg_size);
             }
 
             if (logPath != null) {

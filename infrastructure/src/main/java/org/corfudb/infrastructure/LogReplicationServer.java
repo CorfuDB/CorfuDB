@@ -33,7 +33,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class LogReplicationServer extends AbstractServer {
 
-    private final ServerContext serverContext;
+    // unique and immutable identifier of server's node (UUID)
+    // ServerContext.getLocalEndpoint() could be IP or FQDN, which is mutable
+    // node id should be the only identifier for a node in the topology
+    private final String localNodeId;
 
     private final ExecutorService executor;
 
@@ -52,10 +55,10 @@ public class LogReplicationServer extends AbstractServer {
 
     public LogReplicationServer(@Nonnull ServerContext context, @Nonnull  LogReplicationConfig logReplicationConfig,
                                 @Nonnull LogReplicationMetadataManager metadataManager, String corfuEndpoint,
-                                long topologyConfigId) {
-        this.serverContext = context;
+                                long topologyConfigId, String localNodeId) {
         this.metadataManager = metadataManager;
-        this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig, metadataManager, serverContext, topologyConfigId);
+        this.localNodeId = localNodeId;
+        this.sinkManager = new LogReplicationSinkManager(corfuEndpoint, logReplicationConfig, metadataManager, context, topologyConfigId);
 
         this.executor = Executors.newFixedThreadPool(1,
                 new ServerThreadFactory("LogReplicationServer-", new ServerThreadFactory.ExceptionHandler()));
@@ -137,8 +140,8 @@ public class LogReplicationServer extends AbstractServer {
     private void handleLogReplicationQueryLeadership(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
         log.debug("Log Replication Query Leadership Request received by Server.");
         LogReplicationQueryLeaderShipResponse resp = new LogReplicationQueryLeaderShipResponse(0,
-                isLeader.get(), serverContext.getLocalEndpoint());
-        log.debug("Send Log Replication Leadership Response isLeader={}, endpoint={}", resp.isLeader(), resp.getEndpoint());
+                isLeader.get(), localNodeId);
+        log.debug("Send Log Replication Leadership Response isLeader={}, endpoint={}", resp.isLeader(), resp.getNodeId());
         r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP_RESPONSE.payloadMsg(resp));
     }
 
@@ -159,7 +162,7 @@ public class LogReplicationServer extends AbstractServer {
         if (lostLeadership) {
             log.warn("This node has changed, active={}, leader={}. Dropping message type={}, id={}", isActive.get(),
                     isLeader.get(), msg.getMsgType(), msg.getRequestID());
-            LogReplicationLeadershipLoss payload = new LogReplicationLeadershipLoss(serverContext.getLocalEndpoint());
+            LogReplicationLeadershipLoss payload = new LogReplicationLeadershipLoss(localNodeId);
             r.sendResponse(msg, CorfuMsgType.LOG_REPLICATION_LEADERSHIP_LOSS.payloadMsg(payload));
         }
 

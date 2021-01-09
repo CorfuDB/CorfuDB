@@ -30,7 +30,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
 
     private CorfuLogReplicationRuntime fsm;
 
-    private Optional<String> leaderEndpoint;
+    private Optional<String> leaderNodeId;
 
     private ThreadPoolExecutor worker;
 
@@ -55,13 +55,13 @@ public class NegotiatingState implements LogReplicationRuntimeState {
     public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case ON_CONNECTION_DOWN:
-                String endpointDown = event.getEndpoint();
+                String nodeIdDown = event.getNodeId();
                 // Update list of valid connections.
-                fsm.updateDisconnectedEndpoints(endpointDown);
+                fsm.updateDisconnectedNodes(nodeIdDown);
 
                 // If the leader is the node that become unavailable, verify new leader and attempt to reconnect.
-                if (leaderEndpoint.equals(endpointDown)) {
-                    leaderEndpoint = Optional.empty();
+                if (leaderNodeId.isPresent() && leaderNodeId.get().equals(nodeIdDown)) {
+                    leaderNodeId = Optional.empty();
                     return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 } else {
                     // Router will attempt reconnection of non-leader endpoint
@@ -69,7 +69,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 }
             case ON_CONNECTION_UP:
                 // Some node got connected, update connected endpoints
-                fsm.updateConnectedEndpoints(event.getEndpoint());
+                fsm.updateConnectedNodes(event.getNodeId());
                 return null;
             case NEGOTIATION_COMPLETE:
                 log.info("Negotiation complete, result={}", event.getNegotiationResult());
@@ -104,8 +104,8 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         log.debug("Enter :: negotiate");
 
         try {
-            if(fsm.getRemoteLeader().isPresent()) {
-                String remoteLeader = fsm.getRemoteLeader().get();
+            if(fsm.getRemoteLeaderNodeId().isPresent()) {
+                String remoteLeader = fsm.getRemoteLeaderNodeId().get();
                 CompletableFuture<LogReplicationMetadataResponse> cf = router.sendMessageAndGetCompletable(
                         new CorfuMsg(CorfuMsgType.LOG_REPLICATION_METADATA_REQUEST).setEpoch(0), remoteLeader);
                 LogReplicationMetadataResponse response = cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
@@ -136,10 +136,10 @@ public class NegotiatingState implements LogReplicationRuntimeState {
      * Set Leader Endpoint, determined during the transition from VERIFYING_REMOTE_LEADER
      * to NEGOTIATING state.
      *
-     * @param endpoint leader node on remote cluster
+     * @param nodeId leader node on remote cluster
      */
-    public void setLeaderEndpoint(String endpoint) {
-        this.leaderEndpoint = Optional.of(endpoint);
+    public void setLeaderNodeId(String nodeId) {
+        this.leaderNodeId = Optional.of(nodeId);
     }
 
     /**

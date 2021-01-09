@@ -16,22 +16,22 @@ import org.corfudb.runtime.Messages;
 public class LogReplicationLeadershipLoss implements ICorfuPayload<LogReplicationLeadershipLoss> {
 
     @Getter
-    private final String endpoint;
+    private final String nodeId;
 
-    public LogReplicationLeadershipLoss(String endpoint) {
-        this.endpoint = endpoint;
+    public LogReplicationLeadershipLoss(String nodeId) {
+        this.nodeId = nodeId;
     }
 
     public LogReplicationLeadershipLoss(ByteBuf buf) {
-        endpoint = ICorfuPayload.fromBuffer(buf, String.class);
+        nodeId = ICorfuPayload.fromBuffer(buf, String.class);
     }
 
     public static LogReplicationLeadershipLoss fromProto(Messages.LogReplicationLeadershipLoss proto) {
-        return new LogReplicationLeadershipLoss(proto.getEndpoint());
+        return new LogReplicationLeadershipLoss(proto.getNodeId());
     }
 
     @Override
     public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, endpoint);
+        ICorfuPayload.serialize(buf, nodeId);
     }
 }
