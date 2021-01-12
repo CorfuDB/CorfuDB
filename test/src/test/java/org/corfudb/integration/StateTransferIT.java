@@ -121,9 +121,9 @@ public class StateTransferIT extends AbstractIT {
         final int workflowNumRetry = 3;
         final int nodesCount = 3;
 
-        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false);
-        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false);
-        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false);
+        Process corfuServer_1 = runPersistentServer(corfuSingleNodeHost, PORT_0, false, "logback-test-corfu-metrics.xml");
+        Process corfuServer_2 = runPersistentServer(corfuSingleNodeHost, PORT_1, false, "logback-test-corfu-metrics.xml");
+        Process corfuServer_3 = runPersistentServer(corfuSingleNodeHost, PORT_2, false, "logback-test-corfu-metrics.xml");
 
 
         List<Process> corfuServers = Arrays.asList(corfuServer_1, corfuServer_2, corfuServer_3);

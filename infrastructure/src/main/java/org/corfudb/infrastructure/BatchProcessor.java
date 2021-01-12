@@ -186,7 +186,7 @@ public class BatchProcessor implements AutoCloseable {
                                 WriteRequest write = (WriteRequest) currOp.getMsg().getPayload();
                                 Runnable append =
                                         () -> streamLog.append(write.getGlobalAddress(), (LogData) write.getData());
-                                recordRunnable(append, writeRecordsTimer);
+                                recordRunnable(append, writeRecordTimer);
                                 break;
                             case RANGE_WRITE:
                                 RangeWriteMsg writeRange = (RangeWriteMsg) currOp.getMsg().getPayload();

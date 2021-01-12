@@ -12,7 +12,6 @@ import io.micrometer.core.instrument.step.StepMeterRegistry;
 import io.micrometer.core.instrument.util.DoubleFormat;
 import io.micrometer.core.instrument.util.NamedThreadFactory;
 import io.micrometer.core.instrument.util.StringUtils;
-import io.micrometer.influx.InfluxNamingConvention;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -168,10 +167,7 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
                             counter -> writeCounter(counter.getId(), counter.count()),
                             this::writeFunctionTimer,
                             this::writeMeter
-                    )).forEach(x -> {
-                System.out.println("Got: " + x);
-                loggingSink.accept(x);
-            });
+                    )).forEach(loggingSink::accept);
         }
     }
 
