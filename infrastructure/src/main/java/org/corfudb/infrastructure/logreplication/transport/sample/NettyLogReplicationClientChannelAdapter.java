@@ -1,15 +1,15 @@
 package org.corfudb.infrastructure.logreplication.transport.sample;
 
 import lombok.NonNull;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
-import org.corfudb.runtime.Messages.CorfuMessage;
-import org.corfudb.runtime.exceptions.NetworkException;
-import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
+import org.corfudb.runtime.exceptions.NetworkException;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 
+import javax.annotation.Nonnull;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -57,14 +57,17 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
     }
 
     @Override
-    public void send(String endpoint, CorfuMessage msg) {
+    public void send(@Nonnull String endpoint, @NonNull RequestMsg request) {
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return a exceptionally completed with the timeout.
         if (channels.containsKey(endpoint)) {
-            log.info("Sending message to {} on cluster {}, type={}", endpoint, getRemoteClusterDescriptor().getClusterId(), msg.getType());
-            channels.get(endpoint).send(msg);
+            log.info("Sending message to {} on cluster {}, type={}",
+                    endpoint, getRemoteClusterDescriptor().getClusterId(),
+                    request.getPayload().getPayloadCase());
+            channels.get(endpoint).send(request);
         } else {
-            log.warn("Channel to {} does not exist, message of type={} is dropped", endpoint, msg.getType());
+            log.warn("Channel to {} does not exist, message of type={} is dropped",
+                    endpoint, request.getPayload().getPayloadCase());
         }
     }
 
@@ -74,7 +77,7 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
     }
 
     private String getLeaderEndpoint() {
-        if(getRemoteLeader().isPresent()) {
+        if (getRemoteLeader().isPresent()) {
             return getRemoteLeader().get();
         } else {
             log.warn("No remote leader on cluster id={}", getRemoteClusterDescriptor().getClusterId());

@@ -4,8 +4,10 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.Messages.CorfuMessageType;
-import org.corfudb.runtime.Messages.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,7 +23,6 @@ public class CorfuNettyServerChannel extends ChannelInboundHandlerAdapter {
     private Map<Long, ChannelHandlerContext> contextMapLogEntries;
 
     public CorfuNettyServerChannel(NettyLogReplicationServerChannelAdapter adapter) {
-
         this.adapter = adapter;
         this.contextMap = new ConcurrentHashMap<>();
         this.contextMapLogEntries = new ConcurrentHashMap<>();
@@ -30,20 +31,19 @@ public class CorfuNettyServerChannel extends ChannelInboundHandlerAdapter {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         try {
-            // The incoming message should have been transformed to a CorfuMessage earlier in the
-            // pipeline.
-            CorfuMessage message = (CorfuMessage) msg;
+            RequestMsg message = (RequestMsg) msg;
 
-            log.trace("Received message {}", message.getType());
+            log.trace("Received message {}", message.getPayload().getPayloadCase());
 
             // Hold ChannelHandlerContexts to send response back
 
             // Note: log replication entries send a single summarized ACK as response for a batch of entries
             // for this reason, we will hold in a separate map so we can remove all context handlers for requests lower
             // than the one being served and avoid a memory leak.
-            Map<Long, ChannelHandlerContext> contexts = message.getType() == CorfuMessageType.LOG_REPLICATION_ENTRY ?
+            Map<Long, ChannelHandlerContext> contexts =
+                    message.getPayload().getPayloadCase() == RequestPayloadMsg.PayloadCase.LR_ENTRY ?
                     contextMapLogEntries : contextMap;
-            contexts.put(message.getRequestID(), ctx);
+            contexts.put(message.getHeader().getRequestId(), ctx);
 
             // Send to the adapter for further processing.
             adapter.receive(message);
@@ -69,29 +69,30 @@ public class CorfuNettyServerChannel extends ChannelInboundHandlerAdapter {
      *
      * @param outMsg Outgoing message.
      */
-    public synchronized void sendResponse(CorfuMessage outMsg) {
+    public synchronized void sendResponse(ResponseMsg outMsg) {
         ChannelHandlerContext ctx = getContext(outMsg);
         if (ctx != null) {
             ctx.writeAndFlush(outMsg, ctx.voidPromise());
             log.trace("Sent response: {}", outMsg);
         } else {
-            log.warn("Netty context not found for request id={}. Dropping message type={}", outMsg.getRequestID(),
-                    outMsg.getType());
+            log.warn("Netty context not found for request id={}. Dropping message type={}",
+                    outMsg.getHeader().getRequestId(),
+                    outMsg.getPayload().getPayloadCase());
         }
     }
 
-    private ChannelHandlerContext getContext(CorfuMessage message) {
+    private ChannelHandlerContext getContext(ResponseMsg message) {
 
         ChannelHandlerContext context;
 
-        if (message.getType() == CorfuMessageType.LOG_REPLICATION_ENTRY) {
+        if (message.getPayload().getPayloadCase() == ResponsePayloadMsg.PayloadCase.LR_ENTRY_ACK) {
             // Because ACKs are aggregated (summarized) for a batch of messages, remove all
             // contexts lower than this request ID (to prevent memory leak, as those other messages, will
             // never be served)
-            context = contextMapLogEntries.remove(message.getRequestID());
-            contextMapLogEntries.keySet().removeIf(id -> id <= message.getRequestID());
+            context = contextMapLogEntries.remove(message.getHeader().getRequestId());
+            contextMapLogEntries.keySet().removeIf(id -> id <= message.getHeader().getRequestId());
         } else {
-            context = contextMap.remove(message.getRequestID());
+            context = contextMap.remove(message.getHeader().getRequestId());
         }
 
         return context;
@@ -99,7 +100,7 @@ public class CorfuNettyServerChannel extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.error("Error in handling inbound message, {}", cause);
+        log.error("Error in handling inbound message.", cause);
         ctx.close();
     }
 }

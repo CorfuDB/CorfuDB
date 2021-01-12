@@ -1,11 +1,9 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
-
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_MESSAGE;
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.LOG_ENTRY_REPLICATED;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 
 /**
  * It manages the log entry sink buffer.
@@ -22,7 +20,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      * @param sinkManager
      */
     public LogEntrySinkBufferManager(int ackCycleTime, int ackCycleCnt, int size, long lastProcessedSeq, LogReplicationSinkManager sinkManager) {
-        super(LOG_ENTRY_MESSAGE, ackCycleTime, ackCycleCnt, size, lastProcessedSeq, sinkManager);
+        super(LogReplicationEntryType.LOG_ENTRY_MESSAGE, ackCycleTime, ackCycleCnt, size, lastProcessedSeq, sinkManager);
     }
 
     /**
@@ -31,7 +29,7 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      * @return log entry message's previousTimestamp.
      */
     @Override
-    public long getPreSeq(LogReplicationEntry entry) {
+    public long getPreSeq(LogReplicationEntryMsg entry) {
         return entry.getMetadata().getPreviousTimestamp();
     }
 
@@ -41,20 +39,21 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      * @return log entry message's timestamp.
      */
     @Override
-    public long getCurrentSeq(LogReplicationEntry entry) {
+    public long getCurrentSeq(LogReplicationEntryMsg entry) {
         return entry.getMetadata().getTimestamp();
     }
 
     /**
      * Make a ACK message according to the last processed message's timestamp.
      * @param entry
-     * @return ackMessage's metadata.
+     * @return ackMessage's metadata
      */
     @Override
-    public LogReplicationEntryMetadata generateAckMetadata(LogReplicationEntry entry) {
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());
-        metadata.setMessageMetadataType(LOG_ENTRY_REPLICATED);
-        metadata.setTimestamp(lastProcessedSeq);
+    public LogReplicationEntryMetadataMsg generateAckMetadata(LogReplicationEntryMsg entry) {
+        LogReplicationEntryMetadataMsg metadata = LogReplicationEntryMetadataMsg.newBuilder()
+                .mergeFrom(entry.getMetadata())
+                .setEntryType(LogReplicationEntryType.LOG_ENTRY_REPLICATED)
+                .setTimestamp(lastProcessedSeq).build();
         log.debug("Sink Buffer lastProcessedSeq {}", lastProcessedSeq);
         return metadata;
     }
@@ -65,10 +64,10 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
      * @return
      */
     @Override
-    public boolean verifyMessageType(LogReplicationEntry entry) {
-        if (entry.getMetadata().getMessageMetadataType() != type) {
+    public boolean verifyMessageType(LogReplicationEntryMsg entry) {
+        if (entry.getMetadata().getEntryType() != type) {
             log.warn("Got msg type {} but expecting type {}",
-                    entry.getMetadata().getMessageMetadataType(), type);
+                    entry.getMetadata().getEntryType(), type);
             return false;
         }
 
@@ -76,13 +75,13 @@ public class LogEntrySinkBufferManager extends SinkBufferManager {
     }
 
     public void processBuffer() {
-        /**
+        /*
          *  For each message in the buffer, if its timestamp is smaller than last processed log entry's timestamp,
          *  skip processing and remove it from buffer.
          *  If its preTs and currentTs is overlapping with the last processed log entry's timestamp, process it.
          */
-        for (LogReplicationEntry entry : buffer.values()) {
-            LogReplicationEntryMetadata metadata = entry.getMetadata();
+        for (LogReplicationEntryMsg entry : buffer.values()) {
+            LogReplicationEntryMetadataMsg metadata = entry.getMetadata();
             if (metadata.getTimestamp() <= lastProcessedSeq) {
                 buffer.remove(metadata.getPreviousTimestamp());
             } else if (metadata.getPreviousTimestamp() <= lastProcessedSeq && metadata.getTimestamp() > lastProcessedSeq) {

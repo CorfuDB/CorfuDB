@@ -1,11 +1,11 @@
 package org.corfudb.infrastructure.logreplication.transport.client;
 
 import lombok.Getter;
-
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
-import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
 import javax.annotation.Nonnull;
 import java.util.Optional;
@@ -75,9 +75,9 @@ public abstract class IClientChannelAdapter {
      * Send a message across the channel to a specific endpoint.
      *
      * @param endpoint remote endpoint
-     * @param msg corfu message to be sent
+     * @param request corfu message to be sent
      */
-    public abstract void send(String endpoint, CorfuMessage msg);
+    public abstract void send(String endpoint, RequestMsg request);
 
     /**
      * Notify adapter of cluster change or reconfiguration.
@@ -95,7 +95,7 @@ public abstract class IClientChannelAdapter {
      *
      * @param msg received corfu message
      */
-    public void receive(CorfuMessage msg) {
+    public void receive(ResponseMsg msg) {
         getRouter().receive(msg);
     }
 

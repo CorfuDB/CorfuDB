@@ -11,11 +11,12 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
 import org.corfudb.infrastructure.logreplication.replication.fsm.ObservableAckMsg;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
-import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.integration.DefaultDataControl.DefaultDataControlConfig;
+import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
+import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 import org.corfudb.runtime.view.Address;
 
 import java.util.List;
@@ -71,7 +72,7 @@ public class SourceForwardingDataSender implements DataSender {
     @Getter
     private ObservableValue errors = new ObservableValue(errorCount);
 
-    private ObservableValue<LogReplicationMetadataResponse> metadataResponseObservable;
+    private ObservableValue<LogReplicationMetadataResponseMsg> metadataResponseObservable;
 
     public SourceForwardingDataSender(String destinationEndpoint, LogReplicationConfig config, LogReplicationIT.TestConfig testConfig,
                                       LogReplicationMetadataManager metadataManager,
@@ -89,10 +90,10 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     @Override
-    public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
-        log.trace("Send message: " + message.getMetadata().getMessageMetadataType() + " for:: " + message.getMetadata().getTimestamp());
+    public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
+        log.trace("Send message: " + message.getMetadata().getEntryType() + " for:: " + message.getMetadata().getTimestamp());
         if (ifDropMsg > 0 && msgCnt == droppingNum) {
-            log.info("****** Drop msg {} log entry ts {}",  msgCnt, message.getMetadata().timestamp);
+            log.info("****** Drop msg {} log entry ts {}",  msgCnt, message.getMetadata().getTimestamp());
             if (ifDropMsg == DROP_MSG_ONCE) {
                 droppingNum += DROP_INCREMENT;
             }
@@ -100,10 +101,10 @@ public class SourceForwardingDataSender implements DataSender {
             return new CompletableFuture<>();
         }
 
-        final CompletableFuture<LogReplicationEntry> cf = new CompletableFuture<>();
+        final CompletableFuture<LogReplicationEntryMsg> cf = new CompletableFuture<>();
 
         // Emulate Channel by directly accepting from the destination, whatever is sent by the source manager
-        LogReplicationEntry ack = destinationLogReplicationManager.receive(message);
+        LogReplicationEntryMsg ack = destinationLogReplicationManager.receive(message);
         if (ack != null) {
             cf.complete(ack);
         }
@@ -113,21 +114,21 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     @Override
-    public CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages) {
-        CompletableFuture<LogReplicationEntry> lastAckMessage = null;
-        CompletableFuture<LogReplicationEntry> tmp;
+    public CompletableFuture<LogReplicationEntryMsg> send(List<LogReplicationEntryMsg> messages) {
+        CompletableFuture<LogReplicationEntryMsg> lastAckMessage = null;
+        CompletableFuture<LogReplicationEntryMsg> tmp;
 
-        for (LogReplicationEntry message :  messages) {
+        for (LogReplicationEntryMsg message :  messages) {
             tmp = send(message);
-            if (message.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_END) ||
-                    message.getMetadata().getMessageMetadataType().equals(MessageType.LOG_ENTRY_MESSAGE)) {
+            if (message.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_END) ||
+                    message.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_MESSAGE)) {
                 lastAckMessage = tmp;
             }
         }
 
         try {
             if (lastAckMessage != null) {
-                LogReplicationEntry entry = lastAckMessage.get();
+                LogReplicationEntryMsg entry = lastAckMessage.get();
                 ackMessages.setValue(entry);
             }
         } catch (Exception e) {
@@ -138,17 +139,23 @@ public class SourceForwardingDataSender implements DataSender {
     }
 
     @Override
-    public CompletableFuture<LogReplicationMetadataResponse> sendMetadataRequest() {
-        CompletableFuture<LogReplicationMetadataResponse> completableFuture = new CompletableFuture<>();
+    public CompletableFuture<LogReplicationMetadataResponseMsg> sendMetadataRequest() {
+        CompletableFuture<LogReplicationMetadataResponseMsg> completableFuture = new CompletableFuture<>();
         long baseSnapshotTimestamp = destinationDataSender.getSourceManager().getLogReplicationFSM().getBaseSnapshot();
-        LogReplicationMetadataResponse response;
+        LogReplicationMetadataResponseMsg response;
 
         if (delayedApplyCycles > 0 && countDelayedApplyCycles < delayedApplyCycles) {
             countDelayedApplyCycles++;
             log.debug("Received query metadata request, count={}", countDelayedApplyCycles);
             // Reply Snapshot Sync Apply has not completed yet
-            response = new LogReplicationMetadataResponse(0, "version", baseSnapshotTimestamp,
-                    baseSnapshotTimestamp, Address.NON_ADDRESS, Address.NON_ADDRESS);
+            response = LogReplicationMetadataResponseMsg.newBuilder()
+                    .setTopologyConfigID(0)
+                    .setVersion("version")
+                    .setSnapshotStart(baseSnapshotTimestamp)
+                    .setSnapshotTransferred(baseSnapshotTimestamp)
+                    .setSnapshotApplied(Address.NON_ADDRESS)
+                    .setLastLogEntryTimestamp(Address.NON_ADDRESS)
+                    .build();
         } else {
             if(timeoutMetadataResponse) {
                 log.debug("Delay metadata response to cause timeout");
@@ -158,10 +165,14 @@ public class SourceForwardingDataSender implements DataSender {
                 return new CompletableFuture<>();
             }
             // In test implementation emulate the apply has succeeded and return a LogReplicationMetadataResponse
-            response = new LogReplicationMetadataResponse(0, "version", baseSnapshotTimestamp,
-                    destinationLogReplicationManager.getLogReplicationMetadataManager().getLastTransferredSnapshotTimestamp(),
-                    destinationLogReplicationManager.getLogReplicationMetadataManager().getLastAppliedSnapshotTimestamp(),
-                    destinationLogReplicationManager.getLogReplicationMetadataManager().getLastProcessedLogEntryTimestamp());
+            response = LogReplicationMetadataResponseMsg.newBuilder()
+                    .setTopologyConfigID(0)
+                    .setVersion("version")
+                    .setSnapshotStart(baseSnapshotTimestamp)
+                    .setSnapshotTransferred(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastTransferredSnapshotTimestamp())
+                    .setSnapshotApplied(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastAppliedSnapshotTimestamp())
+                    .setLastLogEntryTimestamp(destinationLogReplicationManager.getLogReplicationMetadataManager().getLastProcessedLogEntryTimestamp())
+                    .build();
         }
 
         metadataResponseObservable.setValue(response);
@@ -203,7 +214,7 @@ public class SourceForwardingDataSender implements DataSender {
         }
     }
 
-    public ObservableValue<LogReplicationMetadataResponse> getMetadataResponses() {
+    public ObservableValue<LogReplicationMetadataResponseMsg> getMetadataResponses() {
         return metadataResponseObservable;
     }
 }

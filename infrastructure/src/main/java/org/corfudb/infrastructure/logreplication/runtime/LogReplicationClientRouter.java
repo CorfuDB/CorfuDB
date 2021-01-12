@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure.logreplication.runtime;
 
+import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.Setter;
@@ -12,22 +13,22 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRunti
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent.LogReplicationRuntimeEventType;
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
-import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverterUtils;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.proto.RpcCommon;
+import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.util.CFUtils;
-import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
+import javax.annotation.Nonnull;
 import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -43,6 +44,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
+
 /**
  * This Client Router is used when a custom (client-defined) transport layer is specified for
  * Log Replication Server communication.
@@ -50,13 +54,15 @@ import java.util.concurrent.atomic.AtomicLong;
 @Slf4j
 public class LogReplicationClientRouter implements IClientRouter {
 
+    public static String REMOTE_LEADER = "REMOTE_LEADER";
+
     @Getter
     private LogReplicationRuntimeParameters parameters;
 
     /**
      * The handlers registered to this router.
      */
-    private final Map<CorfuMsgType, IClient> handlerMap;
+    private final Map<PayloadCase, IClient> handlerMap;
 
     /**
      * The clients registered to this router.
@@ -147,8 +153,7 @@ public class LogReplicationClientRouter implements IClientRouter {
 
         // Iterate through all types of CorfuMsgType, registering the handler
         try {
-            client.getHandledTypes().stream()
-                    .forEach(x -> {
+            client.getHandledCases().forEach(x -> {
                         handlerMap.put(x, client);
                         log.info("Registered client to handle messages of type {}", x);
                     });
@@ -163,11 +168,27 @@ public class LogReplicationClientRouter implements IClientRouter {
 
     @Override
     public <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message) {
-        return sendMessageAndGetCompletable(message, null);
+        throw new UnsupportedOperationException("Deprecated API.");
     }
 
-    public <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message, String endpoint) {
-        if (isValidMessage(message)) {
+    /**
+     * Send a request message and get a completable future to be fulfilled by the reply.
+     *
+     * @param payload
+     * @param <T> The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply,
+     * or a timeout in the case there is no response.
+     */
+    @Override
+    public  <T> CompletableFuture<T> sendRequestAndGetCompletable(
+            @Nonnull RequestPayloadMsg payload,
+            @Nonnull String endpoint) {
+
+        HeaderMsg.Builder header = HeaderMsg.newBuilder()
+                .setIgnoreClusterId(true)
+                .setIgnoreEpoch(true);
+
+        if (isValidMessage(payload)) {
             // Get the next request ID.
             final long requestId = requestID.getAndIncrement();
 
@@ -176,12 +197,12 @@ public class LogReplicationClientRouter implements IClientRouter {
             outstandingRequests.put(requestId, cf);
 
             try {
-                message.setClientID(parameters.getClientId());
-                message.setRequestID(requestId);
+                header.setClientId(getUuidMsg(parameters.getClientId()));
+                header.setRequestId(requestId);
 
                 // If no endpoint is specified, the message is to be sent to the remote leader node.
                 // We should block until a connection to the leader is established.
-                if (endpoint == null || endpoint.length() == 0) {
+                if (endpoint.equals(REMOTE_LEADER)) {
                     // Check the connection future. If connected, continue with sending the message.
                     // If timed out, return a exceptionally completed with the timeout.
                     // Because in Log Replication, messages are sent to the leader node, the connection future
@@ -209,10 +230,8 @@ public class LogReplicationClientRouter implements IClientRouter {
 
                 // In the case the message is intended for a specific endpoint, we do not
                 // block on connection future, this is the case of leader verification.
-                log.info("Send message to {}, type={}", endpoint, message.getMsgType());
-                this.requestSample = MeterRegistryProvider.getInstance().map(Timer::start);
-                channelAdapter.send(endpoint, CorfuMessageConverterUtils.toProtoBuf(message));
-
+                log.info("Send message to {}, type={}", endpoint, payload.getPayloadCase());
+                channelAdapter.send(endpoint, getRequestMsg(header.build(), payload));
             } catch (NetworkException ne) {
                 log.error("Caught Network Exception while trying to send message to remote leader {}", endpoint);
                 runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
@@ -221,7 +240,7 @@ public class LogReplicationClientRouter implements IClientRouter {
             } catch (Exception e) {
                 outstandingRequests.remove(requestId);
                 log.error("sendMessageAndGetCompletable: Remove request {} to {} due to exception! Message:{}",
-                        requestId, remoteClusterId, message, e);
+                        requestId, remoteClusterId, payload, e);
                 cf.completeExceptionally(e);
                 return cf;
             }
@@ -234,7 +253,7 @@ public class LogReplicationClientRouter implements IClientRouter {
                 if (e.getCause() instanceof TimeoutException) {
                     outstandingRequests.remove(requestId);
                     log.debug("sendMessageAndGetCompletable: Remove request {} to {} due to timeout! Message:{}",
-                            requestId, remoteClusterId, message);
+                            requestId, remoteClusterId, TextFormat.shortDebugString(payload));
                 }
                 return null;
             });
@@ -242,7 +261,8 @@ public class LogReplicationClientRouter implements IClientRouter {
             return cfTimeout;
         }
 
-        log.error("Invalid message type {}. Currently only log replication messages are processed.");
+        log.error("Invalid message type {}. Currently only log replication messages are processed.",
+                payload.getPayloadCase());
         CompletableFuture<T> f = new CompletableFuture<>();
         f.completeExceptionally(new Throwable("Invalid message type"));
         return f;
@@ -282,7 +302,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         if (runtimeFSM.getRemoteLeader().isPresent()) {
             String remoteLeader = runtimeFSM.getRemoteLeader().get();
             this.requestSample = MeterRegistryProvider.getInstance().map(Timer::start);
-            channelAdapter.send(remoteLeader, CorfuMessageConverterUtils.toProtoBuf(message));
+            //channelAdapter.send(remoteLeader, CorfuMessageConverterUtils.toProtoBuf(message));
             log.trace("Sent one-way message: {}", message);
         } else {
             log.error("Leader not found to remote cluster {}, dropping {}", remoteClusterId, message.getMsgType());
@@ -376,7 +396,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      *
      * @param msg received corfu message
      */
-    public void receive(CorfuMessage msg) {
+    public void receive(CorfuMessage.ResponseMsg msg) {
         try {
             requestSample.flatMap(sample -> MeterRegistryProvider.getInstance()
                             .map(registry -> {
@@ -384,30 +404,30 @@ public class LogReplicationClientRouter implements IClientRouter {
                                         .timer("logreplication.rtt.seconds");
                                 return sample.stop(timer);
                             }));
-            CorfuMsg corfuMsg = CorfuMessageConverterUtils.fromProtoBuf(msg);
 
             // If it is a Leadership Loss Message re-trigger leadership discovery
-            if (corfuMsg.getMsgType() == CorfuMsgType.LOG_REPLICATION_LEADERSHIP_LOSS) {
+            if (msg.getPayload().getPayloadCase() == PayloadCase.LR_LEADERSHIP_LOSS) {
                 runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
                 return;
             }
 
             // We get the handler for this message from the map
-            IClient handler = handlerMap.get(corfuMsg.getMsgType());
+            IClient handler = handlerMap.get(msg.getPayload().getPayloadCase());
 
             if (handler == null) {
                 // The message was unregistered, we are dropping it.
-                log.warn("Received unregistered message {}, dropping", corfuMsg);
+                log.warn("Received unregistered message {}, dropping", msg);
             } else {
                 // Route the message to the handler.
                 if (log.isTraceEnabled()) {
                     log.trace("Message routed to {}: {}",
-                            handler.getClass().getSimpleName(), corfuMsg);
+                            handler.getClass().getSimpleName(), msg);
                 }
-                handler.handleMessage(corfuMsg, null);
+                handler.handleMessage(msg, null);
             }
-        } catch (CorfuMessageProtoBufException | Exception e) {
-            log.error("Exception caught while receiving message of type {}", msg.getType(), e);
+        } catch (Exception e) {
+            log.error("Exception caught while receiving message of type {}",
+                    msg.getPayload().getPayloadCase(), e);
         }
     }
 
@@ -451,10 +471,10 @@ public class LogReplicationClientRouter implements IClientRouter {
     /**
      * Verify Message is of valid Log Replication type.
      */
-    private boolean isValidMessage(CorfuMsg message) {
-        return message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_ENTRY) ||
-                message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_METADATA_REQUEST) ||
-                message.getMsgType().equals(CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP);
+    private boolean isValidMessage(RequestPayloadMsg message) {
+        return message.getPayloadCase().equals(RequestPayloadMsg.PayloadCase.LR_ENTRY) ||
+                message.getPayloadCase().equals(RequestPayloadMsg.PayloadCase.LR_METADATA_REQUEST) ||
+                message.getPayloadCase().equals(RequestPayloadMsg.PayloadCase.LR_LEADERSHIP_QUERY);
     }
 
     /**

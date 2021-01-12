@@ -6,6 +6,7 @@ option java_package = "org.corfudb.runtime.proto.service";
 import "rpc_common.proto";
 import "service/base.proto";
 import "service/layout.proto";
+import "service/log_replication.proto";
 import "service/log_unit.proto";
 import "service/sequencer.proto";
 import "service/management.proto";
@@ -82,6 +83,11 @@ message RequestPayloadMsg {
     OrchestratorRequestMsg orchestrator_request = 63;
     BootstrapManagementRequestMsg bootstrap_management_request = 64;
     ManagementLayoutRequestMsg management_layout_request = 65;
+
+    // Log Replicator
+    LogReplicationEntryMsg lr_entry = 70;
+    LogReplicationMetadataRequestMsg lr_metadata_request = 71;
+    LogReplicationLeadershipRequestMsg lr_leadership_query = 72;
   }
 }
 
@@ -132,6 +138,13 @@ message ResponsePayloadMsg {
     OrchestratorResponseMsg orchestrator_response = 63;
     BootstrapManagementResponseMsg bootstrap_management_response = 64;
     ManagementLayoutResponseMsg management_layout_response = 65;
+
+    // LR
+    LogReplicationEntryMsg lr_entry_ack = 70;
+    LogReplicationMetadataResponseMsg lr_metadata_response = 71;
+    LogReplicationLeadershipResponseMsg lr_leadership_response = 72;
+
+    LogReplicationLeadershipLossResponseMsg lr_leadership_loss = 73;
 
     // Server Error
     ServerErrorMsg server_error = 200;

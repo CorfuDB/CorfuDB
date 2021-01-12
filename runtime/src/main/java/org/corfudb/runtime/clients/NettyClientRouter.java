@@ -55,6 +55,7 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
 import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.RuntimeParameters;
@@ -505,7 +506,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
      */
     @Override
     public <T> CompletableFuture<T> sendRequestAndGetCompletable(
-            CorfuMessage.RequestPayloadMsg payload,
+            RequestPayloadMsg payload,
             long epoch, RpcCommon.UuidMsg clusterId,
             CorfuMessage.PriorityLevel priority,
             ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
@@ -566,6 +567,11 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         return cfTimeout;
     }
 
+    @Override
+    public <T> CompletableFuture<T> sendRequestAndGetCompletable(@Nonnull RequestPayloadMsg payload, @Nonnull String endpoint) {
+        throw new UnsupportedOperationException("Unsupported API.");
+    }
+
     /**
      * Send a one way message, without adding a completable future.
      *
@@ -594,7 +600,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
      * @param ignoreEpoch     Boolean field indicates whether to ignore epoch.
      */
     @Override
-    public void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch,
+    public void sendRequest(RequestPayloadMsg payload, long epoch,
                             RpcCommon.UuidMsg clusterId,
                             CorfuMessage.PriorityLevel priority, ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         // Get the next request ID

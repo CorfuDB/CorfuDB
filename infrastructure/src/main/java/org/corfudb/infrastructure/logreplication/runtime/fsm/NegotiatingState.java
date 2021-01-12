@@ -7,9 +7,9 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
+import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -106,9 +106,14 @@ public class NegotiatingState implements LogReplicationRuntimeState {
         try {
             if(fsm.getRemoteLeader().isPresent()) {
                 String remoteLeader = fsm.getRemoteLeader().get();
-                CompletableFuture<LogReplicationMetadataResponse> cf = router.sendMessageAndGetCompletable(
-                        new CorfuMsg(CorfuMsgType.LOG_REPLICATION_METADATA_REQUEST).setEpoch(0), remoteLeader);
-                LogReplicationMetadataResponse response = cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+
+                CorfuMessage.RequestPayloadMsg payload =
+                        CorfuMessage.RequestPayloadMsg.newBuilder().setLrMetadataRequest(
+                                LogReplication.LogReplicationMetadataRequestMsg.newBuilder().build()).build();
+                CompletableFuture<LogReplicationMetadataResponseMsg> cf = router
+                        .sendRequestAndGetCompletable(payload, remoteLeader);
+                LogReplicationMetadataResponseMsg response =
+                        cf.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
                 // Process Negotiation Response, and determine if we start replication and which type type to start
                 // (snapshot or log entry sync). This will be carried along the negotiation_complete event.
@@ -149,7 +154,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
      * @return
      * @throws LogReplicationNegotiationException
      */
-    private void processNegotiationResponse(LogReplicationMetadataResponse negotiationResponse)
+    private void processNegotiationResponse(LogReplicationMetadataResponseMsg negotiationResponse)
             throws LogReplicationNegotiationException {
 
         log.debug("Process negotiation response {} from {}", negotiationResponse, fsm.getRemoteClusterId());
@@ -167,9 +172,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The standby site has a smaller config ID, redo the discovery for this standby site when
          * getting a new notification of the site config change if this standby is in the new config.
          */
-        if (negotiationResponse.getTopologyConfigId() < metadataManager.getTopologyConfigId()) {
+        if (negotiationResponse.getTopologyConfigID() < metadataManager.getTopologyConfigId()) {
             log.error("The active site configID {} is bigger than the standby configID {} ",
-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigId());
+                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -177,9 +182,9 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          * The standby site has larger config ID, redo the whole discovery for the active site
          * it will be triggered by a notification of the site config change.
          */
-        if (negotiationResponse.getTopologyConfigId() > metadataManager.getTopologyConfigId()) {
+        if (negotiationResponse.getTopologyConfigID() > metadataManager.getTopologyConfigId()) {
             log.error("The active site configID {} is smaller than the standby configID {} ",
-                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigId());
+                    metadataManager.getTopologyConfigId(), negotiationResponse.getTopologyConfigID());
             throw new LogReplicationNegotiationException("Mismatch of configID");
         }
 
@@ -266,17 +271,17 @@ public class NegotiatingState implements LogReplicationRuntimeState {
          */
         if (negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotTransferred() &&
                 negotiationResponse.getSnapshotStart() == negotiationResponse.getSnapshotApplied() &&
-                negotiationResponse.getLastLogProcessed() >= negotiationResponse.getSnapshotStart()) {
+                negotiationResponse.getLastLogEntryTimestamp() >= negotiationResponse.getSnapshotStart()) {
             /*
              * If the next log entry is not trimmed, restart with log entry sync,
              * otherwise, start snapshot full sync.
              */
-            if (logHead <= negotiationResponse.getLastLogProcessed() + 1) {
+            if (logHead <= negotiationResponse.getLastLogEntryTimestamp() + 1) {
                 log.info("Resume LOG ENTRY sync. Address space has not been trimmed, deltas are guaranteed to be available. " +
-                        "logHead={}, lastLogProcessed={}", logHead, negotiationResponse.getLastLogProcessed());
+                        "logHead={}, lastLogProcessed={}", logHead, negotiationResponse.getLastLogEntryTimestamp());
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                         new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.LOG_ENTRY_SYNC_REQUEST,
-                                new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogProcessed(),
+                                new LogReplicationEventMetadata(LogReplicationEventMetadata.getNIL_UUID(), negotiationResponse.getLastLogEntryTimestamp(),
                                         negotiationResponse.getSnapshotApplied()))));
             } else {
                 // TODO: it is OK for a first phase, but this might not be efficient/accurate, as the next (+1)
@@ -285,7 +290,7 @@ public class NegotiatingState implements LogReplicationRuntimeState {
                 //  falls beyond the logHead. A more accurate approach would be to look for the next available entry
                 //  in the the transaction stream.
                 log.info(" Start SNAPSHOT sync. LOG ENTRY Sync cannot resume, address space has been trimmed." +
-                        "logHead={}, lastLogProcessed={}", logHead, negotiationResponse.getLastLogProcessed());
+                        "logHead={}, lastLogProcessed={}", logHead, negotiationResponse.getLastLogEntryTimestamp());
                 fsm.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEvent.LogReplicationRuntimeEventType.NEGOTIATION_COMPLETE,
                         new LogReplicationEvent(LogReplicationEvent.LogReplicationEventType.SNAPSHOT_SYNC_REQUEST)));
             }

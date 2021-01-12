@@ -9,10 +9,12 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationE
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationFSM;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 import org.corfudb.runtime.exceptions.TrimmedException;
 
 import java.util.UUID;
+
+import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
 
 /**
  * This class is responsible of managing the transmission of log entries,
@@ -82,10 +84,10 @@ public class LogEntrySender {
             /*
              * It will first resend entries in the buffer that hasn't ACKed
              */
-            LogReplicationEntry ack = dataSenderBufferManager.resend();
+            LogReplicationEntryMsg ack = dataSenderBufferManager.resend();
             if (ack != null) {
                 logReplicationFSM.input(new LogReplicationEvent(LogReplicationEventType.LOG_ENTRY_SYNC_REPLICATED,
-                        new LogReplicationEventMetadata(ack.getMetadata().getSyncRequestId(), ack.getMetadata().getTimestamp())));
+                        new LogReplicationEventMetadata(getUUID(ack.getMetadata().getSyncRequestId()), ack.getMetadata().getTimestamp())));
             }
         } catch (LogEntrySyncTimeoutException te) {
             log.error("LogEntrySyncTimeoutException after several retries.", te);
@@ -94,7 +96,7 @@ public class LogEntrySender {
         }
 
         while (taskActive && !dataSenderBufferManager.getPendingMessages().isFull()) {
-            LogReplicationEntry message;
+            LogReplicationEntryMsg message;
 
             /*
              * Read and Send Log Entries

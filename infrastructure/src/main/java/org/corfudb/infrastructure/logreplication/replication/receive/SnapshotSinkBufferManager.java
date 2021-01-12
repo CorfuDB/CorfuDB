@@ -1,12 +1,10 @@
 package org.corfudb.infrastructure.logreplication.replication.receive;
 
+import com.google.protobuf.TextFormat;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
-import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
-
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_END;
-import static org.corfudb.protocols.wireprotocol.logreplication.MessageType.SNAPSHOT_MESSAGE;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 
 @Slf4j
 public class SnapshotSinkBufferManager extends SinkBufferManager {
@@ -25,7 +23,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      */
     public SnapshotSinkBufferManager(int ackCycleTime, int ackCycleCnt, int size,
                                      long lastProcessedSeq, LogReplicationSinkManager sinkManager) {
-        super(SNAPSHOT_MESSAGE, ackCycleTime, ackCycleCnt, size, lastProcessedSeq, sinkManager);
+        super(LogReplicationEntryType.SNAPSHOT_MESSAGE, ackCycleTime, ackCycleCnt, size, lastProcessedSeq, sinkManager);
     }
 
     /**
@@ -34,7 +32,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      * @return Previous in order message's snapshotSeqNumber.
      */
     @Override
-    public long getPreSeq(LogReplicationEntry entry) {
+    public long getPreSeq(LogReplicationEntryMsg entry) {
         return entry.getMetadata().getSnapshotSyncSeqNum() - 1;
     }
 
@@ -44,8 +42,8 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      * @return entry's snapshotSeqNum
      */
     @Override
-    public long getCurrentSeq(LogReplicationEntry entry) {
-        if (entry.getMetadata().getMessageMetadataType() == SNAPSHOT_END) {
+    public long getCurrentSeq(LogReplicationEntryMsg entry) {
+        if (entry.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_END) {
             snapshotEndSeq = entry.getMetadata().getSnapshotSyncSeqNum();
         }
         return entry.getMetadata().getSnapshotSyncSeqNum();
@@ -58,22 +56,25 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      * @return ack message metadata
      */
     @Override
-    public LogReplicationEntryMetadata generateAckMetadata(LogReplicationEntry entry) {
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(entry.getMetadata());
+    public LogReplicationEntryMetadataMsg generateAckMetadata(LogReplicationEntryMsg entry) {
+        LogReplicationEntryMetadataMsg.Builder metadata = LogReplicationEntryMetadataMsg
+                .newBuilder()
+                .mergeFrom(entry.getMetadata());
 
         /*
          * If SNAPSHOT_END message has been processed, send back SNAPSHOT_TRANSFER_COMPLETE to notify
          * sender the completion of the snapshot replication transfer.
          */
         if (lastProcessedSeq == snapshotEndSeq) {
-            metadata.setMessageMetadataType(MessageType.SNAPSHOT_TRANSFER_COMPLETE);
+            metadata.setEntryType(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE);
         } else {
-            metadata.setMessageMetadataType(MessageType.SNAPSHOT_REPLICATED);
+            metadata.setEntryType(LogReplicationEntryType.SNAPSHOT_REPLICATED);
         }
 
         metadata.setSnapshotSyncSeqNum(lastProcessedSeq);
-        log.debug("SnapshotSinkBufferManager send ACK {} for {}", lastProcessedSeq, metadata);
-        return metadata;
+        log.debug("SnapshotSinkBufferManager send ACK {} for {}",
+                lastProcessedSeq, TextFormat.shortDebugString(metadata));
+        return metadata.build();
     }
 
     /**
@@ -83,9 +84,9 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      * @return
      */
     @Override
-    public boolean verifyMessageType(LogReplicationEntry entry) {
-        return entry.getMetadata().getMessageMetadataType() == SNAPSHOT_MESSAGE ||
-                entry.getMetadata().getMessageMetadataType() == SNAPSHOT_END;
+    public boolean verifyMessageType(LogReplicationEntryMsg entry) {
+        return entry.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_MESSAGE ||
+                entry.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_END;
     }
 
     /**
@@ -93,7 +94,7 @@ public class SnapshotSinkBufferManager extends SinkBufferManager {
      */
     public void processBuffer() {
         while (true) {
-            LogReplicationEntry dataMessage = buffer.get(lastProcessedSeq);
+            LogReplicationEntryMsg dataMessage = buffer.get(lastProcessedSeq);
             if (dataMessage == null) {
                 return;
             }
