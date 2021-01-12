@@ -7,6 +7,7 @@ import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.log.statetransfer.StateTransferManager;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.committedbatchprocessor.CommittedBatchProcessor;
 import org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor.ProtocolBatchProcessor;
@@ -422,6 +423,16 @@ public class RestoreRedundancyMergeSegments extends Action {
         return "RestoreRedundancyAndMergeSegments";
     }
 
+    private void registerMetricsIfNeeded() {
+        // If the call has occurred previously, this function does nothing.
+        MeterRegistryProvider.getInstance().ifPresent(registry -> {
+            registry.timer("state-transfer.timer", "type", "protocol");
+            registry.timer("state-transfer.timer", "type", "committed");
+            registry.counter("state-transfer.read.throughput", "type", "protocol");
+            registry.counter("state-transfer.read.throughput", "type", "committed");
+        });
+    }
+
     @Override
     public void impl(@Nonnull CorfuRuntime runtime) throws Exception {
 
@@ -466,6 +477,8 @@ public class RestoreRedundancyMergeSegments extends Action {
                         .basicTransferProcessor(basicTransferProcessor)
                         .parallelTransferProcessor(parallelTransferProcessor)
                         .build();
+
+        registerMetricsIfNeeded();
 
         // While a redundancy can be restored or segments can be merged, perform a state transfer
         // and then restore a layout redundancy on the current node.

@@ -67,7 +67,8 @@ public class CorfuServerNode implements AutoCloseable {
                         .put(SequencerServer.class, new SequencerServer(serverContext))
                         .put(LayoutServer.class, new LayoutServer(serverContext))
                         .put(LogUnitServer.class, new LogUnitServer(serverContext))
-                        .put(ManagementServer.class, new ManagementServer(serverContext))
+                        .put(ManagementServer.class, new ManagementServer(serverContext,
+                                new ManagementServer.ManagementServerInitializer()))
                         .build()
         );
     }
@@ -97,8 +98,7 @@ public class CorfuServerNode implements AutoCloseable {
      * Start the Corfu Server by listening on the specified port.
      */
     public ChannelFuture start() {
-        bindFuture = bindServer(serverContext.getBossGroup(),
-                serverContext.getWorkerGroup(),
+        bindFuture = bindServer(serverContext.getWorkerGroup(),
                 this::configureBootstrapOptions,
                 serverContext,
                 router,
@@ -179,8 +179,6 @@ public class CorfuServerNode implements AutoCloseable {
      * {@link EventLoopGroup}s. For implementations which listen on multiple ports,
      * {@link EventLoopGroup}s may be reused.
      *
-     * @param bossGroup           The "boss" {@link EventLoopGroup} which services incoming
-     *                            connections.
      * @param workerGroup         The "worker" {@link EventLoopGroup} which services incoming
      *                            requests.
      * @param bootstrapConfigurer A {@link BootstrapConfigurer} which will receive the
@@ -192,8 +190,7 @@ public class CorfuServerNode implements AutoCloseable {
      * @param port                The port the {@link ServerChannel} will be created on.
      * @return A {@link ChannelFuture} which can be used to wait for the server to be shutdown.
      */
-    public ChannelFuture bindServer(@Nonnull EventLoopGroup bossGroup,
-                                    @Nonnull EventLoopGroup workerGroup,
+    public ChannelFuture bindServer(@Nonnull EventLoopGroup workerGroup,
                                     @Nonnull BootstrapConfigurer bootstrapConfigurer,
                                     @Nonnull ServerContext context,
                                     @Nonnull NettyServerRouter router,
@@ -201,7 +198,7 @@ public class CorfuServerNode implements AutoCloseable {
                                     int port) {
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
-            bootstrap.group(bossGroup, workerGroup)
+            bootstrap.group(workerGroup)
                     .channel(context.getChannelImplementation().getServerChannelClass());
             bootstrapConfigurer.configure(bootstrap);
 

@@ -1,22 +1,29 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
-import lombok.Setter;
-
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 
+import java.util.UUID;
+
+@Getter
 public class DiscoveryServiceEvent {
-    DiscoveryServiceEventType type;
 
-    @Getter
-    TopologyConfigurationMsg topologyConfig = null;
+    private final DiscoveryServiceEventType type;
 
-    @Getter
-    @Setter
-    ClusterDescriptor remoteSiteInfo;
+    private TopologyConfigurationMsg topologyConfig = null;
+
+    private ClusterDescriptor remoteClusterInfo;
+
+    private UUID eventId = null;
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type) {
        this.type = type;
+    }
+
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId) {
+        this.type = type;
+        this.remoteClusterInfo = new ClusterDescriptor(clusterId);
     }
 
     public DiscoveryServiceEvent(DiscoveryServiceEventType type, TopologyConfigurationMsg topologyConfigMsg) {
@@ -24,10 +31,16 @@ public class DiscoveryServiceEvent {
         this.topologyConfig = topologyConfigMsg;
     }
 
+    public DiscoveryServiceEvent(DiscoveryServiceEventType type, String clusterId, String eventId) {
+        this(type, clusterId);
+        this.eventId = UUID.fromString(eventId);
+    }
+
     public enum DiscoveryServiceEventType {
         DISCOVERED_TOPOLOGY,
         ACQUIRE_LOCK,
         RELEASE_LOCK,
-        UPGRADE
+        UPGRADE,
+        ENFORCE_SNAPSHOT_SYNC
     }
 }

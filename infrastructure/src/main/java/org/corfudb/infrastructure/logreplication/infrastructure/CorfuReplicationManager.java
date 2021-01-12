@@ -4,8 +4,8 @@ import com.google.common.collect.Sets;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.runtime.CorfuRuntime;
@@ -203,5 +203,32 @@ public class CorfuReplicationManager {
                 startLogReplicationRuntime(clusterInfo);
             }
         }
+    }
+
+    /**
+     * Stop the current log replication event and start a full snapshot sync for the given remote cluster.
+     */
+    public void enforceSnapshotSync(DiscoveryServiceEvent event) {
+        CorfuLogReplicationRuntime standbyRuntime = runtimeToRemoteCluster.get(event.getRemoteClusterInfo().getClusterId());
+        if (standbyRuntime == null) {
+            log.warn("Failed to start enforceSnapshotSync for cluster {} as it is not on the standby list.",
+                    event.getRemoteClusterInfo());
+        } else {
+            log.info("EnforceSnapshotSync for cluster {}", standbyRuntime.getRemoteClusterId());
+            standbyRuntime.getSourceManager().stopLogReplication();
+            standbyRuntime.getSourceManager().startForcedSnapshotSync(event.getEventId());
+        }
+    }
+
+    /**
+     * Update Replication Status as NOT_STARTED.
+     * Should be called only once in an active lifecycle.
+     */
+    public void updateStatusAsNotStarted() {
+        runtimeToRemoteCluster.values().forEach(corfuLogReplicationRuntime ->
+                corfuLogReplicationRuntime
+                        .getSourceManager()
+                        .getAckReader()
+                        .markSyncStatus(LogReplicationMetadata.SyncStatus.NOT_STARTED));
     }
 }

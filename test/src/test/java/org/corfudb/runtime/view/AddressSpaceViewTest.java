@@ -8,6 +8,8 @@ import com.google.common.cache.Cache;
 import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
+
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -21,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.MetricsUtils;
+import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 /**
@@ -98,6 +101,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         }
 
         assertThat(rt.getAddressSpaceView().getReadCache().size()).isLessThan(maxCacheSize);
+
     }
 
     @Test

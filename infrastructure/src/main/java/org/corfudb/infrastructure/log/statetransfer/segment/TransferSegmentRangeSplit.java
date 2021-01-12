@@ -1,8 +1,8 @@
 package org.corfudb.infrastructure.log.statetransfer.segment;
 
 import com.google.common.collect.ImmutableList;
-import groovy.transform.EqualsAndHashCode;
-import groovy.transform.ToString;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

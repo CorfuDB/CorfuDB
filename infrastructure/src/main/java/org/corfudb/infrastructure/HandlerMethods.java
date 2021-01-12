@@ -1,14 +1,14 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Timer;
+import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.LambdaMetafactory;
@@ -21,6 +21,7 @@ import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -100,7 +101,7 @@ public class HandlerMethods {
      */
     @SuppressWarnings("unchecked")
     public void handle(CorfuMsg message, IServerRouter r) {
-       handle(message, null, r);
+        handle(message, null, r);
     }
 
     /** Generate handlers for a particular server.
@@ -113,8 +114,8 @@ public class HandlerMethods {
                                                  @Nonnull final AbstractServer server) {
         HandlerMethods handler = new HandlerMethods();
         Arrays.stream(server.getClass().getDeclaredMethods())
-            .filter(method -> method.isAnnotationPresent(ServerHandler.class))
-            .forEach(method -> handler.registerMethod(caller, server, method));
+                .filter(method -> method.isAnnotationPresent(ServerHandler.class))
+                .forEach(method -> handler.registerMethod(caller, server, method));
         return handler;
     }
 
@@ -129,19 +130,19 @@ public class HandlerMethods {
      */
     @SuppressWarnings("unchecked")
     private void registerMethod(@Nonnull final MethodHandles.Lookup caller,
-            @Nonnull final AbstractServer server,
-            @Nonnull final Method method) {
+                                @Nonnull final AbstractServer server,
+                                @Nonnull final Method method) {
         final ServerHandler annotation = method.getAnnotation(ServerHandler.class);
 
         if (!method.getParameterTypes()[0].isAssignableFrom(annotation.type().messageType
                 .getRawType())) {
             throw new UnrecoverableCorfuError("Incorrect message type, expected "
-                + annotation.type().messageType.getRawType() + " but provided "
-                + method.getParameterTypes()[0]);
+                    + annotation.type().messageType.getRawType() + " but provided "
+                    + method.getParameterTypes()[0]);
         }
         if (handlerMap.containsKey(annotation.type())) {
             throw new UnrecoverableCorfuError("HandlerMethod for " + annotation.type()
-                + " already registered!");
+                    + " already registered!");
         }
         // convert the method into a Java8 Lambda for maximum execution speed...
         try {
@@ -150,9 +151,9 @@ public class HandlerMethods {
                 MethodHandle mh = caller.unreflect(method);
                 MethodType mt = mh.type().changeParameterType(0, CorfuMsg.class);
                 h = (HandlerMethod<CorfuMsg>) LambdaMetafactory.metafactory(caller,
-                    "handle", MethodType.methodType(HandlerMethod.class),
-                    mt, mh, mh.type())
-                    .getTarget().invokeExact();
+                        "handle", MethodType.methodType(HandlerMethod.class),
+                        mt, mh, mh.type())
+                        .getTarget().invokeExact();
 
             } else {
                 // instance method, so we need to capture the type.
@@ -161,11 +162,11 @@ public class HandlerMethods {
                 MethodHandle mh = caller.findVirtual(server.getClass(), method.getName(), mt);
                 MethodType mtGeneric = mh.type().changeParameterType(1, CorfuMsg.class);
                 h = (HandlerMethod<CorfuMsg>) LambdaMetafactory.metafactory(caller,
-                    "handle",
-                    MethodType.methodType(HandlerMethod.class, server.getClass()),
-                    mtGeneric.dropParameterTypes(0, 1), mh,
-                    mh.type().dropParameterTypes(0, 1)).getTarget()
-                    .bindTo(server).invoke();
+                        "handle",
+                        MethodType.methodType(HandlerMethod.class, server.getClass()),
+                        mtGeneric.dropParameterTypes(0, 1), mh,
+                        mh.type().dropParameterTypes(0, 1)).getTarget()
+                        .bindTo(server).invoke();
             }
             // Install pre-conditions on handler
             final HandlerMethod<CorfuMsg> handler = generateConditionalHandler(annotation.type(), h);
@@ -188,23 +189,32 @@ public class HandlerMethods {
     private HandlerMethod<CorfuMsg> generateConditionalHandler(@Nonnull final CorfuMsgType type,
                                                                @Nonnull final HandlerMethod<CorfuMsg> handler) {
         // Generate a timer based on the Corfu message type
-        final Timer timer = getTimer(type);
+        final Optional<Timer> timer = getTimer(type);
 
         // Register the handler. Depending on metrics collection configuration by MetricsUtil,
         // handler will be instrumented by the metrics context.
         return (msg, ctx, r) -> {
-            try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
-                handler.handle(msg, ctx, r);
+            Runnable handlerRunnable = () -> handler.handle(msg, ctx, r);
+            if (timer.isPresent()) {
+                timer.get().record(handlerRunnable);
+            }
+            else {
+                handlerRunnable.run();
             }
         };
     }
 
     // Create a timer using cached timer name for the corresponding type
-    private Timer getTimer(@Nonnull CorfuMsgType type) {
+    private Optional<Timer> getTimer(@Nonnull CorfuMsgType type) {
         timerNameCache.computeIfAbsent(type,
-                                       aType -> (CorfuComponent.INFRA_MSG_HANDLER +
-                                                 aType.name().toLowerCase()));
+                aType -> (CorfuComponent.INFRA_MSG_HANDLER +
+                        aType.name().toLowerCase()));
+        double[] percentiles = new double[]{0.50, 0.95, 0.99};
 
-        return ServerContext.getMetrics().timer(timerNameCache.get(type));
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> Timer.builder(timerNameCache.get(type))
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
     }
 }

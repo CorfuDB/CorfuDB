@@ -1,41 +1,38 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
-
-import java.lang.reflect.InvocationTargetException;
-import java.util.Collection;
-import java.util.List;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
+import lombok.Getter;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.view.TableRegistry;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.lang.reflect.InvocationTargetException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
  *
  * Key APIs exposed are:
- *   o-> TxBuilder() for CRUD operations
+ *   o-> TxnContext() for CRUD operations
  *   o-> getTimestamp() for database snapshots
  *   o-> table lifecycle management
- *
- * By itself it is a lightweight layer and only carries the CorfuRuntime and therefore can be
- * instantiated many times with the same runtime.
  *
  * Created by zlokhandwala on 2019-08-02.
  */
 public class CorfuStore {
 
+    @Getter
     private final CorfuRuntime runtime;
 
-    /**
-     * Transaction Streamer.
-     */
-    private final TxnStreamingManager txnStreamingManager;
-
+    private final Optional<AtomicLong> openTableCounter;
     /**
      * Creates a new CorfuStore.
      *
@@ -43,9 +40,22 @@ public class CorfuStore {
      */
     @Nonnull
     public CorfuStore(@Nonnull final CorfuRuntime runtime) {
-        runtime.setTransactionLogging(true);
+        this(runtime, true);
+    }
+
+    /**
+     * Creates a new CorfuStore.
+     *
+     * @param runtime Connected instance of the Corfu Runtime.
+     * @param enableTxLogging
+     */
+    @Nonnull
+    public CorfuStore(@Nonnull final CorfuRuntime runtime, boolean enableTxLogging) {
+        runtime.setTransactionLogging(enableTxLogging);
         this.runtime = runtime;
-        this.txnStreamingManager = new TxnStreamingManager(runtime);
+        openTableCounter = runtime.getRegistry()
+                .map(registry ->
+                        registry.gauge("open_tables.count", new AtomicLong(0L)));
     }
 
     /**
@@ -89,8 +99,10 @@ public class CorfuStore {
                              @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-
-        return runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
+        Table table =
+                runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
+        openTableCounter.ifPresent(count -> count.getAndIncrement());
+        return table;
     }
 
     /**
@@ -103,9 +115,35 @@ public class CorfuStore {
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
-    Table<K, V, M> openTable(@Nonnull final String namespace,
-                             @Nonnull final String tableName) {
+    Table<K, V, M> getTable(@Nonnull final String namespace,
+                            @Nonnull final String tableName) {
         return runtime.getTableRegistry().getTable(namespace, tableName);
+    }
+
+    /**
+     * Creates and registers a Queue backed by a Table.
+     * A table needs to be registered before it is used.
+     *
+     * @param namespace    Namespace of the table.
+     * @param queueName    Queue's table name.
+     * @param vClass       Class of the Queue's record Model.
+     * @param tableOptions Table options.
+     * @param <V>          Value type.
+     * @return Table instance.
+     * @throws NoSuchMethodException     Thrown if key/value class are not protobuf classes.
+     * @throws InvocationTargetException Thrown if key/value class are not protobuf classes.
+     * @throws IllegalAccessException    Thrown if key/value class are not protobuf classes.
+     */
+    @Nonnull
+    public <V extends Message>
+    Table<Queue.CorfuGuidMsg, V, Queue.CorfuQueueMetadataMsg> openQueue(@Nonnull final String namespace,
+                                                                        @Nonnull final String queueName,
+                                                                        @Nonnull final Class<V> vClass,
+                                                                        @Nonnull final TableOptions tableOptions)
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+
+        return runtime.getTableRegistry().openTable(namespace, queueName,
+                Queue.CorfuGuidMsg.class, vClass, Queue.CorfuQueueMetadataMsg.class, tableOptions);
     }
 
     /**
@@ -131,19 +169,63 @@ public class CorfuStore {
     }
 
     /**
-     * Start appending mutations to a transaction.
-     * The transaction does not begin until a commit is invoked.
-     * On a commit the latest available snapshot will be used to resolve the transaction.
+     * Start a transaction with snapshot isolation level at the latest available corfu snapshot.
+     * The transaction does not begin until either a commit is invoked or a read happens.
      *
      * @param namespace Namespace of the tables involved in the transaction.
      * @return Returns a transaction builder instance.
      */
     @Nonnull
+    @Deprecated
     public TxBuilder tx(@Nonnull final String namespace) {
         return new TxBuilder(
                 this.runtime.getObjectsView(),
                 this.runtime.getTableRegistry(),
                 namespace);
+    }
+
+    /**
+     * Start a transaction with snapshot isolation level at the latest available snapshot.
+     *
+     * @param namespace Namespace of the tables involved in the transaction.
+     * @return Returns a Transaction context.
+     */
+    @Nonnull
+    public TxnContext txn(@Nonnull final String namespace) {
+        return this.txn(namespace, IsolationLevel.snapshot());
+    }
+
+    /**
+     * Start a corfu transaction and bind it to a ThreadLocal TxnContext.
+     *
+     * @param namespace      Namespace of the tables involved in the transaction.
+     * @param isolationLevel Snapshot (latest or specific) at which the transaction must execute.
+     * @return Returns a transaction context instance.
+     */
+    @Nonnull
+    public TxnContext txn(@Nonnull final String namespace, IsolationLevel isolationLevel) {
+        return new TxnContext(
+                this.runtime.getObjectsView(),
+                this.runtime.getTableRegistry(),
+                namespace,
+                isolationLevel,
+                false);
+    }
+
+    /**
+     * Return the address of the latest updated made in this table.
+     *
+     * @param namespace - namespace that this table belongs to.
+     * @param tableName - table name of this table without the namespace prefixed in.
+     * @return stream tail of this table.
+     */
+    public long getHighestSequence(@Nonnull final String namespace,
+                                   @Nonnull final String tableName) {
+        return this.runtime.getSequencerView().query(
+                CorfuRuntime.getStreamID(
+                        TableRegistry.getFullyQualifiedTableName(namespace, tableName)
+                )
+        );
     }
 
     /**
@@ -153,6 +235,7 @@ public class CorfuStore {
      * @return Query implementation.
      */
     @Nonnull
+    @Deprecated
     public Query query(@Nonnull final String namespace) {
         return new Query(
                 this.runtime.getTableRegistry(),
@@ -161,28 +244,51 @@ public class CorfuStore {
     }
 
     /**
-     * Subscribe to a specific a table in a namespace or the entire namespace.
-     * Objects returned will honor transactional boundaries
-     * @param streamListener - callback context.
-     * @param namespace - the CorfuStore namespace to subscribe to.
-     * @param tablesOfInterest - If specified, only updates from these tables will be returned.
-     * @param timestamp - If specified, all stream updates from this timestamp will be returned
-     *                  - if null, only future updates will be returned.
+     * Subscribe to transaction updates on specific tables in the namespace.
+     * Objects returned will honor transactional boundaries.
+     *
+     * @param streamListener   callback context
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     * @param timestamp        if specified, all stream updates from this timestamp will be returned
+     *                         if null, only future updates will be returned
      */
     public <K extends Message, V extends Message, M extends Message>
     void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                   @Nonnull List<TableSchema> tablesOfInterest,
+                   @Nonnull List<TableSchema<K, V, M>> tablesOfInterest,
                    @Nullable Timestamp timestamp) {
-        txnStreamingManager.subscribe(streamListener, namespace, tablesOfInterest,
-                (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
+        runtime.getTableRegistry().getStreamManager()
+                .subscribe(streamListener, namespace, tablesOfInterest,
+                        (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
+    }
+
+    /**
+     * Subscribe to transaction updates on specific tables with the streamTag in the namespace.
+     * Objects returned will honor transactional boundaries.
+     *
+     * @param streamListener   callback context
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param tablesOfInterest only updates from these tables of interest will be sent to listener
+     * @param timestamp        if specified, all stream updates from this timestamp will be returned
+     *                         if null, only future updates will be returned
+     */
+    public void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                   @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
+                   @Nullable Timestamp timestamp) {
+        runtime.getTableRegistry().getStreamManager()
+                .subscribe(streamListener, namespace, streamTag, tablesOfInterest,
+                        (timestamp == null) ? getTimestamp().getSequence() : timestamp.getSequence());
     }
 
     /**
      * Gracefully shutdown a streamer.
      * Once this call returns no further stream updates will be returned.
+     *
      * @param streamListener - callback context.
      */
     public void unsubscribe(@Nonnull StreamListener streamListener) {
-        txnStreamingManager.unsubscribe(streamListener);
+        runtime.getTableRegistry().getStreamManager()
+                .unsubscribe(streamListener);
     }
 }

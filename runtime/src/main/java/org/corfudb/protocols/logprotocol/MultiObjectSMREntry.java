@@ -65,6 +65,12 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
         multiSMREntry.addTo(updateEntry);
     }
 
+    public void addTo(UUID streamID, List<SMREntry> updateEntries) {
+        checkState(streamBuffers.isEmpty(), "Shouldn't be called on a deserialized object");
+        MultiSMREntry multiSMREntry = streamUpdates.computeIfAbsent(streamID, k -> new MultiSMREntry());
+        multiSMREntry.addTo(updateEntries);
+    }
+
     /**
      * merge two MultiObjectSMREntry records. This method is only called during a
      * transaction, since only a single thread can execute a transaction at any point in time

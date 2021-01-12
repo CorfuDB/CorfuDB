@@ -24,6 +24,7 @@ import java.util.UUID;
  *
  * Created by zlokhandwala on 2019-08-05.
  */
+@Deprecated
 public class TxBuilder {
 
     private final ObjectsView objectsView;
@@ -49,6 +50,7 @@ public class TxBuilder {
         this.operations = new ArrayList<>();
     }
 
+    @Deprecated
     private <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> getTable(@Nonnull final String tableName) {
         return this.tableRegistry.getTable(this.namespace, tableName);
@@ -64,6 +66,7 @@ public class TxBuilder {
      * @param <V>       Type of Value.
      * @return TxBuilder instance.
      */
+    @Deprecated
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     TxBuilder create(@Nonnull final String tableName,
@@ -88,6 +91,7 @@ public class TxBuilder {
      * @return TxBuilder instance.
      */
     @Nonnull
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message>
     TxBuilder update(@Nonnull final String tableName,
                      @Nonnull final K key,
@@ -106,6 +110,7 @@ public class TxBuilder {
      * @param updateEntry
      * @return
      */
+    @Deprecated
     public TxBuilder logUpdate(UUID streamId, SMREntry updateEntry) {
 
         operations.add(() -> {
@@ -124,6 +129,7 @@ public class TxBuilder {
      * @param <V>       Type of Value.
      * @return TxBuilder instance.
      */
+    @Deprecated
     @Nonnull
     public <K extends Message, V extends Message, M extends Message>
     TxBuilder touch(@Nonnull final String tableName,
@@ -146,6 +152,7 @@ public class TxBuilder {
      * @return TxBuilder instance.
      */
     @Nonnull
+    @Deprecated
     public <K extends Message, V extends Message, M extends Message>
     TxBuilder delete(@Nonnull final String tableName,
                      @Nonnull final K key) {
@@ -175,6 +182,7 @@ public class TxBuilder {
      * The commit returns successfully if the transaction was committed.
      * Otherwise this throws a TransactionAbortedException.
      */
+    @Deprecated
     public void commit() {
         commit(null);
     }
@@ -188,6 +196,7 @@ public class TxBuilder {
      *
      * @param timestamp Timestamp to commit the transaction on.
      */
+    @Deprecated
     public void commit(final Timestamp timestamp) {
         this.timestamp = timestamp;
         try {

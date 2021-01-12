@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto.service";
+
+import "rpc_common.proto";
+
+/**
+ * Protobuf definitions for the Base server RPCs. These
+ * include request and response payloads for: PING, HANDSHAKE,
+ * RESTART, RESET, SEAL, and VERSION.
+ */
+
+message PingRequestMsg {
+}
+
+message PingResponseMsg {
+}
+
+// Request sent to initiate handshake between client and server.
+message HandshakeRequestMsg {
+  UuidMsg client_id = 1;
+  UuidMsg server_id = 2;
+}
+
+// Response sent by server in the handshake stage.
+message HandshakeResponseMsg {
+  UuidMsg server_id = 1;
+  string corfu_version = 2;
+}
+
+message RestartRequestMsg {
+}
+
+message RestartResponseMsg {
+}
+
+message ResetRequestMsg {
+}
+
+message ResetResponseMsg {
+}
+
+message SealRequestMsg {
+  int64 epoch = 1;
+}
+
+message SealResponseMsg {
+}
+
+message VersionRequestMsg {
+}
+
+// Corfu version information, represented as a JSON string.
+message VersionResponseMsg {
+  string json_payload_msg = 1;
+}

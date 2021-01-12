@@ -31,6 +31,33 @@
         </encoder>
     </appender>
 
+    <property name="CORFU_METRICS_DIRECTORY" value="/tmp/corfu_metrics" />
+
+    <appender name="MetricsRollingFileCorfu" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${CORFU_METRICS_DIRECTORY}/corfu-metrics.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>${CORFU_METRICS_DIRECTORY}/corfu-metrics.%i.log.gz</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>30</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>700MB</maxFileSize>
+        </triggeringPolicy>
+        <encoder>
+            <pattern>
+                %msg%n%xException
+            </pattern>
+        </encoder>
+    </appender>
+
+    <appender name="AsyncMetricsRollingFileCorfu" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="MetricsRollingFileCorfu" />
+        <queueSize>1024</queueSize>
+    </appender>
+
+
+
+
     <!-- Control logging levels for individual components here. -->
     <logger name="org.corfudb.runtime.object" level="INFO"/>
     <logger name="org.corfudb.runtime.clients" level="INFO"/>
@@ -41,6 +68,10 @@
 
     <logger name="org.corfudb.metricsdata" level="INFO">
         <!--<appender-ref ref="MetricsRollingFile" />-->
+    </logger>
+
+    <logger name="org.corfudb.metricsdata1" level="DEBUG" additivity="false">
+        <appender-ref ref="AsyncMetricsRollingFileCorfu" />
     </logger>
 
 

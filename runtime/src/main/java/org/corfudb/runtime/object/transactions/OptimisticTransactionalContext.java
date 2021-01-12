@@ -3,12 +3,11 @@ package org.corfudb.runtime.object.transactions;
 import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -18,6 +17,7 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.object.ICorfuSMRAccess;
 import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
+
 
 /** A Corfu optimistic transaction context.
  *
@@ -43,12 +43,6 @@ import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
  */
 @Slf4j
 public class OptimisticTransactionalContext extends AbstractTransactionalContext {
-
-    /** The proxies which were modified by this transaction. */
-    @Getter
-    private final Set<ICorfuSMRProxyInternal> modifiedProxies =
-            new HashSet<>();
-
 
     OptimisticTransactionalContext(Transaction transaction) {
         super(transaction);
@@ -135,7 +129,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      */
     @Override
     public <T extends ICorfuSMR<T>> Object getUpcallResult(ICorfuSMRProxyInternal<T> proxy,
-                                                            long timestamp, Object[] conflictObject) {
+                                                           long timestamp, Object[] conflictObject) {
         // Getting an upcall result adds the object to the conflict set.
         addToReadSet(proxy, conflictObject);
 
@@ -173,7 +167,7 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
      * @return              The "address" that the update was written to.
      */
     @Override
-    public <T extends ICorfuSMR<T>>long logUpdate(ICorfuSMRProxyInternal<T> proxy,
+    public <T extends ICorfuSMR<T>> long logUpdate(ICorfuSMRProxyInternal<T> proxy,
                                                    SMREntry updateEntry,
                                                    Object[] conflictObjects) {
         log.trace("LogUpdate[{},{}] {} ({}) conflictObj={}",
@@ -186,6 +180,11 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
     @Override
     public void logUpdate(UUID streamId, SMREntry updateEntry) {
         addToWriteSet(streamId, updateEntry);
+    }
+
+    @Override
+    public void logUpdate(UUID streamId, List<SMREntry> updateEntries) {
+        addToWriteSet(streamId, updateEntries);
     }
 
     /**
@@ -237,17 +236,20 @@ public class OptimisticTransactionalContext extends AbstractTransactionalContext
             return commitAddress;
         }
 
-        // If the write set is empty, we're done and just return
-        // NOWRITE_ADDRESS.
+        // If the write set is empty, we're done and just return NOWRITE_ADDRESS.
         if (getWriteSetInfo().getWriteSet().getEntryMap().isEmpty()) {
             log.trace("Commit[{}] Read-only commit (no write)", this);
             return NOWRITE_ADDRESS;
         }
 
-        // Write to the transaction stream if transaction logging is enabled
-        Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo().getWriteSet().getEntryMap().keySet());
+        Set<UUID> affectedStreamsIds = new HashSet<>(getWriteSetInfo()
+                .getWriteSet().getEntryMap().keySet());
 
-        if (this.transaction.isLoggingEnabled()) {
+        // Write to transaction streams pertaining to the streamTags and
+        // global transaction stream if transaction logging is enabled.
+        // With stream tagging being introduced, the latter is only for backward compatibility.
+        if (transaction.isLoggingEnabled()) {
+            affectedStreamsIds.addAll(getWriteSetInfo().getStreamTags());
             affectedStreamsIds.add(TRANSACTION_STREAM_ID);
         }
 

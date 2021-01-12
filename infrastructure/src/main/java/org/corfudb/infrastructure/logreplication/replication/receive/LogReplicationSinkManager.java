@@ -4,7 +4,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.common.util.ObservableValue;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
@@ -14,8 +13,13 @@ import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
 import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -40,23 +44,20 @@ public class LogReplicationSinkManager implements DataReceiver {
      * Read SinkManager configuration information from a file.
      * If the file is not available, use the default values.
      */
-    private static final String config_file = "/config/corfu/corfu_replication_config.properties";
+    private static final String CONFIG_FILE = "/config/corfu/corfu_replication_config.properties";
 
-    private final int DEFAULT_ACK_CNT = 1;
-    /*
-     * Duration in milliseconds after which an ACK is sent back to the sender
-     * if the message count is not reached before
-     */
+    private static final int DEFAULT_ACK_CNT = 1;
+
+    // Duration in milliseconds after which an ACK is sent back to the sender
+    // if the message count is not reached before
     private int ackCycleTime = DEFAULT_ACK_CNT;
 
-    /*
-     * Number of messages received before sending a summarized ACK
-     */
+    // Number of messages received before sending a summarized ACK
     private int ackCycleCnt;
 
     private int bufferSize;
 
-    private CorfuRuntime runtime;
+    private final CorfuRuntime runtime;
 
     private LogEntrySinkBufferManager logEntrySinkBufferManager;
     private SnapshotSinkBufferManager snapshotSinkBufferManager;
@@ -73,9 +74,7 @@ public class LogReplicationSinkManager implements DataReceiver {
     private long baseSnapshotTimestamp = Address.NON_ADDRESS - 1;
     private UUID lastSnapshotSyncId = null;
 
-    /*
-     * Current topologyConfigId, used to drop out of date messages.
-     */
+    // Current topologyConfigId, used to drop out of date messages.
     private long topologyConfigId = 0;
 
     @VisibleForTesting
@@ -84,18 +83,21 @@ public class LogReplicationSinkManager implements DataReceiver {
     // Count number of received messages, used for testing purposes
     @VisibleForTesting
     @Getter
-    private ObservableValue rxMessageCount = new ObservableValue(rxMessageCounter);
+    private final ObservableValue<Integer> rxMessageCount = new ObservableValue<>(rxMessageCounter);
 
     private ISnapshotSyncPlugin snapshotSyncPlugin;
 
-    private String pluginConfigFilePath;
+    private final String pluginConfigFilePath;
 
     // true indicates data is consistent on the local(standby) cluster, false indicates it is not.
     // In Snapshot Sync, if the StreamsSnapshotWriter is in the apply phase, the data is not yet
     // consistent and cannot be read by applications.  Data is always consistent during Log Entry Sync
-    private AtomicBoolean dataConsistent = new AtomicBoolean(false);
+    private final AtomicBoolean dataConsistent = new AtomicBoolean(false);
 
     private ExecutorService applyExecutor;
+
+    @Getter
+    private final AtomicBoolean ongoingApply = new AtomicBoolean(false);
 
     /**
      * Constructor Sink Manager
@@ -159,8 +161,30 @@ public class LogReplicationSinkManager implements DataReceiver {
                         .build());
 
         // Set the data consistent status.
-        setDataConsistent(dataConsistent.get());
+        // It could have tx conflict with another log replicator instance.
+        setDataConsistentWithRetry();
         initWriterAndBufferMgr();
+    }
+
+    private void setDataConsistentWithRetry() {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    setDataConsistent(dataConsistent.get());
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to setDataConsistent in SinkManager's init", tae);
+                    throw new RetryNeededException();
+                }
+
+                if (log.isTraceEnabled()) {
+                    log.trace("setDataConsistentWithRetry succeeds, current value is {}", dataConsistent.get());
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to setDataConsistent in SinkManager's init.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
     }
 
     /**
@@ -201,7 +225,7 @@ public class LogReplicationSinkManager implements DataReceiver {
      * If the configFile doesn't exist, use the default values.
      */
     private void readConfig() {
-        File configFile = new File(config_file);
+        File configFile = new File(CONFIG_FILE);
         try {
             FileReader reader = new FileReader(configFile);
             Properties props = new Properties();
@@ -211,7 +235,7 @@ public class LogReplicationSinkManager implements DataReceiver {
             ackCycleTime = Integer.parseInt(props.getProperty("log_writer_ack_cycle_time", Integer.toString(ackCycleTime)));
             reader.close();
         } catch (FileNotFoundException e) {
-            log.warn("Config file {} does not exist.  Using default configs", config_file);
+            log.warn("Config file {} does not exist.  Using default configs", CONFIG_FILE);
         } catch (IOException e) {
             log.error("IO Exception when reading config file", e);
         }
@@ -422,16 +446,20 @@ public class LogReplicationSinkManager implements DataReceiver {
         }
     }
 
-    private void startSnapshotApplyAsync(LogReplicationEntry entry) {
-        applyExecutor.submit(() -> startSnapshotApply(entry));
+    private synchronized void startSnapshotApplyAsync(LogReplicationEntry entry) {
+        if (!ongoingApply.get()) {
+            ongoingApply.set(true);
+            applyExecutor.submit(() -> startSnapshotApply(entry));
+        }
     }
 
-    private void startSnapshotApply(LogReplicationEntry entry) {
+    private synchronized void startSnapshotApply(LogReplicationEntry entry) {
         log.debug("Entry Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
         setDataConsistent(false);
         snapshotWriter.startSnapshotSyncApply();
         completeSnapshotApply(entry);
         setDataConsistent(true);
+        ongoingApply.set(false);
         log.debug("Exit Start Snapshot Sync Apply, id={}", entry.getMetadata().getSyncRequestId());
     }
 
@@ -510,6 +538,24 @@ public class LogReplicationSinkManager implements DataReceiver {
     public void shutdown() {
         this.runtime.shutdown();
         this.applyExecutor.shutdownNow();
+    }
+
+    /**
+     * Resume Snapshot Sync Apply
+     *
+     * In the event of restarts, a Snapshot Sync which had finished transfer can resume the apply stage.
+     */
+    public void resumeSnapshotApply() {
+        // Signal start of snapshot sync to the writer, so data can be cleared (on old snapshot syncs)
+        snapshotWriter.reset(topologyConfigId, logReplicationMetadataManager.getLastStartedSnapshotTimestamp());
+        long snapshotTransferTs = logReplicationMetadataManager.getLastTransferredSnapshotTimestamp();
+        UUID snapshotSyncId = new UUID(logReplicationMetadataManager.getCurrentSnapshotSyncCycleId(), Long.MAX_VALUE);
+        log.info("Resume Snapshot Sync Apply, snapshot_transfer_ts={}, id={}", snapshotTransferTs, snapshotSyncId);
+        // Construct Log Replication Entry message used to complete the Snapshot Sync with info in the metadata manager
+        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END,
+                logReplicationMetadataManager.getTopologyConfigId(),
+                -1L, snapshotTransferTs, snapshotSyncId);
+        startSnapshotApplyAsync(new LogReplicationEntry(metadata));
     }
 
     enum RxState {

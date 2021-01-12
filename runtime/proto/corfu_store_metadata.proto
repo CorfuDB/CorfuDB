@@ -3,6 +3,7 @@ syntax = "proto3";
 package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime";
 
+import "corfu_options.proto";
 import "google/protobuf/descriptor.proto";
 import "google/protobuf/any.proto";
 
@@ -34,6 +35,9 @@ message TableMetadata {
 
     // True if these streams are to be cached, False otherwise.
     bool cache = 3;
+
+    // Extract the schema options defined at the table level for easy lookup.
+    SchemaOptions table_options = 4;
 }
 
 // Record to be persisted containing the value and the metadata.

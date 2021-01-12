@@ -1,18 +1,8 @@
 package org.corfudb.runtime.checkpoint;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-
 import com.google.common.collect.Iterators;
 import com.google.common.reflect.TypeToken;
-import java.nio.file.Paths;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -26,10 +16,20 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.object.AbstractObjectTest;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.nio.file.Paths;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Created by dmalkhi on 5/25/17.
@@ -135,7 +135,7 @@ public class CheckpointTest extends AbstractObjectTest {
             Map<String, Long> localm2A = openMap(rt, streamNameA);
             Map<String, Long> localm2B = openMap(rt, streamNameB);
             for (int i = 0; i < localm2A.size(); i++) {
-                assertThat(localm2A.get(String.valueOf(i))).isEqualTo((long) i);
+                assertThat(localm2A.get(String.valueOf(i))).isEqualTo(i);
             }
             for (int i = 0; i < localm2B.size(); i++) {
                 assertThat(localm2B.get(String.valueOf(i))).isEqualTo(0L);
@@ -396,7 +396,8 @@ public class CheckpointTest extends AbstractObjectTest {
         CorfuRuntime rt = getNewRuntime();
 
         TestRule dropSequencerTrim = new TestRule()
-                .matches(corfuMsg -> corfuMsg.getMsgType().equals(CorfuMsgType.SEQUENCER_TRIM_REQ))
+                .requestMatches(msg -> msg.getPayload().getPayloadCase()
+                        .equals(CorfuMessage.RequestPayloadMsg.PayloadCase.SEQUENCER_TRIM_REQUEST))
                 .drop();
         addClientRule(rt, dropSequencerTrim);
 
@@ -535,7 +536,7 @@ public class CheckpointTest extends AbstractObjectTest {
                     // check map positions 0..(snapshot-1)
                     for (int i = 0; i < snapshotPosition; i++) {
                         assertThat(localm2A.get(String.valueOf(i)))
-                                .isEqualTo((long) i);
+                                .isEqualTo(i);
                     }
 
                     // check map positions snapshot..(mapSize-1)
@@ -670,7 +671,7 @@ public class CheckpointTest extends AbstractObjectTest {
             try {
                 Map<String, Long> localTestMap = openMap(runtime, streamName);
                 for (int i = 0; i < localTestMap.size(); i++) {
-                    assertThat(localTestMap.get(String.valueOf(i))).isEqualTo((long) i);
+                    assertThat(localTestMap.get(String.valueOf(i))).isEqualTo(i);
                 }
                 assertThat(localTestMap.size()).isEqualTo(mapSize);
             } catch (TrimmedException te) {

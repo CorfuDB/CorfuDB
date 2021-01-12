@@ -23,6 +23,7 @@ import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
@@ -409,10 +410,10 @@ public class StateTransferTest extends AbstractViewTest {
         addServer(SERVERS.PORT_1);
         addServer(SERVERS.PORT_2);
 
-        addServerRule(SERVERS.PORT_2, new TestRule().matches(
-                msg -> !msg.getMsgType().equals(CorfuMsgType.LAYOUT_BOOTSTRAP)
-                        && !msg.getMsgType().equals(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST))
-                .drop());
+        addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(
+                msg -> !msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_LAYOUT_REQUEST)).drop());
+        addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(
+                msg -> !msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_MANAGEMENT_REQUEST)).drop());
 
         final long writtenAddressesBatch1 = 3L;
         final long writtenAddressesBatch2 = 6L;
@@ -1272,10 +1273,10 @@ public class StateTransferTest extends AbstractViewTest {
             addServer(SERVERS.PORT_2, sc2);
 
             // Add rule to drop all msgs except for service discovery ones
-            addServerRule(SERVERS.PORT_2, new TestRule().matches(
-                    msg -> !msg.getMsgType().equals(CorfuMsgType.LAYOUT_BOOTSTRAP)
-                            && !msg.getMsgType().equals(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST))
-                    .drop());
+            addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(
+                    msg -> !msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_LAYOUT_REQUEST)).drop());
+            addServerRule(SERVERS.PORT_2, new TestRule().requestMatches(
+                    msg -> !msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_MANAGEMENT_REQUEST)).drop());
 
             final long writtenAddressesBatch1 = 1500L;
             final long writtenAddressesBatch2 = 3000L;

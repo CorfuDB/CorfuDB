@@ -461,14 +461,14 @@ public class DiskBackedCorfuClientTest extends AbstractViewTest implements AutoC
 
         // Simple CRUD using the table instance.
         // These are wrapped as transactional operations.
-        table.create(firstId, firstEvent, metadata);
+        table.put(firstId, firstEvent, metadata);
 
         // Fetch timestamp to perform snapshot queries or transactions at a particular timestamp.
         CorfuStoreMetadata.Timestamp timestamp = corfuStore.getTimestamp();
-        TxBuilder tx = corfuStore.tx(namespace);
+        TxnContext tx = corfuStore.txn(namespace);
 
         Streams.zip(ids.stream(), events.stream(), SimpleEntry::new)
-                .forEach(pair -> tx.update(tableName, pair.getKey(), pair.getValue(), metadata));
+                .forEach(pair -> tx.putRecord(table, pair.getKey(), pair.getValue(), metadata));
         tx.commit();
 
         SimpleEntry<Uuid, EventInfo> sample = Streams

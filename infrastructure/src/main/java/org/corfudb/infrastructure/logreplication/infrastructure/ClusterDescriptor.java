@@ -8,6 +8,7 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -29,6 +30,10 @@ public class ClusterDescriptor {
     @Getter
     private int corfuPort;    // Port on which Corfu DB runs on this cluster
 
+    public ClusterDescriptor(String clusterId) {
+        this.clusterId = clusterId;
+    }
+
     public ClusterDescriptor(ClusterConfigurationMsg clusterConfig) {
         this.clusterId = clusterConfig.getId();
         this.role = clusterConfig.getRole();
@@ -37,7 +42,8 @@ public class ClusterDescriptor {
         for (NodeConfigurationMsg nodeConfig : clusterConfig.getNodeInfoList()) {
             NodeDescriptor newNode = new NodeDescriptor(nodeConfig.getAddress(),
                     Integer.toString(nodeConfig.getPort()), clusterId,
-                    UUID.fromString(nodeConfig.getUuid()));
+                    UUID.fromString(nodeConfig.getUuid()),
+                    UUID.fromString(nodeConfig.getNodeId()));
             this.nodesDescriptors.add(newNode);
         }
     }
@@ -49,7 +55,7 @@ public class ClusterDescriptor {
         this.corfuPort = info.getCorfuPort();
         for (NodeDescriptor nodeInfo : info.nodesDescriptors) {
             NodeDescriptor newNode = new NodeDescriptor(nodeInfo.getHost(), nodeInfo.getPort(),
-                    info.clusterId, nodeInfo.getNodeId());
+                    info.clusterId, nodeInfo.getNodeId(), nodeInfo.getRealNodeId());
             this.nodesDescriptors.add(newNode);
         }
     }
@@ -85,12 +91,21 @@ public class ClusterDescriptor {
      * Get descriptor for a specific endpoint
      *
      * @param endpoint node's endpoint
+     * @param nodeId node's id
      * @return endpoint's node descriptor or null if it does not belong to this cluster.
      */
-    public NodeDescriptor getNode(String endpoint) {
-        for (NodeDescriptor node : nodesDescriptors) {
-            if(node.getEndpoint().equals(endpoint)) {
-                return node;
+    public NodeDescriptor getNode(String endpoint, Optional<String> nodeId) {
+        if (!nodeId.isPresent()) {
+            for (NodeDescriptor node : nodesDescriptors) {
+                if(node.getEndpoint().equals(endpoint)) {
+                    return node;
+                }
+            }
+        } else {
+            for (NodeDescriptor node : nodesDescriptors) {
+                if(node.getRealNodeId().toString().equals(nodeId.get())) {
+                    return node;
+                }
             }
         }
 

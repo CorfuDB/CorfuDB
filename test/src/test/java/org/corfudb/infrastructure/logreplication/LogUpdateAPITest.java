@@ -15,10 +15,11 @@ import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.collections.CorfuStore;
+import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.Query;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
-import org.corfudb.runtime.collections.TxBuilder;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
@@ -32,7 +33,7 @@ public class LogUpdateAPITest extends AbstractViewTest {
     static final private int NUM_KEYS = 10;
 
     /**
-     * Test the TxBuilder logUpdate API work properly.
+     * Test the TxnContext logUpdate API work properly.
      * It first populate tableA with some data. Then read tableA with stream API,
      * then apply the smrEntries to tableB with logUpdate API.
      * Verify that tableB contains all the keys that A has.
@@ -63,7 +64,9 @@ public class LogUpdateAPITest extends AbstractViewTest {
             Uuid key = Uuid.newBuilder()
                     .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
                     .build();
-            corfuStore1.tx(namespace).update(tableAName, key, key, key).commit();
+            TxnContext txnContext = corfuStore1.txn(namespace);
+            txnContext.putRecord(tableA, key, key, key);
+            txnContext.commit();
         }
 
         //start runtime 2, open A, B as a stream and C as an UFO
@@ -95,7 +98,7 @@ public class LogUpdateAPITest extends AbstractViewTest {
 
         while (iterator.hasNext()) {
             CorfuStoreMetadata.Timestamp timestamp = corfuStore2.getTimestamp();
-            TxBuilder txBuilder = corfuStore2.tx(namespace);
+            TxnContext txnContext = corfuStore2.txn(namespace, IsolationLevel.snapshot(timestamp));
 
             //runtime2.getObjectsView().TXBegin();
 
@@ -103,12 +106,12 @@ public class LogUpdateAPITest extends AbstractViewTest {
             Uuid key = Uuid.newBuilder()
                     .setMsb(uuid.getMostSignificantBits()).setLsb(uuid.getLeastSignificantBits())
                     .build();
-            txBuilder.update(tableCName, key, key, key);
+            txnContext.putRecord(tableC2, key, key, key);
             OpaqueEntry opaqueEntry = iterator.next();
             for( SMREntry smrEntry : opaqueEntry.getEntries().get(uuidA)) {
-                    txBuilder.logUpdate(CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName()), smrEntry);
+                    txnContext.logUpdate(CorfuRuntime.getStreamID(tableB.getFullyQualifiedTableName()), smrEntry);
             }
-            txBuilder.commit(timestamp);
+            txnContext.commit();
         }
 
         //verify data at B and C with runtime 1

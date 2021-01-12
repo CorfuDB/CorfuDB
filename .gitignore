@@ -220,7 +220,7 @@ pip-log.txt
 .idea
 target
 *.dat
-
+*doxyen*
 /it/src/test/resources/vm.credentials.properties
 
 test/.jqwik-database

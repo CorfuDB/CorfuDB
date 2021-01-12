@@ -14,6 +14,7 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import jdk.internal.org.objectweb.asm.util.Printer;
@@ -44,6 +45,19 @@ public class Utils {
     private static final TraceMethodVisitor mp = new TraceMethodVisitor(printer);
 
     private static final char[] hexArray = "0123456789ABCDEF".toCharArray();
+
+
+    /**
+     * When true randomness is not required using UUID.randomUUID() can be really slow.
+     * Blocking for 50+ ms for entropy to build up is not unusual. This method generates
+     * random UUIDs PRNG.
+     * @return A pseudo-random UUID
+     */
+    public static UUID genPseudorandomUUID() {
+        long msb = ThreadLocalRandom.current().nextLong();
+        long lsb = ThreadLocalRandom.current().nextLong();
+        return new UUID(msb, lsb);
+    }
 
     /** Convert a byte array to a hex string.
      * Source:

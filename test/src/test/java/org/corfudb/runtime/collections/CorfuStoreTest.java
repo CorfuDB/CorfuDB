@@ -6,13 +6,12 @@ import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Message;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.integration.Event;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.AbstractViewTest;
+import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.EventInfo;
 import org.corfudb.test.SampleSchema.Uuid;
@@ -80,7 +79,7 @@ public class CorfuStoreTest extends AbstractViewTest {
 
         // Simple CRUD using the table instance.
         // These are wrapped as transactional operations.
-        table.create(Uuid.newBuilder().setLsb(0L).setMsb(0L).build(),
+        table.put(Uuid.newBuilder().setLsb(0L).setMsb(0L).build(),
                 EventInfo.newBuilder().setName("simpleCRUD").build(),
                 metadata);
 
@@ -88,7 +87,7 @@ public class CorfuStoreTest extends AbstractViewTest {
         Timestamp timestamp = corfuStore.getTimestamp();
 
         // Creating a transaction builder.
-        TxBuilder tx = corfuStore.tx(nsxManager);
+        TxnContext tx = corfuStore.txn(nsxManager);
         for (int i = 0; i < count; i++) {
             UUID uuid = UUID.nameUUIDFromBytes(Integer.toString(i).getBytes());
             Uuid uuidMsg = Uuid.newBuilder()
@@ -103,7 +102,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                     .setEventTime(i)
                     .build());
 
-            tx.update(tableName, uuids.get(i), events.get(i), metadata);
+            tx.putRecord(table, uuids.get(i), events.get(i), metadata);
         }
         tx.commit();
 
@@ -200,12 +199,11 @@ public class CorfuStoreTest extends AbstractViewTest {
         long expectedVersion = 0L;
 
         corfuStore.tx(nsxManager)
-                .create(tableName,
-                        key1,
+                .create(tableName, key1,
                         EventInfo.newBuilder().setName("abc").build(),
                         user_1)
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_1")
                         .setCreateTimestamp(0L)
@@ -219,21 +217,21 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("bcd").build(),
                         ManagedResources.newBuilder().setCreateUser("user_2").setVersion(0L).build())
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_2")
                         .setCreateTimestamp(0L)
                         .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
                         .setVersion(expectedVersion++).build());
 
-        // Now do an updated without setting the version field, and it should not get validated!
+        // Now do an update without setting the version field, and it should not get validated!
         corfuStore.tx(nsxManager)
                 .update(tableName,
                         key1,
                         EventInfo.newBuilder().setName("cde").build(),
                         user_2)
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder()
                         .setCreateUser("user_2")
                         .setCreateTimestamp(0L)
@@ -241,7 +239,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         .setVersion(expectedVersion).build());
 
         corfuStore.tx(nsxManager).delete(tableName, key1).commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1)).isNull();
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1)).isNull();
         expectedVersion = 0L;
 
         corfuStore.tx(nsxManager)
@@ -250,7 +248,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("def").build(),
                         user_2)
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isEqualTo(ManagedResources.newBuilder(user_2)
                         .setCreateTimestamp(0L)
                         .setNestedType(SampleSchema.NestedTypeA.newBuilder().build())
@@ -340,12 +338,12 @@ public class CorfuStoreTest extends AbstractViewTest {
         UUID uuid1 = UUID.nameUUIDFromBytes("1".getBytes());
         Uuid key1 = Uuid.newBuilder().setMsb(uuid1.getMostSignificantBits()).setLsb(uuid1.getLeastSignificantBits()).build();
         corfuStore.tx(nsxManager)
-                .create(tableName,
+                .update(tableName,
                         key1,
                         EventInfo.newBuilder().setName("abc").build(),
                         null)
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isNull();
 
         corfuStore.tx(nsxManager)
@@ -354,7 +352,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("bcd").build(),
                         ManagedResources.newBuilder().setCreateUser("testUser").setVersion(1L).build())
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isNull();
 
         corfuStore.tx(nsxManager)
@@ -363,7 +361,7 @@ public class CorfuStoreTest extends AbstractViewTest {
                         EventInfo.newBuilder().setName("cde").build(),
                         null)
                 .commit();
-        assertThat(corfuStore.openTable(nsxManager, tableName).get(key1).getMetadata())
+        assertThat(corfuStore.getTable(nsxManager, tableName).get(key1).getMetadata())
                 .isNull();
     }
 
@@ -401,7 +399,7 @@ public class CorfuStoreTest extends AbstractViewTest {
 
         long timestamp = System.currentTimeMillis();
         corfuStore.tx(nsxManager)
-                .create(tableName, key, value,
+                .update(tableName, key, value,
                         ManagedResources.newBuilder()
                                 .setCreateTimestamp(timestamp).build())
                 .commit();
@@ -414,6 +412,54 @@ public class CorfuStoreTest extends AbstractViewTest {
         CorfuRecord<EventInfo, ManagedResources> record1 = table.get(key);
         assertThat(record1.getMetadata().getCreateTimestamp()).isEqualTo(timestamp);
         assertThat(record1.getMetadata().getCreateUser()).isEqualTo("CreateUser");
+    }
+
+    /**
+     * Demonstrates how features switches can be extracted from table options.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void checkTableOptions() throws Exception {
+
+        // Get a Corfu Runtime instance.
+        CorfuRuntime corfuRuntime = getDefaultRuntime();
+
+        // Creating Corfu Store using a connected corfu client.
+        CorfuStore corfuStore = new CorfuStore(corfuRuntime);
+
+        // Define a namespace for the table.
+        final String someNamespace = "some-namespace";
+        // Define table name.
+        final String tableName = "EventInfo";
+
+        // Create & Register the table.
+        // This is required to initialize the table for the current corfu client.
+        Table<Uuid, SampleSchema.SampleTableAMsg, Message> table =
+                corfuStore.openTable(
+                        someNamespace,
+                        tableName,
+                        Uuid.class,
+                        SampleSchema.SampleTableAMsg.class,
+                        null,
+                        // TableOptions includes option to choose - Memory/Disk based corfu table.
+                        TableOptions.builder().build());
+
+        String streamTag1 = SampleSchema.SampleTableAMsg.getDescriptor()
+                .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTag(0);
+        String streamTag2 = SampleSchema.SampleTableAMsg.getDescriptor()
+                .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTag(1);
+        assertThat(streamTag1).isEqualTo("searchStreamer");
+        assertThat(streamTag2).isEqualTo("slowStreamer");
+
+        log.debug(streamTag1+","+streamTag2);
+
+        final TableRegistry tableRegistry = corfuRuntime.getTableRegistry();
+        final CorfuStoreMetadata.TableName tableNameProto = CorfuStoreMetadata.TableName.newBuilder()
+                .setNamespace(table.getNamespace()).setTableName(tableName).build();
+
+        assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getStreamTag(0)).isEqualTo(streamTag1);
+        assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getStreamTag(1)).isEqualTo(streamTag2);
     }
 
     /**

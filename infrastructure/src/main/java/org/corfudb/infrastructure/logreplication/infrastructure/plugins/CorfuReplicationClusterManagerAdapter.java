@@ -1,10 +1,12 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * This is the interface for CorfuReplicationClusterManager.
@@ -49,4 +51,12 @@ public interface CorfuReplicationClusterManagerAdapter {
      * @return
      */
     Map<String, LogReplicationMetadata.ReplicationStatusVal> queryReplicationStatus();
+
+    /**
+     * This API enforce a full snapshot sync on the standby cluster with the clusterId at best effort.
+     * The command can only be executed on the active cluster's node.
+     *
+     * @param clusterId
+     */
+    UUID forceSnapshotSync(String clusterId) throws LogReplicationDiscoveryServiceException;
 }

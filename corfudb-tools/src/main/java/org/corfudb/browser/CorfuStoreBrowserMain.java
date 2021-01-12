@@ -26,6 +26,7 @@ public class CorfuStoreBrowserMain {
         loadTable,
         infoTable,
         showTable,
+        listenOnTable,
         dropTable
     }
 
@@ -37,11 +38,12 @@ public class CorfuStoreBrowserMain {
         "[--diskPath=<pathToTempDirForLargeTables>] "+
         "[--numItems=<numItems>] "+
         "[--batchSize=<itemsPerTransaction>] "+
+        "[--itemSize=<sizeOfEachRecordValue>] "+
         "[--tlsEnabled=<tls_enabled>]\n"
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable> Operation\n"
+        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable|listenOnTable> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--keystore=<keystore_file> KeyStore File\n"
@@ -51,6 +53,7 @@ public class CorfuStoreBrowserMain {
         + "--diskPath=<pathToTempDirForLargeTables> Path to Temp Dir\n"
         + "--numItems=<numItems> Total Number of items for loadTable\n"
         + "--batchSize=<batchSize> Number of records per transaction for loadTable\n"
+        + "--itemSize=<itemSize> Size of each item's payload for loadTable\n"
         + "--tlsEnabled=<tls_enabled>";
 
     public static void main(String[] args) {
@@ -130,7 +133,18 @@ public class CorfuStoreBrowserMain {
                     if (opts.get("--batchSize") != null) {
                         batchSize = Integer.parseInt(opts.get("--batchSize").toString());
                     }
-                    browser.loadTable(namespace, tableName, numItems, batchSize);
+                    int itemSize = 1024;
+                    if (opts.get("--itemSize") != null) {
+                        itemSize = Integer.parseInt(opts.get("--itemSize").toString());
+                    }
+                    browser.loadTable(namespace, tableName, numItems, batchSize, itemSize);
+                    break;
+                case listenOnTable:
+                    numItems = Integer.MAX_VALUE;
+                    if (opts.get("--numItems") != null) {
+                        numItems = Integer.parseInt(opts.get("--numItems").toString());
+                    }
+                    browser.listenOnTable(namespace, tableName, numItems);
                     break;
             }
         } catch (Throwable t) {

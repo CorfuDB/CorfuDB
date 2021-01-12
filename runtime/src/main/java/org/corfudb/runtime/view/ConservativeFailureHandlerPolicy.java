@@ -31,8 +31,8 @@ public class ConservativeFailureHandlerPolicy implements IReconfigurationHandler
                                  Set<String> healedNodes) {
         LayoutBuilder layoutBuilder = new LayoutBuilder(originalLayout);
         Layout newLayout = layoutBuilder
-                .assignResponsiveSequencerAsPrimary(failedNodes)
                 .removeLogunitServers(failedNodes)
+                .assignResponsiveSequencerAsPrimary(failedNodes)
                 .removeUnresponsiveServers(healedNodes)
                 .addUnresponsiveServers(failedNodes)
                 .build();

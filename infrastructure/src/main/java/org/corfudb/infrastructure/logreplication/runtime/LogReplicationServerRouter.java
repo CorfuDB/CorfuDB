@@ -16,6 +16,7 @@ import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
 import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverterUtils;
@@ -65,8 +66,15 @@ public class LogReplicationServerRouter implements IServerRouter {
         this.serverEpoch = ((BaseServer) servers.get(0)).serverContext.getServerEpoch();
         this.servers = ImmutableList.copyOf(servers);
         this.handlerMap = new EnumMap<>(CorfuMsgType.class);
-        servers.forEach(server -> server.getHandler().getHandledTypes()
-                .forEach(x -> handlerMap.put(x, server)));
+
+        servers.forEach(server -> {
+            try {
+                server.getHandler().getHandledTypes().forEach(x -> handlerMap.put(x, server));
+            } catch (UnsupportedOperationException ex) {
+                log.error("No registered CorfuMsg handler for server {}", server, ex);
+            }
+        });
+
         this.serverAdapter = getAdapter(((BaseServer) servers.get(0)).serverContext);
     }
 
@@ -96,6 +104,11 @@ public class LogReplicationServerRouter implements IServerRouter {
         } catch (IllegalArgumentException e) {
             log.warn("Illegal response type. Ignoring message.", e);
         }
+    }
+
+    @Override
+    public void sendResponse(ResponseMsg response, ChannelHandlerContext ctx) {
+        // This is specific to Netty implementation.
     }
 
     @Override

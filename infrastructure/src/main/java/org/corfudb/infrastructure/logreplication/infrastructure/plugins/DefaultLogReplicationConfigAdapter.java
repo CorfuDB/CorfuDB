@@ -1,7 +1,7 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Default testing implementation of a Log Replication Config Provider
@@ -10,18 +10,28 @@ import java.util.Map;
  */
 public class DefaultLogReplicationConfigAdapter implements ILogReplicationConfigAdapter {
 
-    private Map<String, String> streamsNamespaceMap;
+    private Set<String> streamsToReplicate;
+
+    private final int totalMapCount = 10;
+    private static final String TABLE_PREFIX = "Table00";
+    private static final String NAMESPACE = "LR-Test";
 
     public DefaultLogReplicationConfigAdapter() {
-        streamsNamespaceMap = new HashMap<>();
-        streamsNamespaceMap.put("Table001", "testNamespace");
-        streamsNamespaceMap.put("Table002", "testNamespace");
-        streamsNamespaceMap.put("Table003", "testNamespace");
+        streamsToReplicate = new HashSet<>();
+        streamsToReplicate.add("Table001");
+        streamsToReplicate.add("Table002");
+        streamsToReplicate.add("Table003");
+
+        // Support for UFO
+        for(int i=1; i<=totalMapCount; i++) {
+            streamsToReplicate.add(NAMESPACE + "$" + TABLE_PREFIX + i);
+        }
     }
 
+    // Provides the fully qualified names of streams to replicate
     @Override
-    public Map<String, String> fetchStreamsToReplicate() {
-        return streamsNamespaceMap;
+    public Set<String> fetchStreamsToReplicate() {
+        return streamsToReplicate;
     }
 
     @Override

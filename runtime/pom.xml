@@ -32,7 +32,11 @@
                             <includeStdTypes>true</includeStdTypes>
                             <inputDirectories>
                                 <include>proto</include>
+                                <include>proto/service</include>
                             </inputDirectories>
+                            <includeDirectories>
+                                <includeDirectory>proto</includeDirectory>
+                            </includeDirectories>
                             <outputDirectory>
                                 target/generated-sources
                             </outputDirectory>
@@ -43,7 +47,7 @@
             <plugin>
                 <groupId>pl.project13.maven</groupId>
                 <artifactId>git-commit-id-plugin</artifactId>
-                <version>2.1.15</version>
+                <version>4.0.2</version>
                 <executions>
                     <execution>
                         <goals>
@@ -121,6 +125,17 @@
             <version>3.9</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.18</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/commons-io/commons-io -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.8.0</version>
+        </dependency>
+        <dependency>
             <groupId>org.ehcache</groupId>
             <artifactId>sizeof</artifactId>
             <version>0.3.0</version>
@@ -163,6 +178,7 @@
             <version>6.0.53</version>
             <scope>provided</scope>
         </dependency>
+
     </dependencies>
 
 </project>

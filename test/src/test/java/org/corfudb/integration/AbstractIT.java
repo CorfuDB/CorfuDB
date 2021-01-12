@@ -8,10 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
-import org.corfudb.runtime.exceptions.UnreachableClusterException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.RuntimeLayout;
 import org.junit.After;
@@ -23,6 +21,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
@@ -321,6 +321,17 @@ public class AbstractIT extends AbstractCorfuTest {
                 .runServer();
     }
 
+    public static Process runReplicationServer(int port, String pluginConfigFilePath, String metricsConfigFile)
+            throws IOException {
+        return new CorfuReplicationServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(port)
+                .setPluginConfigFilePath(pluginConfigFilePath)
+                .setMsg_size(MSG_SIZE)
+                .setMetricsConfigFile(metricsConfigFile)
+                .runServer();
+    }
+
     public static Process runReplicationServer(int port, String pluginConfigFilePath, int lockLeaseDuration) throws IOException {
         return new CorfuReplicationServerRunner()
                 .setHost(DEFAULT_HOST)
@@ -328,6 +339,18 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
                 .setPluginConfigFilePath(pluginConfigFilePath)
                 .setMsg_size(MSG_SIZE)
+                .runServer();
+    }
+
+    public static Process runReplicationServer(int port, String pluginConfigFilePath,
+                                               int lockLeaseDuration, String metricsConfigfFile) throws IOException {
+        return new CorfuReplicationServerRunner()
+                .setHost(DEFAULT_HOST)
+                .setPort(port)
+                .setLockLeaseDuration(Integer.valueOf(lockLeaseDuration))
+                .setPluginConfigFilePath(pluginConfigFilePath)
+                .setMsg_size(MSG_SIZE)
+                .setMetricsConfigFile(metricsConfigfFile)
                 .runServer();
     }
 
@@ -345,6 +368,16 @@ public class AbstractIT extends AbstractCorfuTest {
                 .setHost(address)
                 .setPort(port)
                 .setLogPath(getCorfuServerLogPath(address, port))
+                .setSingle(singleNode)
+                .runServer();
+    }
+
+    public static Process runPersistentServer(String address, int port, boolean singleNode, String metricsConfigFile) throws IOException {
+        return new CorfuServerRunner()
+                .setHost(address)
+                .setPort(port)
+                .setLogPath(getCorfuServerLogPath(address, port))
+                .setMetricsConfigFile(metricsConfigFile)
                 .setSingle(singleNode)
                 .runServer();
     }
@@ -417,7 +450,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
         private String host = DEFAULT_HOST;
         private int port = DEFAULT_PORT;
-
+        private String metricsConfigFile = "";
         private boolean single = true;
         private boolean tlsEnabled = false;
         private boolean noAutoCommit = true;
@@ -443,6 +476,10 @@ public class AbstractIT extends AbstractCorfuTest {
                 command.append(" -l ").append(logPath);
             } else {
                 command.append(" -m");
+            }
+
+            if (!metricsConfigFile.isEmpty()) {
+                command.append(" --metrics ");
             }
 
             if (single) {
@@ -486,18 +523,36 @@ public class AbstractIT extends AbstractCorfuTest {
          */
         public Process runServer() throws IOException {
             final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
-
             File logPath = new File(getCorfuServerLogPath(host, port));
             if (!logPath.exists()) {
                 logPath.mkdir();
             }
             ProcessBuilder builder = new ProcessBuilder();
-            builder.command("sh", "-c", "bin/corfu_server " + getOptionsString());
+
+            if (!metricsConfigFile.isEmpty()) {
+                addMetricsToProcessBuilder(builder, "corfu_server");
+            }
+            else {
+                builder.command("sh", "-c", "bin/corfu_server " + getOptionsString());
+            }
             builder.directory(new File(CORFU_PROJECT_DIR));
             Process corfuServerProcess = builder.start();
             StreamGobbler streamGobbler = new StreamGobbler(corfuServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuServerProcess;
+        }
+
+        private void addMetricsToProcessBuilder(ProcessBuilder builder, String runnable) throws IOException {
+            URL resource = AbstractIT.class.getResource("/" + metricsConfigFile);
+            try {
+                String configPath = Paths.get(resource.toURI()).toAbsolutePath().toString();
+                String exportMetricsConfigFile = "export METRICS_CONFIG_FILE=" + configPath + ";";
+                builder.command("sh", "-c", exportMetricsConfigFile + " bin/" + runnable + " "
+                        + getOptionsString());
+            }
+            catch (URISyntaxException use) {
+                throw new IOException(use);
+            }
         }
     }
 
@@ -512,7 +567,7 @@ public class AbstractIT extends AbstractCorfuTest {
 
         private String host = DEFAULT_HOST;
         private int port = DEFAULT_LOG_REPLICATION_PORT;
-
+        private String metricsConfigFile = "";
         private boolean tlsEnabled = false;
         private String keyStore = null;
         private String keyStorePassword = null;
@@ -543,6 +598,10 @@ public class AbstractIT extends AbstractCorfuTest {
             } else {
                 command.append(" -m");
             }
+            if (!metricsConfigFile.isEmpty()) {
+                command.append(" --metrics ");
+            }
+
 
             if (tlsEnabled) {
                 command.append(" -e");
@@ -582,18 +641,37 @@ public class AbstractIT extends AbstractCorfuTest {
          */
         public Process runServer() throws IOException {
             final String serverConsoleLogPath = CORFU_LOG_PATH + File.separator + host + "_" + port + "_consolelog";
-
             File logPath = new File(getCorfuServerLogPath(host, port));
             if (!logPath.exists()) {
                 logPath.mkdir();
             }
             ProcessBuilder builder = new ProcessBuilder();
-            builder.command("sh", "-c", "bin/corfu_replication_server " + getOptionsString());
+
+            if (!metricsConfigFile.isEmpty()) {
+                addMetricsToProcessBuilder(builder, "corfu_replication_server");
+            }
+            else {
+                builder.command("sh", "-c", "bin/corfu_replication_server " + getOptionsString());
+            }
+
             builder.directory(new File(CORFU_PROJECT_DIR));
             Process corfuReplicationServerProcess = builder.start();
             StreamGobbler streamGobbler = new StreamGobbler(corfuReplicationServerProcess.getInputStream(), serverConsoleLogPath);
             Executors.newSingleThreadExecutor().submit(streamGobbler);
             return corfuReplicationServerProcess;
+        }
+
+        private void addMetricsToProcessBuilder(ProcessBuilder builder, String runnable) throws IOException {
+            URL resource = AbstractIT.class.getResource("/" + metricsConfigFile);
+            try {
+                String configPath = Paths.get(resource.toURI()).toAbsolutePath().toString();
+                String exportMetricsConfigFile = "export METRICS_CONFIG_FILE=" + configPath + ";";
+                builder.command("sh", "-c", exportMetricsConfigFile + " bin/" + runnable + " "
+                        + getOptionsString());
+            }
+            catch (URISyntaxException use) {
+                throw new IOException(use);
+            }
         }
     }
 }

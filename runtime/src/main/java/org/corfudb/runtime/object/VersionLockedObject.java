@@ -1,20 +1,19 @@
 package org.corfudb.runtime.object;
 
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.object.transactions.WriteSetSMRStream;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.StampedLock;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -123,21 +123,23 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      */
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
-    private final String syncStreamTimer;
-    private final String syncStreamCount;
-
+    private final Optional<AtomicLong> noRollBackExceptionCounter;
+    private final Optional<Timer> syncStreamTimer;
+    private final Optional<Counter> versionApplyCounter;
+    private final Optional<Counter> versionUndoCounter;
+    private final Optional<Counter> optimisticReadCounter;
+    private final Optional<Counter> pessimisticReadCounter;
     /**
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
      * and is optionally backed by an additional optimistic update stream.
      *
-     * @param newObjectFn       A function passed to instantiate a new instance of this object.
-     * @param smrStream         Stream View backing this object.
+     * @param newObjectFn A function passed to instantiate a new instance of this object.
+     * @param smrStream   Stream View backing this object.
      */
     public VersionLockedObject(Supplier<T> newObjectFn,
                                StreamViewSMRAdapter smrStream,
                                ICorfuSMR<T> wrapperObject) {
         this.smrStream = smrStream;
-
         this.upcallTargetMap = wrapperObject.getCorfuSMRUpcallMap();
         this.undoRecordFunctionMap = wrapperObject.getCorfuUndoRecordMap();
         this.undoFunctionMap = wrapperObject.getCorfuUndoMap();
@@ -148,10 +150,40 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         this.object = newObjectFn.get();
         this.pendingUpcalls = ConcurrentHashMap.newKeySet();
         this.upcallResults = new ConcurrentHashMap<>();
-
-        this.syncStreamTimer = CorfuComponent.OBJECT.toString() + "vlo.sync.timer." + getID();
-        this.syncStreamCount = CorfuComponent.OBJECT.toString() + "vlo.sync.count." + getID();
         lock = new StampedLock();
+
+        Optional<MeterRegistry> metricsRegistry = smrStream.runtime.getRegistry();
+        Tag streamIdTag = Tag.of("streamId", getID().toString());
+        noRollBackExceptionCounter = metricsRegistry
+                .map(registry ->
+                        registry.gauge("vlo.no_rollback_exception.count",
+                               new AtomicLong(0L)));
+        syncStreamTimer = metricsRegistry.map(registry ->
+                Timer.builder("vlo.sync.timer")
+                        .tags(ImmutableList.of(streamIdTag))
+                        .publishPercentiles(0.50, 0.95, 0.99)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
+
+        versionApplyCounter = metricsRegistry.map(registry ->
+                Counter.builder("vlo.sync.rate")
+                        .tags(ImmutableList.of(Tag.of("type", "apply"), streamIdTag))
+                        .register(registry));
+        versionUndoCounter = metricsRegistry.map(registry ->
+                Counter.builder("vlo.sync.rate")
+                        .tags(ImmutableList.of(Tag.of("type", "undo"), streamIdTag))
+                        .register(registry));
+
+        optimisticReadCounter = metricsRegistry
+                .map(registry -> Counter.builder("vlo.read.rate")
+                        .tags(ImmutableList.of(Tag.of("type", "optimistic"), streamIdTag))
+                        .register(registry));
+
+        pessimisticReadCounter = metricsRegistry
+                .map(registry -> Counter.builder("vlo.read.rate")
+                        .tags(ImmutableList.of(Tag.of("type", "pessimistic"), streamIdTag))
+                        .register(registry));
+
     }
 
     /**
@@ -161,7 +193,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     public void gc(long trimMark) {
         long ts = 0;
 
-        try (Timer.Context vloGcDuration = VloMetricsHelper.getVloGcContext()) {
+        try {
             ts = lock.writeLock();
             pendingUpcalls.removeIf(e -> e < trimMark);
             upcallResults.entrySet().removeIf(e -> e.getKey() < trimMark);
@@ -212,7 +244,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         // meets the conditions for direct access.
         long ts = lock.tryOptimisticRead();
         if (ts != 0) {
-            try (Timer.Context optimistReadDuration = VloMetricsHelper.getOptimisticReadContext()) {
+            try {
                 if (directAccessCheckFunction.apply(this)) {
                     log.trace("Access [{}] Direct (optimistic-read) access at {}",
                             this, getVersionUnsafe());
@@ -221,6 +253,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                     long versionForCorrectness = getVersionUnsafe();
                     if (lock.validate(ts)) {
                         correctnessLogger.trace("Version, {}", versionForCorrectness);
+                        optimisticReadCounter.ifPresent(Counter::count);
                         return ret;
                     }
                 }
@@ -240,13 +273,14 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         // Next, we just upgrade to a full write lock if the optimistic
         // read fails, since it means that the state of the object was
         // updated.
-        try (Timer.Context updateObjectReadDuration = VloMetricsHelper.getUpdatedObjectReadContext()) {
+        try {
             // Attempt an upgrade
             ts = lock.tryConvertToWriteLock(ts);
             // Upgrade failed, try conversion again
             if (ts == 0) {
                 ts = lock.writeLock();
             }
+            pessimisticReadCounter.ifPresent(Counter::count);
             // Check if direct access is possible (unlikely).
             if (directAccessCheckFunction.apply(this)) {
                 log.trace("Access [{}] Direct (writelock) access at {}", this, getVersionUnsafe());
@@ -275,7 +309,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     public <R> R update(Function<VersionLockedObject<T>, R> updateFunction) {
         long ts = 0;
 
-        try (Timer.Context updateDuration = VloMetricsHelper.getVloUpdateContext()) {
+        try {
             ts = lock.writeLock();
             log.trace("Update[{}] (writelock)", this);
             return updateFunction.apply(this);
@@ -310,6 +344,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             log.trace("Rollback[{}] completed", this);
         } catch (NoRollbackException nre) {
             log.warn("SyncObjectUnsafe[{}] to {} failed {}", this, timestamp, nre);
+            noRollBackExceptionCounter.ifPresent(AtomicLong::getAndIncrement);
             resetUnsafe();
         }
     }
@@ -329,9 +364,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @see VersionLockedObject#syncObjectUnsafeInner
      */
     public void syncObjectUnsafe(long timestamp) {
-        try (Timer.Context updateDuration = VloMetricsHelper.getVloSyncContext()) {
-            syncObjectUnsafeInner(timestamp);
-        }
+        syncObjectUnsafeInner(timestamp);
     }
 
     /**
@@ -372,8 +405,9 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         }
     }
 
-    /** Set the correct optimistic stream for this transaction (if not already).
-     *
+    /**
+     * Set the correct optimistic stream for this transaction (if not already).
+     * <p>
      * If the Optimistic stream doesn't reflect the current transaction context,
      * we create the correct WriteSetSMRStream and pick the latest context as the
      * current context.
@@ -643,6 +677,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 ListIterator<SMREntry> it = entries.listIterator(entries.size());
                 while (it.hasPrevious()) {
                     applyUndoRecordUnsafe(it.previous(), stream);
+                    versionUndoCounter.ifPresent(Counter::increment);
                 }
             } else {
                 Optional<SMREntry> entry = entries.stream().findFirst();
@@ -679,32 +714,31 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 ? "Optimistic" : "to " + timestamp);
         long syncTo = (timestamp == Address.OPTIMISTIC) ? Address.MAX : timestamp;
 
-        Histogram histogram = VloMetricsHelper.metrics.histogram(syncStreamCount);
-        Counter counter = new Counter();
-        try (Timer.Context context = getVloStreamSyncContext(timestamp, syncStreamTimer)) {
-            stream.streamUpTo(syncTo)
-                    .forEachOrdered(entry -> {
-                        try {
-                            counter.count++;
-                            Object res = applyUpdateUnsafe(entry, timestamp);
-                            if (timestamp == Address.OPTIMISTIC) {
+        Runnable syncStreamRunnable = () ->
+                stream.streamUpTo(syncTo)
+                        .forEachOrdered(entry -> {
+                            try {
+                                Object res = applyUpdateUnsafe(entry, timestamp);
+                                versionApplyCounter.ifPresent(Counter::increment);
+                                if (timestamp == Address.OPTIMISTIC) {
+                                    entry.setUpcallResult(res);
+                                } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {
+                                    log.debug("Sync[{}] Upcall Result {}",
+                                            this, entry.getGlobalAddress());
+                                    upcallResults.put(entry.getGlobalAddress(), res == null
+                                            ? NullValue.NULL_VALUE : res);
+                                    pendingUpcalls.remove(entry.getGlobalAddress());
+                                }
                                 entry.setUpcallResult(res);
-                            } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {
-                                log.debug("Sync[{}] Upcall Result {}",
-                                        this, entry.getGlobalAddress());
-                                upcallResults.put(entry.getGlobalAddress(), res == null
-                                        ? NullValue.NULL_VALUE : res);
-                                pendingUpcalls.remove(entry.getGlobalAddress());
+                            } catch (Exception e) {
+                                log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
+                                throw new UnrecoverableCorfuError(e);
                             }
-                            entry.setUpcallResult(res);
-                        } catch (Exception e) {
-                            log.error("Sync[{}] Error: Couldn't execute upcall due to {}", this, e);
-                            throw new UnrecoverableCorfuError(e);
-                        }
-                    });
-        }
-        if (timestamp != Address.OPTIMISTIC) {
-            histogram.update(counter.count);
+                        });
+        if (syncStreamTimer.isPresent()) {
+            syncStreamTimer.get().record(syncStreamRunnable);
+        } else {
+            syncStreamRunnable.run();
         }
     }
 
@@ -720,11 +754,13 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             log.trace("OptimisticRollback[{}] complete", this);
         } catch (NoRollbackException nre) {
             log.warn("OptimisticRollback[{}] failed", this);
+            noRollBackExceptionCounter.ifPresent(AtomicLong::getAndIncrement);
             resetUnsafe();
         }
     }
 
-    /** Apply an SMREntry to the version object, while
+    /**
+     * Apply an SMREntry to the version object, while
      * doing bookkeeping for the underlying stream.
      *
      * @param entry smr entry
@@ -737,49 +773,5 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     @VisibleForTesting
     public ISMRStream getSmrStream() {
         return smrStream;
-    }
-
-    private static Timer.Context getVloStreamSyncContext(long timestamp, String syncStreamTimer) {
-        Timer timer = VloMetricsHelper.metrics.timer(syncStreamTimer);
-        return timestamp == Address.OPTIMISTIC ? null : MetricsUtils.getConditionalContext(timer);
-    }
-
-    private static class Counter {
-        long count;
-    }
-
-    /**
-     * This class includes the metrics registry and the timer names used within VersionLockedObject
-     * methods
-     */
-    private static class VloMetricsHelper {
-        private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-        private static final String VLO_OPTIMISTIC_READ = CorfuComponent.OBJECT.toString() +
-                "vlo.optimistic-read";
-        private static final String VLO_UPDATED_OBJECT_READ = CorfuComponent.OBJECT.toString() +
-                "vlo.updated-object-read";
-        private static final String VLO_UPDATE = CorfuComponent.OBJECT.toString() + "vlo.update";
-        private static final String VLO_SYNC = CorfuComponent.OBJECT.toString() + "vlo.sync";
-        private static final String VLO_GC = CorfuComponent.OBJECT.toString() + "vlo.gc";
-
-        private static Timer.Context getVloSyncContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_SYNC));
-        }
-
-        private static Timer.Context getOptimisticReadContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_OPTIMISTIC_READ));
-        }
-
-        private static Timer.Context getUpdatedObjectReadContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATED_OBJECT_READ));
-        }
-
-        private static Timer.Context getVloUpdateContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_UPDATE));
-        }
-
-        private static Timer.Context getVloGcContext() {
-            return MetricsUtils.getConditionalContext(metrics.timer(VLO_GC));
-        }
     }
 }

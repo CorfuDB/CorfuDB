@@ -1,7 +1,5 @@
 package org.corfudb.protocols.wireprotocol;
 
-import io.netty.buffer.ByteBuf;
-
 import lombok.Data;
 
 /**
@@ -10,7 +8,7 @@ import lombok.Data;
  * <p>Created by zlokhandwala on 4/12/18.
  */
 @Data
-public class SequencerMetrics implements ICorfuPayload<SequencerMetrics> {
+public class SequencerMetrics {
 
     public static final SequencerMetrics READY = new SequencerMetrics(SequencerStatus.READY);
     public static final SequencerMetrics NOT_READY = new SequencerMetrics(SequencerStatus.NOT_READY);
@@ -32,14 +30,5 @@ public class SequencerMetrics implements ICorfuPayload<SequencerMetrics> {
 
     public SequencerMetrics(SequencerStatus sequencerStatus) {
         this.sequencerStatus = sequencerStatus;
-    }
-
-    public SequencerMetrics(ByteBuf buf) {
-        sequencerStatus = SequencerStatus.valueOf(ICorfuPayload.fromBuffer(buf, String.class));
-    }
-
-    @Override
-    public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, sequencerStatus.toString());
     }
 }

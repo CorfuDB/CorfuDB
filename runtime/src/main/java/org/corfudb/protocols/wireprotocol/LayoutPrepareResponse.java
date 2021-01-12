@@ -1,7 +1,5 @@
 package org.corfudb.protocols.wireprotocol;
 
-import io.netty.buffer.ByteBuf;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -19,30 +17,7 @@ import org.corfudb.runtime.view.Layout;
  */
 @Data
 @AllArgsConstructor
-public class LayoutPrepareResponse implements ICorfuPayload<LayoutPrepareResponse> {
+public class LayoutPrepareResponse {
     private long rank;
     private Layout layout;
-
-    /**
-     * Constructor for layout server response in first phase of Paxos.
-     */
-    public LayoutPrepareResponse(ByteBuf buf) {
-        rank = ICorfuPayload.fromBuffer(buf, Long.class);
-        boolean layoutPresent = ICorfuPayload.fromBuffer(buf, Boolean.class);
-        if (layoutPresent) {
-            layout = ICorfuPayload.fromBuffer(buf, Layout.class);
-        }
-    }
-
-    @Override
-    public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, rank);
-        boolean layoutPresent = layout != null;
-        ICorfuPayload.serialize(buf, layoutPresent);
-        if (layoutPresent) {
-            ICorfuPayload.serialize(buf, layout);
-        }
-    }
-
-
 }

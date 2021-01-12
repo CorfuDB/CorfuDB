@@ -1,8 +1,7 @@
 package org.corfudb.infrastructure.logreplication.replication;
 
-import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata;
@@ -11,38 +10,52 @@ import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogE
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader.StreamIteratorMetadata;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.retry.IRetry;
+import org.corfudb.util.retry.IntervalRetry;
+import org.corfudb.util.retry.RetryNeededException;
 
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static org.corfudb.runtime.view.ObjectsView.TRANSACTION_STREAM_ID;
+
 @Slf4j
 public class LogReplicationAckReader {
-    private LogReplicationMetadataManager metadataManager;
-    private LogReplicationConfig config;
-    private CorfuRuntime runtime;
-    private String remoteClusterId;
+    private final LogReplicationMetadataManager metadataManager;
+    private final LogReplicationConfig config;
+    private final CorfuRuntime runtime;
+    private final String remoteClusterId;
+
     // Log tail when the current snapshot sync started.  We do not need to synchronize access to it because it will not
     // be read(calculateRemainingEntriesToSend) and written(setBaseSnapshot) concurrently.
     private long baseSnapshotTimestamp;
 
+    // Flag for the periodic task. It will protect status table from overriding by the periodic task
+    // if current replication state is initialized or stopped
+    @Getter
+    private final AtomicBoolean ongoing;
+
     /*
      * Periodic Thread which reads the last Acked Timestamp and writes it to the metadata table
      */
-    private ScheduledExecutorService lastAckedTsPoller;
+    private final ScheduledExecutorService lastAckedTsPoller;
 
     /*
      * Interval at which the thread reads the last Acked Timestamp
      */
-    private static int ACKED_TS_READ_INTERVAL_SECONDS = 15;
+    private static final int ACKED_TS_READ_INTERVAL_SECONDS = 15;
 
-    private static int NO_REPLICATION_REMAINING_ENTRIES = 0;
+    private static final int NO_REPLICATION_REMAINING_ENTRIES = 0;
 
     /*
      * Last ack'd timestamp from Receiver
@@ -58,7 +71,7 @@ public class LogReplicationAckReader {
 
     private LogEntryReader logEntryReader;
 
-    private Lock lock = new ReentrantLock();
+    private final Lock lock = new ReentrantLock();
 
     public LogReplicationAckReader(LogReplicationMetadataManager metadataManager, LogReplicationConfig config,
                                     CorfuRuntime runtime, String remoteClusterId) {
@@ -66,6 +79,7 @@ public class LogReplicationAckReader {
         this.config = config;
         this.runtime = runtime;
         this.remoteClusterId = remoteClusterId;
+        this.ongoing = new AtomicBoolean(true);
         lastAckedTsPoller = Executors.newSingleThreadScheduledExecutor(
                 new ThreadFactoryBuilder().setNameFormat("ack-timestamp-reader").build());
     }
@@ -327,19 +341,111 @@ public class LogReplicationAckReader {
         this.baseSnapshotTimestamp = baseSnapshotTimestamp;
     }
 
+    public void markSnapshotSyncInfoCompleted() {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    lock.lock();
+                    metadataManager.updateSnapshotSyncInfo(remoteClusterId);
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to markSnapshotSyncInfoCompleted for remote cluster {}.", remoteClusterId, tae);
+                    throw new RetryNeededException();
+                } finally {
+                    lock.unlock();
+                }
+
+                if (log.isTraceEnabled()) {
+                    log.trace("markSnapshotSyncInfoCompleted succeeds for remote cluster {}.", remoteClusterId);
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoCompleted.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
+    public void markSnapshotSyncInfoOngoing(boolean forced, UUID eventId) {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    lock.lock();
+                    long remainingEntriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
+                    metadataManager.updateSnapshotSyncInfo(remoteClusterId, forced, eventId,
+                            baseSnapshotTimestamp, remainingEntriesToSend);
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to markSnapshotSyncInfoOngoing for event {}.", eventId, tae);
+                    throw new RetryNeededException();
+                } finally {
+                    lock.unlock();
+                }
+
+                if (log.isTraceEnabled()) {
+                    log.trace("markSnapshotSyncInfoOngoing succeeds with eventId{} and forced flag {}.", eventId, forced);
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to markSnapshotSyncInfoOngoing.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
+    public void markSyncStatus(LogReplicationMetadata.SyncStatus status) {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    lock.lock();
+                    metadataManager.updateSyncStatus(remoteClusterId, lastSyncType, status);
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to markSyncStatus as {}.", status, tae);
+                    throw new RetryNeededException();
+                } finally {
+                    lock.unlock();
+                }
+
+                if (log.isTraceEnabled()) {
+                    log.trace("markSyncStatus succeeds as {}.", status);
+                }
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to markSyncStatus as {}.", status, e);
+            throw new UnrecoverableCorfuInterruptedError(e);
+        }
+    }
+
     /**
      * Task which periodically updates the metadata table with replication completion percentage
      */
     private class TsPollingTask implements Runnable {
         @Override
         public void run() {
-            lock.lock();
-            try {
-                long remainingReplicationStatus = calculateRemainingEntriesToSend(lastAckedTimestamp);
-                metadataManager.setReplicationRemainingEntries(remoteClusterId, remainingReplicationStatus,
-                        lastSyncType);
-            } finally {
-                lock.unlock();
+            if (ongoing.get()) {
+                try {
+                    IRetry.build(IntervalRetry.class, () -> {
+                        try {
+                            lock.lock();
+                            long entriesToSend = calculateRemainingEntriesToSend(lastAckedTimestamp);
+                            metadataManager.setReplicationStatusTable(
+                                    remoteClusterId, entriesToSend, lastSyncType);
+                        } catch (TransactionAbortedException tae) {
+                            log.error("Error while attempting to setReplicationStatusTable for " +
+                                            "remote cluster {} with lastSyncType {}.",
+                                    remoteClusterId, lastSyncType, tae);
+                            throw new RetryNeededException();
+                        } finally {
+                            lock.unlock();
+                        }
+
+                        return null;
+                    }).run();
+                } catch (InterruptedException e) {
+                    log.error("Unrecoverable exception when attempting to setReplicationStatusTable", e);
+                    throw new UnrecoverableCorfuInterruptedError(e);
+                }
+            } else {
+                log.debug("Skip TsPollingTask, ongoing flag is false.");
             }
         }
     }

@@ -1,0 +1,144 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto.service";
+
+import "rpc_common.proto";
+import "tx_resolution.proto";
+
+/**
+ * Protobuf definitions for the Sequencer server RPCs. These
+ * include request and response payloads for: TOKEN, BOOTSTRAP_SEQUENCER,
+ * SEQUENCER_TRIM, SEQUENCER_METRICS, and STREAMS_ADDRESS.
+ */
+
+/**
+ * A token request is at the heart of the Corfu log protocol.
+ *
+ * <p>There are four token request scenarios, designated by the relevant constants :
+ * 0. TokenRequestType::TK_QUERY : Query of the current log tail and of specific stream-tails.
+ * 1. TokenRequestType::TK_RAW : Ask for raw (global) log token(s).
+ *              This extends the global log tail by the requested # of tokens.
+ * 2. TokenRequestType::TK_MULTI_STREAM : Ask for token(s) on multiple streams.
+ *          This extends both the global log tail, and each of the specified stream tails,
+ *          by the requested # of tokens.
+ * 3. TokenRequestType::TK_TX :
+ *          First, check transaction resolution. If transaction can commit, then behave
+ *          like TokenRequestType::TK_MULTI_STREAM.</p>
+ */
+message TokenRequestMsg {
+  enum TokenRequestType {
+    INVALID = 0;
+    TK_QUERY = 1;
+    TK_RAW = 2;
+    TK_MULTI_STREAM = 3;
+    TK_TX = 4;
+  }
+
+  TokenRequestType request_type = 11;
+  int64 num_tokens = 12;
+  repeated UuidMsg streams = 13;
+  TxResolutionInfoMsg txn_resolution = 14;
+}
+
+message TokenResponseMsg {
+  enum TokenType {
+    TOKEN_TYPE_INVALID = 0;
+
+    // Standard token issue by sequencer or a tail-query response
+    TX_NORMAL = 1;
+
+    // Token request for optimistic TX-commit rejected due to conflict
+    TX_ABORT_CONFLICT = 2;
+
+    // Token request for optimistic TX-commit rejected due to a
+    // failover-sequencer lacking conflict-resolution info
+    TX_ABORT_NEWSEQ = 3;
+
+    // Sent when a transaction aborts a transaction due to missing information
+    // (required data evicted from cache)
+    TX_ABORT_SEQ_OVERFLOW = 4;
+
+    // Sent when a transaction aborts because it has an old version (i.e. older than
+    // the trim mark). This is to detect slow transactions
+    TX_ABORT_SEQ_TRIM = 5;
+  }
+
+  // The cause/type of response.
+  TokenType resp_type = 1;
+
+  // In case of a conflict, signal to the client which key was responsible for the conflict.
+  bytes conflict_key = 2;
+
+  // In case of a conflict, signal to the client which stream was responsible for the conflict.
+  UuidMsg conflict_stream = 3;
+
+  // The current token or global log tail in the case of stream tails query.
+  TokenMsg token = 4;
+
+  // The backPointer map, if available.
+  repeated UuidToLongPairMsg backpointer_map = 5;
+
+  repeated UuidToLongPairMsg stream_tails = 6;
+}
+
+// SequencerRecoveryMsg
+message BootstrapSequencerRequestMsg {
+  int64 global_tail = 1;
+  repeated UuidToStreamAddressSpacePairMsg streams_address_map = 2;
+  int64 sequencer_epoch = 3;
+
+  /**
+   * Boolean flag to denote whether this bootstrap message is just updating an existing primary
+   * sequencer with the new epoch (if set to true) or bootstrapping a currently NOT_READY
+   * sequencer.
+   */
+  bool bootstrap_without_tails_update = 4;
+}
+
+message BootstrapSequencerResponseMsg {
+  bool is_bootstrapped = 1;
+}
+
+message SequencerTrimRequestMsg {
+  int64 trim_mark = 1;
+}
+
+message SequencerTrimResponseMsg {
+}
+
+message SequencerMetricsRequestMsg {
+}
+
+message SequencerMetricsResponseMsg {
+  SequencerMetricsMsg sequencer_metrics = 1;
+}
+
+/**
+ * Represents the request sent to the sequencer to retrieve one or several streams address map.
+ */
+message StreamsAddressRequestMsg {
+  enum Type {
+    INVALID = 0;
+    /* To request specific streams */
+    STREAMS = 1;
+    /* To request all streams */
+    ALL_STREAMS = 2;
+  }
+  /** The type of request, one of the above. */
+  Type req_type = 1;
+  repeated StreamAddressRangeMsg stream_range = 2;
+}
+
+/**
+ * Represents the response sent by the sequencer when streams address maps are
+ * requested (i.e. StreamsAddressRequest)
+ *
+ * It contains a per stream map with its corresponding address space
+ * (composed of the addresses of this stream and trim mark)
+ */
+message StreamsAddressResponseMsg {
+  int64 log_tail = 1;
+  int64 epoch = 2;
+  repeated UuidToStreamAddressSpacePairMsg address_map = 3;
+}

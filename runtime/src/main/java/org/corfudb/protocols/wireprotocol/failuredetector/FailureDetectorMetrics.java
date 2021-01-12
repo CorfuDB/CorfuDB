@@ -1,14 +1,10 @@
 package org.corfudb.protocols.wireprotocol.failuredetector;
 
-import io.netty.buffer.ByteBuf;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
-import org.corfudb.util.JsonUtils;
-
 import java.util.List;
 import java.util.NavigableSet;
-import java.util.TreeSet;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import org.corfudb.util.JsonUtils;
 
 /**
  * Full information about failure that changed cluster state.
@@ -17,7 +13,7 @@ import java.util.TreeSet;
  */
 @Builder
 @AllArgsConstructor
-public class FailureDetectorMetrics implements ICorfuPayload<FailureDetectorMetrics> {
+public class FailureDetectorMetrics {
     //state
     private final String localNode;
     private final ConnectivityGraph graph;
@@ -36,29 +32,6 @@ public class FailureDetectorMetrics implements ICorfuPayload<FailureDetectorMetr
         return JsonUtils.toJson(this);
     }
 
-    public FailureDetectorMetrics(ByteBuf buf) {
-        localNode = ICorfuPayload.fromBuffer(buf, String.class);
-        graph = ICorfuPayload.fromBuffer(buf, ConnectivityGraph.class);
-        action = FailureDetectorAction.valueOf(ICorfuPayload.fromBuffer(buf, String.class));
-        failed = ICorfuPayload.fromBuffer(buf, NodeRank.class);
-        healed = ICorfuPayload.fromBuffer(buf, NodeRank.class);
-        layout = ICorfuPayload.listFromBuffer(buf, String.class);
-        unresponsiveNodes = ICorfuPayload.listFromBuffer(buf, String.class);
-        epoch = ICorfuPayload.fromBuffer(buf, Long.class);
-    }
-
-    @Override
-    public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, localNode);
-        ICorfuPayload.serialize(buf, graph);
-        ICorfuPayload.serialize(buf, action.name());
-        ICorfuPayload.serialize(buf, failed == null ? NodeRank.EMPTY_NODE_RANK: failed);
-        ICorfuPayload.serialize(buf, healed == null ? NodeRank.EMPTY_NODE_RANK: healed);
-        ICorfuPayload.serialize(buf, layout);
-        ICorfuPayload.serialize(buf, unresponsiveNodes);
-        ICorfuPayload.serialize(buf, epoch);
-    }
-
     public enum FailureDetectorAction {
         FAIL, HEAL, EXTERNAL_UPDATE
     }
@@ -67,16 +40,7 @@ public class FailureDetectorMetrics implements ICorfuPayload<FailureDetectorMetr
      * Simplified version of a ClusterGraph, contains only connectivity information.
      */
     @AllArgsConstructor
-    public static class ConnectivityGraph implements ICorfuPayload<ConnectivityGraph> {
+    public static class ConnectivityGraph {
         private final NavigableSet<NodeConnectivity> graph;
-
-        public ConnectivityGraph(ByteBuf buf){
-            graph = new TreeSet<>(ICorfuPayload.setFromBuffer(buf, NodeConnectivity.class));
-        }
-
-        @Override
-        public void doSerialize(ByteBuf buf) {
-            ICorfuPayload.serialize(buf, graph);
-        }
     }
 }

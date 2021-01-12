@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime.proto.service";
+
+import "rpc_common.proto";
+
+/**
+ * Protobuf definitions for the Layout server RPCs. These
+ * include request and response payloads for: LAYOUT, PREPARE_LAYOUT,
+ * PROPOSE_LAYOUT, COMMIT_LAYOUT, and BOOTSTRAP_LAYOUT.
+ */
+
+// Retrieve layout
+message LayoutRequestMsg {
+  int64 epoch = 1;
+}
+
+message LayoutResponseMsg {
+  LayoutMsg layout = 1;
+}
+
+// Request in first phase of Paxos
+message PrepareLayoutRequestMsg {
+  int64 epoch = 1;
+  int64 rank = 2;
+}
+
+message PrepareLayoutResponseMsg {
+  bool prepared = 1;
+  int64 rank = 2;
+  LayoutMsg layout = 3;
+}
+
+// Request in second phase of Paxos
+message ProposeLayoutRequestMsg {
+  int64 epoch = 1;
+  int64 rank = 2;
+  LayoutMsg layout = 3;
+}
+
+message ProposeLayoutResponseMsg {
+  bool proposed = 1;
+  int64 rank = 2;
+}
+
+// If the first two phases (prepare and propose) of Paxos have been accepted, the
+// proposer sends a Committed message to commit the proposed Layout
+message CommitLayoutRequestMsg {
+  bool forced = 1;
+  int64 epoch = 2;
+  LayoutMsg layout = 3;
+}
+
+message CommitLayoutResponseMsg {
+  bool committed = 1;
+}
+
+// Request sent to bootstrap the server with a Layout
+message BootstrapLayoutRequestMsg {
+  LayoutMsg layout = 1;
+}
+
+message BootstrapLayoutResponseMsg {
+  bool bootstrapped = 1;
+}

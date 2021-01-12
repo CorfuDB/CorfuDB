@@ -11,11 +11,11 @@ import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
 import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationEvent.LogReplicationEventType;
-import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.LogEntrySender;
+import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
+import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
-import org.corfudb.infrastructure.logreplication.replication.send.SnapshotSender;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsSnapshotReader;
 import org.corfudb.runtime.CorfuRuntime;
@@ -134,18 +134,18 @@ public class LogReplicationFSM {
      * Map of all Log Replication FSM States (reuse single instance for each state)
      */
     @Getter
-    private Map<LogReplicationStateType, LogReplicationState> states = new HashMap<>();
+    private final Map<LogReplicationStateType, LogReplicationState> states = new HashMap<>();
 
     /**
      * Executor service for FSM state tasks (it can be shared across several LogReplicationFSMs)
      */
     @Getter
-    private ExecutorService logReplicationFSMWorkers;
+    private final ExecutorService logReplicationFSMWorkers;
 
     /**
      * Executor service for FSM event queue consume
      */
-    private ExecutorService logReplicationFSMConsumer;
+    private final ExecutorService logReplicationFSMConsumer;
 
     /**
      * A queue of events.
@@ -157,18 +157,18 @@ public class LogReplicationFSM {
      */
     @VisibleForTesting
     @Getter
-    private ObservableValue<Integer> numTransitions = new ObservableValue(0);
+    private final ObservableValue<Integer> numTransitions = new ObservableValue(0);
 
     /**
      * Log Entry Reader (read incremental updated from Corfu Datatore)
      */
     @Getter
-    private LogEntryReader logEntryReader;
+    private final LogEntryReader logEntryReader;
 
     /**
      * Snapshot Reader (read data from Corfu Datastore)
      */
-    private SnapshotReader snapshotReader;
+    private final SnapshotReader snapshotReader;
 
     /**
      * Version on which snapshot sync is based on.
@@ -187,12 +187,12 @@ public class LogReplicationFSM {
     /**
      * Log Entry Sender (send incremental updates to remote cluster)
      */
-    private LogEntrySender logEntrySender;
+    private final LogEntrySender logEntrySender;
 
     /**
      * Snapshot Sender (send snapshot cut to remote cluster)
      */
-    private SnapshotSender snapshotSender;
+    private final SnapshotSender snapshotSender;
 
     /**
      * Remote Cluster Descriptor to which this FSM drives the log replication
@@ -279,7 +279,7 @@ public class LogReplicationFSM {
         states.put(LogReplicationStateType.IN_SNAPSHOT_SYNC, new InSnapshotSyncState(this, snapshotSender));
         states.put(LogReplicationStateType.WAIT_SNAPSHOT_APPLY, new WaitSnapshotApplyState(this, dataSender));
         states.put(LogReplicationStateType.IN_LOG_ENTRY_SYNC, new InLogEntrySyncState(this, logEntrySender));
-        states.put(LogReplicationStateType.STOPPED, new StoppedState());
+        states.put(LogReplicationStateType.STOPPED, new StoppedState(this));
     }
 
     /**
@@ -296,7 +296,7 @@ public class LogReplicationFSM {
                 return;
             }
             if (event.getType() != LogReplicationEventType.LOG_ENTRY_SYNC_CONTINUE) {
-                log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventID());
+                log.trace("Enqueue event {} with ID {}", event.getType(), event.getEventId());
             }
             eventQueue.put(event);
         } catch (InterruptedException ex) {

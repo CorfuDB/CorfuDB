@@ -1,8 +1,5 @@
 package org.corfudb.infrastructure;
 
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.DetectorMsg;
-import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.view.Layout;
@@ -12,9 +9,11 @@ import org.junit.Test;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getBootstrapLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getBootstrapManagementRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getReportFailureRequestMsg;
 
 /**
  * Checks the various services and messages handled by the
@@ -41,7 +40,9 @@ public class ManagementServerTest extends AbstractServerTest {
         // Required for management server to bootstrap during initialization.
         router.addServer(new SequencerServer(serverContext));
         router.setServerContext(serverContext);
-        managementServer = new ManagementServer(serverContext);
+        managementServer = new ManagementServer(serverContext,
+                new ManagementServer.ManagementServerInitializer());
+
         return managementServer;
     }
 
@@ -68,12 +69,16 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void bootstrapManagementServer() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
-        CompletableFuture<Boolean> future = sendRequestWithClusterId(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout),
-                layout.getClusterId());
+        sendRequest(getBootstrapLayoutRequestMsg(layout), true, true);
+
+        CompletableFuture<Boolean> future = sendRequestWithClusterId(
+                getBootstrapManagementRequestMsg(layout), layout.getClusterId(), true, true);
+
         assertThat(future.join()).isEqualTo(true);
-        future = sendRequestWithClusterId(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout),
-                layout.getClusterId());
+
+        future = sendRequestWithClusterId(
+                getBootstrapManagementRequestMsg(layout), layout.getClusterId(), true, true);
+
         assertThatThrownBy(future::join).hasCauseExactlyInstanceOf(AlreadyBootstrappedException.class);
     }
 
@@ -83,20 +88,23 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void triggerFailureHandler() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        sendMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(layout)));
-        CompletableFuture<Boolean> future = sendRequestWithClusterId(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())),
-                layout.getClusterId());
+        sendRequest(getBootstrapLayoutRequestMsg(layout), true, true);
+
+        CompletableFuture<Boolean> future = sendRequestWithClusterId(
+                getReportFailureRequestMsg(0L, Collections.emptySet()),
+                layout.getClusterId(), false, true);
 
         assertThatThrownBy(future::join).hasCauseExactlyInstanceOf(NoBootstrapException.class);
 
-        future = sendRequestWithClusterId(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(layout),
-                layout.getClusterId());
-        assertThat(future.join()).isEqualTo(true);
-        future = sendRequestWithClusterId(CorfuMsgType.MANAGEMENT_FAILURE_DETECTED.payloadMsg(
-                new DetectorMsg(0L, Collections.emptySet(), Collections.emptySet())),
-                layout.getClusterId());
+        future = sendRequestWithClusterId(
+                getBootstrapManagementRequestMsg(layout), layout.getClusterId(), true, true);
+
         assertThat(future.join()).isEqualTo(true);
 
+        future = sendRequestWithClusterId(
+                getReportFailureRequestMsg(0L, Collections.emptySet()),
+                layout.getClusterId(), false, true);
+
+        assertThat(future.join()).isEqualTo(true);
     }
 }

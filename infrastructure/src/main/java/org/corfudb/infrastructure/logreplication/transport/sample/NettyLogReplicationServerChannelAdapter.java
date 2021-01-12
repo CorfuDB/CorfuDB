@@ -77,8 +77,6 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
      * {@link EventLoopGroup}s. For implementations which listen on multiple ports,
      * {@link EventLoopGroup}s may be reused.
      *
-     * @param bossGroup           The "boss" {@link EventLoopGroup} which services incoming
-     *                            connections.
      * @param workerGroup         The "worker" {@link EventLoopGroup} which services incoming
      *                            requests.
      * @param bootstrapConfigurer A {@link BootstrapConfigurer} which will receive the
@@ -86,14 +84,13 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
      * @param port                The port will be created on.
      * @return A {@link ChannelFuture} which can be used to wait for the server to be shutdown.
      */
-    public ChannelFuture bindServer(@Nonnull EventLoopGroup bossGroup,
-                                    @Nonnull EventLoopGroup workerGroup,
+    public ChannelFuture bindServer(@Nonnull EventLoopGroup workerGroup,
                                     @Nonnull BootstrapConfigurer bootstrapConfigurer,
                                     String address,
                                     int port) {
         try {
             ServerBootstrap bootstrap = new ServerBootstrap();
-            bootstrap.group(bossGroup, workerGroup)
+            bootstrap.group(workerGroup)
                     .channel(getServerContext().getChannelImplementation().getServerChannelClass());
             bootstrapConfigurer.configure(bootstrap);
 
@@ -118,8 +115,7 @@ public class NettyLogReplicationServerChannelAdapter extends IServerChannelAdapt
      * Start the Corfu Replication Server by listening on the specified port.
      */
     private ChannelFuture startServer() {
-        bindFuture = bindServer(getServerContext().getBossGroup(),
-                getServerContext().getWorkerGroup(),
+        bindFuture = bindServer(getServerContext().getWorkerGroup(),
                 this::configureBootstrapOptions,
                 (String) getServerContext().getServerConfig().get("--address"),
                 port);
