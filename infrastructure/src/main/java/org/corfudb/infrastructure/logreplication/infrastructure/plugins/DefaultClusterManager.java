@@ -11,7 +11,6 @@ import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.TopologyConfigurationMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
-import org.corfudb.runtime.Messages;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
@@ -20,6 +19,7 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 
 import java.io.File;
 import java.io.FileReader;
@@ -61,12 +61,12 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
 
     public static final String CONFIG_NAMESPACE = "ns_lr_config_it";
     public static final String CONFIG_TABLE_NAME = "lr_config_it";
-    public static final Messages.Uuid OP_RESUME = Messages.Uuid.newBuilder().setLsb(0L).setMsb(0L).build();
-    public static final Messages.Uuid OP_SWITCH = Messages.Uuid.newBuilder().setLsb(1L).setMsb(1L).build();
-    public static final Messages.Uuid OP_TWO_ACTIVE = Messages.Uuid.newBuilder().setLsb(2L).setMsb(2L).build();
-    public static final Messages.Uuid OP_ALL_STANDBY = Messages.Uuid.newBuilder().setLsb(3L).setMsb(3L).build();
-    public static final Messages.Uuid OP_INVALID = Messages.Uuid.newBuilder().setLsb(4L).setMsb(4L).build();
-    public static final Messages.Uuid OP_ENFORCE_SNAPSHOT_FULL_SYNC = Messages.Uuid.newBuilder().setLsb(5L).setMsb(5L).build();
+    public static final UuidMsg OP_RESUME = UuidMsg.newBuilder().setLsb(0L).setMsb(0L).build();
+    public static final UuidMsg OP_SWITCH = UuidMsg.newBuilder().setLsb(1L).setMsb(1L).build();
+    public static final UuidMsg OP_TWO_ACTIVE = UuidMsg.newBuilder().setLsb(2L).setMsb(2L).build();
+    public static final UuidMsg OP_ALL_STANDBY = UuidMsg.newBuilder().setLsb(3L).setMsb(3L).build();
+    public static final UuidMsg OP_INVALID = UuidMsg.newBuilder().setLsb(4L).setMsb(4L).build();
+    public static final UuidMsg OP_ENFORCE_SNAPSHOT_FULL_SYNC = UuidMsg.newBuilder().setLsb(5L).setMsb(5L).build();
 
     @Getter
     private long configId;
@@ -96,9 +96,9 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         corfuStore = new CorfuStore(corfuRuntime);
         CorfuStoreMetadata.Timestamp ts = corfuStore.getTimestamp();
         try {
-            Table<Messages.Uuid, Messages.Uuid, Messages.Uuid> table = corfuStore.openTable(
+            Table<UuidMsg, UuidMsg, UuidMsg> table = corfuStore.openTable(
                     CONFIG_NAMESPACE, CONFIG_TABLE_NAME,
-                    Messages.Uuid.class, Messages.Uuid.class, Messages.Uuid.class,
+                    UuidMsg.class, UuidMsg.class, UuidMsg.class,
                     TableOptions.builder().build()
             );
             table.clear();
@@ -109,7 +109,8 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         }
         configStreamListener = new ConfigStreamListener(this);
         corfuStore.subscribe(configStreamListener, CONFIG_NAMESPACE,
-                Collections.singletonList(new TableSchema(CONFIG_TABLE_NAME, Messages.Uuid.class, Messages.Uuid.class, Messages.Uuid.class)), ts);
+                Collections.singletonList(new TableSchema(CONFIG_TABLE_NAME,
+                        UuidMsg.class, UuidMsg.class, UuidMsg.class)), ts);
         thread = new Thread(clusterManagerCallback);
         thread.start();
     }

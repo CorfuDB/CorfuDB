@@ -1,19 +1,9 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-
-
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
-import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.time.Duration;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
@@ -24,6 +14,16 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.time.Duration;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+
+import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 /**
  * This class represents the Corfu Replication Server. This Server will be running on both ends

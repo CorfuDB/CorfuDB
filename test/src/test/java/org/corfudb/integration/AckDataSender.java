@@ -3,9 +3,9 @@ package org.corfudb.integration;
 import lombok.Data;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationError;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
+import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 
 import static org.assertj.core.api.Assertions.fail;
 
@@ -28,21 +28,21 @@ public class AckDataSender implements DataSender {
     }
 
     @Override
-    public CompletableFuture<LogReplicationEntry> send(LogReplicationEntry message) {
+    public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
         // Emulate it was sent over the wire and arrived on the source side
         // channel.execute(() -> sourceManager.receive(message));
         return new CompletableFuture<>();
     }
 
     @Override
-    public CompletableFuture<LogReplicationEntry> send(List<LogReplicationEntry> messages) {
-        CompletableFuture<LogReplicationEntry> ackCF = new CompletableFuture<>();
+    public CompletableFuture<LogReplicationEntryMsg> send(List<LogReplicationEntryMsg> messages) {
+        CompletableFuture<LogReplicationEntryMsg> ackCF = new CompletableFuture<>();
         messages.forEach(msg -> send(msg));
         return ackCF;
     }
 
     @Override
-    public CompletableFuture<LogReplicationMetadataResponse> sendMetadataRequest() {
+    public CompletableFuture<LogReplication.LogReplicationMetadataResponseMsg> sendMetadataRequest() {
         return new CompletableFuture<>();
     }
 

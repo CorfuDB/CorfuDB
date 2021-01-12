@@ -3,9 +3,9 @@ package org.corfudb.infrastructure.logreplication.runtime.fsm;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationQueryLeaderShipResponse;
+import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.LogReplicationLeadershipResponseMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -93,7 +93,7 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
 
         String leader = "";
 
-        Map<String, CompletableFuture<LogReplicationQueryLeaderShipResponse>> pendingLeadershipQueries = new HashMap<>();
+        Map<String, CompletableFuture<LogReplicationLeadershipResponseMsg>> pendingLeadershipQueries = new HashMap<>();
 
         // Verify leadership on remote cluster, only if no leader is currently selected.
         if (!fsm.getRemoteLeader().isPresent()) {
@@ -104,17 +104,22 @@ public class VerifyingRemoteLeaderState implements LogReplicationRuntimeState {
                     for (String node : fsm.getConnectedEndpoints()) {
                         log.debug("Verify leadership status for node {}", node);
                         // Check Leadership
-                        CompletableFuture<LogReplicationQueryLeaderShipResponse> leadershipRequestCf =
-                                router.sendMessageAndGetCompletable(new CorfuMsg(CorfuMsgType.LOG_REPLICATION_QUERY_LEADERSHIP).setEpoch(0), node);
+                        CorfuMessage.RequestPayloadMsg payload =
+                                CorfuMessage.RequestPayloadMsg.newBuilder().setLrLeadershipQuery(
+                                        LogReplication.LogReplicationLeadershipRequestMsg.newBuilder().build()
+                                ).build();
+                        CompletableFuture<LogReplicationLeadershipResponseMsg> leadershipRequestCf =
+                                router.sendRequestAndGetCompletable(payload, node);
                         pendingLeadershipQueries.put(node, leadershipRequestCf);
                     }
 
                     // Block until all leadership requests are completed, or a leader is discovered.
                     while (pendingLeadershipQueries.size() != 0) {
-                        LogReplicationQueryLeaderShipResponse leadershipResponse = (LogReplicationQueryLeaderShipResponse) CompletableFuture.anyOf(pendingLeadershipQueries.values()
+                        LogReplicationLeadershipResponseMsg leadershipResponse = (LogReplicationLeadershipResponseMsg)
+                                CompletableFuture.anyOf(pendingLeadershipQueries.values()
                                 .toArray(new CompletableFuture<?>[pendingLeadershipQueries.size()])).get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
-                        if (leadershipResponse.isLeader()) {
+                        if (leadershipResponse.getIsLeader()) {
                             log.info("Received Leadership Response :: leader for remote cluster, node={}", leadershipResponse.getEndpoint());
                             leader = leadershipResponse.getEndpoint();
                             fsm.setRemoteLeaderEndpoint(leader);

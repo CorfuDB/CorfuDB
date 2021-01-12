@@ -4,19 +4,19 @@ package org.corfudb.infrastructure.logreplication;
 option java_package = "org.corfudb.infrastructure.logreplication";
 
 import "google/protobuf/any.proto";
-import "messages.proto";
+import "service/corfu_message.proto";
 
 
 service LogReplicationChannel {
 
     // Client sends Negotiation Request
-    rpc negotiate(org.corfudb.runtime.CorfuMessage) returns (org.corfudb.runtime.CorfuMessage) {}
+    rpc negotiate(org.corfudb.runtime.RequestMsg) returns (org.corfudb.runtime.ResponseMsg) {}
 
     // Client sends Negotiation Request
-    rpc queryLeadership(org.corfudb.runtime.CorfuMessage) returns (org.corfudb.runtime.CorfuMessage) {}
+    rpc queryLeadership(org.corfudb.runtime.RequestMsg) returns (org.corfudb.runtime.ResponseMsg) {}
 
     // A client-side streaming RPC where the client writes a sequence of messages and sends them to the server,
     // again using a provided stream. Once the client has finished writing the messages, it waits for the server
     // to read them all and return its response (ack).
-    rpc replicate(stream org.corfudb.runtime.CorfuMessage) returns (org.corfudb.runtime.CorfuMessage) {}
+    rpc replicate(stream org.corfudb.runtime.RequestMsg) returns (org.corfudb.runtime.ResponseMsg) {}
 }

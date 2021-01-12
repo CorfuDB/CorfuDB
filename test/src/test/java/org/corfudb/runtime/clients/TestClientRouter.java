@@ -40,6 +40,8 @@ import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.NodeLocator;
 
+import javax.annotation.Nonnull;
+
 import static org.corfudb.AbstractCorfuTest.PARAMETERS;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
@@ -333,6 +335,13 @@ public class TestClientRouter implements IClientRouter {
             return null;
         });
         return cfTimeout;
+    }
+
+    @Override
+    public <T> CompletableFuture<T> sendRequestAndGetCompletable(
+            @Nonnull RequestPayloadMsg payload,
+            @Nonnull String endpoint) {
+        throw new UnsupportedOperationException("Unsupported API.");
     }
 
     /**

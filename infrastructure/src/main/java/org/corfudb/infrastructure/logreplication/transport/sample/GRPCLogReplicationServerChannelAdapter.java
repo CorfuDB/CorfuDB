@@ -5,8 +5,8 @@ import io.grpc.ServerBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
-import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -40,8 +40,8 @@ public class GRPCLogReplicationServerChannelAdapter extends IServerChannelAdapte
     }
 
     @Override
-    public void send(CorfuMessage msg) {
-        log.info("Server send message {}", msg.getType());
+    public void send(CorfuMessage.ResponseMsg msg) {
+        log.info("Server send message {}", msg.getPayload().getPayloadCase());
         service.send(msg);
     }
 

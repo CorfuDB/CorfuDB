@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.infrastructure.plugins;
 
 import lombok.Getter;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuReplicationDiscoveryServiceAdapter;
 import org.corfudb.infrastructure.logreplication.infrastructure.LogReplicationDiscoveryServiceException;

@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.logreplication.runtime.fsm;
 
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 
 /**
