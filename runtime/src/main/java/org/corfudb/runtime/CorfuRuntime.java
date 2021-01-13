@@ -49,6 +49,25 @@ import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
 
 /**
  * Created by mwei on 12/9/15.
@@ -266,7 +285,7 @@ public class CorfuRuntime {
             private MetricRegistry metricRegistry = null;
             private MicroMeterRuntimeConfig microMeterRuntimeConfig =
                     new MicroMeterRuntimeConfig(true,
-                    "org.corfudb.client.metricsdata", Duration.ofMinutes(1));
+                    "org.corfudb.client.metricsdata", Duration.ofSeconds(1));
 
             public CorfuRuntimeParametersBuilder configureMicroMeterMetrics(
                     MicroMeterRuntimeConfig microMeterRuntimeConfig) {

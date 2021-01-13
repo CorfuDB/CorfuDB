@@ -80,9 +80,13 @@ public class BatchProcessor implements AutoCloseable {
         operationsQueue = new LinkedBlockingQueue<>();
         writeRecordTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("logunit.write.timer")
+                        .publishPercentiles(0.50, 0.95, 0.99)
+                        .publishPercentileHistogram()
                         .tags("type", "single").register(registry));
         writeRecordsTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("logunit.write.timer")
+                        .publishPercentiles(0.50, 0.95, 0.99)
+                        .publishPercentileHistogram()
                         .tags("type", "multiple").register(registry));
         queueSizeDist = MeterRegistryProvider.getInstance().map(registry ->
                 DistributionSummary
