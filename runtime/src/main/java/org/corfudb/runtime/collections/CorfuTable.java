@@ -80,6 +80,7 @@ public class CorfuTable<K, V> implements
     private final ContextAwareMap<K, V> mainMap;
     private final Set<Index.Spec<K, V, ?>> indexSpec;
     private final Map<String, Map<Object, Map<K, V>>> secondaryIndexes;
+    private final Map<String, String> secondaryIndexesAliasToPath;
     private final CorfuTable<K, V> optimisticTable;
     private final VersionPolicy versionPolicy;
 
@@ -90,6 +91,7 @@ public class CorfuTable<K, V> implements
         this.mainMap = mainMap;
         this.indexSpec = indexSpec;
         this.secondaryIndexes = secondaryIndexes;
+        this.secondaryIndexesAliasToPath = new HashMap<>();
         this.optimisticTable = optimisticTable;
         this.versionPolicy = ICorfuVersionPolicy.DEFAULT;
     }
@@ -104,6 +106,7 @@ public class CorfuTable<K, V> implements
                       VersionPolicy versionPolicy) {
         this.indexSpec = new HashSet<>();
         this.secondaryIndexes = new HashMap<>();
+        this.secondaryIndexesAliasToPath = new HashMap<>();
         this.mainMap = streamingMapSupplier.get();
         this.versionPolicy = versionPolicy;
         this.optimisticTable = new CorfuTable<>(this.mainMap.getOptimisticMap(), this.indexSpec,
@@ -111,6 +114,7 @@ public class CorfuTable<K, V> implements
 
         indices.forEach(index -> {
             secondaryIndexes.put(index.getName().get(), new HashMap<>());
+            secondaryIndexesAliasToPath.put(index.getAlias().get(), index.getName().get());
             indexSpec.add(index);
         });
 
@@ -233,8 +237,9 @@ public class CorfuTable<K, V> implements
     Collection<Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
         String secondaryIndex = indexName.get();
         Map<Object, Map<K, V>> secondaryMap;
-        if (secondaryIndexes.containsKey(secondaryIndex) &&
-                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null)) {
+        if ((secondaryIndexes.containsKey(secondaryIndex) &&
+                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null)) || secondaryIndexesAliasToPath.containsKey(secondaryIndex)
+                && ((secondaryMap = secondaryIndexes.get(secondaryIndexesAliasToPath.get(secondaryIndex))) != null)) {
             // If secondary index exists and function for this index is not null
             Map<K, V> res = secondaryMap.get(indexKey);
 
@@ -268,7 +273,8 @@ public class CorfuTable<K, V> implements
         Map<Object, Map<K, V>> secondaryMap;
 
         if (secondaryIndexes.containsKey(secondaryIndex) &&
-                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null)) {
+                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null) || secondaryIndexesAliasToPath.containsKey(secondaryIndex)
+                && ((secondaryMap = secondaryIndexes.get(secondaryIndexesAliasToPath.get(secondaryIndex))) != null)) {
             if (secondaryMap.get(indexKey) == null) {
                 entryStream = Stream.empty();
             } else {

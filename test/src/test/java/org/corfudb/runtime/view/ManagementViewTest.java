@@ -1,7 +1,6 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.reflect.TypeToken;
-
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.SequencerServer;
@@ -801,10 +800,11 @@ public class ManagementViewTest extends AbstractViewTest {
         // Allow only SERVERS.PORT_0 to handle the failure.
         // Preventing PORT_2 from bootstrapping the sequencer.
         addClientRule(getManagementServer(SERVERS.PORT_2).getManagementAgent().getCorfuRuntime(),
-                new TestRule().matches(msg -> msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER)).drop());
+                new TestRule().requestMatches(msg ->
+                        msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_SEQUENCER_REQUEST)).drop());
         addClientRule(getManagementServer(SERVERS.PORT_1).getManagementAgent().getCorfuRuntime(),
-                new TestRule().matches(msg -> {
-                    if (msg.getMsgType().equals(CorfuMsgType.BOOTSTRAP_SEQUENCER)) {
+                new TestRule().requestMatches(msg -> {
+                    if (msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_SEQUENCER_REQUEST)) {
                         try {
                             // There is a failure but the BOOTSTRAP_SEQUENCER message has not yet been
                             // sent. So if we request a token now, we should be denied as the
@@ -1612,8 +1612,8 @@ public class ManagementViewTest extends AbstractViewTest {
         });
         // Block any sequencer bootstrap attempts.
         addClientRule(getManagementServer(SERVERS.PORT_0).getManagementAgent().getCorfuRuntime(), new TestRule()
-                .matches(corfuMsg -> corfuMsg.getMsgType() == CorfuMsgType.BOOTSTRAP_SEQUENCER).drop());
-
+                .requestMatches(msg ->
+                        msg.getPayload().getPayloadCase().equals(PayloadCase.BOOTSTRAP_SEQUENCER_REQUEST)).drop());
         // Increment the sequencer epoch twice so that a full sequencer bootstrap is required.
         incrementClusterEpoch(corfuRuntime);
         Layout layout = incrementClusterEpoch(corfuRuntime);

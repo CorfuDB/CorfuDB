@@ -1,26 +1,26 @@
 package org.corfudb.protocols.wireprotocol;
 
 import io.netty.buffer.ByteBuf;
-import java.util.Map;
-import java.util.UUID;
 import lombok.Data;
-import lombok.Setter;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 
+import java.util.Map;
+import java.util.UUID;
+
 /**
  * Represents the response sent by the sequencer when streams address maps are requested
- * @see org.corfudb.protocols.wireprotocol.StreamsAddressRequest
  *
+ * @see org.corfudb.runtime.proto.service.Sequencer.StreamsAddressRequestMsg
+ * <p>
  * It contains a per stream map with its corresponding address space
  * (composed of the addresses of this stream and trim mark)
  */
 @Data
-public class StreamsAddressResponse implements ICorfuPayload<StreamsAddressResponse>{
+public class StreamsAddressResponse implements ICorfuPayload<StreamsAddressResponse> {
 
     private long logTail;
 
-    @Setter
     private long epoch = Layout.INVALID_EPOCH;
 
     private final Map<UUID, StreamAddressSpace> addressMap;
@@ -33,6 +33,9 @@ public class StreamsAddressResponse implements ICorfuPayload<StreamsAddressRespo
     /**
      * Deserialization Constructor from Bytebuf to StreamsAddressResponse.
      *
+     * Note: LogUnitServer also needs to serialize a StreamsAddressResponse, so
+     * this methods can be removed once both of the servers are using Protobuf.
+     *
      * @param buf The buffer to deserialize
      */
     public StreamsAddressResponse(ByteBuf buf) {
@@ -41,6 +44,14 @@ public class StreamsAddressResponse implements ICorfuPayload<StreamsAddressRespo
         this.addressMap = ICorfuPayload.mapFromBuffer(buf, UUID.class, StreamAddressSpace.class);
     }
 
+    /**
+     * Serialize a the object and append to the {@link ByteBuf}  parameter passed.
+     *
+     * Note: LogUnitServer also needs to serialize a StreamsAddressResponse, so
+     * this methods can be removed once both of the servers are using Protobuf.
+     *
+     * @param buf the {@link ByteBuf} to which the serialized bytes are appended
+     */
     @Override
     public void doSerialize(ByteBuf buf) {
         ICorfuPayload.serialize(buf, this.logTail);
