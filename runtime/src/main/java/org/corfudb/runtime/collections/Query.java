@@ -34,7 +34,6 @@ import org.corfudb.runtime.view.TableRegistry;
  * <p>
  * Created by zlokhandwala on 2019-08-09.
  */
-@Deprecated
 public class Query {
 
     private final TableRegistry tableRegistry;
@@ -50,6 +49,7 @@ public class Query {
      * @param objectsView   Objects View from the corfu client.
      * @param namespace     Namespace to perform the queries within.
      */
+    @Deprecated
     public Query(final TableRegistry tableRegistry, final ObjectsView objectsView, final String namespace) {
         this.tableRegistry = tableRegistry;
         this.objectsView = objectsView;
@@ -204,14 +204,14 @@ public class Query {
      */
     @Nonnull
     @Deprecated
-    public <K extends Message, V extends Message, M extends Message, I extends Comparable<I>>
+    public <K extends Message, V extends Message, M extends Message, I>
     QueryResult<Entry<K, V>> getByIndex(@Nonnull final String tableName,
                                         @Nonnull final String indexName,
                                         @Nonnull final I indexKey) {
         return new QueryResult<>(((Table<K, V, M>) getTable(tableName)).getByIndexAsQueryResult(indexName, indexKey));
     }
 
-    private <K extends Message, V extends Message, M extends Message, R>
+    private static <K extends Message, V extends Message, M extends Message, R>
     Collection<R> initializeResultCollection(QueryOptions<K, V, M, R> queryOptions) {
         if (!queryOptions.isDistinct()) {
             return new ArrayList<>();
@@ -222,8 +222,7 @@ public class Query {
         return new HashSet<>();
     }
 
-    @Deprecated
-    private <K extends Message, V extends Message, M extends Message, R>
+    private static <K extends Message, V extends Message, M extends Message, R>
     Collection<R> transform(Collection<CorfuStoreEntry<K, V, M>> queryResult,
                             Collection<R> resultCollection,
                             Function<CorfuStoreEntry<K, V, M>, R> projection) {
@@ -282,8 +281,8 @@ public class Query {
     /**
      * Execute a join of 2 tables.
      *
-     * @param tableName1     Table name 1.
-     * @param tableName2     Table name 2.
+     * @param table1         First table in the join query.
+     * @param table2         Second table to join with the first.
      * @param query1         Predicate to filter entries in table 1.
      * @param query2         Predicate to filter entries in table 2.
      * @param joinPredicate  Predicate to filter entries during the join.
@@ -296,21 +295,20 @@ public class Query {
      * @return Result of query.
      */
     @Nonnull
-    @Deprecated
-    public <K1 extends Message, K2 extends Message,
+    public static <K1 extends Message, K2 extends Message,
             V1 extends Message, V2 extends Message,
             M1 extends Message, M2 extends Message, T, U>
     QueryResult<U> executeJoinQuery(
-            @Nonnull final String tableName1,
-            @Nonnull final String tableName2,
+            @Nonnull final Table<K1, V1, M1> table1,
+            @Nonnull final Table<K2, V2, M2> table2,
             @Nonnull final Predicate<CorfuStoreEntry<K1, V1, M1>> query1,
             @Nonnull final Predicate<CorfuStoreEntry<K2, V2, M2>> query2,
             @Nonnull final BiPredicate<V1, V2> joinPredicate,
             @Nonnull final BiFunction<V1, V2, T> joinFunction,
             final Function<T, U> joinProjection) {
         return executeJoinQuery(
-                tableName1,
-                tableName2,
+                table1,
+                table2,
                 query1,
                 query2,
                 DEFAULT_OPTIONS,
@@ -323,8 +321,8 @@ public class Query {
     /**
      * Execute a join of 2 tables.
      *
-     * @param tableName1     Table name 1.
-     * @param tableName2     Table name 2.
+     * @param table1         First table object.
+     * @param table2         Second table to join with the first one.
      * @param query1         Predicate to filter entries in table 1.
      * @param query2         Predicate to filter entries in table 2.
      * @param queryOptions1  Query options to transform table 1 filtered values.
@@ -341,14 +339,13 @@ public class Query {
      * @return Result of query.
      */
     @Nonnull
-    @Deprecated
-    public <K1 extends Message, K2 extends Message,
+    public static <K1 extends Message, K2 extends Message,
             V1 extends Message, V2 extends Message,
             M1 extends Message, M2 extends Message,
             R, S, T, U>
     QueryResult<U> executeJoinQuery(
-            @Nonnull final String tableName1,
-            @Nonnull final String tableName2,
+            @Nonnull final Table<K1, V1, M1> table1,
+            @Nonnull final Table<K2, V2, M2> table2,
             @Nonnull final Predicate<CorfuStoreEntry<K1, V1, M1>> query1,
             @Nonnull final Predicate<CorfuStoreEntry<K2, V2, M2>> query2,
             @Nonnull final QueryOptions<K1, V1, M1, R> queryOptions1,
@@ -358,14 +355,14 @@ public class Query {
             final Function<T, U> joinProjection) {
 
         List<CorfuStoreEntry<K1, V1, M1>> filterResult1
-                = scanAndFilterByEntry(tableName1, queryOptions1.getTimestamp(), query1);
+                = table1.scanAndFilterByEntry(query1);
         Collection<R> queryResult1 = transform(
                 filterResult1,
                 initializeResultCollection(queryOptions1),
                 queryOptions1.getProjection());
 
         List<CorfuStoreEntry<K2, V2, M2>> filterResult2
-                = scanAndFilterByEntry(tableName2, queryOptions2.getTimestamp(), query2);
+                = table2.scanAndFilterByEntry(query2);
         Collection<S> queryResult2 = transform(
                 filterResult2,
                 initializeResultCollection(queryOptions2),

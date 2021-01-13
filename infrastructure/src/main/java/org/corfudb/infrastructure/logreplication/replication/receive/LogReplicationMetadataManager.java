@@ -51,9 +51,6 @@ public class LogReplicationMetadataManager {
 
     private final Table<ReplicationStatusKey, ReplicationStatusVal, ReplicationStatusVal> replicationStatusTable;
 
-    private final CorfuRuntime runtimeTxLogging;
-    private final CorfuStore corfuStoreTxLogging;
-
     private final CorfuRuntime runtime;
     private final String localClusterId;
 
@@ -62,17 +59,8 @@ public class LogReplicationMetadataManager {
         // LR does not require transaction logging enabled as we don't want to trigger subscriber's logic
         // on replicated data which could eventually lead to overwrites
         this.runtime = rt;
-        this.corfuStore = new CorfuStore(runtime, false);
-
-        // This special runtime with transaction logging enabled is required for the REPLICATION_EVENT_TABLE
-        // which is a table used to communicate events between lead and non-lead nodes in LR (e.g., notify
-        // force snapshot sync from a non-lead to the lead node)
-        CorfuRuntime.CorfuRuntimeParameters params = rt.getParameters();
-        this.runtimeTxLogging = CorfuRuntime.fromParameters(params)
-                .setTransactionLogging(true)
-                .parseConfigurationString(rt.getLayoutServers().get(0))
-                .connect();
-        this.corfuStoreTxLogging = new CorfuStore(runtimeTxLogging);
+        // CorfuStore must have TX Logging Enabled as it might be used by consumers to update UI
+        this.corfuStore = new CorfuStore(runtime);
 
         metadataTableName = getPersistedWriterMetadataTableName(localClusterId);
         try {
@@ -90,7 +78,7 @@ public class LogReplicationMetadataManager {
                             null,
                             TableOptions.builder().build());
 
-            this.corfuStoreTxLogging.openTable(NAMESPACE,
+            this.corfuStore.openTable(NAMESPACE,
                     REPLICATION_EVENT_TABLE_NAME,
                     ReplicationEventKey.class,
                     ReplicationEvent.class,
@@ -356,6 +344,8 @@ public class LogReplicationMetadataManager {
     /**
      * Update replication status table's snapshot sync info as ongoing.
      *
+     * Note: TransactionAbortedException has been handled by upper level.
+     *
      * @param clusterId standby cluster id
      */
     public void updateSnapshotSyncInfo(String clusterId, boolean forced, UUID eventId,
@@ -390,6 +380,8 @@ public class LogReplicationMetadataManager {
 
     /**
      * Update replication status table's snapshot sync info as completed.
+     *
+     * Note: TransactionAbortedException has been handled by upper level.
      *
      * @param clusterId standby cluster id
      */
@@ -430,6 +422,8 @@ public class LogReplicationMetadataManager {
     /**
      * Update replication status table's sync status
      *
+     * Note: TransactionAbortedException has been handled by upper level.
+     *
      * @param clusterId standby cluster id
      */
     public void updateSyncStatus(String clusterId, ReplicationStatusVal.SyncType lastSyncType, LogReplicationMetadata.SyncStatus status) {
@@ -465,6 +459,8 @@ public class LogReplicationMetadataManager {
     /**
      * Set replication status table.
      * If the current sync type is log entry sync, keep Snapshot Sync Info.
+     *
+     * Note: TransactionAbortedException has been handled by upper level.
      *
      * @param clusterId standby cluster id
      * @param remainingEntries num of remaining entries to send
@@ -550,15 +546,13 @@ public class LogReplicationMetadataManager {
         return replicationStatusMap;
     }
 
-    public ReplicationStatusVal getReplicationRemainingEntries(String clusterId) {
-        ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(clusterId).build();
-        CorfuRecord record = corfuStore.query(NAMESPACE).getRecord(REPLICATION_STATUS_TABLE, key);
-        if (record == null) {
-            return null;
-        }
-        return (ReplicationStatusVal)record.getPayload();
-    }
-
+    /**
+     * set DataConsistent filed in status table on standby side.
+     *
+     * Note: TransactionAbortedException has been handled by upper level.
+     *
+     * @param isConsistent data is consistent or not
+     */
     public void setDataConsistentOnStandby(boolean isConsistent) {
         ReplicationStatusKey key = ReplicationStatusKey.newBuilder().setClusterId(localClusterId).build();
         ReplicationStatusVal val = ReplicationStatusVal.newBuilder()
@@ -569,7 +563,9 @@ public class LogReplicationMetadataManager {
         txBuilder.update(REPLICATION_STATUS_TABLE, key, val, null);
         txBuilder.commit();
 
-        log.trace("setDataConsistentOnStandby: localClusterId: {}, isConsistent: {}", localClusterId, isConsistent);
+        if (log.isTraceEnabled()) {
+            log.trace("setDataConsistentOnStandby: localClusterId: {}, isConsistent: {}", localClusterId, isConsistent);
+        }
     }
 
     public Map<String, ReplicationStatusVal> getDataConsistentOnStandby() {
@@ -684,7 +680,7 @@ public class LogReplicationMetadataManager {
      */
     public void updateLogReplicationEventTable(ReplicationEventKey key, ReplicationEvent event) {
         log.info("UpdateReplicationEvent {} with event {}", REPLICATION_EVENT_TABLE_NAME, event);
-        TxBuilder txBuilder = corfuStoreTxLogging.tx(NAMESPACE);
+        TxBuilder txBuilder = corfuStore.tx(NAMESPACE);
         txBuilder.update(REPLICATION_EVENT_TABLE_NAME, key, event, null);
         txBuilder.commit();
     }
@@ -695,7 +691,7 @@ public class LogReplicationMetadataManager {
      */
     public void subscribeReplicationEventTable(StreamListener listener) {
         log.info("LogReplication start listener for table {}", REPLICATION_EVENT_TABLE_NAME);
-        corfuStoreTxLogging.subscribe(listener, NAMESPACE,
+        corfuStore.subscribe(listener, NAMESPACE,
                 Collections.singletonList(new TableSchema(REPLICATION_EVENT_TABLE_NAME, ReplicationEventKey.class, ReplicationEvent.class, null)), null);
     }
 
@@ -708,9 +704,7 @@ public class LogReplicationMetadataManager {
     }
 
     public void shutdown() {
-        if (runtimeTxLogging != null) {
-            runtimeTxLogging.shutdown();
-        }
+        // No-Op
     }
 
     public enum LogReplicationMetadataType {

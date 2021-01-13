@@ -26,11 +26,11 @@ public class Index {
      * @param <I> type of the index value computed.
      */
     @FunctionalInterface
-    public interface Function<K, V, I extends Comparable<?>> extends BiFunction<K, V, I> {
+    public interface Function<K, V, I> extends BiFunction<K, V, I> {
     }
 
     @FunctionalInterface
-    public interface MultiValueFunction<K, V, I extends Comparable<?>>
+    public interface MultiValueFunction<K, V, I>
             extends BiFunction<K, V, Iterable<I>> {
     }
 
@@ -44,29 +44,43 @@ public class Index {
      * @param <V> type of the record value associated with {@code IndexKey}.
      * @param <I> type of the index value computed using the {@code IndexKey}.
      */
-    public static class Spec<K, V, I extends Comparable<?>> {
+    public static class Spec<K, V, I> {
         private final Name name;
+        private final Name alias;
         private final MultiValueFunction<K, V, I> indexFunction;
 
         public Spec(Name name, Function<K, V, I> indexFunction) {
+            this(name, name, indexFunction);
+        }
+
+        public Spec(Name name, Name alias, Function<K, V, I> indexFunction) {
             this.name = name;
+            this.alias = alias;
             this.indexFunction =
                     (k, v) -> Collections.singletonList(indexFunction.apply(k, v));
         }
 
-        public Spec(Name name, MultiValueFunction<K, V, I> indexFunction) {
+        public Spec(Name name, Name alias, MultiValueFunction<K, V, I> indexFunction) {
             this.name = name;
+            this.alias = alias;
             this.indexFunction = indexFunction;
+        }
+
+        public Spec(Name name, MultiValueFunction<K, V, I> indexFunction) {
+            this(name, name, indexFunction);
         }
 
         public Name getName() {
             return name;
         }
 
+        public Name getAlias() {
+            return alias;
+        }
+
         public MultiValueFunction<K, V, I> getMultiValueIndexFunction() {
             return indexFunction;
         }
-
 
         @Override
         public boolean equals(Object o) {
@@ -88,17 +102,16 @@ public class Index {
      * @param <K> type of the record key associated with {@code Index}.
      * @param <V> type of the record value associated with {@code Index}.
      */
-    public interface Registry<K, V>
-            extends Iterable<Spec<K, V, ? extends Comparable<?>>> {
+    public interface Registry<K, V> extends Iterable<Spec<K, V, ?>> {
 
         Registry<?, ?> EMPTY = new Registry<Object, Object>() {
             @Override
-            public <I extends Comparable<?>> Optional<Spec<Object, Object, I>> get(Name name) {
+            public <I> Optional<Spec<Object, Object, I>> get(Name name) {
                 return Optional.empty();
             }
 
             @Override
-            public Iterator<Spec<Object, Object, ? extends Comparable<?>>> iterator() {
+            public Iterator<Spec<Object, Object, ? >> iterator() {
                 return Collections.emptyIterator();
             }
         };
@@ -109,7 +122,7 @@ public class Index {
          * @param name name of the {@code IndexKey} previously registered.
          * @return the instance of {@link Function} registered to the lookup name.
          */
-        <I extends Comparable<?>> Optional<Spec<K, V, I>> get(Name name);
+        <I> Optional<Spec<K, V, I>> get(Name name);
 
         /**
          * Obtain a static {@link Registry} with no registered {@link Function}s.

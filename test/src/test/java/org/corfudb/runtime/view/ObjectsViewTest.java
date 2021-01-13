@@ -93,8 +93,7 @@ public class ObjectsViewTest extends AbstractViewTest {
         assertThat(map)
                 .containsEntry("k", "v2");
 
-        IStreamView txStream = r.getStreamsView().get(ObjectsView
-                .TRANSACTION_STREAM_ID);
+        IStreamView txStream = r.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
         List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
         assertThat(txns).hasSize(1);
         assertThat(txns.get(0).getLogEntry(getRuntime()).getType())

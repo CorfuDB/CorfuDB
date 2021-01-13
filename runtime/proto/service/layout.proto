@@ -27,13 +27,7 @@ message PrepareLayoutRequestMsg {
 }
 
 message PrepareLayoutResponseMsg {
-  enum Type {
-    INVALID = 0;
-    ACK = 1;
-    REJECT = 2;
-  }
-
-  Type resp_type = 1;
+  bool prepared = 1;
   int64 rank = 2;
   LayoutMsg layout = 3;
 }
@@ -46,13 +40,7 @@ message ProposeLayoutRequestMsg {
 }
 
 message ProposeLayoutResponseMsg {
-  enum Type {
-    INVALID = 0;
-    ACK = 1;
-    REJECT = 2;
-  }
-
-  Type resp_type = 1;
+  bool proposed = 1;
   int64 rank = 2;
 }
 
@@ -65,13 +53,7 @@ message CommitLayoutRequestMsg {
 }
 
 message CommitLayoutResponseMsg {
-  enum Type {
-    INVALID = 0;
-    ACK = 1;
-    NACK = 2;
-  }
-
-  Type resp_type = 1;
+  bool committed = 1;
 }
 
 // Request sent to bootstrap the server with a Layout
@@ -80,11 +62,5 @@ message BootstrapLayoutRequestMsg {
 }
 
 message BootstrapLayoutResponseMsg {
-  enum Type {
-    INVALID = 0;
-    ACK = 1;
-    NACK = 2;
-  }
-
-  Type resp_type = 1;
+  bool bootstrapped = 1;
 }

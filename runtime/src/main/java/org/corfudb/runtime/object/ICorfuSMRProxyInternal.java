@@ -1,5 +1,8 @@
 package org.corfudb.runtime.object;
 
+import java.util.Set;
+import java.util.UUID;
+
 import org.corfudb.util.serializer.ISerializer;
 
 /**
@@ -17,6 +20,8 @@ public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSM
     /**
      * Directly get the state of the object the proxy is managing,
      * without causing a sync.
+     *
+     * @return the underlying object
      */
     VersionLockedObject<T> getUnderlyingObject();
 
@@ -26,4 +31,10 @@ public interface ICorfuSMRProxyInternal<T extends ICorfuSMR<T>> extends ICorfuSM
      * @return  The serializer to use.
      */
     ISerializer getSerializer();
+
+    /**
+     * Get the stream tags on of the object the proxy is managing
+     * @return
+     */
+    Set<UUID> getStreamTags();
 }

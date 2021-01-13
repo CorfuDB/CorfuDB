@@ -1,13 +1,8 @@
 package org.corfudb.runtime.view;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
-
-import javax.annotation.Nonnull;
 import lombok.Data;
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
@@ -22,9 +17,7 @@ import org.corfudb.infrastructure.ServerContextBuilder;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.NetworkStretcher;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.LayoutBootstrapRequest;
-import org.corfudb.protocols.wireprotocol.SequencerRecoveryMsg;
+import org.corfudb.protocols.service.CorfuProtocolMessage;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.BaseHandler;
@@ -36,19 +29,30 @@ import org.corfudb.runtime.clients.SequencerHandler;
 import org.corfudb.runtime.clients.TestClientRouter;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.OutrankedException;
-
+import org.corfudb.runtime.proto.service.CorfuMessage;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.util.NodeLocator;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 
+import javax.annotation.Nonnull;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import org.junit.BeforeClass;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLayout.getBootstrapLayoutRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolManagement.getBootstrapManagementRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
+import static org.corfudb.protocols.service.CorfuProtocolMessage.getRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolSequencer.getBootstrapSequencerRequestMsg;
 
 /**
  * This class serves as a base class for most higher-level Corfu unit tests
@@ -136,6 +140,19 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
     public void simulateEndpointDisconnected(CorfuRuntime runtime) {
         ((TestClientRouter) runtime.getRouter(getDefaultEndpoint()))
                 .simulateDisconnectedEndpoint();
+    }
+
+    /**
+     * A helper method that creates a basic message header populated
+     * with default values.
+     *
+     * @param ignoreClusterId   indicates if the message is clusterId aware
+     * @param ignoreEpoch       indicates if the message is epoch aware
+     * @return                  the corresponding HeaderMsg
+     */
+    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+        return getHeaderMsg(1L, CorfuMessage.PriorityLevel.NORMAL, 0L,
+                getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
 
     /**
@@ -284,22 +301,28 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      *
      * @param l         The layout to bootstrap all servers with.
      */
-    public void bootstrapAllServers(Layout l)
-    {
+    public void bootstrapAllServers(Layout l) {
         testServerMap.entrySet().parallelStream()
                 .forEach(e -> {
-                    e.getValue().layoutServer
-                            .handleMessage(CorfuMsgType.LAYOUT_BOOTSTRAP.payloadMsg(new LayoutBootstrapRequest(l)),
-                                    null, e.getValue().serverRouter);
-                    e.getValue().managementServer
-                            .handleMessage(CorfuMsgType.MANAGEMENT_BOOTSTRAP_REQUEST.payloadMsg(l),
-                                    null, e.getValue().serverRouter);
+                    e.getValue().layoutServer.handleMessage(getRequestMsg(
+                                    getBasicHeader(true, true),
+                                    getBootstrapLayoutRequestMsg(l)), null, e.getValue().serverRouter);
+                    e.getValue().managementServer.handleMessage(getRequestMsg(
+                                    getBasicHeader(true, true),
+                                    getBootstrapManagementRequestMsg(l)), null, e.getValue().serverRouter);
                 });
         TestServer primarySequencerNode = testServerMap.get(l.getSequencers().get(0));
         primarySequencerNode.sequencerServer
-                .handleMessage(CorfuMsgType.BOOTSTRAP_SEQUENCER.payloadMsg(new SequencerRecoveryMsg(0L,
-                        Collections.emptyMap(), l.getEpoch(), false)), null,
-                        primarySequencerNode.serverRouter);
+                .handleMessage(
+                        CorfuProtocolMessage.getRequestMsg(
+                                getBasicHeader(false, false),
+                                getBootstrapSequencerRequestMsg(
+                                        Collections.emptyMap(),
+                                        0L,
+                                        l.getEpoch(),
+                                        false)
+                        ),
+                        null, primarySequencerNode.serverRouter);
     }
 
 
@@ -498,7 +521,8 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
             this.sequencerServer = new SequencerServer(serverContext);
             this.layoutServer = new LayoutServer(serverContext);
             this.logUnitServer = new LogUnitServer(serverContext);
-            this.managementServer = new ManagementServer(serverContext);
+            this.managementServer = new ManagementServer(serverContext,
+                    new ManagementServer.ManagementServerInitializer());
 
             this.serverRouter.addServer(baseServer);
             this.serverRouter.addServer(sequencerServer);

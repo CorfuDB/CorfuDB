@@ -1,17 +1,13 @@
 package org.corfudb.protocols.wireprotocol.failuredetector;
 
 import com.google.common.collect.ImmutableMap;
-import io.netty.buffer.ByteBuf;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -24,7 +20,7 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 @ToString
 @EqualsAndHashCode
-public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Comparable<NodeConnectivity> {
+public class NodeConnectivity implements Comparable<NodeConnectivity> {
     /**
      * Node name
      */
@@ -45,31 +41,6 @@ public class NodeConnectivity implements ICorfuPayload<NodeConnectivity>, Compar
 
     @Getter
     private final long epoch;
-
-    public NodeConnectivity(ByteBuf buf) {
-        endpoint = ICorfuPayload.fromBuffer(buf, String.class);
-        type = NodeConnectivityType.valueOf(ICorfuPayload.fromBuffer(buf, String.class));
-
-        Map<String, ConnectionStatus> connectivityMap = new HashMap<>();
-        ICorfuPayload
-                .mapFromBuffer(buf, String.class, String.class)
-                //transform map of strings to map of ConnectionStatus-es
-                .forEach((node, status) -> connectivityMap.put(node, ConnectionStatus.valueOf(status)));
-        connectivity = ImmutableMap.copyOf(connectivityMap);
-        epoch = ICorfuPayload.fromBuffer(buf, Long.class);
-    }
-
-    @Override
-    public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, endpoint);
-        ICorfuPayload.serialize(buf, type.name());
-
-        Map<String, String> connectivityStrings = new HashMap<>();
-        connectivity.forEach((node, state) -> connectivityStrings.put(node, state.name()));
-
-        ICorfuPayload.serialize(buf, connectivityStrings);
-        ICorfuPayload.serialize(buf, epoch);
-    }
 
     /**
      * Contains list of servers successfully connected with current node.

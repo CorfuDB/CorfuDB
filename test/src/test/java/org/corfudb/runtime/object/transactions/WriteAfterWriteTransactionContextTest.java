@@ -1,11 +1,17 @@
 package org.corfudb.runtime.object.transactions;
 
+import com.google.common.reflect.TypeToken;
+
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.ICorfuTable;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
@@ -18,6 +24,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Created by mwei on 11/22/16.
  */
 public class WriteAfterWriteTransactionContextTest extends AbstractTransactionContextTest {
+    private final String streamName = "test stream";
+    private final String txnStreamName = "txn" + streamName;
+
+    private ICorfuTable<String, String> testMap;
 
     /** In a write after write transaction, concurrent modifications
      * with the same read timestamp should abort.
@@ -50,7 +60,7 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
                 .doesNotContainEntry("k", "v3");
 
         IStreamView txStream = getRuntime().getStreamsView()
-                .get(ObjectsView.TRANSACTION_STREAM_ID);
+                .get(CorfuRuntime.getStreamID(txnStreamName));
 
         List<ILogData> txns = txStream.remainingUpTo(Long.MAX_VALUE);
         assertThat(txns).hasSize(1);
@@ -69,5 +79,18 @@ public class WriteAfterWriteTransactionContextTest extends AbstractTransactionCo
         assertThat(smrEntry.getSMRMethod()).isEqualTo("put");
         assertThat((String) args[0]).isEqualTo("k");
         assertThat((String) args[1]).isEqualTo("v2");
+    }
+
+    @Override
+    public ICorfuTable<String, String> getMap() {
+        if (testMap == null) {
+            Object obj = getRuntime().getObjectsView().build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                .setStreamTags(getRuntime().getStreamID(txnStreamName))
+                .open();
+            testMap = (ICorfuTable<String, String>) obj;
+        }
+       return testMap;
     }
 }

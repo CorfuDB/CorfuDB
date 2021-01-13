@@ -3,6 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.protobuf.Message;
 import lombok.Builder;
 import lombok.Data;
+import lombok.Getter;
 
 import static lombok.Builder.Default;
 
@@ -17,11 +18,13 @@ import static lombok.Builder.Default;
  */
 @Data
 @Builder
-class MetadataOptions {
+public class MetadataOptions {
 
     @Default
+    @Getter
     private final boolean metadataEnabled = false;
 
     @Default
+    @Getter
     private final Message defaultMetadataInstance = null;
 }

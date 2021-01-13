@@ -21,6 +21,8 @@ import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
+import org.corfudb.runtime.proto.RpcCommon;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.util.CFUtils;
 import org.corfudb.utils.common.CorfuMessageProtoBufException;
 
@@ -142,11 +144,15 @@ public class LogReplicationClientRouter implements IClientRouter {
         client.setRouter(this);
 
         // Iterate through all types of CorfuMsgType, registering the handler
-        client.getHandledTypes().stream()
-                .forEach(x -> {
-                    handlerMap.put(x, client);
-                    log.info("Registered client to handle messages of type {}", x);
-                });
+        try {
+            client.getHandledTypes().stream()
+                    .forEach(x -> {
+                        handlerMap.put(x, client);
+                        log.info("Registered client to handle messages of type {}", x);
+                    });
+        } catch (UnsupportedOperationException ex) {
+            log.error("No registered CorfuMsg handler for client {}", client, ex);
+        }
 
         // Register this type
         clientList.add(client);
@@ -241,6 +247,27 @@ public class LogReplicationClientRouter implements IClientRouter {
     }
 
     /**
+     * Send a request message and get a completable future to be fulfilled by the reply.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     * @param <T> The type of completable to return.
+     * @return A completable future which will be fulfilled by the reply,
+     * or a timeout in the case there is no response.
+     */
+    @Override
+    public  <T> CompletableFuture<T> sendRequestAndGetCompletable(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
+                                                                  org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
+                                                                  boolean ignoreClusterId, boolean ignoreEpoch) {
+        // This is an empty stub. This method is not being used anywhere in the LR framework.
+        return null;
+    }
+
+    /**
      * Send a one way message, without adding a completable future.
      *
      * @param message The message to send.
@@ -259,6 +286,23 @@ public class LogReplicationClientRouter implements IClientRouter {
             log.error("Leader not found to remote cluster {}, dropping {}", remoteClusterId, message.getMsgType());
             runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
         }
+    }
+
+    /**
+     * Send a one way message, without adding a completable future.
+     *
+     * @param payload
+     * @param epoch
+     * @param clusterId
+     * @param priority
+     * @param ignoreClusterId
+     * @param ignoreEpoch
+     */
+    @Override
+    public void sendRequest(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
+                            org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
+                            boolean ignoreClusterId, boolean ignoreEpoch) {
+        // This is an empty stub. This method is not being used anywhere in the LR framework.
     }
 
     @Override

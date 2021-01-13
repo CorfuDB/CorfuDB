@@ -78,18 +78,20 @@ public class CorfuTable<K, V> implements
 
     // The "main" map which contains the primary key-value mappings.
     private final ContextAwareMap<K, V> mainMap;
-    private final Set<Index.Spec<K, V, ? extends Comparable>> indexSpec;
-    private final Map<String, Map<Comparable, Map<K, V>>> secondaryIndexes;
+    private final Set<Index.Spec<K, V, ?>> indexSpec;
+    private final Map<String, Map<Object, Map<K, V>>> secondaryIndexes;
+    private final Map<String, String> secondaryIndexesAliasToPath;
     private final CorfuTable<K, V> optimisticTable;
     private final VersionPolicy versionPolicy;
 
     public CorfuTable(ContextAwareMap<K, V> mainMap,
-                      Set<Index.Spec<K, V, ? extends Comparable>> indexSpec,
-                      Map<String, Map<Comparable, Map<K, V>>> secondaryIndexe,
+                      Set<Index.Spec<K, V, ?>> indexSpec,
+                      Map<String, Map<Object, Map<K, V>>> secondaryIndexes,
                       CorfuTable<K, V> optimisticTable) {
         this.mainMap = mainMap;
         this.indexSpec = indexSpec;
-        this.secondaryIndexes = secondaryIndexe;
+        this.secondaryIndexes = secondaryIndexes;
+        this.secondaryIndexesAliasToPath = new HashMap<>();
         this.optimisticTable = optimisticTable;
         this.versionPolicy = ICorfuVersionPolicy.DEFAULT;
     }
@@ -104,14 +106,15 @@ public class CorfuTable<K, V> implements
                       VersionPolicy versionPolicy) {
         this.indexSpec = new HashSet<>();
         this.secondaryIndexes = new HashMap<>();
+        this.secondaryIndexesAliasToPath = new HashMap<>();
         this.mainMap = streamingMapSupplier.get();
         this.versionPolicy = versionPolicy;
-
         this.optimisticTable = new CorfuTable<>(this.mainMap.getOptimisticMap(), this.indexSpec,
                 this.secondaryIndexes, null);
 
         indices.forEach(index -> {
             secondaryIndexes.put(index.getName().get(), new HashMap<>());
+            secondaryIndexesAliasToPath.put(index.getAlias().get(), index.getName().get());
             indexSpec.add(index);
         });
 
@@ -230,12 +233,13 @@ public class CorfuTable<K, V> implements
     @SuppressWarnings("unchecked")
     @Accessor
     public @Nonnull
-    <I extends Comparable<I>>
+    <I>
     Collection<Entry<K, V>> getByIndex(@Nonnull Index.Name indexName, I indexKey) {
         String secondaryIndex = indexName.get();
-        Map<Comparable, Map<K, V>> secondaryMap;
-        if (secondaryIndexes.containsKey(secondaryIndex) &&
-                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null)) {
+        Map<Object, Map<K, V>> secondaryMap;
+        if ((secondaryIndexes.containsKey(secondaryIndex) &&
+                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null)) || secondaryIndexesAliasToPath.containsKey(secondaryIndex)
+                && ((secondaryMap = secondaryIndexes.get(secondaryIndexesAliasToPath.get(secondaryIndex))) != null)) {
             // If secondary index exists and function for this index is not null
             Map<K, V> res = secondaryMap.get(indexKey);
 
@@ -259,17 +263,18 @@ public class CorfuTable<K, V> implements
      */
     @Accessor
     public @Nonnull
-    <I extends Comparable<I>>
+    <I>
     Collection<Map.Entry<K, V>> getByIndexAndFilter(@Nonnull Index.Name indexName,
                                                     @Nonnull Predicate<? super Entry<K, V>>
                                                             entryPredicate,
                                                     I indexKey) {
         Stream<Entry<K, V>> entryStream;
         String secondaryIndex = indexName.get();
-        Map<Comparable, Map<K, V>> secondaryMap;
+        Map<Object, Map<K, V>> secondaryMap;
 
         if (secondaryIndexes.containsKey(secondaryIndex) &&
-                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null)) {
+                ((secondaryMap = secondaryIndexes.get(secondaryIndex)) != null) || secondaryIndexesAliasToPath.containsKey(secondaryIndex)
+                && ((secondaryMap = secondaryIndexes.get(secondaryIndexesAliasToPath.get(secondaryIndex))) != null)) {
             if (secondaryMap.get(indexKey) == null) {
                 entryStream = Stream.empty();
             } else {
@@ -371,7 +376,7 @@ public class CorfuTable<K, V> implements
     @Override
     @Accessor
     public List<V> scanAndFilter(Predicate<? super V> valuePredicate) {
-        try (Stream<Map.Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
+        try (Stream<Entry<K, V>> entries = mainMap.unsafeEntryStream()) {
             return pool.submit(() -> entries
                     .map(Entry::getValue).filter(valuePredicate)
                     .collect(Collectors.toCollection(ArrayList::new))).join();
@@ -646,10 +651,10 @@ public class CorfuTable<K, V> implements
 
         try {
             // Map entry into secondary indexes
-            for (Index.Spec<K, V, ? extends Comparable> index : indexSpec) {
+            for (Index.Spec<K, V, ?> index : indexSpec) {
                 String indexName = index.getName().get();
-                Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
-                for (Comparable indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
+                Map<Object, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
+                for (Object indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
                     Map<K, V> slot = secondaryIndex.get(indexKey);
                     if (slot != null) {
                         slot.remove(key, value);
@@ -684,10 +689,10 @@ public class CorfuTable<K, V> implements
 
         try {
             // Map entry into secondary indexes
-            for (Index.Spec<K, V, ? extends Comparable> index : indexSpec) {
+            for (Index.Spec<K, V, ?> index : indexSpec) {
                 String indexName = index.getName().get();
-                Map<Comparable, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
-                for (Comparable indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
+                Map<Object, Map<K, V>> secondaryIndex = secondaryIndexes.get(indexName);
+                for (Object indexKey : index.getMultiValueIndexFunction().apply(key, value)) {
                     Map<K, V> slot = secondaryIndex.computeIfAbsent(indexKey, k -> new HashMap<>());
                     slot.put(key, value);
                 }

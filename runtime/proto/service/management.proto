@@ -29,13 +29,7 @@ message ReportFailureRequestMsg {
 }
 
 message ReportFailureResponseMsg {
-  enum Type {
-    INVALID = 0;
-    ACK = 1;
-    NACK = 2;
-  }
-
-  Type resp_type = 1;
+  bool handling_successful = 1;
 }
 
 message HealFailureRequestMsg {
@@ -44,13 +38,7 @@ message HealFailureRequestMsg {
 }
 
 message HealFailureResponseMsg {
-  enum Type {
-    INVALID = 0;
-    ACK = 1;
-    NACK  = 2;
-  }
-
-  Type resp_type = 1;
+  bool handling_successful = 1;
 }
 
 // A message container that encapsulates all the orchestrator's requests.
@@ -78,13 +66,7 @@ message BootstrapManagementRequestMsg {
 }
 
 message BootstrapManagementResponseMsg {
-  enum Type {
-    INVALID = 0;
-    ACK = 1;
-    NACK = 2;
-  }
-
-  Type resp_type = 1;
+  bool bootstrapped = 1;
 }
 
 message ManagementLayoutRequestMsg {

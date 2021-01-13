@@ -1,25 +1,33 @@
 package org.corfudb.infrastructure.log;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.AtomicDouble;
 import com.google.protobuf.AbstractMessage;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.corfudb.common.compression.Codec;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.ResourceQuota;
+import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
 import org.corfudb.infrastructure.log.LogFormat.DataRank;
 import org.corfudb.infrastructure.log.LogFormat.DataType;
 import org.corfudb.infrastructure.log.LogFormat.LogEntry;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.infrastructure.log.LogFormat.Metadata;
-import org.corfudb.infrastructure.ResourceQuota;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IMetadata;
@@ -98,7 +106,13 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     private ConcurrentMap<String, SegmentHandle> writeChannels;
     private final Set<FileChannel> channelsToSync;
     private final MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
-
+    private final Optional<AtomicDouble> logUnitSizeBytes;
+    private final Optional<AtomicLong> logUnitSizeEntries;
+    private final Optional<AtomicLong> currentTrimMark;
+    private final Optional<DistributionSummary> writeDistributionSummary;
+    private final Optional<DistributionSummary> readDistributionSummary;
+    private final Optional<AtomicLong> openSegments;
+    private final Optional<Timer> fsyncTimer;
     //=================Log Metadata=================
     // TODO(Maithem) this should effectively be final, but it is used
     // by a reset API that clears the state of this class, on reset
@@ -113,6 +127,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     // Resource quota to track the log size
     private ResourceQuota logSizeQuota;
 
+    private final String logUnitSizeMetricName = "logunit.size";
+    private final String logUnitTrimMarkMetricName = "logunit.trimmark";
     /**
      * Prevents corfu from reading and executing maintenance
      * operations (reset log unit and stream log compaction) in parallel
@@ -144,6 +160,31 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         long fileSystemCapacity = initStreamLogDirectory();
         logSizeLimit = (long) (fileSystemCapacity * logSizeLimitPercentage / 100.0);
 
+        String baseUnits = "bytes";
+        logUnitSizeBytes = MeterRegistryProvider.getInstance().map(registry ->
+                registry.gauge(logUnitSizeMetricName,
+                ImmutableList.of(Tag.of("unit", baseUnits)), new AtomicDouble(0)));
+        logUnitSizeEntries = MeterRegistryProvider.getInstance().map(registry ->
+                registry.gauge(logUnitSizeMetricName,
+                ImmutableList.of(Tag.of("unit", "entries")), new AtomicLong(0L)));
+        openSegments = MeterRegistryProvider.getInstance().map(registry ->
+                registry.gauge(logUnitSizeMetricName,
+                ImmutableList.of(Tag.of("unit", "segments")), new AtomicLong(0L)));
+        currentTrimMark = MeterRegistryProvider.getInstance().map(registry ->
+                registry.gauge(logUnitTrimMarkMetricName,
+                new AtomicLong(getTrimMark())));
+        writeDistributionSummary = MeterRegistryProvider.getInstance()
+                .map(registry -> DistributionSummary.builder("logunit.write.throughput")
+                        .baseUnit(baseUnits).register(registry));
+        readDistributionSummary = MeterRegistryProvider.getInstance()
+                .map(registry -> DistributionSummary.builder("logunit.read.throughput")
+                        .baseUnit(baseUnits).register(registry));
+
+        fsyncTimer = MeterRegistryProvider.getInstance()
+                .map(registry -> Timer.builder("logunit.fsync.timer")
+                        .publishPercentiles(0.50, 0.95, 0.99)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
         long initialLogSize = estimateSize(logDir);
         log.info("StreamLogFiles: {} size is {} bytes, limit {}", logDir, initialLogSize, logSizeLimit);
         logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
@@ -160,6 +201,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         if (Math.max(logMetadata.getGlobalTail(), 0L) < getTrimMark()) {
             syncTailSegment(getTrimMark() - 1);
         }
+
     }
 
     private long getStartingSegment() {
@@ -225,6 +267,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                         continue;
                     }
                     LogData logEntry = read(address);
+                    logUnitSizeEntries.ifPresent(AtomicLong::incrementAndGet);
+                    logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(logEntry.getSizeEstimate()));
                     logMetadata.update(logEntry, true);
                 }
             } finally {
@@ -350,9 +394,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         dataStore.updateStartingAddress(newStartingAddress);
         syncTailSegment(address);
         log.debug("Trimmed prefix, new starting address {}", newStartingAddress);
-
+        currentTrimMark.ifPresent(counter -> counter.set(newStartingAddress));
         // Trim address space maps.
         logMetadata.prefixTrim(address);
+        logUnitSizeEntries.ifPresent(counter -> counter.addAndGet(-address));
     }
 
     private boolean isTrimmed(long address) {
@@ -401,7 +446,10 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
     public void sync(boolean force) throws IOException {
         if (force) {
             for (FileChannel ch : channelsToSync) {
+                Optional<Timer.Sample> sample =
+                        MeterRegistryProvider.getInstance().map(Timer::start);
                 ch.force(true);
+                fsyncTimer.ifPresent(timer -> sample.ifPresent(s -> s.stop(timer)));
             }
         }
         log.trace("Sync'd {} channels", channelsToSync.size());
@@ -731,7 +779,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         try {
             ByteBuffer entryBuf = ByteBuffer.allocate(metaData.length);
             fileChannel.read(entryBuf, metaData.offset);
-            return getLogData(LogEntry.parseFrom(entryBuf.array()));
+            LogData logData = getLogData(LogEntry.parseFrom(entryBuf.array()));
+            readDistributionSummary.ifPresent(summary -> summary.record(metaData.length));
+            return logData;
         } catch (InvalidProtocolBufferException e) {
             String errorMessage = getDataCorruptionErrorMessage("Invalid entry",
                     fileChannel, segment.getFileName()
@@ -797,6 +847,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 readCh = getChannel(a, true);
 
                 SegmentHandle sh = new SegmentHandle(segment, writeCh, readCh, a);
+                openSegments.ifPresent(counter -> counter.incrementAndGet());
                 // The first time we open a file we should read to the end, to load the
                 // map of entries we already have.
                 // Once the segment address space is loaded, it should be ready to accept writes.
@@ -850,7 +901,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         return strUUIds;
     }
-
 
 
     private LogEntry getLogEntry(long address, LogData entry) {
@@ -944,7 +994,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         ByteBuffer allRecordsBuf = ByteBuffer.allocate(totalBytes);
-
+        long size = allRecordsBuf.remaining();
         try (MultiReadWriteLock.AutoCloseableLock ignored =
                      segmentLocks.acquireWriteLock(segment.getSegment())) {
             for (int ind = 0; ind < entryBuffs.size(); ind++) {
@@ -965,7 +1015,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
             logMetadata.update(entries);
         }
-
+        logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(size));
+        writeDistributionSummary.ifPresent(summary -> summary.record(size));
+        logUnitSizeEntries.ifPresent(counter -> counter.addAndGet(entries.size()));
         return recordsMap;
     }
 
@@ -1002,6 +1054,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         Metadata metadata = getMetadata(logEntry);
 
         ByteBuffer record = getByteBuffer(metadata, logEntry);
+        long size = record.remaining();
         long channelOffset;
 
         try (MultiReadWriteLock.AutoCloseableLock ignored =
@@ -1012,6 +1065,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             syncTailSegment(address);
             logMetadata.update(entry, false);
         }
+        logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(size));
+        writeDistributionSummary.ifPresent(summary -> summary.record(size));
+        logUnitSizeEntries.ifPresent(counter -> counter.incrementAndGet());
         return new AddressMetaData(metadata.getPayloadChecksum(), metadata.getLength(), channelOffset);
     }
 
@@ -1281,6 +1337,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
 
             closeSegment(sh);
+            openSegments.ifPresent(counter -> counter.decrementAndGet());
         }
     }
 
@@ -1327,6 +1384,8 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             }
         }
         logSizeQuota.release(freedBytes);
+        final long freedBytesFinal = freedBytes;
+        logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(-freedBytesFinal));
         log.info("deleteFilesMatchingFilter: completed, deleted {} files, freed {} bytes", numFiles, freedBytes);
     }
 
@@ -1359,10 +1418,20 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             logMetadata = new LogMetadata();
 
             logSizeQuota = new ResourceQuota("LogSizeQuota", logSizeLimit);
+            cleanUpGauges();
             log.info("reset: Completed");
         } finally {
             lock.unlock();
         }
+    }
+
+    private void cleanUpGauges() {
+        String unitTag = "unit";
+        ImmutableList.of(Tags.of(unitTag, "bytes"), Tags.of(unitTag, "entries"), Tags.of(unitTag, "segments"))
+                .forEach(tags -> MeterRegistryProvider
+                        .deregisterServerMeter(logUnitSizeMetricName, tags, Meter.Type.GAUGE));
+        MeterRegistryProvider.deregisterServerMeter(logUnitTrimMarkMetricName, Tags.empty(),
+                Meter.Type.GAUGE);
     }
 
     @VisibleForTesting

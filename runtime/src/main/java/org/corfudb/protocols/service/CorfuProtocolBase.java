@@ -2,8 +2,10 @@ package org.corfudb.protocols.service;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
+import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.proto.service.Base.HandshakeRequestMsg;
 import org.corfudb.runtime.proto.service.Base.HandshakeResponseMsg;
 import org.corfudb.runtime.proto.service.Base.PingRequestMsg;
@@ -21,8 +23,6 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
 
-import java.util.UUID;
-
 /**
  * This class provides methods for creating the Protobuf objects defined
  * in base.proto. These provide the interface for performing the RPCs
@@ -35,6 +35,8 @@ public class CorfuProtocolBase {
 
     /**
      * Returns a PING request message that can be sent by the client.
+     *
+     * @return   a RequestPayloadMsg containing a PING request
      */
     public static RequestPayloadMsg getPingRequestMsg() {
         return RequestPayloadMsg.newBuilder()
@@ -44,6 +46,8 @@ public class CorfuProtocolBase {
 
     /**
      * Returns a PING response message that can be sent by the server.
+     *
+     * @return   a ResponsePayloadMsg containing a PING response
      */
     public static ResponsePayloadMsg getPingResponseMsg() {
         return ResponsePayloadMsg.newBuilder()
@@ -53,6 +57,8 @@ public class CorfuProtocolBase {
 
     /**
      * Returns a RESTART request message that can be sent by the client.
+     *
+     * @return   a RequestPayloadMsg containing a RESTART request
      */
     public static RequestPayloadMsg getRestartRequestMsg() {
         return RequestPayloadMsg.newBuilder()
@@ -62,6 +68,8 @@ public class CorfuProtocolBase {
 
     /**
      * Returns a RESTART response message that can be sent by the server.
+     *
+     * @return   a ResponsePayloadMsg containing a RESTART response
      */
     public static ResponsePayloadMsg getRestartResponseMsg() {
         return ResponsePayloadMsg.newBuilder()
@@ -71,6 +79,8 @@ public class CorfuProtocolBase {
 
     /**
      * Returns a RESET request message that can be sent by the client.
+     *
+     * @return   a RequestPayloadMsg containing a RESET request
      */
     public static RequestPayloadMsg getResetRequestMsg() {
         return RequestPayloadMsg.newBuilder()
@@ -80,6 +90,8 @@ public class CorfuProtocolBase {
 
     /**
      * Returns a RESET response message that can be sent by the server.
+     *
+     * @return   a ResponsePayloadMsg containing a RESET response
      */
     public static ResponsePayloadMsg getResetResponseMsg() {
         return ResponsePayloadMsg.newBuilder()
@@ -91,6 +103,7 @@ public class CorfuProtocolBase {
      * Returns a SEAL request message that can be sent by the client.
      *
      * @param epoch   the SEAL epoch
+     * @return        a RequestPayloadMsg containing a SEAL request
      */
     public static RequestPayloadMsg getSealRequestMsg(long epoch) {
         return RequestPayloadMsg.newBuilder()
@@ -102,6 +115,8 @@ public class CorfuProtocolBase {
 
     /**
      * Returns a SEAL response message that can be sent by the server.
+     *
+     * @return   a ResponsePayloadMsg containing a SEAL response
      */
     public static ResponsePayloadMsg getSealResponseMsg() {
         return ResponsePayloadMsg.newBuilder()
@@ -111,6 +126,8 @@ public class CorfuProtocolBase {
 
     /**
      * Returns a VERSION request message that can be sent by the client.
+     *
+     * @return   a RequestPayloadMsg containing a VERSION request
      */
     public static RequestPayloadMsg getVersionRequestMsg() {
         return RequestPayloadMsg.newBuilder()
@@ -122,6 +139,7 @@ public class CorfuProtocolBase {
      * Returns a VERSION response message that can be sent by the server.
      *
      * @param vi   the version information of the server
+     * @return     a ResponsePayloadMsg containing a VERSION response
      */
     public static ResponsePayloadMsg getVersionResponseMsg(VersionInfo vi) {
         final Gson parser = new GsonBuilder().create();
@@ -134,6 +152,22 @@ public class CorfuProtocolBase {
                 .build();
     }
 
+    /**
+     * Returns a Java VersionInfo object from its Protobuf representation.
+     *
+     * @param msg   the Protobuf VERSION response message
+     * @return      a corresponding VersionInfo object from its JSON representation
+     * @throws      SerializerException if unable to deserialize the JSON payload
+     */
+    public static VersionInfo getVersionInfo(VersionResponseMsg msg) {
+        final Gson parser = new GsonBuilder().create();
+
+        try {
+            return parser.fromJson(msg.getJsonPayloadMsg(), VersionInfo.class);
+        } catch (Exception ex) {
+            throw new SerializerException("Unexpected error while deserializing VersionInfo JSON", ex);
+        }
+    }
 
     /**
      * Returns a HANDSHAKE request message that is sent by the client
@@ -141,6 +175,7 @@ public class CorfuProtocolBase {
      *
      * @param clientId   the client id
      * @param nodeId     the expected id of the server
+     * @return           a RequestPayloadMsg containing a HANDSHAKE request
      */
     public static RequestPayloadMsg getHandshakeRequestMsg(UUID clientId, UUID nodeId) {
         return RequestPayloadMsg.newBuilder()
@@ -157,6 +192,7 @@ public class CorfuProtocolBase {
      *
      * @param nodeId         the server id
      * @param corfuVersion   a string containing corfu version information
+     * @return               a ResponsePayloadMsg containing a HANDSHAKE response
      */
     public static ResponsePayloadMsg getHandshakeResponseMsg(UUID nodeId, String corfuVersion) {
         return ResponsePayloadMsg.newBuilder()

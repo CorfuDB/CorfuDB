@@ -1,24 +1,24 @@
 package org.corfudb.runtime.view;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.google.common.collect.Lists;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Created by mwei on 12/10/15.
@@ -27,13 +27,10 @@ import java.util.UUID;
 public class SequencerView extends AbstractView {
 
     // Timers used for measuring sequencer operations
-    private Timer sequencerNextOneStream;
-    private Timer sequencerQuery;
-    private Timer sequencerNextMultipleStream;
-    private Timer sequencerDeprecatedNextOneStream;
-    private Timer sequencerDeprecatedNextMultipleStream;
-    private Timer sequencerTrimCache;
-    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+    private Optional<Timer> queryRateTimer;
+    private Optional<Timer> nextRateTimer;
+    private Optional<Timer> resolutionRateTimer;
+    private Optional<Timer> streamAddressRangeTimer;
 
     public SequencerView(CorfuRuntime runtime) {
         super(runtime);
@@ -46,18 +43,36 @@ public class SequencerView extends AbstractView {
      * Set up timers for different sequencer request from the client perspective
      */
     private void setupTimers() {
-        sequencerQuery = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "query");
-        sequencerTrimCache = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "trim-cache");
-        sequencerNextOneStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "particular-next");
-        sequencerNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "multiple-next");
-        sequencerDeprecatedNextOneStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "deprecated-particular-next");
-        sequencerDeprecatedNextMultipleStream = metricRegistry.timer(CorfuComponent.CLIENT_SEQUENCER +
-                "deprecated-multiple-next");
+        Optional<MeterRegistry> metricsRegistry = runtime.getRegistry();
+        double [] percentiles = new double[] {0.50, 0.95, 0.99};
+        queryRateTimer = metricsRegistry
+                .map(registry ->
+                        Timer.builder("sequencer.query")
+                                .publishPercentiles(percentiles)
+                                .publishPercentileHistogram(true)
+                                .register(registry)
+                );
+
+        nextRateTimer = metricsRegistry
+                .map(registry ->
+                        Timer.builder("sequencer.next")
+                                .publishPercentiles(percentiles)
+                                .publishPercentileHistogram(true)
+                                .register(registry)
+                );
+
+        resolutionRateTimer = metricsRegistry
+                .map(registry -> Timer.builder("sequencer.tx_resolution")
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .register(registry)
+                );
+
+        streamAddressRangeTimer = metricsRegistry.map(registry ->
+                Timer.builder("sequencer.stream_address_range")
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
     }
 
     /**
@@ -68,7 +83,7 @@ public class SequencerView extends AbstractView {
      * @return the global tail or a list of tails
      */
     public TokenResponse query(UUID... streamIds) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)){
+        Supplier<TokenResponse> querySupplier = () -> {
             if (streamIds.length == 0) {
                 return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                         .nextToken(Collections.emptyList(), 0)));
@@ -76,7 +91,9 @@ public class SequencerView extends AbstractView {
                 return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                         .nextToken(Arrays.asList(streamIds), 0)));
             }
-        }
+        };
+        return queryRateTimer.map(timer -> timer.record(querySupplier)).orElseGet(() -> querySupplier.get());
+
     }
 
     /**
@@ -86,10 +103,11 @@ public class SequencerView extends AbstractView {
      * @return the stream tail
      */
     public long query(UUID streamId) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerQuery)) {
-                return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+        Supplier<Long> tailSupplier = () ->
+                layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                         .nextToken(Arrays.asList(streamId), 0))).getStreamTail(streamId);
-        }
+
+        return queryRateTimer.map(timer -> timer.record(tailSupplier)).orElseGet(() -> tailSupplier.get());
     }
 
     /**
@@ -98,11 +116,11 @@ public class SequencerView extends AbstractView {
      * @param streamIds The stream IDs to retrieve from.
      * @return The first token retrieved.
      */
-    public TokenResponse next(UUID ... streamIds) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {
-            return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
-                    .nextToken(Arrays.asList(streamIds), 1)));
-        }
+    public TokenResponse next(UUID... streamIds) {
+        Supplier<TokenResponse> tokenSupplier = () ->
+                layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                        .nextToken(Arrays.asList(streamIds), 1)));
+        return nextRateTimer.map(timer -> timer.record(tokenSupplier)).orElseGet(() -> tokenSupplier.get());
     }
 
     /**
@@ -122,27 +140,27 @@ public class SequencerView extends AbstractView {
      * @return address space for each stream in the request.
      */
     public Map<UUID, StreamAddressSpace> getStreamsAddressSpace(List<StreamAddressRange> streamsAddressesRange) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextOneStream)) {
-            StreamsAddressResponse streamsAddressResponse = layoutHelper(e ->
-                    CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
-                            .getStreamsAddressSpace(streamsAddressesRange)));
-            return streamsAddressResponse.getAddressMap();
-        }
+        Supplier<Map<UUID, StreamAddressSpace>> streamsAddressResponseSupplier = () ->
+                layoutHelper(e ->
+                        CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                                .getStreamsAddressSpace(streamsAddressesRange)).getAddressMap());
+
+        return streamAddressRangeTimer.map(timer -> timer.record(streamsAddressResponseSupplier))
+                .orElseGet(() -> streamsAddressResponseSupplier.get());
     }
 
     /**
-     *
      * Acquire a token for a number of streams if there are no conflicts.
      *
      * @param conflictInfo transaction conflict info
-     * @param streamIds streams to acquire the token for
+     * @param streamIds    streams to acquire the token for
      * @return First token to be written for the streams if there are no conflicts
      */
-    public TokenResponse next(TxResolutionInfo conflictInfo, UUID ... streamIds) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerNextMultipleStream)) {
-            return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
-                    .nextToken(Arrays.asList(streamIds), 1, conflictInfo)));
-        }
+    public TokenResponse next(TxResolutionInfo conflictInfo, UUID... streamIds) {
+        Supplier<TokenResponse> tokenSupplier = () ->
+                layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                        .nextToken(Arrays.asList(streamIds), 1, conflictInfo)));
+        return resolutionRateTimer.map(timer -> timer.record(tokenSupplier)).orElseGet(() -> tokenSupplier.get());
     }
 
     /**
@@ -158,24 +176,19 @@ public class SequencerView extends AbstractView {
      */
     @Deprecated
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerDeprecatedNextOneStream)){
-            return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
-                    .nextToken(Lists.newArrayList(streamIDs), numTokens)));
-        }
+        return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                .nextToken(Lists.newArrayList(streamIDs), numTokens)));
     }
 
     @Deprecated
     public TokenResponse nextToken(Set<UUID> streamIDs, int numTokens,
                                    TxResolutionInfo conflictInfo) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerDeprecatedNextMultipleStream)){
-            return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
-                    .nextToken(Lists.newArrayList(streamIDs), numTokens, conflictInfo)));
-        }
+
+        return layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
+                .nextToken(Lists.newArrayList(streamIDs), numTokens, conflictInfo)));
     }
 
     public void trimCache(long address) {
-        try (Timer.Context context = MetricsUtils.getConditionalContext(sequencerTrimCache)){
-            runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);
-        }
+        runtime.getLayoutView().getRuntimeLayout().getPrimarySequencerClient().trimCache(address);
     }
 }

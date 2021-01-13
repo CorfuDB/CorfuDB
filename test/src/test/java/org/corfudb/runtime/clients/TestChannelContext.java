@@ -2,9 +2,8 @@ package org.corfudb.runtime.clients;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.Unpooled;
+import com.google.protobuf.TextFormat;
+import io.netty.buffer.*;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
@@ -16,8 +15,12 @@ import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.CorfuProtocolCommon.MessageMarker;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
+import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -49,12 +52,36 @@ public class TestChannelContext implements ChannelHandlerContext {
             try {
                 Object origCapture = orig; //for debugging
                 if (o instanceof ByteBuf) {
-                    CorfuMsg m = CorfuMsg.deserialize((ByteBuf) o);
-                    hmf.handleMessage(m);
-                    ((ByteBuf) o).release();
+                    byte msgMark = ((ByteBuf) o).readByte();
+
+                    switch (MessageMarker.typeMap.get(msgMark)) {
+                        case LEGACY_MSG_MARK:
+                            CorfuMsg m = CorfuMsg.deserialize((ByteBuf) o);
+                            hmf.handleMessage(m);
+                            ((ByteBuf) o).release();
+                            break;
+                        case PROTO_REQUEST_MSG_MARK:
+                            try (ByteBufInputStream msgInputStream = new ByteBufInputStream((ByteBuf) o)) {
+                                RequestMsg requestMsg = RequestMsg.parseFrom(msgInputStream);
+                                hmf.handleMessage(requestMsg);
+                                ((ByteBuf) o).release();
+                            }
+
+                            break;
+                        case PROTO_RESPONSE_MSG_MARK:
+                            try (ByteBufInputStream msgInputStream = new ByteBufInputStream((ByteBuf) o)) {
+                                ResponseMsg responseMsg = ResponseMsg.parseFrom(msgInputStream);
+                                hmf.handleMessage(responseMsg);
+                                ((ByteBuf) o).release();
+                            }
+
+                            break;
+                        default:
+                            throw new IllegalStateException("decode: Received an incorrectly marked message.");
+                    }
                 }
             } catch (Exception e) {
-                 log.warn("Error during deserialization", e);
+                log.warn("Error during deserialization", e);
             }
         }, msgExecutorService);
     }
@@ -228,15 +255,40 @@ public class TestChannelContext implements ChannelHandlerContext {
     }
 
     public ByteBuf simulateSerialization(Object message) {
+        ByteBuf oBuf = Unpooled.buffer();
+
         if (message instanceof CorfuMsg) {
-        /* simulate serialization/deserialization */
-            ByteBuf oBuf = Unpooled.buffer();
-            ((CorfuMsg) message).serialize(oBuf);
+            CorfuMsg corfuMsg = (CorfuMsg) message;
+            // Marks the Corfu msg as legacy.
+            oBuf.writeByte(MessageMarker.LEGACY_MSG_MARK.asByte());
+            corfuMsg.serialize(oBuf);
             oBuf.resetReaderIndex();
-            return oBuf;
+        } else if (message instanceof RequestMsg) {
+            RequestMsg requestMsg = (RequestMsg) message;
+            try (ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(oBuf)) {
+                // Marks the Corfu msg as a protobuf request.
+                requestOutputStream.writeByte(MessageMarker.PROTO_REQUEST_MSG_MARK.asByte());
+                requestMsg.writeTo(requestOutputStream);
+            } catch (IOException e) {
+                log.error("simulateSerialization: Exception occurred when encoding request {}, caused by {}",
+                        TextFormat.shortDebugString(requestMsg), e.getCause(), e);
+            }
+        } else if (message instanceof ResponseMsg) {
+            ResponseMsg responseMsg = (ResponseMsg) message;
+            try (ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(oBuf)) {
+                // Marks the Corfu msg as a protobuf response.
+                requestOutputStream.writeByte(MessageMarker.PROTO_RESPONSE_MSG_MARK.asByte());
+                responseMsg.writeTo(requestOutputStream);
+            } catch (IOException e) {
+                log.error("simulateSerialization: Exception occurred when encoding response {}, caused by {}",
+                        TextFormat.shortDebugString(responseMsg), e.getCause(), e);
+            }
+        } else {
+            throw new UnsupportedOperationException("Test framework does not support serialization of object type "
+                    + message.getClass());
         }
-        throw new UnsupportedOperationException("Test framework does not support serialization of object type "
-                + message.getClass());
+
+        return oBuf;
     }
 
     @Override

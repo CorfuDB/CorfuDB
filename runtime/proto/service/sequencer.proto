@@ -97,13 +97,7 @@ message BootstrapSequencerRequestMsg {
 }
 
 message BootstrapSequencerResponseMsg {
-  enum Type {
-    INVALID = 0;
-    ACK = 1;
-    NACK = 2;
-  }
-
-  Type resp_type = 1;
+  bool is_bootstrapped = 1;
 }
 
 message SequencerTrimRequestMsg {
@@ -144,6 +138,7 @@ message StreamsAddressRequestMsg {
  * (composed of the addresses of this stream and trim mark)
  */
 message StreamsAddressResponseMsg {
-  uint64 log_tail = 1;
-  repeated UuidToStreamAddressSpacePairMsg address_map = 2;
+  int64 log_tail = 1;
+  int64 epoch = 2;
+  repeated UuidToStreamAddressSpacePairMsg address_map = 3;
 }

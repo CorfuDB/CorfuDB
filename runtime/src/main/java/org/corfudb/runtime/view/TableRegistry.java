@@ -284,6 +284,16 @@ public class TableRegistry {
     }
 
     /**
+     * Fully qualified table name created to produce the stream uuid.
+     *
+     * @param tableName TableName of the table.
+     * @return Fully qualified table name.
+     */
+    public static String getFullyQualifiedTableName(TableName tableName) {
+        return getFullyQualifiedTableName(tableName.getNamespace(), tableName.getTableName());
+    }
+
+    /**
      * Adds the schema to the class map to enable serialization of this table data.
      *
      * @param msg Default message of this protobuf message.
@@ -350,6 +360,9 @@ public class TableRegistry {
         Table<K, V, M> table = new Table<>(
                 namespace,
                 fullyQualifiedTableName,
+                kClass,
+                vClass,
+                mClass,
                 defaultValueMessage,
                 defaultMetadataMessage,
                 this.runtime,
@@ -432,6 +445,15 @@ public class TableRegistry {
                 .stream()
                 .filter(tableName -> namespace == null || tableName.getNamespace().equals(namespace))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Lists all tables.
+     *
+     * @return Collection of tables.
+     */
+    public Collection<TableName> listTables() {
+        return registryTable.keySet();
     }
 
     /**

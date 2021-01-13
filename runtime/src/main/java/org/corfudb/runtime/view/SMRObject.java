@@ -14,6 +14,9 @@ import org.corfudb.runtime.object.ICorfuSMR;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -51,6 +54,8 @@ public class SMRObject<T extends ICorfuSMR<T>> {
     @NonNull
     private final Object[] arguments;
 
+    @NonNull
+    private final Set<UUID> streamTags;
 
     public static class Builder<T extends ICorfuSMR<T>> {
 
@@ -63,6 +68,8 @@ public class SMRObject<T extends ICorfuSMR<T>> {
         private CorfuRuntime runtime;
         @Getter
         public UUID streamID;
+        @Getter
+        private Set<UUID> streamTags = new HashSet<>();
 
         private void verify() {
             if (streamName != null && !UUID.nameUUIDFromBytes(streamName.getBytes()).equals(streamID)) {
@@ -107,13 +114,23 @@ public class SMRObject<T extends ICorfuSMR<T>> {
             return this;
         }
 
+        public SMRObject.Builder<T> setStreamTags(Set<UUID> tags) {
+            this.streamTags = new HashSet<>(tags);
+            return this;
+        }
+
+        public SMRObject.Builder<T> setStreamTags(UUID... tags) {
+            this.streamTags = new HashSet<>(Arrays.asList(tags));
+            return this;
+        }
 
         public SMRObject<T> build() {
             if (streamID == null && streamName != null) {
                 streamID = UUID.nameUUIDFromBytes(streamName.getBytes());
             }
             verify();
-            return new SMRObject<>(runtime, type, streamID, streamName, serializer, option, arguments);
+            return new SMRObject<>(runtime, type, streamID, streamName,
+                serializer, option, arguments, streamTags);
         }
 
         public T open() {

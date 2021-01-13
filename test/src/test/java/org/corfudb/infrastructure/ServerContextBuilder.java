@@ -97,7 +97,6 @@ public class ServerContextBuilder {
         // Provide the server with event loop groups
         if (implementation.equals("local")) {
             builder.put("client", TestThreadGroups.NETTY_CLIENT_GROUP.get());
-            builder.put("boss", TestThreadGroups.NETTY_BOSS_GROUP.get());
             builder.put("worker", TestThreadGroups.NETTY_CLIENT_GROUP.get());
         }
         ServerContext sc = new ServerContext(builder.build());

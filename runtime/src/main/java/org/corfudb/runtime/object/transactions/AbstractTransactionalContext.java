@@ -2,7 +2,15 @@ package org.corfudb.runtime.object.transactions;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import javax.annotation.Nullable;
 import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -10,6 +18,7 @@ import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -23,16 +32,6 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
-
-import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Represents a transactional context. Transactional contexts
@@ -124,6 +123,20 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final AbstractTransactionalContext parentContext;
 
+    /**
+     * CorfuStore Transaction context to allow nesting.
+     */
+    @Getter
+    @Setter
+    private TxnContext txnContext;
+
+    /**
+     * To help triage transactions that are started but not ended, track the stack trace of the caller.
+     */
+    @Setter
+    @Getter
+    private StackTraceElement[] beginTxnStackTrace;
+
     @Getter
     private final WriteSetInfo writeSetInfo = new WriteSetInfo();
 
@@ -156,7 +169,7 @@ public abstract class AbstractTransactionalContext implements
     private final Timer.Context txOpDurationContext;
 
     AbstractTransactionalContext(Transaction transaction) {
-        transactionID = UUID.randomUUID();
+        transactionID = Utils.genPseudorandomUUID();
         this.transaction = transaction;
 
         startTime = System.currentTimeMillis();
@@ -250,6 +263,14 @@ public abstract class AbstractTransactionalContext implements
     public abstract void logUpdate(UUID streamId, SMREntry updateEntry);
 
     /**
+     * Log a list of SMR updates to the specified Corfu stream log
+     *
+     * @param streamId        The id of the stream which the SMR updates are applied to
+     * @param updateEntries   The entries which we are writing to the log
+     */
+    public abstract void logUpdate(UUID streamId, List<SMREntry> updateEntries);
+
+    /**
      * Add a given transaction to this transactional context, merging
      * the read and write sets.
      *
@@ -329,7 +350,7 @@ public abstract class AbstractTransactionalContext implements
      * @param conflictObjects The fine-grained conflict information, if
      *                        available.
      */
-    public void addToReadSet(ICorfuSMRProxyInternal proxy, Object[] conflictObjects) {
+    public <T extends ICorfuSMR<T>> void addToReadSet(ICorfuSMRProxyInternal<T> proxy, Object[] conflictObjects) {
         getReadSetInfo().add(proxy, conflictObjects);
     }
 
@@ -351,13 +372,17 @@ public abstract class AbstractTransactionalContext implements
      * @return a synthetic "address" in the write-set, to be used for
      *     checking upcall results
      */
-    long addToWriteSet(ICorfuSMRProxyInternal proxy, SMREntry updateEntry, Object[]
-            conflictObjects) {
+    <T extends ICorfuSMR<T>> long addToWriteSet(ICorfuSMRProxyInternal<T> proxy,
+                                                SMREntry updateEntry, Object[] conflictObjects) {
         return getWriteSetInfo().add(proxy, updateEntry, conflictObjects);
     }
 
     void addToWriteSet(UUID streamId, SMREntry updateEntry) {
         getWriteSetInfo().add(streamId, updateEntry);
+    }
+
+    public void addToWriteSet(UUID streamId, List<SMREntry> updateEntries) {
+        getWriteSetInfo().add(streamId, updateEntries);
     }
 
     void mergeWriteSetInto(WriteSetInfo other) {

@@ -93,7 +93,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         corfuRuntime = CorfuRuntime.fromParameters(CorfuRuntime.CorfuRuntimeParameters.builder().build())
                 .parseConfigurationString("localhost:9000")
                 .connect();
-        corfuStore = new CorfuStore(corfuRuntime, false);
+        corfuStore = new CorfuStore(corfuRuntime);
         CorfuStoreMetadata.Timestamp ts = corfuStore.getTimestamp();
         try {
             Table<Messages.Uuid, Messages.Uuid, Messages.Uuid> table = corfuStore.openTable(
@@ -199,7 +199,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         for (int i = 0; i < activeNodeNames.size(); i++) {
             log.info("Active Cluster Name {}, IpAddress {}", activeNodeNames.get(i), activeNodeHosts.get(i));
             NodeDescriptor nodeInfo = new NodeDescriptor(activeNodeHosts.get(i),
-                    activeLogReplicationPort, ACTIVE_CLUSTER_NAME, UUID.fromString(activeNodeIds.get(i)));
+                    activeLogReplicationPort, ACTIVE_CLUSTER_NAME, UUID.fromString(activeNodeIds.get(i)), UUID.fromString(standbyNodeIds.get(i)));
             activeCluster.getNodesDescriptors().add(nodeInfo);
         }
 
@@ -210,7 +210,7 @@ public class DefaultClusterManager extends CorfuReplicationClusterManagerBaseAda
         for (int i = 0; i < standbyNodeNames.size(); i++) {
             log.info("Standby Cluster Name {}, IpAddress {}", standbyNodeNames.get(i), standbyNodeHosts.get(i));
             NodeDescriptor nodeInfo = new NodeDescriptor(standbyNodeHosts.get(i),
-                    standbyLogReplicationPort, STANDBY_CLUSTER_NAME, UUID.fromString(standbyNodeIds.get(i)));
+                    standbyLogReplicationPort, STANDBY_CLUSTER_NAME, UUID.fromString(standbyNodeIds.get(i)), UUID.fromString(standbyNodeIds.get(i)));
             standbySites.get(STANDBY_CLUSTER_NAME).getNodesDescriptors().add(nodeInfo);
         }
 

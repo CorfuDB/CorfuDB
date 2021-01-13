@@ -14,6 +14,7 @@ import com.google.gson.JsonObject;
 public class TableMetrics {
     private final String tableName;
     private final Counter numPuts;
+    private final Counter numEnqueues;
     private final Counter numMerges;
     private final Counter numTouches;
     private final Counter numDeletes;
@@ -22,6 +23,8 @@ public class TableMetrics {
     private final Counter numCounts;
     private final Counter numKeySets;
     private final Counter numScans;
+    private final Counter numEntryLists;
+    private final Counter numJoins;
     private final Counter numGetByIndex;
     private final Counter numTxnAborts;
 
@@ -31,6 +34,10 @@ public class TableMetrics {
 
     public void incNumPuts() {
         numPuts.inc();
+    }
+
+    public void incNumEnqueues() {
+        numEnqueues.inc();
     }
 
     public void incNumMerges() {
@@ -65,6 +72,14 @@ public class TableMetrics {
         numScans.inc();
     }
 
+    public void incNumEntryLists() {
+        numEntryLists.inc();
+    }
+
+    public void incNumJoins() {
+        numJoins.inc();
+    }
+
     public void incNumGetByIndexes() {
         numGetByIndex.inc();
     }
@@ -91,6 +106,7 @@ public class TableMetrics {
     TableMetrics(String fullTableName, MetricRegistry registry) {
         this.tableName = fullTableName;
         this.numPuts = registry.counter(fullTableName+"_numPuts");
+        this.numEnqueues = registry.counter(fullTableName+"_numEnqueues");
         this.numMerges = registry.counter(fullTableName+"_numMerges");
         this.numTouches = registry.counter(fullTableName+"_numTouches");
         this.numDeletes = registry.counter(fullTableName+"_numDeletes");
@@ -99,6 +115,8 @@ public class TableMetrics {
         this.numCounts = registry.counter(fullTableName+"_numCounts");
         this.numKeySets = registry.counter(fullTableName+"_numKeySets");
         this.numScans = registry.counter(fullTableName+"_numScans");
+        this.numEntryLists = registry.counter(fullTableName+"_numEntryLists");
+        this.numJoins = registry.counter(fullTableName+"_numJoins");
         this.numGetByIndex = registry.counter(fullTableName+"_numGetByIndex");
         this.numTxnAborts = registry.counter(fullTableName+"_numTxnAborts");
 
@@ -115,6 +133,7 @@ public class TableMetrics {
         JsonObject json = new JsonObject();
         json.addProperty("tableName", tableName);
         json.addProperty("numPuts", numPuts.getCount());
+        json.addProperty("numEnqueues", numEnqueues.getCount());
         json.addProperty("numMerges", numMerges.getCount());
         json.addProperty("numTouches", numTouches.getCount());
         json.addProperty("numGets", numGets.getCount());
@@ -124,6 +143,8 @@ public class TableMetrics {
         json.addProperty("numKeySets", numKeySets.getCount());
         json.addProperty("numGetByIndex", numGetByIndex.getCount());
         json.addProperty("numScans", numScans.getCount());
+        json.addProperty("numEntryLists", numEntryLists.getCount());
+        json.addProperty("numJoins", numJoins.getCount());
         json.addProperty("numTxnAborts", numTxnAborts.getCount());
         json.add("writeOnlyTxTimes", writeOnlyTxnTimes.asJsonObject());
         json.add("readOnlyTxTimes", readOnlyTxnTimes.asJsonObject());
