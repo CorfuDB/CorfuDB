@@ -1,5 +1,8 @@
 package org.corfudb.infrastructure.log;
 
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
+
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
@@ -15,33 +18,6 @@ import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.Unpooled;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
-import org.corfudb.common.compression.Codec;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.infrastructure.ResourceQuota;
-import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
-import org.corfudb.infrastructure.log.LogFormat.DataRank;
-import org.corfudb.infrastructure.log.LogFormat.DataType;
-import org.corfudb.infrastructure.log.LogFormat.LogEntry;
-import org.corfudb.infrastructure.log.LogFormat.LogHeader;
-import org.corfudb.infrastructure.log.LogFormat.Metadata;
-import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsResponse;
-import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.LogUnitException;
-import org.corfudb.runtime.exceptions.OverwriteCause;
-import org.corfudb.runtime.exceptions.OverwriteException;
-import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-
-import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.FileNotFoundException;
@@ -75,8 +51,30 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
-
-import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
+import javax.annotation.Nullable;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
+import org.corfudb.common.compression.Codec;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.infrastructure.ResourceQuota;
+import org.corfudb.infrastructure.ServerContext;
+import org.corfudb.infrastructure.log.LogFormat.CheckpointEntryType;
+import org.corfudb.infrastructure.log.LogFormat.DataType;
+import org.corfudb.infrastructure.log.LogFormat.LogEntry;
+import org.corfudb.infrastructure.log.LogFormat.LogHeader;
+import org.corfudb.infrastructure.log.LogFormat.Metadata;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
+import org.corfudb.protocols.wireprotocol.TailsResponse;
+import org.corfudb.runtime.exceptions.DataCorruptionException;
+import org.corfudb.runtime.exceptions.LogUnitException;
+import org.corfudb.runtime.exceptions.OverwriteCause;
+import org.corfudb.runtime.exceptions.OverwriteException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 /**
  * This class implements the StreamLog by persisting the stream log as records in multiple files.
@@ -87,7 +85,7 @@ import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
  */
 
 @Slf4j
-public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpace {
+public class StreamLogFiles implements StreamLog {
 
     public static final int METADATA_SIZE = Metadata.newBuilder()
             .setLengthChecksum(-1)
@@ -509,7 +507,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         logData.setBackpointerMap(getUUIDLongMap(entry.getBackpointersMap()));
         logData.setGlobalAddress(entry.getGlobalAddress());
-        logData.setRank(createDataRank(entry));
 
         if (entry.hasThreadId()) {
             logData.setThreadId(entry.getThreadId());
@@ -914,9 +911,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
                 .addAllStreams(getStrUUID(entry.getStreams()))
                 .putAllBackpointers(getStrLongMap(entry.getBackpointerMap()));
 
-        Optional<DataRank> rank = createProtobufsDataRank(entry);
-        rank.ifPresent(logEntryBuilder::setRank);
-
         if (entry.getClientId() != null && entry.getThreadId() != null) {
             logEntryBuilder.setClientIdMostSignificant(
                     entry.getClientId().getMostSignificantBits());
@@ -942,29 +936,6 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
         }
 
         return logEntryBuilder.build();
-    }
-
-    private Optional<DataRank> createProtobufsDataRank(IMetadata entry) {
-        IMetadata.DataRank rank = entry.getRank();
-        if (rank == null) {
-            return Optional.empty();
-        }
-        DataRank result = DataRank.newBuilder()
-                .setRank(rank.getRank())
-                .setUuidLeastSignificant(rank.getUuid().getLeastSignificantBits())
-                .setUuidMostSignificant(rank.getUuid().getMostSignificantBits())
-                .build();
-        return Optional.of(result);
-    }
-
-    @Nullable
-    private IMetadata.DataRank createDataRank(LogEntry entity) {
-        if (!entity.hasRank()) {
-            return null;
-        }
-        DataRank rank = entity.getRank();
-        return new IMetadata.DataRank(rank.getRank(),
-                new UUID(rank.getUuidMostSignificant(), rank.getUuidLeastSignificant()));
     }
 
     /**
@@ -1243,16 +1214,9 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
             // (probably need a faster way to do this - high watermark?)
             if (segment.getKnownAddresses().containsKey(address)
                     || segment.getTrimmedAddresses().contains(address)) {
-                if (entry.getRank() == null) {
-                    OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
-                    log.trace("Disk_write[{}]: overwritten exception, cause: {}", address, overwriteCause);
-                    throw new OverwriteException(overwriteCause);
-                } else {
-                    // the method below might throw DataOutrankedException or ValueAdoptedException
-                    assertAppendPermittedUnsafe(address, entry);
-                    AddressMetaData addressMetaData = writeRecord(segment, address, entry);
-                    segment.getKnownAddresses().put(address, addressMetaData);
-                }
+                OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
+                log.trace("Disk_write[{}]: overwritten exception, cause: {}", address, overwriteCause);
+                throw new OverwriteException(overwriteCause);
             } else {
                 AddressMetaData addressMetaData = writeRecord(segment, address, entry);
                 segment.getKnownAddresses().put(address, addressMetaData);

@@ -26,7 +26,7 @@ import org.corfudb.runtime.view.Address;
  * Created by maithem on 7/21/16.
  */
 @Slf4j
-public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressSpace {
+public class InMemoryStreamLog implements StreamLog {
 
     private Map<Long, LogData> logCache;
     private final Set<Long> trimmed;
@@ -64,7 +64,9 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
         }
 
         if (logCache.containsKey(address)) {
-            throwLogUnitExceptionsIfNecessary(address, entry);
+            OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
+            log.trace("throwLogUnitExceptionsIfNecessary: overwritten exception for address {}, cause: {}", address, overwriteCause);
+            throw new OverwriteException(overwriteCause);
         }
         logCache.put(address, entry);
         logMetadata.update(entry, false);
@@ -132,17 +134,6 @@ public class InMemoryStreamLog implements StreamLog, StreamLogWithRankedAddressS
     @Override
     public long getTrimMark() {
         return startingAddress;
-    }
-
-    private void throwLogUnitExceptionsIfNecessary(long address, LogData entry) {
-        if (entry.getRank() == null) {
-            OverwriteCause overwriteCause = getOverwriteCauseForAddress(address, entry);
-            log.trace("throwLogUnitExceptionsIfNecessary: overwritten exception for address {}, cause: {}", address, overwriteCause);
-            throw new OverwriteException(overwriteCause);
-        } else {
-            // the method below might throw DataOutrankedException or ValueAdoptedException
-            assertAppendPermittedUnsafe(address, entry);
-        }
     }
 
     /**
