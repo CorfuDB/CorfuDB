@@ -88,12 +88,12 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
             if (Double.isFinite(mean)) {
                 builder.add(new Field("mean", mean));
             }
-            return Stream.of(influxLineProtocol(timer.getId(), "histogram", builder.build()));
+            return Stream.of(influxLineProtocol(timer.getId(), "function_timer", builder.build()));
         }
         return Stream.empty();
     }
 
-    private Stream<String> writeTimer(Timer timer) {
+    Stream<String> writeTimer(Timer timer) {
         final Stream<Field> fields = Stream.of(
                 new Field("sum", timer.totalTime(getBaseTimeUnit())),
                 new Field("count", timer.count()),
@@ -101,10 +101,10 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
                 new Field("upper", timer.max(getBaseTimeUnit()))
         );
 
-        return Stream.of(influxLineProtocol(timer.getId(), "histogram", fields));
+        return Stream.of(influxLineProtocol(timer.getId(), "timer", fields));
     }
 
-    private Stream<String> writeSummary(DistributionSummary summary) {
+    Stream<String> writeSummary(DistributionSummary summary) {
         final Stream<Field> fields = Stream.of(
                 new Field("sum", summary.totalAmount()),
                 new Field("count", summary.count()),
@@ -112,7 +112,7 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
                 new Field("upper", summary.max())
         );
 
-        return Stream.of(influxLineProtocol(summary.getId(), "histogram", fields));
+        return Stream.of(influxLineProtocol(summary.getId(), "summary", fields));
     }
 
     private String influxLineProtocol(Meter.Id id, String metricType, Stream<Field> fields) {
