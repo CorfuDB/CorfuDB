@@ -285,7 +285,7 @@ public class CorfuRuntime {
             private MetricRegistry metricRegistry = null;
             private MicroMeterRuntimeConfig microMeterRuntimeConfig =
                     new MicroMeterRuntimeConfig(true,
-                    "org.corfudb.client.metricsdata", Duration.ofSeconds(1));
+                    "org.corfudb.client.metricsdata", Duration.ofMinutes(1));
 
             public CorfuRuntimeParametersBuilder configureMicroMeterMetrics(
                     MicroMeterRuntimeConfig microMeterRuntimeConfig) {

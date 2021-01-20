@@ -31,7 +31,7 @@
         </encoder>
     </appender>
 
-    <property name="CORFU_METRICS_DIRECTORY" value="/tmp/client_metrics" />
+    <property name="CORFU_METRICS_DIRECTORY" value="/tmp/corfu_metrics" />
 
     <appender name="MetricsRollingFileCorfu" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${CORFU_METRICS_DIRECTORY}/corfu-metrics.log</file>
@@ -70,14 +70,14 @@
         <!--<appender-ref ref="MetricsRollingFile" />-->
     </logger>
 
-    <logger name="org.corfudb.client.metricsdata" level="DEBUG" additivity="false">
+    <logger name="org.corfudb.metricsdata1" level="DEBUG" additivity="false">
         <appender-ref ref="AsyncMetricsRollingFileCorfu" />
     </logger>
 
 
     <root level="INFO">
         <!--<appender-ref ref="FILE" />-->
-        <appender-ref ref="STDOUT" />
+        <!--<appender-ref ref="STDOUT" />-->
         <!--<appender-ref ref="MetricsRollingFile" />-->
     </root>
 </configuration>

@@ -55,7 +55,7 @@
         <!--<appender-ref ref="MetricsRollingFile" />-->
     </logger>
 
-    <logger name="org.corfudb.metricsdata" level="DEBUG" additivity="false">
+    <logger name="org.corfudb.metricsdata1" level="DEBUG" additivity="false">
         <appender-ref ref="AsyncMetricsRollingFile" />
     </logger>
 

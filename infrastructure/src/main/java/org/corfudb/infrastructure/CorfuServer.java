@@ -196,7 +196,7 @@ public class CorfuServer {
 
     private static final String DEFAULT_METRICS_LOGGER_NAME = "org.corfudb.metricsdata";
 
-    private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL = Duration.ofSeconds(1);
+    private static final Duration DEFAULT_METRICS_LOGGING_INTERVAL = Duration.ofMinutes(1);
     /**
      * Main program entry point.
      *
