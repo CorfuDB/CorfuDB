@@ -1,13 +1,30 @@
 package org.corfudb.infrastructure;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
+import static org.junit.Assert.fail;
+
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import java.io.File;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.IMetadata;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.TailsRequest;
@@ -22,24 +39,6 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
-
-import java.io.File;
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
-import static org.junit.Assert.fail;
 
 /**
  * Created by mwei on 2/4/16.
@@ -546,86 +545,6 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogUnitServer logunit = new LogUnitServer(context);
     }
 
-
-    @Test
-    public void checkOverwriteExceptionIsNotThrownWhenTheRankIsHigher() {
-        String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-
-        ServerContext sc = new ServerContextBuilder()
-                .setLogPath(serviceDir)
-                .setSingle(true)
-                .setMemory(false)
-                .build();
-
-        sc.installSingleNodeLayoutIfAbsent();
-        sc.setServerRouter(router);
-        sc.setServerEpoch(sc.getCurrentLayout().getEpoch(), router);
-
-        LogUnitServer s1 = new LogUnitServer(sc);
-
-        setServer(s1);
-        setContext(sc);
-
-        final long ADDRESS_0 = 0L;
-        final long ADDRESS_1 = 100L;
-        //write at 0
-        ByteBuf b = Unpooled.buffer();
-        Serializers.CORFU.serialize("0".getBytes(), b);
-        WriteRequest m = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(ADDRESS_0);
-        m.setRank(new IMetadata.DataRank(0));
-        m.setBackpointerMap(Collections.emptyMap());
-        sendRequest(CorfuMsgType.WRITE.payloadMsg(m)).join();
-        assertThat(s1)
-                .containsDataAtAddress(ADDRESS_0);
-        assertThat(s1)
-                .isEmptyAtAddress(ADDRESS_1);
-
-
-        // repeat: do not throw exception, the overwrite is forced
-        b.clear();
-        b = Unpooled.buffer();
-        Serializers.CORFU.serialize("1".getBytes(), b);
-        m = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-        m.setGlobalAddress(ADDRESS_0);
-        m.setBackpointerMap(Collections.emptyMap());
-
-
-        WriteRequest m2 = WriteRequest.builder()
-                .data(new LogData(DataType.DATA, b))
-                .build();
-
-        m2.setGlobalAddress(ADDRESS_0);
-        m2.setRank(new IMetadata.DataRank(1));
-        m2.setBackpointerMap(Collections.emptyMap());
-
-        assertThat(sendRequest(CorfuMsgType.WRITE.payloadMsg(m2)).join()).isEqualTo(true);
-
-        // now let's read again and see what we have, we should have the second value (not the first)
-
-        assertThat(s1)
-                .containsDataAtAddress(ADDRESS_0);
-        assertThat(s1)
-                .matchesDataAtAddress(ADDRESS_0, "1".getBytes());
-
-        // and now without the local cache
-        LogUnitServer s2 = new LogUnitServer(new ServerContextBuilder()
-                .setLogPath(serviceDir)
-                .setMemory(false)
-                .build());
-        setServer(s2);
-
-        assertThat(s2)
-                .containsDataAtAddress(ADDRESS_0);
-        assertThat(s2)
-                .matchesDataAtAddress(ADDRESS_0, "1".getBytes());
-
-    }
-
     @Test
     public void testLogDataRWLatency() {
         String serviceDir = PARAMETERS.TEST_TEMP_DIR;
@@ -658,7 +577,6 @@ public class LogUnitServerTest extends AbstractServerTest {
                     .build();
             ADDRESS = i;
             m.setGlobalAddress(ADDRESS);
-            m.setRank(new IMetadata.DataRank(0));
             m.setBackpointerMap(populateBackpointerMap());
             m.setCheckpointedStreamId(UUID.randomUUID());
             m.setCheckpointedStreamId(UUID.randomUUID());

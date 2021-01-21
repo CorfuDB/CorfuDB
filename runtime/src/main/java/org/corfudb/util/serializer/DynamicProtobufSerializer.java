@@ -143,7 +143,12 @@ public class DynamicProtobufSerializer implements ISerializer {
      */
     private void identifyMessageTypesinFileDescriptorProto(FileDescriptorProto fileDescriptorProto) {
         for (DescriptorProtos.DescriptorProto descriptorProto : fileDescriptorProto.getMessageTypeList()) {
-            String messageName = fileDescriptorProto.getPackage() + "." + descriptorProto.getName();
+            String messageName;
+            if (fileDescriptorProto.getPackage() == null || fileDescriptorProto.getPackage().equals("")) {
+                messageName = descriptorProto.getName();
+            } else {
+                messageName = fileDescriptorProto.getPackage() + "." + descriptorProto.getName();
+            }
             messagesFdProtoNameMap.putIfAbsent(messageName, fileDescriptorProto.getName());
         }
     }
@@ -191,7 +196,13 @@ public class DynamicProtobufSerializer implements ISerializer {
      */
     private String getMessageName(Any message) {
         String typeUrl = message.getTypeUrl();
-        return typeUrl.substring(typeUrl.lastIndexOf('.') + 1);
+        String messageName = typeUrl.substring(typeUrl.lastIndexOf('.') + 1);
+        if (messageName.contains("/")) {
+            // In case the message lacks package name
+            // E.g. typeUrl: type.googleapis.com/TableName
+            messageName = messageName.substring(messageName.lastIndexOf("/") + 1);
+        }
+        return messageName;
     }
 
     /**
