@@ -26,7 +26,9 @@ public class CorfuStoreBrowserMain {
         loadTable,
         infoTable,
         showTable,
-        dropTable
+        listenOnTable,
+        dropTable,
+        radioTest,
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
@@ -137,6 +139,17 @@ public class CorfuStoreBrowserMain {
                         itemSize = Integer.parseInt(opts.get("--itemSize").toString());
                     }
                     browser.loadTable(namespace, tableName, numItems, batchSize, itemSize);
+                    break;
+                case radioTest:
+                    numItems = 10;
+                    itemSize = 1;
+                    if (opts.get("--numItems") != null) {
+                        numItems = Integer.parseInt(opts.get("--numItems").toString());
+                    }
+                    if (opts.get("--itemSize") != null) {
+                        itemSize = Integer.parseInt(opts.get("--itemSize").toString());
+                    }
+                    browser.radioTest(namespace, tableName, numItems, itemSize);
                     break;
             }
         } catch (Throwable t) {

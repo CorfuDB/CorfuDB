@@ -3,17 +3,26 @@ package org.corfudb.browser;
 import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.collections.CorfuStore;
@@ -266,5 +275,55 @@ public class CorfuStoreBrowser {
             log.error("loadTable: {} {} {} {} failed.", namespace, tablename, numItems, batchSize, e);
         }
         return (int)(Math.ceil((double)numItems/batchSize));
+    }
+
+
+    public void radioTest(String namespace, String tablename, int numItems, int itemSize) {
+        CorfuStore store = new CorfuStore(runtime);
+
+        TableOptions.TableOptionsBuilder<Object, Object> optionsBuilder = TableOptions.builder();
+        try {
+            store.openTable(
+                    namespace, tablename,
+                    TableName.class,
+                    TableName.class,
+                    TableName.class,
+                    optionsBuilder.build());
+        } catch (Exception e) {
+            log.error("Unable to open table {}:{}", namespace, tablename);
+        }
+
+        String payload = getRandomStringOfSize(itemSize);
+
+        Function<Object,Object> keyMutator = (x) -> x;
+        Function<Object,Object> valueMutator = (x) -> x;
+        ISerializer serializer = Serializers.getDefaultSerializer();
+        SMREntry each = new SMREntry("put", new Object[]{keyMutator.apply("key_0"), valueMutator.apply(payload)}, serializer);
+        ByteBuf b = Unpooled.buffer();
+        each.serialize(b);
+        System.out.println("Single SMR Entry size is: " + b.writerIndex());
+
+        for (int i = 0; i < numItems; i++) {
+            TxBuilder tx = store.tx(namespace);
+            TableName key = TableName.newBuilder().setNamespace(namespace).setTableName("key_" + i).build();
+            TableName value = TableName.newBuilder().setNamespace(namespace).setTableName(payload).build();
+            TableName metadata = TableName.newBuilder().setNamespace(namespace).setTableName("metadata").build();
+            tx.update(tablename, key, value, metadata);
+            tx.commit();
+        }
+
+        TableName key = TableName.newBuilder().setNamespace(namespace).setTableName("key_0").build();
+        TableName value = TableName.newBuilder().setNamespace(namespace).setTableName(payload).build();
+        TableName metadata = TableName.newBuilder().setNamespace(namespace).setTableName("metadata").build();
+        log.info("Size of key: {}, size of value: {}, size of metadata: {}", key.getSerializedSize(), value.getSerializedSize(), metadata.getSerializedSize());
+        log.info("Total size for 1 CorfuStoreEntry (key + payload + metadata) is: {}", key.getSerializedSize() + value.getSerializedSize() + metadata.getSerializedSize());
+        log.info("{} records are put into table {}${}", numItems, namespace, tablename);
+    }
+
+
+    private String getRandomStringOfSize(int size) {
+        byte[] buf = new byte[size];
+        ThreadLocalRandom.current().nextBytes(buf);
+        return new String(buf);
     }
 }

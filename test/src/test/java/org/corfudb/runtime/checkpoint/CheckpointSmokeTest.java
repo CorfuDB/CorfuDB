@@ -12,7 +12,10 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
@@ -25,6 +28,7 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -293,6 +297,83 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
     }
 
+    /** Test the CheckpointWriter class, part 1.
+     */
+    @Test
+    public void checkpointWriterSizeLimitTest() throws Exception {
+        final String streamName = "mystream5";
+        final UUID streamId = CorfuRuntime.getStreamID(streamName);
+        final String keyPrefix = "a-prefix";
+        final int numKeys = 100;
+        final String author = "Me, myself, and I";
+        final String mutationSuffix = "_mutation_suffix";
+
+        StreamingMap<String, String> m = instantiateStringMap(streamName);
+
+        String bfdConfigStr = "{\"enabled\":false,\"interval\":400,\"multiple\":3,\"markedForDelete\":false,\"deleteWithParent\":false,\"lockedBy\":null,\"locked\":false,\"lockComments\":null,\"lockModifiedTime\":0,\"forwardRelationShips\":[],\"internalId\":\"81d21356-8369-449d-9075-7993222a4056\",\"isOnboarded\":false,\"tags\":null,\"displayName\":\"default-evpn-bfd-profile\",\"description\":null,\"createUser\":\"system\",\"lastModifiedUser\":\"system\",\"createTime\":1610746373710,\"lastModifiedTime\":1610746373710,\"systemResourceFlag\":true,\"revision\":0,\"touched\":false,\"id\":{\"#type\":\"com.vmware.nsx.management.common.IdentifierImpl\",\"#data\":{\"objectType\":\"BfdConfig\",\"stringId\":\"/global-infra/bfd-profiles/default-evpn-bfd-profile\",\"uuid\":null}},\"nonMonotonicRevision\":0,\"$type\":\"BfdConfig\"}";
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 1500; i++) {
+            sb.append(bfdConfigStr);
+        }
+        String payload = sb.toString();
+
+        Function<Object,Object> keyMutator = (x) -> x;
+        Function<Object,Object> valueMutator = (x) -> x;
+        SMREntry each = new SMREntry("put", new Object[]{keyMutator.apply("key_0"), valueMutator.apply(payload)}, serializer);
+        ByteBuf b = Unpooled.buffer();
+        each.serialize(b);
+        System.out.println("Single SMR Entry size is: " + b.writerIndex());
+
+        for (int i = 0; i < numKeys; i++) {
+            m.put(keyPrefix + Integer.toString(i), payload);
+        }
+
+        /*
+         * Current implementation of a CP's log replay will include
+         * all CP data plus one DATA entry from the last map mutation
+         * plus any other DATA entries that were written concurrently
+         * with the CP.  Later, we check the values of the
+         * keyPrefix keys, and we wish to observe the CHECKPOINT
+         * version of those keys, not DATA.
+         */
+        m.put("just one more", "0L");
+
+        // Set up CP writer.  Add fudgeFactor to all CP data,
+        // also used for assertion checks later.
+        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (CorfuTable) m);
+        cpw.setSerializer(serializer);
+        cpw.setValueMutator((l) -> (String) l + mutationSuffix);
+        // use default batch size which is 50
+
+        // Write all CP data.
+        r.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .build()
+                .begin();
+        Token snapshot = TransactionalContext
+                .getCurrentContext()
+                .getSnapshotTimestamp();
+        try {
+            cpw.startCheckpoint(snapshot);
+            cpw.appendObjectState(m.entryStream());
+            cpw.finishCheckpoint();
+
+            // Instantiate new runtime & map.  All map entries (except 'just one more')
+            // should have fudgeFactor added.
+            setRuntime();
+            Map<String, String> m2 = instantiateStringMap(streamName);
+            for (int i = 0; i < numKeys; i++) {
+                assertThat(m2.get(keyPrefix + Integer.toString(i))).describedAs("get " + i)
+                        .isEqualTo(payload + mutationSuffix);
+            }
+        } catch (WriteSizeException e) {
+            assertThat(false);
+        } finally {
+            r.getObjectsView().TXEnd();
+        }
+    }
+
     static long middleTracker;
 
     /** Test the CheckpointWriter class, part 2.  We write data to a
@@ -463,6 +544,16 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {})
+                .setSerializer(serializer)
+                .open();
+    }
+
+    private StreamingMap<String, String> instantiateStringMap(String streamName) {
+        Serializers.registerSerializer(serializer);
+        return r.getObjectsView()
+                .build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setSerializer(serializer)
                 .open();
     }

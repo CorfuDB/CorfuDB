@@ -5,8 +5,14 @@ import com.google.protobuf.UnknownFieldSet;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Paths;
+import java.util.function.Function;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.corfudb.protocols.logprotocol.SMREntry;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Assert;
 import org.junit.Before;
@@ -242,7 +248,30 @@ public class CorfuStoreBrowserIT extends AbstractIT {
             NoSuchMethodException,
             IllegalAccessException,
             InvocationTargetException {
-        final String namespace = "namespace";
+
+        String namespace = "global_manager";
+        String bfdConfigStr = "{\"enabled\":false,\"interval\":400,\"multiple\":3,\"markedForDelete\":false,\"deleteWithParent\":false,\"lockedBy\":null,\"locked\":false,\"lockComments\":null,\"lockModifiedTime\":0,\"forwardRelationShips\":[],\"internalId\":\"81d21356-8369-449d-9075-7993222a4056\",\"isOnboarded\":false,\"tags\":null,\"displayName\":\"default-evpn-bfd-profile\",\"description\":null,\"createUser\":\"system\",\"lastModifiedUser\":\"system\",\"createTime\":1610746373710,\"lastModifiedTime\":1610746373710,\"systemResourceFlag\":true,\"revision\":0,\"touched\":false,\"id\":{\"#type\":\"com.vmware.nsx.management.common.IdentifierImpl\",\"#data\":{\"objectType\":\"BfdConfig\",\"stringId\":\"/global-infra/bfd-profiles/default-evpn-bfd-profile\",\"uuid\":null}},\"nonMonotonicRevision\":0,\"$type\":\"BfdConfig\"}";
+        CorfuStoreMetadata.TableName key = CorfuStoreMetadata.TableName.newBuilder().setNamespace(namespace).setTableName("key_0").build();
+        CorfuStoreMetadata.TableName value = CorfuStoreMetadata.TableName.newBuilder().setNamespace(namespace).setTableName(bfdConfigStr).build();
+        CorfuStoreMetadata.TableName m = CorfuStoreMetadata.TableName.newBuilder().setNamespace(namespace).setTableName("metadata").build();
+
+        System.out.println(String.format("Size of key: %s, size of value: %s, size of metadata: %s", key.getSerializedSize(), value.getSerializedSize(), m.getSerializedSize()));
+        System.out.println(String.format("Total size for 1 item (key + payload + metadata) is: %s", key.getSerializedSize() + value.getSerializedSize() + m.getSerializedSize()));
+
+        Function<Object,Object> keyMutator = (x) -> x;
+        Function<Object,Object> valueMutator = (x) -> x;
+        ISerializer serializer = Serializers.getDefaultSerializer();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 1500; i++) {
+            sb.append(bfdConfigStr);
+        }
+        String payload = sb.toString();
+        SMREntry each = new SMREntry("put", new Object[]{keyMutator.apply("key_0"), valueMutator.apply(payload)}, serializer);
+        ByteBuf b = Unpooled.buffer();
+        each.serialize(b);
+        System.out.println("SMR Entry size is: " + b.writerIndex());
+
+        namespace = "namespace";
         final String tableName = "table";
         Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
                 corfuStringNodePort);

@@ -61,7 +61,8 @@ public class CorfuServer {
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
                     + "[--metrics] [--metrics-port <metrics_port>]"
                     + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
-                    + "[-P <prefix>] [-R <retention>] <port>\n"
+                    + "[-P <prefix>] [-R <retention>] <port>"
+                    + "[--max-data-message-size=<msg-size>]\n"
                     + "\n"
                     + "Options:\n"
                     + " -l <path>, --log-path=<path>                                             "
@@ -182,7 +183,9 @@ public class CorfuServer {
                     + " -h, --help                                                               "
                     + "              Show this screen\n"
                     + " --version                                                                "
-                    + "              Show version\n";
+                    + "              Show version\n"
+                    + " --max-data-message-size=<msg-size>                                       "
+                    + "              The max size of replication data message in bytes.\n        ";
 
     // Active Corfu Server.
     private static volatile CorfuServerNode activeServer;
