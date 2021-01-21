@@ -13,6 +13,7 @@ public class StreamOptions {
     public static StreamOptions DEFAULT = StreamOptions.builder()
             .ignoreTrimmed(false)
             .cacheEntries(true)
+            .isCheckpointCapable(true)
             .build();
 
     /**
@@ -28,4 +29,11 @@ public class StreamOptions {
     @Getter
     @Builder.Default
     private final boolean cacheEntries = true;
+
+    /**
+     * If this stream can be checkpointed.
+     */
+    @Getter
+    @Builder.Default
+    private final boolean isCheckpointCapable = true;
 }

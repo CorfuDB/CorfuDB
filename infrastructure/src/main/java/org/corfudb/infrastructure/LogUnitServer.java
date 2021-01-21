@@ -1,7 +1,25 @@
 package org.corfudb.infrastructure;
 
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
+import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
+
+
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.ChannelHandlerContext;
+import java.lang.invoke.MethodHandles;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -29,34 +47,14 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.TrimRequest;
 import org.corfudb.protocols.wireprotocol.WriteRequest;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
-import org.corfudb.runtime.exceptions.DataOutrankedException;
 import org.corfudb.runtime.exceptions.LogUnitException;
 import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.exceptions.TrimmedException;
-import org.corfudb.runtime.exceptions.ValueAdoptedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
-
-import java.lang.invoke.MethodHandles;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.LOG_ADDRESS_SPACE_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.PREFIX_TRIM;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RANGE_WRITE;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.RESET;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.SEAL;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.TAILS_QUERY;
-import static org.corfudb.infrastructure.BatchWriterOperation.Type.WRITE;
 
 
 /**
@@ -231,11 +229,6 @@ public class LogUnitServer extends AbstractServer {
             OverwriteException owe = (OverwriteException) ex.getCause();
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_OVERWRITE
                     .payloadMsg(owe.getOverWriteCause().getId()));
-        } else if (ex.getCause() instanceof DataOutrankedException) {
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_DATA_OUTRANKED.msg());
-        } else if (ex.getCause() instanceof ValueAdoptedException) {
-            ValueAdoptedException vae = (ValueAdoptedException) ex.getCause();
-            r.sendResponse(ctx, msg, CorfuMsgType.ERROR_VALUE_ADOPTED.payloadMsg(vae.getReadResponse()));
         } else if (ex.getCause() instanceof TrimmedException) {
             r.sendResponse(ctx, msg, CorfuMsgType.ERROR_TRIMMED.msg());
         } else {
