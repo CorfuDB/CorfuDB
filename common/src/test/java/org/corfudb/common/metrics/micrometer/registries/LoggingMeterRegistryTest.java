@@ -10,6 +10,8 @@ import org.corfudb.common.metrics.micrometer.IntervalLoggingConfig;
 import org.junit.Test;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -106,6 +108,25 @@ public class LoggingMeterRegistryTest {
         }
     }
 
+    static class AggregateSink implements Consumer<String> {
+
+        private final List<String> lines = new ArrayList<>();
+
+        public boolean substringIsPresent(String substring) {
+            for (String line : lines) {
+                if (line.contains(substring)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public void accept(String s) {
+            lines.add(s);
+        }
+    }
+
     static LoggingMeterRegistryWithHistogramSupport getInstance() {
         LoggingRegistryConfig config = new IntervalLoggingConfig(Duration.ofSeconds(1));
         return new LoggingMeterRegistryWithHistogramSupport(config, value -> {
@@ -153,6 +174,56 @@ public class LoggingMeterRegistryTest {
         TestSummary summary = new TestSummary();
         String line = registry.writeSummary(summary).findFirst().orElseThrow(IllegalArgumentException::new);
         assertTrue(line.contains("metric,endpoint=localhost:9000,metric_type=summary sum=200,count=100,mean=2,upper=300"));
+    }
+
+    @Test
+    public void testTimerPercentiles() {
+        AggregateSink sink = new AggregateSink();
+
+        LoggingMeterRegistryWithHistogramSupport registry = getInstance(sink);
+
+        Timer timer = Timer.builder("timer")
+                .publishPercentileHistogram()
+                .publishPercentiles(0.99, 0.95, 0.5)
+                .tags("endpoint", "localhost:9000")
+                .register(registry);
+        for (int i = 0; i < 3; i++) {
+            timer.record(() -> {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ie) {
+
+                }
+            });
+        }
+        assertTrue(sink.substringIsPresent("timer_percentile,endpoint=localhost:9000,phi=0.99,metric_type=gauge"));
+        assertTrue(sink.substringIsPresent("timer_percentile,endpoint=localhost:9000,phi=0.95,metric_type=gauge"));
+        assertTrue(sink.substringIsPresent("timer_percentile,endpoint=localhost:9000,phi=0.5,metric_type=gauge"));
+    }
+
+    @Test
+    public void testSummaryPercentiles() {
+        AggregateSink sink = new AggregateSink();
+
+        LoggingMeterRegistryWithHistogramSupport registry = getInstance(sink);
+
+        DistributionSummary summary = DistributionSummary.builder("summary")
+                .publishPercentileHistogram()
+                .publishPercentiles(0.99, 0.95, 0.5)
+                .tags("endpoint", "localhost:9000")
+                .register(registry);
+
+        for (int i = 0; i < 3; i++) {
+            summary.record(100);
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ie) {
+
+            }
+        }
+        assertTrue(sink.substringIsPresent("summary_percentile,endpoint=localhost:9000,phi=0.99,metric_type=gauge value=100"));
+        assertTrue(sink.substringIsPresent("summary_percentile,endpoint=localhost:9000,phi=0.95,metric_type=gauge value=100"));
+        assertTrue(sink.substringIsPresent("summary_percentile,endpoint=localhost:9000,phi=0.5,metric_type=gauge value=100"));
     }
 
 }
