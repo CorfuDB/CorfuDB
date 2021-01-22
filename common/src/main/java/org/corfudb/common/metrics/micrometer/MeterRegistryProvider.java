@@ -14,8 +14,6 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-import static org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport.DataProtocol.INFLUX;
-
 /**
  * A configuration class for a meter (metrics) registry.
  */
@@ -44,7 +42,7 @@ public class MeterRegistryProvider {
                                                 UUID clientId) {
             LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
             LoggingMeterRegistryWithHistogramSupport registry =
-                    new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, INFLUX);
+                    new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
             registry.config().commonTags("clientId", clientId.toString());
             return registry;
         }
@@ -61,7 +59,7 @@ public class MeterRegistryProvider {
             Supplier<Optional<MeterRegistry>> supplier = () -> {
                 LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
                 LoggingMeterRegistryWithHistogramSupport registry =
-                        new LoggingMeterRegistryWithHistogramSupport(config, logger::debug, INFLUX);
+                        new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
                 registry.config().commonTags("endpoint", localEndpoint);
                 endpoint = Optional.of(localEndpoint);
                 return Optional.of(registry);
