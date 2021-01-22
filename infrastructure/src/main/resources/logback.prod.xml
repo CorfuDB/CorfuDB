@@ -31,7 +31,7 @@
         </triggeringPolicy>
         <encoder>
             <pattern>
-                %date{yyyy-MM-dd'T'HH:mm:ss.SSSXXX, UTC} | %msg%n%xException
+                %msg%n%xException
             </pattern>
         </encoder>
     </appender>
