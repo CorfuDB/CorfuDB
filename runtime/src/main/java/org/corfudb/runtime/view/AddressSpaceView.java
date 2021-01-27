@@ -35,7 +35,6 @@ import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Sleep;
 import org.corfudb.util.Utils;
 
@@ -65,7 +64,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class AddressSpaceView extends AbstractView {
 
-    private final static long CACHE_KEY_SIZE = MetricsUtils.sizeOf.deepSizeOf(0L);
     private final static long DEFAULT_MAX_CACHE_ENTRIES = 5000;
 
     /**
@@ -82,11 +80,6 @@ public class AddressSpaceView extends AbstractView {
             .clientCacheable(true)
             .serverCacheable(true)
             .build();
-
-    private final Optional<Gauge> missRatio;
-    private final Optional<Gauge> loadCount;
-    private final Optional<Gauge> loadExceptionCount;
-
     /**
      * Constructor for the Address Space View.
      */
@@ -101,8 +94,7 @@ public class AddressSpaceView extends AbstractView {
         final int concurrencyLevel = runtime.getParameters().getCacheConcurrencyLevel();
 
         if (maxCacheWeight != 0) {
-            cacheBuilder.maximumWeight(maxCacheWeight);
-            cacheBuilder.weigher((k, v) -> (int) (CACHE_KEY_SIZE + MetricsUtils.sizeOf.deepSizeOf(v)));
+            throw new UnsupportedOperationException("Weighing cache is not supported!");
         }
 
         if (cacheDisabled) {
@@ -126,15 +118,23 @@ public class AddressSpaceView extends AbstractView {
 
         Optional<MeterRegistry> metricsRegistry = runtime.getRegistry();
 
-        missRatio = metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.miss_ratio",
+        metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.miss_ratio",
                 readCache,
-                cache -> cache.stats().missRate()).register(registry));
+                cache -> cache.stats().missRate())
+                .strongReference(true)
+                .register(registry));
 
-        loadCount = metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.load_count",
-                readCache, cache -> cache.stats().loadCount()).register(registry));
+        metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.load_count",
+                readCache,
+                cache -> cache.stats().loadCount())
+                .strongReference(true)
+                .register(registry));
 
-        loadExceptionCount = metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.load_exception_count",
-                readCache, cache -> cache.stats().loadExceptionCount()).register(registry));
+        metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.load_exception_count",
+                readCache,
+                cache -> cache.stats().loadExceptionCount())
+                .strongReference(true)
+                .register(registry));
 
         double[] percentiles = new double[]{0.50, 0.95, 0.99};
 

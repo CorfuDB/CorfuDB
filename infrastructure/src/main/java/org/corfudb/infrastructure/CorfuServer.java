@@ -8,9 +8,7 @@ import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
-import org.corfudb.common.metrics.MetricsServer;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
@@ -59,7 +57,7 @@ public class CorfuServer {
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
-                    + "[--metrics] [--metrics-port <metrics_port>]"
+                    + "[--metrics]"
                     + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
                     + "[-P <prefix>] [-R <retention>] <port>\n"
                     + "\n"
@@ -173,8 +171,6 @@ public class CorfuServer {
                     + "              Number of threads dedicated for the logunit server.\n"
                     + " --metrics                                                                "
                     + "              Enable metrics provider.\n                                  "
-                    + " --metrics-port=<metrics_port>                                            "
-                    + "              Metrics provider server port [default: 9999].\n             "
                     + " --snapshot-batch=<batch-size>                                            "
                     + "              Snapshot (Full) Sync batch size (number of entries)\n       "
                     + " --lock-lease=<lease-duration>                                            "
@@ -442,16 +438,5 @@ public class CorfuServer {
 
         println("Serving on port " + port);
         println("Data location: " + dataLocation);
-    }
-
-    /**
-     * Generate metrics server config and start server.
-     *
-     * @param opts Command line parameters.
-     */
-    private static void setupMetrics(Map<String, Object> opts) {
-        PrometheusMetricsServer.Config config = PrometheusMetricsServer.Config.parse(opts);
-        MetricsServer server = new PrometheusMetricsServer(config, ServerContext.getMetrics());
-        server.start();
     }
 }

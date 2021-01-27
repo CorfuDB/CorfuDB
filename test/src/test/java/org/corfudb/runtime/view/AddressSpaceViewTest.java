@@ -9,21 +9,19 @@ import com.google.common.collect.ContiguousSet;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.corfudb.common.compression.Codec;
+import org.corfudb.common.util.Memory;
 import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.MetricsUtils;
-import org.corfudb.util.Sleep;
 import org.junit.Test;
 
 /**
@@ -94,7 +92,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
         final int payloadSize = 4000;
         byte[] payload = new byte[payloadSize];
 
-        long maxCacheSize = oneMb / MetricsUtils.sizeOf.deepSizeOf(payload);
+        long maxCacheSize = oneMb / Memory.sizeOf.deepSizeOf(payload);
 
         for (int x = 0; x < maxCacheSize * 2; x++) {
             rt.getStreamsView().get(UUID.randomUUID()).append(payload);

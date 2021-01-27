@@ -1,7 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.util.Collections;
@@ -21,7 +19,6 @@ import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.proto.service.LogUnit.TailRequestMsg.Type;
-import org.corfudb.util.CorfuComponent;
 import org.corfudb.util.serializer.Serializers;
 
 import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getCommittedTailRequestMsg;
@@ -59,19 +56,6 @@ public class LogUnitClient extends AbstractClient {
         return getRouter().getPort();
     }
 
-    @Getter
-    MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-
-    private Timer.Context getTimerContext(String opName) {
-        final String timerName = String.format("%s%s:%s-%s",
-                CorfuComponent.LOG_UNIT_CLIENT.toString(),
-                getHost(),
-                getPort().toString(),
-                opName);
-        Timer t = getMetricRegistry().timer(timerName);
-        return t.time();
-    }
-
     /**
      * Asynchronously write to the logging unit.
      *
@@ -83,19 +67,12 @@ public class LogUnitClient extends AbstractClient {
     public CompletableFuture<Boolean> write(long address,
                                             Object writeObject,
                                             Map<UUID, Long> backpointerMap) {
-        Timer.Context context = getTimerContext("writeObject");
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
         LogData logData = new LogData(DataType.DATA, payload);
         logData.setBackpointerMap(backpointerMap);
         logData.setGlobalAddress(address);
-        CompletableFuture<Boolean> completableFuture = sendRequestWithFuture(
-                getWriteLogRequestMsg(logData), false, false);
-
-        return completableFuture.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        return sendRequestWithFuture(getWriteLogRequestMsg(logData), false, false);
     }
 
     /**
@@ -151,14 +128,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> read(List<Long> addresses, boolean cacheable) {
-        Timer.Context context = getTimerContext("read");
-        CompletableFuture<ReadResponse> completableFuture = sendRequestWithFuture(
-                getReadLogRequestMsg(addresses, cacheable), false, false);
-
-        return completableFuture.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        return sendRequestWithFuture(getReadLogRequestMsg(addresses, cacheable), false, false);
     }
 
     /**

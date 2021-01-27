@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -20,8 +19,6 @@ import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getUnknownErrorMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
@@ -133,31 +130,10 @@ public class RequestHandlerMethods {
                         mtt, mh, mtt).getTarget().bindTo(server).invoke();
             }
 
-            // Install pre-conditions on handler and place the handler in the map
-            final HandlerMethod handler = generateConditionalHandler(annotation.type(), h);
+            final HandlerMethod handler = h::handle;
             handlerMap.put(annotation.type(), handler);
         } catch (Throwable e) {
             throw new UnrecoverableCorfuError("Exception during request handler registration", e);
         }
-    }
-
-    private HandlerMethod generateConditionalHandler(@NonNull final PayloadCase type,
-                                                     @NonNull final HandlerMethod handler) {
-        // Generate a timer based on the Corfu request type
-        final Timer timer = getTimer(type);
-
-        // Register the handler. Depending on metrics collection configuration by MetricsUtil,
-        // handler will be instrumented by the metrics context.
-        return (req, ctx, r) -> {
-            try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
-                handler.handle(req, ctx, r);
-            }
-        };
-    }
-
-    private Timer getTimer(@Nonnull PayloadCase type) {
-        timerNameCache.computeIfAbsent(type,
-                aType -> (CorfuComponent.INFRA_MSG_HANDLER + aType.name().toLowerCase()));
-        return ServerContext.getMetrics().timer(timerNameCache.get(type));
     }
 }
