@@ -69,37 +69,7 @@ public class AddressSpaceViewTest extends AbstractViewTest {
                 .connect();
 
         assertThatThrownBy(() -> rt.getAddressSpaceView())
-                .isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    public void testAddressSpaceCache() throws Exception {
-        setupNodes();
-
-        // Set the address space cache to 1mb and try to write 2x
-        // the cache size, then verify that only of the entries are cached
-        final long oneMb = 1_000_000;
-
-        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
-                .builder()
-                .maxCacheWeight(oneMb)
-                .build();
-
-        CorfuRuntime rt = CorfuRuntime.fromParameters(params)
-                .parseConfigurationString(getDefaultConfigurationString())
-                .connect();
-
-        final int payloadSize = 4000;
-        byte[] payload = new byte[payloadSize];
-
-        long maxCacheSize = oneMb / Memory.sizeOf.deepSizeOf(payload);
-
-        for (int x = 0; x < maxCacheSize * 2; x++) {
-            rt.getStreamsView().get(UUID.randomUUID()).append(payload);
-        }
-
-        assertThat(rt.getAddressSpaceView().getReadCache().size()).isLessThan(maxCacheSize);
-
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
