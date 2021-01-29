@@ -126,7 +126,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThatThrownBy( () -> readWriteTxn.putRecord(tableName, key2, null, null))
                     .isExactlyInstanceOf(IllegalArgumentException.class);
         }
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -197,8 +196,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(entries.get(0).getPayload().getPayload()).isEqualTo("abc");
             readWriteTxn.commit();
         }
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -295,8 +292,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(sum).isEqualTo(((totalRecords/2) / 2)*((totalRecords/2) + (totalRecords-1)));
             readWriteTxn.commit();
         }
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -365,8 +360,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(classRooms.size()).isEqualTo(totalClassRooms/2);
             readWriteTxn.commit();
         }
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -457,8 +450,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(networks.size()).isEqualTo(totalNetworks);
             readWriteTxn.commit();
         }
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -583,8 +574,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(companiesDepartmentType4.size()).isEqualTo(totalCompanies);
             readWriteTxn.commit();
         }
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -661,8 +650,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(entries.size()).isEqualTo(people);
             readWriteTxn.commit();
         }
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -760,8 +747,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(offices.size()).isEqualTo(numOffices);
             readWriteTxn.commit();
         }
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -875,8 +860,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(schools.size()).isEqualTo(numSchools/others.length);
             readWriteTxn.commit();
         }
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -1182,8 +1165,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThat(entries.get(0).getPayload().getField1()).isEqualTo("record_1");
             readWriteTxn.commit();
         }
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -1274,8 +1255,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(entry.getMetadata().getCreateUser()).isEqualTo("user_1");
         assertThat(entry.getMetadata().getLastModifiedTime()).isLessThan(System.currentTimeMillis() + 1);
         assertThat(entry.getMetadata().getCreateTime()).isLessThan(entry.getMetadata().getLastModifiedTime());
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -1346,8 +1325,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         txn.commit();
         assertThat(shimStore.getTable(someNamespace, tableName).get(key1).getMetadata())
                 .isNull();
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -1418,8 +1395,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                             .build(), true);
             txn.commit();
         }
-
-        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -1519,7 +1494,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             });
             txn.commit();
         }
-        log.debug(table.getMetrics().toString());
     }
 
     /**

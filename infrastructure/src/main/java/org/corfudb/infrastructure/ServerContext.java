@@ -2,10 +2,7 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
-
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
@@ -42,7 +39,6 @@ import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.utils.lock.Lock;
@@ -153,9 +149,6 @@ public class ServerContext implements AutoCloseable {
     private final String localEndpoint;
 
     @Getter
-    private static final MetricRegistry metrics = new MetricRegistry();
-
-    @Getter
     private final Set<String> dsFilePrefixesForCleanup =
             Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
 
@@ -186,11 +179,6 @@ public class ServerContext implements AutoCloseable {
         nodeLocator = NodeLocator
                 .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
         localEndpoint = nodeLocator.toEndpointUrl();
-
-        // Metrics setup & reporting configuration
-        if (!isMetricsReportingSetUp(metrics)) {
-            MetricsUtils.metricsReportingSetup(metrics);
-        }
     }
 
     int getBaseServerThreadCount() {

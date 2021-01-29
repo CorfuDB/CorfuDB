@@ -1,6 +1,5 @@
 package org.corfudb.runtime.view;
 
-import com.codahale.metrics.Timer;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
@@ -22,8 +21,6 @@ import org.corfudb.runtime.object.transactions.Transaction;
 import org.corfudb.runtime.object.transactions.Transaction.TransactionBuilder;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 
 import javax.annotation.Nonnull;
 import java.util.Map;
@@ -37,8 +34,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class ObjectsView extends AbstractView {
 
-    private static final String TXN_COMMIT_TIMER_NAME =
-            CorfuComponent.OBJECT.toString() + "txn-commit-duration";
     /**
      * The Transaction stream is used to log/write successful transactions from different clients.
      * Transaction data and meta data can be obtained by reading this stream.
@@ -149,15 +144,7 @@ public class ObjectsView extends AbstractView {
         long totalTime = System.currentTimeMillis() - context.getStartTime();
         log.trace("TXEnd[{}] time={} ms", context, totalTime);
 
-        // If exist, stop the timer for timing the beginning of transaction to start of commit.
-        if (context.getTxOpDurationContext() != null) {
-            context.getTxOpDurationContext().stop();
-        }
-
-        // Create a timer to measure the transaction commit duration
-        Timer txCommitDurationTimer = context.getMetrics().timer(TXN_COMMIT_TIMER_NAME);
-        try (Timer.Context txCommitDuration =
-                     MetricsUtils.getConditionalContext(txCommitDurationTimer)){
+        try {
             return TransactionalContext.getCurrentContext().commitTransaction();
         } catch (TransactionAbortedException e) {
             log.warn("TXEnd[{}] Aborted Exception {}", context, e);

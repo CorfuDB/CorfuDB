@@ -8,7 +8,6 @@ import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.ExceptionMsg;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.util.CorfuComponent;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.LambdaMetafactory;
@@ -207,7 +206,7 @@ public class HandlerMethods {
     // Create a timer using cached timer name for the corresponding type
     private Optional<Timer> getTimer(@Nonnull CorfuMsgType type) {
         timerNameCache.computeIfAbsent(type,
-                aType -> (CorfuComponent.INFRA_MSG_HANDLER +
+                aType -> ("corfu.infrastructure.message-handler." +
                         aType.name().toLowerCase()));
         double[] percentiles = new double[]{0.50, 0.95, 0.99};
 
