@@ -37,7 +37,6 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.Utils;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import javax.annotation.Nonnull;
 import java.lang.invoke.MethodHandles;
@@ -537,17 +536,13 @@ public class SequencerServer extends AbstractServer {
 
             for (Map.Entry<UUID, StreamAddressSpace> streamAddressSpace :
                     streamsAddressMap.entrySet()) {
-                log.info("Stream[{}] set to last trimmed address {} and {} addresses in the range" +
-                                " [{}-{}], on sequencer reset.",
+                log.info("Stream[{}]={} on sequencer reset.",
                         Utils.toReadableId(streamAddressSpace.getKey()),
-                        streamAddressSpace.getValue().getTrimMark(),
-                        streamAddressSpace.getValue().getAddressMap().getLongCardinality(),
-                        streamAddressSpace.getValue().getLowestAddress(),
-                        streamAddressSpace.getValue().getHighestAddress());
+                        streamAddressSpace.getValue());
                 if (log.isTraceEnabled()) {
-                    log.trace("Stream[{}] address map on sequencer reset: {}",
+                    log.trace("Stream[{}] addresses: {}",
                             Utils.toReadableId(streamAddressSpace.getKey()),
-                            streamAddressSpace.getValue().getAddressMap());
+                            streamAddressSpace.getValue().toArray());
                 }
             }
         }
@@ -728,10 +723,7 @@ public class SequencerServer extends AbstractServer {
             // (to keep track of all updates to this stream)
             streamsAddressMap.compute(uuid, (streamId, addressMap) -> {
                 if (addressMap == null) {
-                    addressMap = new StreamAddressSpace(
-                            Address.NON_ADDRESS,
-                            new Roaring64NavigableMap()
-                    );
+                    addressMap = new StreamAddressSpace();
                 }
 
                 for (long i = globalLogTail; i < newTail; i++) {
@@ -825,17 +817,14 @@ public class SequencerServer extends AbstractServer {
     private Map<UUID, StreamAddressSpace> getStreamsAddressesMap(
             List<StreamAddressRangeMsg> addressRanges) {
         Map<UUID, StreamAddressSpace> requestedAddressSpaces = new HashMap<>();
-        Roaring64NavigableMap addressMap;
 
         for (StreamAddressRangeMsg streamAddressRange : addressRanges) {
             UUID streamId = getUUID(streamAddressRange.getStreamId());
             // Get all addresses in the requested range
             if (streamsAddressMap.containsKey(streamId)) {
-                addressMap = streamsAddressMap.get(streamId)
+                StreamAddressSpace addressesInRange = streamsAddressMap.get(streamId)
                         .getAddressesInRange(getStreamAddressRange(streamAddressRange));
-
-                requestedAddressSpaces.put(streamId, new StreamAddressSpace(
-                        streamsAddressMap.get(streamId).getTrimMark(), addressMap));
+                requestedAddressSpaces.put(streamId, addressesInRange);
             } else {
                 log.warn("getStreamsAddressesMap: address space map is not present for stream {}." +
                         " Verify this is a valid stream.", streamId);

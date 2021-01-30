@@ -9,10 +9,9 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
-import org.roaringbitmap.longlong.LongIterator;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import javax.annotation.Nonnull;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.NavigableSet;
@@ -226,7 +225,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     private void processCheckpoint(StreamAddressSpace streamAddressSpace, Function<ILogData, Boolean> filter,
                                    NavigableSet<Long> queue) {
         SortedSet<Long> checkpointAddresses = new TreeSet<>(Collections.reverseOrder());
-        streamAddressSpace.getAddressMap().forEach(checkpointAddresses::add);
+        Arrays.stream(streamAddressSpace.toArray()).forEach(checkpointAddresses::add);
 
         // Checkpoint entries will be read in batches of a predefined size,
         // the reason not to read them all in a single call is that:
@@ -302,7 +301,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             // if this address is already resolved locally do not request the stream map to the sequencer as new
             // updates are not required to be synced (this benefits single runtime writers).
             if(isAddressToBackpointerResolved(startAddress, streamId)) {
-                return new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(startAddress));
+                return new StreamAddressSpace(Collections.singleton(startAddress));
             }
 
             log.trace("getStreamAddressMap[{}]: request stream address space between {} and {}.",
@@ -313,7 +312,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
         // Start and stop address are consecutive addresses, no need to request the address map for this stream,
         // the only address to include is startAddress (stopAddress is already resolved - not included in the lookup).
-        return new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(startAddress));
+        return new StreamAddressSpace(Collections.singleton(startAddress));
     }
 
     private boolean isAddressToBackpointerResolved(long startAddress, UUID streamId) {
@@ -395,21 +394,16 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         StreamAddressSpace streamAddressSpace = runtime.getSequencerView()
                 .getStreamAddressSpace(new StreamAddressRange(getId(), Address.MAX, getCurrentGlobalPosition()));
 
-        long size = streamAddressSpace.getAddressMap().getLongCardinality();
+        long size = streamAddressSpace.size();
         if (size == 0L) {
             return Address.NON_ADDRESS;
         }
 
         if (size <= maxEntries) {
-            return streamAddressSpace.getHighestAddress();
+            return streamAddressSpace.getTail();
         }
 
-        LongIterator it = streamAddressSpace.getAddressMap().getLongIterator();
-        while (--maxEntries > 0) {
-            it.next();
-        }
-
-        return it.next();
+        return streamAddressSpace.select(maxEntries - 1);
     }
 
     @Override

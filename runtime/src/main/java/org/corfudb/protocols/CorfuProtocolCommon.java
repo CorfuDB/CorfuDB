@@ -21,7 +21,6 @@ import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.proto.service.Sequencer.StreamsAddressResponseMsg;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -190,22 +189,17 @@ public final class CorfuProtocolCommon {
      *
      * @param addressSpace   the desired Java StreamAddressSpace object
      * @return               an equivalent Protobuf StreamAddressSpace message
-     * @throws               SerializerException if unable to serialize the underlying roaring64NavigableMap
+     * @throws               SerializerException if unable to serialize StreamAddressSpace
      */
     public static StreamAddressSpaceMsg getStreamAddressSpaceMsg(StreamAddressSpace addressSpace) {
         StreamAddressSpaceMsg.Builder addressSpaceMsgBuilder = StreamAddressSpaceMsg.newBuilder();
-        addressSpaceMsgBuilder.setTrimMark(addressSpace.getTrimMark());
-
         try (ByteString.Output bso = ByteString.newOutput()) {
             try (DataOutputStream dos = new DataOutputStream(bso)) {
-                Roaring64NavigableMap rm = addressSpace.getAddressMap();
-                // Improve compression
-                rm.runOptimize();
-                rm.serialize(dos);
+                addressSpace.serialize(dos);
                 addressSpaceMsgBuilder.setAddressMap(bso.toByteString());
             }
         } catch (IOException ex) {
-            throw new SerializerException("Unexpected error while serializing roaring64NavigableMap", ex);
+            throw new SerializerException("Unexpected error while serializing StreamAddressSpace", ex);
         }
 
         return addressSpaceMsgBuilder.build();
@@ -216,18 +210,14 @@ public final class CorfuProtocolCommon {
      *
      * @param msg   the desired Protobuf StreamAddressSpace message
      * @return      an equivalent Java StreamAddressSpace object
-     * @throws      SerializerException if unable to deserialize the underlying roaring64NavigableMap
+     * @throws      SerializerException if unable to deserialize the StreamAddressSpace
      */
     public static StreamAddressSpace getStreamAddressSpace(StreamAddressSpaceMsg msg) {
-        Roaring64NavigableMap roaring64NavigableMap = new Roaring64NavigableMap();
-
         try (DataInputStream dis = new DataInputStream(msg.getAddressMap().newInput())) {
-            roaring64NavigableMap.deserialize(dis);
+            return StreamAddressSpace.deserialize(dis);
         } catch (IOException ex) {
-            throw new SerializerException("Unexpected error while deserializing roaring64NavigableMap", ex);
+            throw new SerializerException("Unexpected error while deserializing StreamAddressSpaceMsg", ex);
         }
-
-        return new StreamAddressSpace(msg.getTrimMark(), roaring64NavigableMap);
     }
 
     /**

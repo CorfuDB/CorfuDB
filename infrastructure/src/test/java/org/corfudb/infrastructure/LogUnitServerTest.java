@@ -43,7 +43,6 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.DEFAULT_UUID;
 import static org.corfudb.protocols.CorfuProtocolCommon.getStreamsAddressResponse;
@@ -228,8 +227,8 @@ public class LogUnitServerTest {
         );
 
         Map<UUID, StreamAddressSpace> tails = ImmutableMap.of(
-                UUID.randomUUID(), new StreamAddressSpace(-1L, Roaring64NavigableMap.bitmapOf(32L)),
-                UUID.randomUUID(), new StreamAddressSpace(-1L, Roaring64NavigableMap.bitmapOf(11L))
+                UUID.randomUUID(), new StreamAddressSpace(-1L, Collections.singleton(32L)),
+                UUID.randomUUID(), new StreamAddressSpace(-1L, Collections.singleton(11L))
         );
 
         StreamsAddressResponse expectedResponse = new StreamsAddressResponse(32L, tails);
@@ -261,8 +260,7 @@ public class LogUnitServerTest {
         assertEquals(expectedResponse.getAddressMap().size(), provided.getAddressMap().size());
 
         provided.getAddressMap().forEach((id, addressSpace) -> {
-            assertEquals(expectedResponse.getAddressMap().get(id).getTrimMark(), addressSpace.getTrimMark());
-            assertEquals(expectedResponse.getAddressMap().get(id).getAddressMap(), addressSpace.getAddressMap());
+            assertEquals(expectedResponse.getAddressMap().get(id), addressSpace);
         });
     }
 

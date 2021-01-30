@@ -420,7 +420,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Verify address space and trim mark is properly set for the given stream (should be 7 which  is the start log address
             // for the existing checkpoint)
             assertThat(addressSpaceA.getTrimMark()).isEqualTo(snapshotAddress);
-            assertThat(addressSpaceA.getAddressMap().getLongCardinality()).isEqualTo(insertions);
+            assertThat(addressSpaceA.size()).isEqualTo(insertions);
 
             // Fetch Address Space for the given stream S2
             StreamAddressSpace addressSpaceB =  Utils.getLogAddressSpace(runtimeRestart
@@ -431,7 +431,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
             // Verify address space and trim mark is properly set for the given stream (should be 7 which  is the start log address
             // for the existing checkpoint)
             assertThat(addressSpaceB.getTrimMark()).isEqualTo(snapshotAddress);
-            assertThat(addressSpaceB.getAddressMap().getLongCardinality()).isEqualTo(insertionsB);
+            assertThat(addressSpaceB.size()).isEqualTo(insertionsB);
 
             // Open mapB after restart (verify it loads from checkpoint)
             Map<String, Integer> mapBRestart = createMap(runtimeRestart, stream2);
@@ -544,7 +544,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Verify address space and trim mark is properly set for the given stream.
             assertThat(addressSpaceA.getTrimMark()).isEqualTo(snapshotAddress);
-            assertThat(addressSpaceA.getAddressMap().getLongCardinality()).isEqualTo(insertions);
+            assertThat(addressSpaceA.size()).isEqualTo(insertions);
 
             // Open mapA after restart (verify it loads from checkpoint)
             Map<String, Integer> mapARestart = createMap(runtimeRestart, streamNameA);
@@ -635,7 +635,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Verify address space and trim mark is properly set for the given stream.
             assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_EXIST);
-            assertThat(addressSpaceB.getAddressMap().getLongCardinality()).isEqualTo(insertions);
+            assertThat(addressSpaceB.size()).isEqualTo(insertions);
 
             // Open mapB new runtime
             Map<String, Integer> mapBNewRuntime = createMap(rt2, streamNameB);
@@ -661,7 +661,7 @@ public class StreamAddressDiscoveryIT extends AbstractIT {
 
             // Verify address space and trim mark is properly set for the given stream.
             assertThat(addressSpaceB.getTrimMark()).isEqualTo(Address.NON_EXIST);
-            assertThat(addressSpaceB.getAddressMap().getLongCardinality()).isEqualTo(insertions);
+            assertThat(addressSpaceB.size()).isEqualTo(insertions);
 
             // Open mapB after restart
             Map<String, Integer> mapBRestart = createMap(runtimeRestart, streamNameB);
