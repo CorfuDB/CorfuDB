@@ -157,11 +157,8 @@ public class CorfuRuntime {
 
         // region Stream Parameters
         /*
-         * True, if strategy to discover the address space of a stream relies on the follow backpointers.
-         * False, if strategy to discover the address space of a stream relies on the get stream address map.
-         */
-        boolean followBackpointersEnabled = false;
 
+         */
         /*
          * Whether or not hole filling should be disabled.
          */
@@ -259,7 +256,6 @@ public class CorfuRuntime {
             long maxCacheWeight;
             int cacheConcurrencyLevel = 0;
             long cacheExpiryTime = Long.MAX_VALUE;
-            boolean followBackpointersEnabled = false;
             boolean holeFillingDisabled = false;
             int writeRetry = 5;
             int trimRetry = 2;
@@ -458,11 +454,6 @@ public class CorfuRuntime {
                 return this;
             }
 
-            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder followBackpointersEnabled(boolean followBackpointersEnabled) {
-                this.followBackpointersEnabled = followBackpointersEnabled;
-                return this;
-            }
-
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder holeFillingDisabled(boolean holeFillingDisabled) {
                 this.holeFillingDisabled = holeFillingDisabled;
                 return this;
@@ -565,7 +556,6 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setMaxCacheWeight(maxCacheWeight);
                 corfuRuntimeParameters.setCacheConcurrencyLevel(cacheConcurrencyLevel);
                 corfuRuntimeParameters.setCacheExpiryTime(cacheExpiryTime);
-                corfuRuntimeParameters.setFollowBackpointersEnabled(followBackpointersEnabled);
                 corfuRuntimeParameters.setHoleFillingDisabled(holeFillingDisabled);
                 corfuRuntimeParameters.setWriteRetry(writeRetry);
                 corfuRuntimeParameters.setTrimRetry(trimRetry);

@@ -6,8 +6,6 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 
-import org.ehcache.sizeof.SizeOf;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -21,8 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class ViewsGarbageCollectorTest extends AbstractViewTest {
 
     @Test
-    @Ignore
-    public void testRuntimeGC() throws Exception {
+    public void testRuntimeGC() {
 
         CorfuRuntime rt = getDefaultRuntime();
 
@@ -34,19 +31,13 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
 
         assertThat(rt.getGarbageCollector().isStarted()).isTrue();
 
-        SizeOf sizeOf = SizeOf.newInstance();
-        long sizeAfterCreation = sizeOf.deepSizeOf(table);
         rt.getGarbageCollector().runRuntimeGC();
-        assertThat(sizeAfterCreation).isLessThanOrEqualTo(sizeOf.deepSizeOf(table));
 
         final int numWrites = 100;
 
-        //TODO(Maithem): sync garbage from other clients
         for (int x = 0; x < numWrites; x++) {
             table.put(String.valueOf(x), String.valueOf(x));
         }
-
-        long sizeOfTableAfterWrite = sizeOf.deepSizeOf(table);
 
         MultiCheckpointWriter mcw = new MultiCheckpointWriter();
         mcw.addMap(table);
@@ -54,10 +45,6 @@ public class ViewsGarbageCollectorTest extends AbstractViewTest {
         rt.getAddressSpaceView().prefixTrim(trimMark);
         rt.getParameters().setRuntimeGCPeriod(Duration.ofMinutes(0));
         rt.getGarbageCollector().runRuntimeGC();
-        long sizeOfTableAfterGc = sizeOf.deepSizeOf(table);
-        final int numOfSetsStreamSets = 3;
-        assertThat(sizeOfTableAfterGc)
-                .isLessThan(sizeOfTableAfterWrite - (numWrites * Long.BYTES * numOfSetsStreamSets));
         assertThat(rt.getAddressSpaceView().getReadCache().asMap()).isEmpty();
         rt.shutdown();
         assertThat(rt.getGarbageCollector().isStarted()).isFalse();
