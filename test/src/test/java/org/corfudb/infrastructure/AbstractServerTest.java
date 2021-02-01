@@ -4,7 +4,6 @@ import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseHandler;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -60,46 +59,9 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
 
     public abstract AbstractServer getDefaultServer();
 
-    @Deprecated
-    public <T> CompletableFuture<T> sendRequest(UUID clientId, CorfuMsg msg) {
-        msg.setClientID(clientId)
-                .setRequestID(requestCounter.getAndIncrement())
-                .setEpoch(0L);
-        clientRouter.setClientID(clientId);
-        return clientRouter.sendMessageAndGetCompletable(msg);
-    }
-
-    @Deprecated
-    public <T> CompletableFuture<T> sendRequest(CorfuMsg msg) {
-        msg.setClientID(testClientId)
-                .setRequestID(requestCounter.getAndIncrement())
-                .setEpoch(0L);
-        clientRouter.setClientID(testClientId);
-        return clientRouter.sendMessageAndGetCompletable(msg);
-    }
-
     public <T> CompletableFuture<T> sendRequest(RequestPayloadMsg payload,
                                                 ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return sendRequestWithClusterId(payload, Layout.INVALID_CLUSTER_ID, ignoreClusterId, ignoreEpoch);
-    }
-
-    @Deprecated
-    public <T> CompletableFuture<T> sendRequestWithEpoch(CorfuMsg msg, long epoch) {
-        msg.setClientID(testClientId)
-                .setRequestID(requestCounter.getAndIncrement())
-                .setEpoch(epoch);
-        clientRouter.setClientID(testClientId);
-        return clientRouter.sendMessageAndGetCompletable(msg);
-    }
-
-    @Deprecated
-    public <T> CompletableFuture<T> sendRequestWithClusterId(CorfuMsg msg, UUID clusterId) {
-        msg.setClientID(testClientId)
-                .setRequestID(requestCounter.getAndIncrement())
-                .setClusterID(clusterId)
-                .setEpoch(0L);
-        clientRouter.setClientID(testClientId);
-        return clientRouter.sendMessageAndGetCompletable(msg);
     }
 
     public <T> CompletableFuture<T> sendRequestWithEpoch(RequestPayloadMsg payload, long epoch,
@@ -114,16 +76,6 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         clientRouter.setClientID(testClientId);
         return clientRouter.sendRequestAndGetCompletable(payload, 0L, getUuidMsg(clusterId),
                 CorfuMessage.PriorityLevel.NORMAL, ignoreClusterId, ignoreEpoch);
-    }
-
-    @Deprecated
-    public <T> CompletableFuture<T> sendRequestWithClusterId(UUID clientId, CorfuMsg msg, UUID clusterId) {
-        msg.setClientID(clientId)
-                .setRequestID(requestCounter.getAndIncrement())
-                .setClusterID(clusterId)
-                .setEpoch(0L);
-        clientRouter.setClientID(clientId);
-        return clientRouter.sendMessageAndGetCompletable(msg);
     }
 
     public <T> CompletableFuture<T> sendRequestWithClientId(UUID clientId, RequestPayloadMsg payload, UUID clusterId,
@@ -150,20 +102,6 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
         router.reset();
         router.addServer(getDefaultServer());
         requestCounter.set(0);
-    }
-
-    @Deprecated
-    public void sendMessage(CorfuMsg message) {
-        sendMessage(testClientId, message);
-    }
-
-
-    @Deprecated
-    public void sendMessage(UUID clientId, CorfuMsg message) {
-        message.setClientID(clientId)
-                .setRequestID(requestCounter.getAndIncrement())
-                .setEpoch(0L);
-        clientRouter.sendMessageAndGetCompletable(message);
     }
 
     /**

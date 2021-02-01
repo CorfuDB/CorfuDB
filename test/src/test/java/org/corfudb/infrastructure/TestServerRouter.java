@@ -6,8 +6,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.clients.TestChannelContext;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
@@ -22,7 +20,6 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -32,15 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class TestServerRouter implements IServerRouter {
 
     @Getter
-    @Deprecated
-    public List<CorfuMsg> responseMessages;
-
-    @Getter
     public List<ResponseMsg> protoResponseMessages;
-
-    @Getter
-    @Deprecated
-    public Map<CorfuMsgType, AbstractServer> handlerMap;
 
     @Getter
     public Map<RequestPayloadMsg.PayloadCase, AbstractServer> requestTypeHandlerMap;
@@ -72,30 +61,12 @@ public class TestServerRouter implements IServerRouter {
     }
 
     public void reset() {
-        this.responseMessages = new ArrayList<>();
         this.protoResponseMessages = new ArrayList<>();
         this.requestCounter = new AtomicLong();
         this.servers = new ArrayList<>();
-        this.handlerMap = new ConcurrentHashMap<>();
         // EnumMap is not thread-safe - https://docs.oracle.com/javase/7/docs/api/java/util/EnumMap.html
         this.requestTypeHandlerMap = Collections.synchronizedMap(new EnumMap<>(RequestPayloadMsg.PayloadCase.class));
         this.rules = new ArrayList<>();
-    }
-
-    @Override
-    @Deprecated
-    public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
-        outMsg.copyBaseFields(inMsg);
-        outMsg.setEpoch(getServerEpoch());
-        if (rules.stream()
-                .map(x -> x.evaluate(outMsg, this))
-                .allMatch(x -> x)) {
-            if (ctx != null && ctx instanceof TestChannelContext) {
-                ctx.writeAndFlush(outMsg);
-            } else {
-                this.responseMessages.add(outMsg);
-            }
-        }
     }
 
     /**
@@ -128,15 +99,6 @@ public class TestServerRouter implements IServerRouter {
     public void addServer(AbstractServer server) {
         servers.add(server);
 
-        try {
-            server.getHandler().getHandledTypes().forEach(x -> {
-                handlerMap.put(x, server);
-                log.trace("Registered {} to handle messages of type {}", server, x);
-            });
-        } catch (UnsupportedOperationException ex) {
-            log.trace("No registered CorfuMsg handler for server {}", server, ex);
-        }
-
         server.getHandlerMethods().getHandledTypes().forEach(x -> {
             requestTypeHandlerMap.put(x, server);
             log.trace("Registered {} to handle messages of type {}", server, x);
@@ -146,27 +108,6 @@ public class TestServerRouter implements IServerRouter {
     @Override
     public List<AbstractServer> getServers() {
         return servers;
-    }
-
-    @Deprecated
-    public void sendServerMessage(CorfuMsg msg) {
-        sendServerMessage(msg, null);
-    }
-
-    @Deprecated
-    public void sendServerMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-        AbstractServer as = handlerMap.get(msg.getMsgType());
-        if (messageIsValid(msg, ctx)) {
-            if (as != null) {
-                // refactor and move threading to handler
-                as.handleMessage(msg, ctx, this);
-            }
-            else {
-                log.trace("Unregistered message of type {} sent to router", msg.getMsgType());
-            }
-        } else {
-            log.trace("Message with wrong epoch {}, expected {}", msg.getEpoch(), serverEpoch);
-        }
     }
 
     public void sendServerMessage(RequestMsg request) {

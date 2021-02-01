@@ -14,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
@@ -86,11 +85,6 @@ public class LayoutServer extends AbstractServer {
 
     @NonNull
     private final PaxosDataStore paxosDataStore;
-
-    @Override
-    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
-        return getState() == ServerState.READY;
-    }
 
     /**
      * Returns new LayoutServer for context.

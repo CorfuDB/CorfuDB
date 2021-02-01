@@ -12,11 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.service.CorfuProtocolBase;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
 import org.corfudb.protocols.wireprotocol.ExceptionMsg;
-import org.corfudb.protocols.wireprotocol.WrongClusterMsg;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -44,101 +40,15 @@ public class BaseHandler implements IClient {
     @Setter
     public IClientRouter router;
 
-    /** Public functions which are exposed to clients. */
+    /* Public functions which are exposed to clients. */
 
     /**
-     * The handler and handlers which implement this client.
-     */
-    @Getter
-    @Deprecated
-    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
-            .generateHandlers(MethodHandles.lookup(), this);
-
-    /**
-     * For old CorfuMsg, use {@link #msgHandler}
      * The handler and handlers which implement this client.
      */
     @Getter
     public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
             .generateHandlers(MethodHandles.lookup(), this)
             .generateErrorHandlers(MethodHandles.lookup(), this);
-
-    /**
-     * Handle an ACK response from the server.
-     *
-     * @param msg The ping request message
-     * @param ctx The context the message was sent under
-     * @param r   A reference to the router
-     * @return Always True, since the ACK message was successful.
-     */
-    @ClientHandler(type = CorfuMsgType.ACK)
-    @Deprecated
-    private static Object handleAck(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        return true;
-    }
-
-    /**
-     * Handle a NACK response from the server.
-     *
-     * @param msg The ping request message
-     * @param ctx The context the message was sent under
-     * @param r   A reference to the router
-     * @return Always True, since the ACK message was successful.
-     */
-    @ClientHandler(type = CorfuMsgType.NACK)
-    @Deprecated
-    private static Object handleNack(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        return false;
-    }
-
-    /**
-     * Handle a WRONG_EPOCH response from the server.
-     *
-     * @param msg The wrong epoch message
-     * @param ctx The context the message was sent under
-     * @param r   A reference to the router
-     * @return none, throw a wrong epoch exception instead.
-     */
-    @ClientHandler(type = CorfuMsgType.WRONG_EPOCH)
-    @Deprecated
-    private static Object handleWrongEpoch(CorfuPayloadMsg<Long> msg, ChannelHandlerContext ctx, IClientRouter r) {
-        throw new WrongEpochException(msg.getPayload());
-    }
-
-    @ClientHandler(type = CorfuMsgType.NOT_READY)
-    @Deprecated
-    private static Object handleNotReady(CorfuMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        throw new ServerNotReadyException();
-    }
-
-    /**
-     * Generic handler for a server exception.
-     */
-    @ClientHandler(type = CorfuMsgType.ERROR_SERVER_EXCEPTION)
-    @Deprecated
-    private static Object handleServerException(CorfuPayloadMsg<ExceptionMsg> msg,
-                                                ChannelHandlerContext ctx, IClientRouter r) throws Throwable {
-        log.warn("Server threw exception for request {}", msg.getRequestID(),
-                msg.getPayload().getThrowable());
-        throw msg.getPayload().getThrowable();
-    }
-
-    /**
-     * Handle a wrong cluster id exception.
-     *
-     * @param msg Wrong cluster id exception message.
-     * @param ctx A context the message was sent under.
-     * @param r   A reference to the router.
-     * @return None, throw a wrong cluster id exception.
-     */
-    @ClientHandler(type = CorfuMsgType.WRONG_CLUSTER_ID)
-    @Deprecated
-    private static Object handleWrongClusterId(CorfuPayloadMsg<WrongClusterMsg> msg,
-                                               ChannelHandlerContext ctx, IClientRouter r) {
-        WrongClusterMsg wrongClusterMessage = msg.getPayload();
-        throw new WrongClusterException(wrongClusterMessage.getServerClusterId(),
-                wrongClusterMessage.getClientClusterId());
-    }
 
     // Protobuf region
 
@@ -197,6 +107,20 @@ public class BaseHandler implements IClient {
     }
 
     /**
+     * Handle a NOT_READY_ERROR response from the server.
+     *
+     * @param msg The NOT_READY_ERROR message
+     * @param ctx The context the message was sent under
+     * @param r   A reference to the router
+     * @return none, throw a ServerNotReadyException instead.
+     */
+    @ServerErrorsHandler(type = ErrorCase.NOT_READY_ERROR)
+    private static Object handleNotReadyError(ResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
+        throw new ServerNotReadyException();
+    }
+
+
+    /**
      * Handle a version response from the server.
      *
      * @param msg The version response message.
@@ -246,19 +170,6 @@ public class BaseHandler implements IClient {
     private static Object handleWrongEpochError(ResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
         long correctEpoch = msg.getPayload().getServerError().getWrongEpochError().getCorrectEpoch();
         throw new WrongEpochException(correctEpoch);
-    }
-
-    /**
-     * Handle a NOT_READY_ERROR response from the server.
-     *
-     * @param msg The NOT_READY_ERROR message
-     * @param ctx The context the message was sent under
-     * @param r   A reference to the router
-     * @return none, throw a ServerNotReadyException instead.
-     */
-    @ServerErrorsHandler(type = ErrorCase.NOT_READY_ERROR)
-    private static Object handleNotReadyError(ResponseMsg msg, ChannelHandlerContext ctx, IClientRouter r) {
-        throw new ServerNotReadyException();
     }
 
     /**

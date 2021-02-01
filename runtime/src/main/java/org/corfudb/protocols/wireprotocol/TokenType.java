@@ -14,7 +14,7 @@ import lombok.RequiredArgsConstructor;
  * Created by dalia on 4/8/17.
  */
 @RequiredArgsConstructor
-public enum TokenType implements ICorfuPayload<TokenType> {
+public enum TokenType implements ICorfuPayload {
 
     // Standard token issue by sequencer or a tail-query response
     NORMAL((byte) 0),

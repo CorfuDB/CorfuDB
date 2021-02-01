@@ -20,7 +20,7 @@ import org.corfudb.util.serializer.CorfuSerializer;
 
 
 /**
- * Object & serialization methods for in-stream checkpoint
+ * Object & serialization methods for in-stream checkpointICorfuPayload
  * summarization of SMR object state.
  */
 @ToString(callSuper = true)

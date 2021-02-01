@@ -2,13 +2,13 @@ package org.corfudb.runtime.clients;
 
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
+import java.util.concurrent.CompletableFuture;
+
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 
 import javax.annotation.Nonnull;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * This is an interface in which all client routers must implement.
@@ -27,18 +27,6 @@ public interface IClientRouter {
      * @return This IClientRouter, to support chaining and the builder pattern.
      */
     IClientRouter addClient(IClient client);
-
-    /**
-     * @deprecated [RM]
-     * Send a message and get a completable future to be fulfilled by the reply.
-     *
-     * @param message The message to send.
-     * @param <T>     The type of completable to return.
-     * @return A completable future which will be fulfilled by the reply,
-     * or a timeout in the case there is no response.
-     */
-    @Deprecated
-    <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message);
 
     /**
      * Send a request message and get a completable future to be fulfilled by the reply.
@@ -68,15 +56,6 @@ public interface IClientRouter {
     <T> CompletableFuture<T> sendRequestAndGetCompletable(
             @Nonnull RequestPayloadMsg payload,
             @Nonnull String endpoint);
-
-    /**
-     * @deprecated [RM]
-     * Send a one way message, without adding a completable future.
-     *
-     * @param message The message to send.
-     */
-    @Deprecated
-    void sendMessage(CorfuMsg message);
 
     /**
      * Send a one way message, without adding a completable future.

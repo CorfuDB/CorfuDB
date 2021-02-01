@@ -9,7 +9,7 @@ import org.corfudb.util.serializer.Serializers;
 /** This message wraps exceptions that are encountered on the server.
  *
  */
-public class ExceptionMsg implements ICorfuPayload<ExceptionMsg> {
+public class ExceptionMsg implements ICorfuPayload {
 
     /** The throwable that was thrown remotely. */
     @Getter
