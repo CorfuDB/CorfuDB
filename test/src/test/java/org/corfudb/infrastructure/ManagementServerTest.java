@@ -88,9 +88,12 @@ public class ManagementServerTest extends AbstractServerTest {
     @Test
     public void triggerFailureHandler() {
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
-        sendRequest(getBootstrapLayoutRequestMsg(layout), true, true);
+        CompletableFuture<Boolean> future = sendRequest(
+                getBootstrapLayoutRequestMsg(layout), true, true);
 
-        CompletableFuture<Boolean> future = sendRequestWithClusterId(
+        assertThat(future.join()).isEqualTo(true);
+
+        future = sendRequestWithClusterId(
                 getReportFailureRequestMsg(0L, Collections.emptySet()),
                 layout.getClusterId(), false, true);
 
