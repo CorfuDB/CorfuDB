@@ -8,20 +8,28 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import com.google.protobuf.ByteString;
+import com.google.protobuf.DescriptorProtos;
+import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -35,14 +43,18 @@ import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.ManagedTxnContext;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
+import org.corfudb.runtime.view.ObjectOpenOption;
 import org.corfudb.runtime.view.SMRObject;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.util.serializer.DynamicProtobufSerializer;
 import org.corfudb.util.serializer.ISerializer;
+import org.corfudb.util.serializer.ProtobufSerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.rocksdb.Options;
 
 import com.google.protobuf.util.JsonFormat;
+
+import static org.corfudb.runtime.view.TableRegistry.*;
 
 /**
  * This is the CorfuStore Browser Tool which prints data in a given namespace and table.
@@ -386,5 +398,80 @@ public class CorfuStoreBrowser {
         store.unsubscribe(streamDumper);
 
         return streamDumper.getTxnRead().get();
+    }
+
+    public void editTable(String tableName, String namespace,
+        ByteString key, ByteString value, ByteString metadata) {
+
+        // Create and register a protobuf serializer to read the table registry.
+        ISerializer protobufSerializer = createProtobufSerializer();
+        Serializers.registerSerializer(protobufSerializer);
+
+        // Open the Registry Table.
+        CorfuTable<TableName, CorfuRecord<CorfuStoreMetadata.TableDescriptors,
+            CorfuStoreMetadata.TableMetadata>> corfuTable =
+            corfuRuntime.getObjectsView().build()
+            .setTypeToken(new TypeToken<CorfuTable<TableName,
+                CorfuRecord<CorfuStoreMetadata.TableDescriptors,
+                    CorfuStoreMetadata.TableMetadata>>>() {
+            })
+            .setStreamName(getFullyQualifiedTableName(CORFU_SYSTEM_NAMESPACE, REGISTRY_TABLE_NAME))
+            .setSerializer(protobufSerializer)
+            .addOpenOption(ObjectOpenOption.NO_CACHE)
+            .open();
+
+        // Identify the Key, Value and Metadata types of the table
+        corfuTable.forEach((table, value) ->
+        {
+            if (Objects.equals(table, tableName)) {
+                CorfuStoreMetadata.TableDescriptors tableDescriptors =
+                    value.getPayload();
+                tableDescriptors.getFileDescriptorsMap().forEach((fdName,
+                    fileDescriptorProto) -> {
+                    identifyMessageTypesinFileDescriptorProto(fileDescriptorProto);
+                });
+            }
+        });
+
+        CorfuTable<CorfuDynamicKey, CorfuDynamicRecord> table =
+            getTable(namespace, tableName);
+
+        DynamicMessage keyMsg = DynamicMessage.parseFrom(keyDescriptor, key);
+        CorfuDynamicKey dynamicKey = new CorfuDynamicKey(keyDescriptor, keyMsg);
+
+        DynamicMessage valueMsg = DynamicMessage.parseFrom(valueDescriptor,
+            value);
+
+        DynamicMessage metadataMsg =
+            DynamicMessage.parseFrom(metadataDescriptor, metadata);
+
+        CorfuDynamicRecord dynamicRecord =
+            new CorfuDynamicRecord(valueDescriptor, valueMsg,
+                metadataDescriptor, metadataMsg);
+
+        table.put(dynamicKey, dynamicRecord);
+    }
+
+    private ISerializer createProtobufSerializer() {
+        ConcurrentMap<String, Class<? extends Message>> classMap = new ConcurrentHashMap<>();
+
+        // Register the schemas of TableName, TableDescriptors & TableMetadata
+        // to be able to understand registry table.
+        classMap.put(getTypeUrl(TableName.getDescriptor()), TableName.class);
+        classMap.put(getTypeUrl(CorfuStoreMetadata.TableDescriptors.getDescriptor()), CorfuStoreMetadata.TableDescriptors.class);
+        classMap.put(getTypeUrl(CorfuStoreMetadata.TableMetadata.getDescriptor()), CorfuStoreMetadata.TableMetadata.class);
+        return new ProtobufSerializer(classMap);
+    }
+
+    private void identifyMessageTypesinFileDescriptorProto(DescriptorProtos.FileDescriptorProto fileDescriptorProto) {
+        for (DescriptorProtos.DescriptorProto descriptorProto : fileDescriptorProto.getMessageTypeList()) {
+            String messageName;
+            if (fileDescriptorProto.getPackage() == null || fileDescriptorProto.getPackage().equals("")) {
+                messageName = descriptorProto.getName();
+            } else {
+                messageName = fileDescriptorProto.getPackage() + "." + descriptorProto.getName();
+            }
+            messagesFdProtoNameMap.putIfAbsent(messageName, fileDescriptorProto.getName());
+        }
     }
 }
