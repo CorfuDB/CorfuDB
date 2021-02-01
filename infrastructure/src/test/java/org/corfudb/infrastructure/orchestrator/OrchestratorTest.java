@@ -13,6 +13,8 @@ import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RemoveNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RestoreRedundancyMergeSegmentsWorkflow;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
@@ -88,7 +90,7 @@ public class OrchestratorTest {
      */
     private HeaderMsg getBasicHeader() {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, 1L,
-                getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), true, true);
+                getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
     }
 
     /**

@@ -3,6 +3,8 @@ package org.corfudb.runtime.clients;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 
 import static org.corfudb.protocols.service.CorfuProtocolBase.getPingRequestMsg;
@@ -47,7 +49,7 @@ public class BaseClient extends AbstractClient {
      * the endpoint is reachable, otherwise False or exceptional completion.
      */
     public CompletableFuture<Boolean> ping() {
-        return sendRequestWithFuture(getPingRequestMsg(), true, true);
+        return sendRequestWithFuture(getPingRequestMsg(), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
     }
 
     /**
@@ -57,7 +59,7 @@ public class BaseClient extends AbstractClient {
      * the endpoint restarts successfully, otherwise False or exceptional completion.
      */
     public CompletableFuture<Boolean> restart() {
-        return sendRequestWithFuture(getRestartRequestMsg(), true, true);
+        return sendRequestWithFuture(getRestartRequestMsg(), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
     }
 
     /**
@@ -68,7 +70,7 @@ public class BaseClient extends AbstractClient {
      * the endpoint resets successfully, otherwise False or exceptional completion.
      */
     public CompletableFuture<Boolean> reset() {
-        return sendRequestWithFuture(getResetRequestMsg(), true, true);
+        return sendRequestWithFuture(getResetRequestMsg(), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
     }
 
     /**
@@ -78,7 +80,7 @@ public class BaseClient extends AbstractClient {
      * @return Completable future which returns true on successful epoch set.
      */
     public CompletableFuture<Boolean> sealRemoteServer(long newEpoch) {
-        return sendRequestWithFuture(getSealRequestMsg(newEpoch), false, true);
+        return sendRequestWithFuture(getSealRequestMsg(newEpoch), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
@@ -87,6 +89,6 @@ public class BaseClient extends AbstractClient {
      * @return Completable future which returns {@link VersionInfo} object.
      */
     public CompletableFuture<VersionInfo> getVersionInfo() {
-        return sendRequestWithFuture(getVersionRequestMsg(), true, true);
+        return sendRequestWithFuture(getVersionRequestMsg(), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
     }
 }

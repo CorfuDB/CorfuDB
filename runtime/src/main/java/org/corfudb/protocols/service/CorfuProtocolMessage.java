@@ -30,6 +30,22 @@ public final class CorfuProtocolMessage {
     private CorfuProtocolMessage() {}
 
     /**
+     * An Enum wrapper for the boolean field ignore_cluster_id of HeaderMsg.
+     */
+    public enum ClusterIdCheck {
+        CHECK,
+        IGNORE
+    }
+
+    /**
+     * An Enum wrapper for the boolean field ignore_epoch of HeaderMsg.
+     */
+    public enum EpochCheck {
+        CHECK,
+        IGNORE
+    }
+
+    /**
      * This type map provides clients with the ability to convert
      * between representations of PriorityLevel.
      */
@@ -53,7 +69,7 @@ public final class CorfuProtocolMessage {
      */
     public static HeaderMsg getHeaderMsg(long requestId, CorfuMessage.PriorityLevel priority,
                                          long epoch, UuidMsg clusterId, UuidMsg clientId,
-                                         boolean ignoreClusterId, boolean ignoreEpoch) {
+                                         ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return HeaderMsg.newBuilder()
                 .setVersion(ProtocolVersionMsg.getDefaultInstance())
                 .setRequestId(requestId)
@@ -61,8 +77,8 @@ public final class CorfuProtocolMessage {
                 .setEpoch(epoch)
                 .setClusterId(clusterId)
                 .setClientId(clientId)
-                .setIgnoreClusterId(ignoreClusterId)
-                .setIgnoreEpoch(ignoreEpoch)
+                .setIgnoreClusterId(ignoreClusterId == ClusterIdCheck.IGNORE)
+                .setIgnoreEpoch(ignoreEpoch == EpochCheck.IGNORE)
                 .build();
     }
 
@@ -79,7 +95,7 @@ public final class CorfuProtocolMessage {
      * @return                  a HeaderMsg encoding the provided arguments
      */
     public static HeaderMsg getHeaderMsg(long requestId, CorfuMessage.PriorityLevel priority, long epoch,
-                                         UUID clusterId, UUID clientId, boolean ignoreClusterId, boolean ignoreEpoch) {
+                                         UUID clusterId, UUID clientId, ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestId, priority, epoch, getUuidMsg(clusterId),
                 getUuidMsg(clientId), ignoreClusterId, ignoreEpoch);
     }
@@ -95,11 +111,11 @@ public final class CorfuProtocolMessage {
      *                          header, but modifying the ignoreClusterId and ignoreEpoch
      *                          fields with the values provided
      */
-    public static HeaderMsg getHeaderMsg(HeaderMsg header, boolean ignoreClusterId, boolean ignoreEpoch) {
+    public static HeaderMsg getHeaderMsg(HeaderMsg header, ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return HeaderMsg.newBuilder()
                 .mergeFrom(header)
-                .setIgnoreClusterId(ignoreClusterId)
-                .setIgnoreEpoch(ignoreEpoch)
+                .setIgnoreClusterId(ignoreClusterId == ClusterIdCheck.IGNORE)
+                .setIgnoreEpoch(ignoreEpoch == EpochCheck.IGNORE)
                 .build();
     }
 

@@ -4,6 +4,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.corfudb.infrastructure.log.LogFormat.LogHeader;
 import org.corfudb.infrastructure.log.StreamLogFiles;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -69,8 +71,8 @@ public class LogUnitServerTest extends AbstractServerTest {
         setServer(s1);
         setContext(sc);
 
-        TailsResponse req1 = (TailsResponse) sendRequest(getTailRequestMsg(Type.LOG_TAIL), false, false).join();
-        TailsResponse req2 = (TailsResponse) sendRequest(getTailRequestMsg(Type.ALL_STREAMS_TAIL), false, false).join();
+        TailsResponse req1 = (TailsResponse) sendRequest(getTailRequestMsg(Type.LOG_TAIL), ClusterIdCheck.CHECK, EpochCheck.CHECK).join();
+        TailsResponse req2 = (TailsResponse) sendRequest(getTailRequestMsg(Type.ALL_STREAMS_TAIL), ClusterIdCheck.CHECK, EpochCheck.CHECK).join();
 
         assertThat(req1.getEpoch()).isEqualTo(sc.getCurrentLayout().getEpoch());
         assertThat(req2.getEpoch()).isEqualTo(sc.getCurrentLayout().getEpoch());
@@ -103,7 +105,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         LogData ld = new LogData(DataType.DATA, b);
         ld.setGlobalAddress(ADDRESS_0);
         ld.setBackpointerMap(Collections.emptyMap());
-        sendRequest(getWriteLogRequestMsg(ld), false, false).join();
+        sendRequest(getWriteLogRequestMsg(ld), ClusterIdCheck.CHECK, EpochCheck.CHECK).join();
         assertThat(s1)
                 .containsDataAtAddress(ADDRESS_0);
         assertThat(s1)
@@ -114,7 +116,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         ld2.setGlobalAddress(ADDRESS_0);
         ld2.setBackpointerMap(Collections.emptyMap());
 
-        CompletableFuture<Boolean> future = sendRequest(getWriteLogRequestMsg(ld2), false, false);
+        CompletableFuture<Boolean> future = sendRequest(getWriteLogRequestMsg(ld2), ClusterIdCheck.CHECK, EpochCheck.CHECK);
         assertThatThrownBy(future::join).hasCauseExactlyInstanceOf(OverwriteException.class);
     }
 
@@ -241,7 +243,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         ld.setGlobalAddress(addr);
         ld.setBackpointerMap(Collections.singletonMap(CorfuRuntime.getStreamID(streamName),
                 Address.NO_BACKPOINTER));
-        return sendRequest(getWriteLogRequestMsg(ld), false, false);
+        return sendRequest(getWriteLogRequestMsg(ld), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     @Test
@@ -387,7 +389,7 @@ public class LogUnitServerTest extends AbstractServerTest {
                 backpointer = Address.NON_EXIST;
             }
             ld.setBackpointerMap(Collections.singletonMap(streamID, backpointer));
-            futures.add(sendRequest(getWriteLogRequestMsg(ld), false, false));
+            futures.add(sendRequest(getWriteLogRequestMsg(ld), ClusterIdCheck.CHECK, EpochCheck.CHECK));
         }
 
         futures.forEach(CompletableFuture::join);
@@ -410,7 +412,7 @@ public class LogUnitServerTest extends AbstractServerTest {
 
         // Trim the log, and verify that trim mark is updated on log unit
         newServer.prefixTrim(trimMark);
-        sendRequest(getTrimLogRequestMsg(new Token(0L, trimMark)), false, false).join();
+        sendRequest(getTrimLogRequestMsg(new Token(0L, trimMark)), ClusterIdCheck.CHECK, EpochCheck.CHECK).join();
 
         // Retrieve address space from current log unit server (after a prefix trim)
         addressSpace = newServer.getStreamAddressSpace(streamID);
@@ -447,7 +449,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         final Long address = 5L;
         uuidLongMap.put(uuid, address);
         ld.setBackpointerMap(uuidLongMap);
-        sendRequest(getWriteLogRequestMsg(ld), false, false).join();
+        sendRequest(getWriteLogRequestMsg(ld), ClusterIdCheck.CHECK, EpochCheck.CHECK).join();
 
         s1 = new LogUnitServer(new ServerContextBuilder()
                 .setLogPath(serviceDir)
@@ -557,7 +559,7 @@ public class LogUnitServerTest extends AbstractServerTest {
             ld.setCheckpointedStreamId(UUID.randomUUID());
             ld.setCheckpointedStreamId(UUID.randomUUID());
             ld.setCheckpointId(UUID.randomUUID());
-            sendRequest(getWriteLogRequestMsg(ld), false, false).join();
+            sendRequest(getWriteLogRequestMsg(ld), ClusterIdCheck.CHECK, EpochCheck.CHECK).join();
         }
         long end = System.currentTimeMillis();
         System.out.println("Total Write Time - " + (end - start));
@@ -565,7 +567,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         start = System.currentTimeMillis();
         for (int i = 0; i < iterations; i++) {
             ADDRESS = i;
-            sendRequest(getReadLogRequestMsg(Collections.singletonList(ADDRESS), true), false, false).join();
+            sendRequest(getReadLogRequestMsg(Collections.singletonList(ADDRESS), true), ClusterIdCheck.CHECK, EpochCheck.CHECK).join();
         }
         end = System.currentTimeMillis();
         System.out.println("Total Read Time -" + (end - start));

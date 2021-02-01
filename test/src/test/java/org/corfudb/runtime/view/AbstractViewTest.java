@@ -18,6 +18,8 @@ import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.NetworkStretcher;
 import org.corfudb.protocols.service.CorfuProtocolMessage;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.clients.BaseHandler;
@@ -150,7 +152,7 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
      * @param ignoreEpoch       indicates if the message is epoch aware
      * @return                  the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(1L, CorfuMessage.PriorityLevel.NORMAL, 0L,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -305,17 +307,17 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         testServerMap.entrySet().parallelStream()
                 .forEach(e -> {
                     e.getValue().layoutServer.handleMessage(getRequestMsg(
-                                    getBasicHeader(true, true),
+                                    getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                                     getBootstrapLayoutRequestMsg(l)), null, e.getValue().serverRouter);
                     e.getValue().managementServer.handleMessage(getRequestMsg(
-                                    getBasicHeader(true, true),
+                                    getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                                     getBootstrapManagementRequestMsg(l)), null, e.getValue().serverRouter);
                 });
         TestServer primarySequencerNode = testServerMap.get(l.getSequencers().get(0));
         primarySequencerNode.sequencerServer
                 .handleMessage(
                         CorfuProtocolMessage.getRequestMsg(
-                                getBasicHeader(false, false),
+                                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                                 getBootstrapSequencerRequestMsg(
                                         Collections.emptyMap(),
                                         0L,

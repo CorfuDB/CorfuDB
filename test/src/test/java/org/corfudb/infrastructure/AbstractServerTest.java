@@ -2,6 +2,8 @@ package org.corfudb.infrastructure;
 
 import lombok.Getter;
 import org.corfudb.AbstractCorfuTest;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.BaseHandler;
@@ -77,7 +79,7 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     }
 
     public <T> CompletableFuture<T> sendRequest(RequestPayloadMsg payload,
-                                                boolean ignoreClusterId, boolean ignoreEpoch) {
+                                                ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return sendRequestWithClusterId(payload, Layout.INVALID_CLUSTER_ID, ignoreClusterId, ignoreEpoch);
     }
 
@@ -101,14 +103,14 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     }
 
     public <T> CompletableFuture<T> sendRequestWithEpoch(RequestPayloadMsg payload, long epoch,
-                                                         boolean ignoreClusterId, boolean ignoreEpoch) {
+                                                         ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         clientRouter.setClientID(testClientId);
         return clientRouter.sendRequestAndGetCompletable(payload, epoch, getUuidMsg(Layout.INVALID_CLUSTER_ID),
                 CorfuMessage.PriorityLevel.NORMAL, ignoreClusterId, ignoreEpoch);
     }
 
     public <T> CompletableFuture<T> sendRequestWithClusterId(RequestPayloadMsg payload, UUID clusterId,
-                                                             boolean ignoreClusterId, boolean ignoreEpoch) {
+                                                             ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         clientRouter.setClientID(testClientId);
         return clientRouter.sendRequestAndGetCompletable(payload, 0L, getUuidMsg(clusterId),
                 CorfuMessage.PriorityLevel.NORMAL, ignoreClusterId, ignoreEpoch);
@@ -125,7 +127,7 @@ public abstract class AbstractServerTest extends AbstractCorfuTest {
     }
 
     public <T> CompletableFuture<T> sendRequestWithClientId(UUID clientId, RequestPayloadMsg payload, UUID clusterId,
-                                                            boolean ignoreClusterId, boolean ignoreEpoch) {
+                                                            ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         clientRouter.setClientID(clientId);
         return clientRouter.sendRequestAndGetCompletable(payload, 0L, getUuidMsg(clusterId),
                 CorfuMessage.PriorityLevel.NORMAL, ignoreClusterId, ignoreEpoch);

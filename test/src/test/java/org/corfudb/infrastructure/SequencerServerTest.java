@@ -1,5 +1,7 @@
 package org.corfudb.infrastructure;
 
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -59,7 +61,7 @@ public class SequencerServerTest extends AbstractServerTest {
     @Test
     public void sequencerMetricsRequest() {
         CompletableFuture<SequencerMetrics> cFuture = sendRequest(
-                getDefaultSequencerMetricsRequestMsg(), false, true);
+                getDefaultSequencerMetricsRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         SequencerMetrics seqMetrics = cFuture.join();
         assertThat(seqMetrics.getSequencerStatus())
                 .isEqualTo(SequencerMetrics.SequencerStatus.READY);
@@ -71,7 +73,7 @@ public class SequencerServerTest extends AbstractServerTest {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             CompletableFuture<TokenResponse> future = sendRequest(
                     getTokenRequestMsg(1L, Collections.emptyList()),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             Token thisToken = future.join().getToken();
             assertThat(thisToken.getSequence())
                     .isGreaterThan(lastTokenValue);
@@ -85,10 +87,10 @@ public class SequencerServerTest extends AbstractServerTest {
 
             CompletableFuture<TokenResponse> future1 = sendRequest(
                     getTokenRequestMsg(1L, Collections.emptyList()),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             CompletableFuture<TokenResponse> future2 = sendRequest(
                     getTokenRequestMsg(0L, Collections.emptyList()),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             Token thisToken = future1.join().getToken();
             Token checkToken = future2.join().getToken();
 
@@ -105,13 +107,13 @@ public class SequencerServerTest extends AbstractServerTest {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             CompletableFuture<TokenResponse> future = sendRequest(
                     getTokenRequestMsg(1L, Collections.singletonList(streamA)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
 
             Token thisTokenA = future.join().getToken();
 
             future = sendRequest(
                     getTokenRequestMsg(0L, Collections.singletonList(streamA)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
 
             long checkTokenA = future.join().getStreamTail(streamA);
 
@@ -120,13 +122,13 @@ public class SequencerServerTest extends AbstractServerTest {
 
             future = sendRequest(
                     getTokenRequestMsg(1L, Collections.singletonList(streamB)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
 
             Token thisTokenB = future.join().getToken();
 
             future = sendRequest(
                     getTokenRequestMsg(0L, Collections.singletonList(streamB)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             long checkTokenB = future.join().getStreamTail(streamB);
 
             assertThat(thisTokenB.getSequence())
@@ -134,7 +136,7 @@ public class SequencerServerTest extends AbstractServerTest {
 
             future = sendRequest(
                     getTokenRequestMsg(0L, Collections.singletonList(streamA)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             long checkTokenA2 = future.join().getStreamTail(streamA);
 
             assertThat(checkTokenA2)
@@ -153,12 +155,12 @@ public class SequencerServerTest extends AbstractServerTest {
         for (int i = 0; i < PARAMETERS.NUM_ITERATIONS_LOW; i++) {
             CompletableFuture<TokenResponse> future = sendRequest(
                     getTokenRequestMsg(1L, Collections.singletonList(streamA)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             Token thisTokenA = future.join().getToken();
 
             future = sendRequest(
                     getTokenRequestMsg(1L, Collections.singletonList(streamA)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             long checkTokenAValue = future.join().getBackpointerMap().get(streamA);
 
             assertThat(thisTokenA.getSequence())
@@ -166,12 +168,12 @@ public class SequencerServerTest extends AbstractServerTest {
 
             future = sendRequest(
                     getTokenRequestMsg(1L, Collections.singletonList(streamB)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             Token thisTokenB = future.join().getToken();
 
             future = sendRequest(
                     getTokenRequestMsg(1L, Collections.singletonList(streamB)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             long checkTokenBValue = future.join().getBackpointerMap().get(streamB);
 
             assertThat(thisTokenB.getSequence())
@@ -181,12 +183,12 @@ public class SequencerServerTest extends AbstractServerTest {
 
             future = sendRequest(
                     getTokenRequestMsg(MULTI_TOKEN, Collections.singletonList(streamA)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             thisTokenA = future.join().getToken();
 
             future = sendRequest(
                     getTokenRequestMsg(1L, Collections.singletonList(streamA)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             checkTokenAValue = future.join().getBackpointerMap().get(streamA);
 
             assertThat(thisTokenA.getSequence() + MULTI_TOKEN - 1)
@@ -195,12 +197,12 @@ public class SequencerServerTest extends AbstractServerTest {
             // check the requesting multiple tokens does not break the back-pointer for the multi-entry
             future = sendRequest(
                     getTokenRequestMsg(1L, Collections.singletonList(streamA)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             thisTokenA = future.join().getToken();
 
             future = sendRequest(
                     getTokenRequestMsg(MULTI_TOKEN, Collections.singletonList(streamA)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
             checkTokenAValue = future.join().getBackpointerMap().get(streamA);
 
             assertThat(thisTokenA.getSequence()).isEqualTo(checkTokenAValue);
@@ -216,23 +218,23 @@ public class SequencerServerTest extends AbstractServerTest {
 
         CompletableFuture<TokenResponse> future = sendRequest(
                 getTokenRequestMsg(1L, Collections.singletonList(streamA)),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
         long tailA = future.join().getToken().getSequence();
 
         future = sendRequest(
                 getTokenRequestMsg(1L, Collections.singletonList(streamB)),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
         long tailB = future.join().getToken().getSequence();
 
         future = sendRequest(
                 getTokenRequestMsg(1L, Collections.singletonList(streamC)),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
 
         long tailC = future.join().getToken().getSequence();
 
         future = sendRequest(
                 getTokenRequestMsg(0L, Collections.emptyList()),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
         long globalTail = future.join().getToken().getSequence();
 
         // Construct new tails
@@ -255,22 +257,22 @@ public class SequencerServerTest extends AbstractServerTest {
                         globalTail + 2,
                         0L,
                         false),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
         future.join();
         future = sendRequest(
                 getTokenRequestMsg(0L, Collections.singletonList(streamA)),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
         assertThat(future.join().getStreamTail(streamA)).isEqualTo(newTailA);
 
         future = sendRequest(
                 getTokenRequestMsg(0L, Collections.singletonList(streamB)),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
         assertThat(future.join().getStreamTail(streamB)).isEqualTo(newTailB);
 
         // We should have the same value than before
         future = sendRequest(
                 getTokenRequestMsg(0L, Collections.singletonList(streamC)),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
         assertThat(future.join().getStreamTail(streamC)).isEqualTo(newTailC);
     }
 
@@ -293,7 +295,7 @@ public class SequencerServerTest extends AbstractServerTest {
         for (int i = 0; i < num; i++) {
             future = sendRequest(
                     getTokenRequestMsg(1L, Collections.singletonList(streamA)),
-                    false, false);
+                    ClusterIdCheck.CHECK, EpochCheck.CHECK);
         }
 
         future.join();
@@ -309,7 +311,7 @@ public class SequencerServerTest extends AbstractServerTest {
                         newEpoch,
                         true),
                 newEpoch,
-                false, false
+                ClusterIdCheck.CHECK, EpochCheck.CHECK
         );
         assertThat(future1.join()).isEqualTo(true);
         // Sequencer accepts only a full bootstrap message if the epoch is not consecutive.
@@ -322,7 +324,7 @@ public class SequencerServerTest extends AbstractServerTest {
                         newEpoch,
                         true),
                 newEpoch,
-                false, false
+                ClusterIdCheck.CHECK, EpochCheck.CHECK
         );
         assertThat(future1.join()).isEqualTo(false);
         future1 = sendRequestWithEpoch(
@@ -335,7 +337,7 @@ public class SequencerServerTest extends AbstractServerTest {
                         newEpoch,
                         false),
                 newEpoch,
-                false, false
+                ClusterIdCheck.CHECK, EpochCheck.CHECK
         );
 
         assertThat(future1.join()).isEqualTo(true);
@@ -343,7 +345,7 @@ public class SequencerServerTest extends AbstractServerTest {
         future = sendRequestWithEpoch(
                 getTokenRequestMsg(0L, Collections.emptyList()),
                 newEpoch,
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
         assertThat(future.join())
                 .isEqualTo(new TokenResponse(TokenType.NORMAL, TokenResponse.NO_CONFLICT_KEY,
                         TokenResponse.NO_CONFLICT_STREAM, new Token(newEpoch, num - 1),

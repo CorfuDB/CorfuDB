@@ -15,6 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics.SequencerStatus;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -430,7 +432,7 @@ public class SequencerServer extends AbstractServer {
         log.debug("trimCache: global trim {}, streamsAddressSpace {}", trimMark, streamsAddressMap);
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(),
-                false, true);
+                ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getSequencerTrimResponseMsg());
         r.sendResponse(response, ctx);
     }
@@ -565,7 +567,7 @@ public class SequencerServer extends AbstractServer {
                 streamTailToGlobalTailMap, sequencerEpoch);
 
         HeaderMsg responseHeader = getHeaderMsg(req.getHeader(),
-                false, true);
+                ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         r.sendResponse(getResponseMsg(responseHeader,
                 getBootstrapSequencerResponseMsg(true)), ctx);
     }

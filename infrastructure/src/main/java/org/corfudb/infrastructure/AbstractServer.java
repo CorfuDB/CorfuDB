@@ -3,6 +3,8 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
@@ -139,7 +141,7 @@ public abstract class AbstractServer {
     }
 
     private ResponseMsg getNotReadyError(HeaderMsg requestHeader) {
-        HeaderMsg responseHeader = getHeaderMsg(requestHeader, false, true);
+        HeaderMsg responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         return getResponseMsg(responseHeader, getNotReadyErrorMsg());
     }
 

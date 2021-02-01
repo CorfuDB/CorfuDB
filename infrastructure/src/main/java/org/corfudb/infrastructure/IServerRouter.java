@@ -5,6 +5,9 @@ import io.netty.channel.ChannelHandlerContext;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
@@ -206,7 +209,7 @@ public interface IServerRouter {
     default void sendWrongEpochError(HeaderMsg requestHeader, ChannelHandlerContext ctx) {
         final long correctEpoch = getServerEpoch();
 
-        HeaderMsg responseHeader = getHeaderMsg(requestHeader, false, true);
+        HeaderMsg responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getWrongEpochErrorMsg(correctEpoch));
         sendResponse(response, ctx);
 
@@ -224,7 +227,7 @@ public interface IServerRouter {
      * @param ctx The context of the channel handler.
      */
     default void sendNoBootstrapError(HeaderMsg requestHeader, ChannelHandlerContext ctx) {
-        HeaderMsg responseHeader = getHeaderMsg(requestHeader, false, true);
+        HeaderMsg responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getNotBootstrappedErrorMsg());
         sendResponse(response, ctx);
 
@@ -242,7 +245,7 @@ public interface IServerRouter {
      * @param clusterId The current cluster id.
      */
     default void sendWrongClusterError(HeaderMsg requestHeader, ChannelHandlerContext ctx, UuidMsg clusterId) {
-        HeaderMsg responseHeader = getHeaderMsg(requestHeader, false, true);
+        HeaderMsg responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader,
                 getWrongClusterErrorMsg(clusterId, requestHeader.getClusterId()));
 

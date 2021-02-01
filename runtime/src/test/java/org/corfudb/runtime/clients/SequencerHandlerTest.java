@@ -2,6 +2,8 @@ package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -63,7 +65,7 @@ public class SequencerHandlerTest {
      * @param ignoreEpoch       indicates if the message is epoch aware
      * @return                  the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), CorfuMessage.PriorityLevel.NORMAL, 0L,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -117,7 +119,7 @@ public class SequencerHandlerTest {
     public void testTokenResponseEmptyMap() {
         Token token = new Token(0L, 0L);
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTokenResponseMsg(
                         TokenType.NORMAL,
                         TokenResponse.NO_CONFLICT_KEY,
@@ -151,7 +153,7 @@ public class SequencerHandlerTest {
         Map<UUID, Long> backPointerMap = getTokenResponseDefaultMap();
         Map<UUID, Long> streamTails = getTokenResponseDefaultMap();
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTokenResponseMsg(
                         TokenType.NORMAL,
                         TokenResponse.NO_CONFLICT_KEY,
@@ -182,11 +184,11 @@ public class SequencerHandlerTest {
     @Test
     public void testBootstrapSequencerResponse() {
         ResponseMsg responseAck = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getBootstrapSequencerResponseMsg(true)
         );
         ResponseMsg responseNack = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getBootstrapSequencerResponseMsg(false)
         );
 
@@ -205,7 +207,7 @@ public class SequencerHandlerTest {
     @Test
     public void testSequencerTrimResponse() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getSequencerTrimResponseMsg()
         );
 
@@ -225,15 +227,15 @@ public class SequencerHandlerTest {
         SequencerMetrics sequencerMetricsNotReady = SequencerMetrics.NOT_READY;
         SequencerMetrics sequencerMetricsUnknown = SequencerMetrics.UNKNOWN;
         ResponseMsg responseReady = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getSequencerMetricsResponseMsg(sequencerMetricsReady)
         );
         ResponseMsg responseNotReady = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getSequencerMetricsResponseMsg(sequencerMetricsNotReady)
         );
         ResponseMsg responseUnkown = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getSequencerMetricsResponseMsg(sequencerMetricsUnknown)
         );
 
@@ -255,7 +257,7 @@ public class SequencerHandlerTest {
     public void testSequencerMetricsResponseUnsupported() {
         SequencerMetrics sequencerMetrics = new SequencerMetrics(null);
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getSequencerMetricsResponseMsg(sequencerMetrics)
         );
 
@@ -274,7 +276,7 @@ public class SequencerHandlerTest {
         long defaultEpoch = 10L;
 
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getStreamsAddressResponseMsg(defaultLogTail, defaultEpoch, Collections.emptyMap())
         );
 
@@ -301,7 +303,7 @@ public class SequencerHandlerTest {
         Map<UUID, StreamAddressSpace> defaultMap = getDefaultAddressMap();
 
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getStreamsAddressResponseMsg(defaultLogTail, defaultEpoch, defaultMap)
         );
 

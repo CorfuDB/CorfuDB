@@ -7,6 +7,8 @@ import java.util.concurrent.ExecutorService;
 import javax.annotation.Nonnull;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
@@ -68,7 +70,7 @@ public class BaseServer extends AbstractServer {
         log.trace("handlePing[{}]: Ping message received from {} {}", req.getHeader().getRequestId(),
                 req.getHeader().getClientId().getMsb(), req.getHeader().getClientId().getLsb());
 
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getPingResponseMsg());
         r.sendResponse(response, ctx);
     }
@@ -83,7 +85,7 @@ public class BaseServer extends AbstractServer {
     @RequestHandler(type = RequestPayloadMsg.PayloadCase.VERSION_REQUEST)
     private void getVersion(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
         VersionInfo versionInfo = new VersionInfo(serverContext.getServerConfig(), serverContext.getNodeIdBase64());
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getVersionResponseMsg(versionInfo));
         r.sendResponse(response, ctx);
     }
@@ -111,14 +113,14 @@ public class BaseServer extends AbstractServer {
                     req.getHeader().getRequestId(), req.getHeader().getClientId(), remoteHostAddress, epoch);
 
             serverContext.setServerEpoch(epoch, r);
-            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             ResponseMsg response = getResponseMsg(responseHeader, getSealResponseMsg());
             r.sendResponse(response, ctx);
         } catch (WrongEpochException e) {
             log.debug("handleSeal[{}]: Rejected SEAL current={}, requested={}", req.getHeader().getRequestId(),
                     e.getCorrectEpoch(), req.getPayload().getSealRequest().getEpoch());
 
-            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             ResponseMsg response = getResponseMsg(responseHeader, getWrongEpochErrorMsg(e.getCorrectEpoch()));
             r.sendResponse(response, ctx);
         }
@@ -138,7 +140,7 @@ public class BaseServer extends AbstractServer {
         log.warn("handleReset[{}]: Remote reset requested from client {}",
                 req.getHeader().getRequestId(), req.getHeader().getClientId());
 
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getResetResponseMsg());
         r.sendResponse(response, ctx);
         CorfuServer.restartServer(true);
@@ -158,7 +160,7 @@ public class BaseServer extends AbstractServer {
         log.warn("handleRestart[{}]: Remote restart requested from client {}",
                 req.getHeader().getRequestId(), req.getHeader().getClientId());
 
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getRestartResponseMsg());
         r.sendResponse(response, ctx);
         CorfuServer.restartServer(false);
