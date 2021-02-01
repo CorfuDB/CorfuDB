@@ -5,6 +5,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
@@ -542,8 +544,8 @@ public class LayoutServerTest extends AbstractServerTest {
         long newEpoch = baseEpoch + reboot;
         sendRequestWithClusterId(getSealRequestMsg(newEpoch),
                 bootstrappedLayout.getClusterId(),
-                false,
-                true).join();
+                ClusterIdCheck.CHECK,
+                EpochCheck.IGNORE).join();
 
         Layout layout = TestLayoutBuilder.single(SERVERS.PORT_0);
         layout.setEpoch(newEpoch);
@@ -581,45 +583,45 @@ public class LayoutServerTest extends AbstractServerTest {
 
     private CorfuMessage.RequestMsg getRequest(CorfuMessage.RequestPayloadMsg payloadMsg) {
         CorfuMessage.HeaderMsg header = getHeaderMsg(0, CorfuMessage.PriorityLevel.NORMAL, 0,
-                DEFAULT_UUID, DEFAULT_UUID, true, true);
+                DEFAULT_UUID, DEFAULT_UUID, ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
         return getRequestMsg(header, payloadMsg);
     }
 
     private void bootstrapServer(Layout l) {
-        sendRequest(getBootstrapLayoutRequestMsg(l), true, true).join();
+        sendRequest(getBootstrapLayoutRequestMsg(l), ClusterIdCheck.IGNORE, EpochCheck.IGNORE).join();
     }
 
     private CompletableFuture<Layout> requestLayout(long epoch) {
-        return sendRequest(getLayoutRequestMsg(epoch), true, true);
+        return sendRequest(getLayoutRequestMsg(epoch), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
     }
 
     private CompletableFuture<Boolean> setEpoch(long epoch, UUID clusterId) {
         return sendRequestWithClusterId(getSealRequestMsg(epoch),
-                clusterId, false, true);
+                clusterId, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     private CompletableFuture<LayoutPrepareResponse> sendPrepare(long epoch, long rank, UUID clusterId) {
         return sendRequestWithClusterId(getPrepareLayoutRequestMsg(epoch, rank),
-                clusterId, false, true);
+                clusterId, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     private CompletableFuture<Boolean> sendPropose(long epoch, long rank, Layout layout, UUID clusterId) {
         return sendRequestWithClusterId(getProposeLayoutRequestMsg(epoch, rank, layout),
-                clusterId, false, true);
+                clusterId, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     private CompletableFuture<Boolean> sendCommitted(long epoch, Layout layout, UUID clusterId) {
         return sendRequestWithClusterId(getCommitLayoutRequestMsg(false, epoch, layout),
-                clusterId, false, true);
+                clusterId, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     private CompletableFuture<LayoutPrepareResponse> sendPrepare(UUID clientId, long epoch, long rank, UUID clusterId) {
         return sendRequestWithClientId(clientId, getPrepareLayoutRequestMsg(epoch, rank),
-                clusterId, false, true);
+                clusterId, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     private CompletableFuture<Boolean> sendPropose(UUID clientId, long epoch, long rank, Layout layout, UUID clusterId) {
         return sendRequestWithClientId(clientId, getProposeLayoutRequestMsg(epoch, rank, layout),
-                clusterId, false, true);
+                clusterId, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 }

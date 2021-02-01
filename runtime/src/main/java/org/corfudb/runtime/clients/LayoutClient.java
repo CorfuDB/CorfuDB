@@ -5,6 +5,8 @@ import java.util.concurrent.CompletableFuture;
 
 import javax.annotation.Nonnull;
 
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.view.Layout;
 
@@ -34,7 +36,7 @@ public class LayoutClient extends AbstractClient {
      * @return A future which will be completed with the current layout.
      */
     public CompletableFuture<Layout> getLayout() {
-        return sendRequestWithFuture(getLayoutRequestMsg(getEpoch()), true, true);
+        return sendRequestWithFuture(getLayoutRequestMsg(getEpoch()), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
     }
 
     /**
@@ -45,7 +47,7 @@ public class LayoutClient extends AbstractClient {
      * bootstrap was successful, false otherwise.
      */
     public CompletableFuture<Boolean> bootstrapLayout(Layout l) {
-        return sendRequestWithFuture(getBootstrapLayoutRequestMsg(l), true, true);
+        return sendRequestWithFuture(getBootstrapLayoutRequestMsg(l), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
     }
 
     /**
@@ -58,7 +60,7 @@ public class LayoutClient extends AbstractClient {
      * with OutrankedException.
      */
     public CompletableFuture<LayoutPrepareResponse> prepare(long epoch, long rank) {
-        return sendRequestWithFuture(getPrepareLayoutRequestMsg(epoch, rank), false, true);
+        return sendRequestWithFuture(getPrepareLayoutRequestMsg(epoch, rank), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
@@ -73,7 +75,7 @@ public class LayoutClient extends AbstractClient {
      * with OutrankedException.
      */
     public CompletableFuture<Boolean> propose(long epoch, long rank, Layout layout) {
-        return sendRequestWithFuture(getProposeLayoutRequestMsg(epoch, rank, layout), false, true);
+        return sendRequestWithFuture(getProposeLayoutRequestMsg(epoch, rank, layout), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
@@ -84,7 +86,7 @@ public class LayoutClient extends AbstractClient {
      * @return True, if the commit was successful.
      */
     public CompletableFuture<Boolean> committed(long epoch, Layout layout) {
-        return sendRequestWithFuture(getCommitLayoutRequestMsg(false, epoch, layout), false, true);
+        return sendRequestWithFuture(getCommitLayoutRequestMsg(false, epoch, layout), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
@@ -94,7 +96,7 @@ public class LayoutClient extends AbstractClient {
      * @return true if it was committed, otherwise false.
      */
     public CompletableFuture<Boolean> force(@Nonnull Layout layout) {
-        return sendRequestWithFuture(getCommitLayoutRequestMsg(true, layout.getEpoch(), layout), false, true);
+        return sendRequestWithFuture(getCommitLayoutRequestMsg(true, layout.getEpoch(), layout), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
 }

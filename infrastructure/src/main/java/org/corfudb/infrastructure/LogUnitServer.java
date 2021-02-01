@@ -11,6 +11,8 @@ import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.infrastructure.log.StreamLogCompaction;
 import org.corfudb.infrastructure.log.StreamLogFiles;
 import org.corfudb.protocols.CorfuProtocolLogData;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -243,7 +245,7 @@ public class LogUnitServer extends AbstractServer {
         }
 
         streamLog.updateCommittedTail(req.getPayload().getUpdateCommittedTailRequest().getCommittedTail());
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         router.sendResponse(getResponseMsg(responseHeader, getUpdateCommittedTailResponseMsg()), ctx);
     }
 
@@ -259,17 +261,17 @@ public class LogUnitServer extends AbstractServer {
 
         if (ex.getCause() instanceof WrongEpochException) {
             WrongEpochException wee = (WrongEpochException) ex.getCause();
-            responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             router.sendResponse(getResponseMsg(responseHeader, getWrongEpochErrorMsg(wee.getCorrectEpoch())), ctx);
         } else if (ex.getCause() instanceof OverwriteException) {
             OverwriteException owe = (OverwriteException) ex.getCause();
-            responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             router.sendResponse(getResponseMsg(responseHeader, getOverwriteErrorMsg(owe.getOverWriteCause().getId())), ctx);
         } else if (ex.getCause() instanceof TrimmedException) {
-            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
             router.sendResponse(getResponseMsg(responseHeader, getTrimmedErrorMsg()), ctx);
         } else {
-            responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             router.sendResponse(getResponseMsg(responseHeader, getUnknownErrorMsg(ex)), ctx);
             throw new LogUnitException(ex);
         }
@@ -339,7 +341,7 @@ public class LogUnitServer extends AbstractServer {
 
         batchWriter.addTask(BatchWriterOperation.Type.PREFIX_TRIM, req)
                 .thenRun(() -> {
-                    HeaderMsg header = getHeaderMsg(req.getHeader(), false, true);
+                    HeaderMsg header = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
                     router.sendResponse(getResponseMsg(header, getTrimLogResponseMsg()), ctx);
                 })
                 .exceptionally(ex -> {

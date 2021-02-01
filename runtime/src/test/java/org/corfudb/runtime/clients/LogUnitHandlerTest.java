@@ -2,6 +2,8 @@ package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -75,7 +77,7 @@ public class LogUnitHandlerTest {
      * @param ignoreEpoch       indicates if the message is epoch aware
      * @return                  the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, 0L,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -99,7 +101,7 @@ public class LogUnitHandlerTest {
     @Test
     public void testWrite() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getWriteLogResponseMsg()
         );
 
@@ -116,7 +118,7 @@ public class LogUnitHandlerTest {
     @Test
     public void testWriteRange() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getRangeWriteLogResponseMsg()
         );
 
@@ -134,7 +136,7 @@ public class LogUnitHandlerTest {
     public void testRead() {
         ReadResponse rr = new ReadResponse();
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getReadLogResponseMsg(rr.getAddresses())
         );
 
@@ -152,7 +154,7 @@ public class LogUnitHandlerTest {
     public void testInspectAddresses() {
         List<Long> emptyAddresses = new ArrayList<>();
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getInspectAddressesResponseMsg(emptyAddresses)
         );
 
@@ -173,7 +175,7 @@ public class LogUnitHandlerTest {
     public void testTailResponse() {
         TailsResponse sampleTailsResponse = new TailsResponse(0L, 0L, new HashMap<>());
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTailResponseMsg(sampleTailsResponse.getEpoch(), sampleTailsResponse.getLogTail(),
                         sampleTailsResponse.getStreamTails())
         );
@@ -192,7 +194,7 @@ public class LogUnitHandlerTest {
     public void testGetCommittedTail() {
         long sampleCommittedTail = 5L;
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getCommittedTailResponseMsg(sampleCommittedTail)
         );
 
@@ -209,7 +211,7 @@ public class LogUnitHandlerTest {
     @Test
     public void testUpdateCommittedTail() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getUpdateCommittedTailResponseMsg()
         );
 
@@ -227,7 +229,7 @@ public class LogUnitHandlerTest {
     public void testGetLogAddressSpace() {
         StreamsAddressResponse addressResponse = new StreamsAddressResponse(0L, new HashMap<>());
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getLogAddressSpaceResponseMsg(addressResponse.getLogTail(), addressResponse.getEpoch(),
                         addressResponse.getAddressMap())
         );
@@ -246,7 +248,7 @@ public class LogUnitHandlerTest {
     public void testGetTrimMark() {
         long sampleTrimMark = 5L;
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTrimMarkResponseMsg(sampleTrimMark)
         );
 
@@ -264,7 +266,7 @@ public class LogUnitHandlerTest {
     public void testRequestKnownAddresses() {
         KnownAddressResponse knownAddressResponse = new KnownAddressResponse(new HashSet<>());
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getKnownAddressResponseMsg(knownAddressResponse.getKnownAddresses())
         );
 
@@ -281,7 +283,7 @@ public class LogUnitHandlerTest {
     @Test
     public void testPrefixTrim() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTrimLogResponseMsg()
         );
 
@@ -298,7 +300,7 @@ public class LogUnitHandlerTest {
     @Test
     public void testCompact() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getCompactResponseMsg()
         );
 
@@ -315,7 +317,7 @@ public class LogUnitHandlerTest {
     @Test
     public void testFlushCache() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getFlushCacheResponseMsg()
         );
 
@@ -332,7 +334,7 @@ public class LogUnitHandlerTest {
     @Test
     public void testResetLogUnit() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getResetLogUnitResponseMsg()
         );
 
@@ -349,7 +351,7 @@ public class LogUnitHandlerTest {
     @Test
     public void testTrimmedError() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getTrimmedErrorMsg()
         );
 
@@ -367,7 +369,7 @@ public class LogUnitHandlerTest {
     public void testOverwriteError() {
         int causeIdWrittenByHole = OverwriteCause.SAME_DATA.getId();
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getOverwriteErrorMsg(causeIdWrittenByHole)
         );
 
@@ -387,7 +389,7 @@ public class LogUnitHandlerTest {
     public void testDataCorruptionError() {
         long sampleAddress = 5L;
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getDataCorruptionErrorMsg(sampleAddress)
         );
 

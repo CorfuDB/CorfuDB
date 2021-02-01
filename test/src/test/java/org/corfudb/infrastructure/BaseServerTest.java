@@ -2,6 +2,8 @@ package org.corfudb.infrastructure;
 
 import java.util.concurrent.CompletableFuture;
 import org.corfudb.protocols.service.CorfuProtocolBase;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.exceptions.WrongEpochException;
 import org.junit.Test;
 
@@ -25,17 +27,17 @@ public class BaseServerTest extends AbstractServerTest {
 
     @Test
     public void testProtoPing() {
-        CompletableFuture<Boolean> res = sendRequest(CorfuProtocolBase.getPingRequestMsg(), true, true);
+        CompletableFuture<Boolean> res = sendRequest(CorfuProtocolBase.getPingRequestMsg(), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
         assertThat(res.join()).isTrue();
     }
 
     @Test
     public void testProtoSeal() {
         // Set the ignoreClusterId and ignoreEpoch to be true for testing purpose.
-        CompletableFuture<Boolean> res = sendRequest(CorfuProtocolBase.getSealRequestMsg(1L), true, true);
+        CompletableFuture<Boolean> res = sendRequest(CorfuProtocolBase.getSealRequestMsg(1L), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
         assertThat(res.join()).isTrue();
         assertThatThrownBy(() -> {
-            sendRequest(CorfuProtocolBase.getSealRequestMsg(0L), true, true).join();
+            sendRequest(CorfuProtocolBase.getSealRequestMsg(0L), ClusterIdCheck.IGNORE, EpochCheck.IGNORE).join();
         }).hasCauseInstanceOf(WrongEpochException.class);
     }
 }

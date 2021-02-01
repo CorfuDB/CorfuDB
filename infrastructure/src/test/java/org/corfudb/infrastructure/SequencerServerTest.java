@@ -4,6 +4,8 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -113,7 +115,7 @@ public class SequencerServerTest {
      * @param ignoreEpoch     indicates if the message is epoch aware
      * @return the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, 0L,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -159,7 +161,7 @@ public class SequencerServerTest {
         when(mockServerContext.getServerEpoch()).thenReturn(Layout.INVALID_EPOCH);
 
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTokenRequestMsg(0, Collections.emptyList())
         );
 
@@ -195,7 +197,7 @@ public class SequencerServerTest {
         sequencerServer.setSequencerEpoch(Layout.INVALID_EPOCH);
 
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getBootstrapSequencerRequestMsg(
                         Collections.emptyMap(),
                         0,
@@ -228,7 +230,7 @@ public class SequencerServerTest {
         sequencerServer.setSequencerEpoch(0L);
 
         request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getBootstrapSequencerRequestMsg(
                         Collections.emptyMap(),
                         0,
@@ -271,7 +273,7 @@ public class SequencerServerTest {
         sequencerServer = new SequencerServer(mockServerContext, spySequencerFactoryHelper);
         sequencerServer.setSequencerEpoch(1L);
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getBootstrapSequencerRequestMsg(
                         Collections.emptyMap(),
                         0,
@@ -330,7 +332,7 @@ public class SequencerServerTest {
         tailMap.put(streamB, streamAddressSpaceB);
 
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getBootstrapSequencerRequestMsg(
                         tailMap,
                         globalTailB,
@@ -406,7 +408,7 @@ public class SequencerServerTest {
         // SequencerServer should send streamAddressSpaceA as the response
         // Note: StreamAddressRange = (end, start]
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getStreamsAddressRequestMsg(
                         Collections.singletonList(
                                 new StreamAddressRange(streamA, globalTailA, -1)))
@@ -440,7 +442,7 @@ public class SequencerServerTest {
         // Case 2: Send StreamsAddressRequestMsg.ALL_STREAMS RPC call.
         // SequencerServer should send all streams and their address spaces as the response
         request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getAllStreamsAddressRequestMsg()
         );
 
@@ -486,7 +488,7 @@ public class SequencerServerTest {
         // Case 3: Send StreamsAddressRequestMsg.INVALID RPC call.
         // SequencerServer should send all streams and their address spaces as the response
         request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 CorfuMessage.RequestPayloadMsg.newBuilder()
                         .setStreamsAddressRequest(StreamsAddressRequestMsg.newBuilder()
                                 .setReqType(StreamsAddressRequestMsg.Type.INVALID)
@@ -521,7 +523,7 @@ public class SequencerServerTest {
         sequencerServer = new SequencerServer(mockServerContext, spySequencerFactoryHelper);
         sequencerServer.setSequencerEpoch(0L);
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getDefaultSequencerMetricsRequestMsg()
         );
 
@@ -572,7 +574,7 @@ public class SequencerServerTest {
         // Send a request with SequencerTrimRequestMsg
         long trimMark = 0;
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getSequencerTrimRequestMsg(trimMark)
         );
 
@@ -637,7 +639,7 @@ public class SequencerServerTest {
 
         // Send a request with TokenRequestMsg
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTokenRequestMsg(0, streams)
         );
         Map<UUID, Long> streamTailToGlobalTailMap = new HashMap<>();
@@ -703,7 +705,7 @@ public class SequencerServerTest {
 
         // Send a request with TokenRequestMsg
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTokenRequestMsg(0, Collections.emptyList())
         );
 
@@ -765,7 +767,7 @@ public class SequencerServerTest {
         long numTokens = 5;
         // Send a request with TokenRequestMsg
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTokenRequestMsg(numTokens, Collections.emptyList())
         );
 
@@ -829,7 +831,7 @@ public class SequencerServerTest {
         Token snapshotTimestamp = new Token(sequencerEpoch, globalTail);
         UUID txId = UUID.randomUUID();
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTokenRequestMsg(5, Collections.emptyList(),
                         new TxResolutionInfo(txId, snapshotTimestamp))
         );
@@ -897,7 +899,7 @@ public class SequencerServerTest {
         Token snapshotTimestamp = new Token(txSnapshotEpoch, globalTail);
         UUID txId = UUID.randomUUID();
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTokenRequestMsg(5, Collections.emptyList(),
                         new TxResolutionInfo(txId, snapshotTimestamp))
         );

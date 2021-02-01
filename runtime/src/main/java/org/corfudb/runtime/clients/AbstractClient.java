@@ -4,6 +4,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.runtime.proto.service.CorfuMessage;
@@ -45,7 +47,7 @@ public abstract class AbstractClient implements IClient {
     }
 
     <T> CompletableFuture<T> sendRequestWithFuture(RequestPayloadMsg payload,
-                                                   boolean ignoreClusterId, boolean ignoreEpoch) {
+                                                   ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         CorfuMessage.PriorityLevel protoPriorityLevel =
                 priorityTypeMap.getOrDefault(priorityLevel, CorfuMessage.PriorityLevel.NORMAL);
 

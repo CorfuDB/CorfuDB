@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.BatchProcessor;
 import org.corfudb.infrastructure.BatchWriterOperation;
 import org.corfudb.infrastructure.log.StreamLog;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -65,7 +67,7 @@ public class BatchProcessorTest {
      *
      * @return   the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, DEFAULT_SEAL_EPOCH,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -77,7 +79,7 @@ public class BatchProcessorTest {
      *
      * @return   the corresponding HeaderMsg
      */
-    private HeaderMsg getHeaderHighPriority(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getHeaderHighPriority(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.HIGH, DEFAULT_SEAL_EPOCH,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -92,7 +94,7 @@ public class BatchProcessorTest {
      */
     private HeaderMsg getResetHeaderLargerEpoch() {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, LARGER_SEAL_EPOCH,
-                getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), false, true);
+                getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
@@ -127,7 +129,7 @@ public class BatchProcessorTest {
     public void testPrefixTrim() {
         long epoch = 0L;
         long sequence = 5L;
-        RequestMsg request = getRequestMsg(getBasicHeader(false, false),
+        RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTrimLogRequestMsg(new Token(epoch, sequence)));
 
         batchProcessor.addTask(BatchWriterOperation.Type.PREFIX_TRIM, request).join();
@@ -140,7 +142,7 @@ public class BatchProcessorTest {
     @Test
     public void testWrite() {
         LogData logData = getDefaultLogData(0L);
-        RequestMsg request = getRequestMsg(getBasicHeader(false, false),
+        RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getWriteLogRequestMsg(logData));
 
         batchProcessor.addTask(BatchWriterOperation.Type.WRITE, request).join();
@@ -159,7 +161,7 @@ public class BatchProcessorTest {
             entries.add(ld);
         }
 
-        RequestMsg request = getRequestMsg(getBasicHeader(false, false),
+        RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getRangeWriteLogRequestMsg(entries));
         batchProcessor.addTask(BatchWriterOperation.Type.RANGE_WRITE, request).join();
         verify(mockStreamLog).append(entries);
@@ -171,7 +173,7 @@ public class BatchProcessorTest {
     @Test
     public void testReset() {
         long epochWaterMark = 100L;
-        RequestMsg request = getRequestMsg(getBasicHeader(false, true),
+        RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getResetLogUnitRequestMsg(epochWaterMark));
         batchProcessor.addTask(BatchWriterOperation.Type.RESET, request).join();
         verify(mockStreamLog).reset();
@@ -182,7 +184,7 @@ public class BatchProcessorTest {
      */
     @Test
     public void testTailsQueryLogTail() {
-        RequestMsg request = getRequestMsg(getBasicHeader(false, false),
+        RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTailRequestMsg(LogUnit.TailRequestMsg.Type.LOG_TAIL));
 
         Object ret = batchProcessor.addTask(BatchWriterOperation.Type.TAILS_QUERY, request).join();
@@ -195,7 +197,7 @@ public class BatchProcessorTest {
      */
     @Test
     public void testTailsQueryAllStreamsTail() {
-        RequestMsg request = getRequestMsg(getBasicHeader(false, false),
+        RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getTailRequestMsg(LogUnit.TailRequestMsg.Type.ALL_STREAMS_TAIL));
 
         when(mockStreamLog.getAllTails()).thenReturn(new TailsResponse(0L));
@@ -209,7 +211,7 @@ public class BatchProcessorTest {
      */
     @Test
     public void testLogAddressSpaceQuery() {
-        RequestMsg request = getRequestMsg(getBasicHeader(false, false),
+        RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getLogAddressSpaceRequestMsg());
 
         when(mockStreamLog.getStreamsAddressSpace()).thenReturn(new StreamsAddressResponse(0L, new HashMap<>()));
@@ -242,14 +244,14 @@ public class BatchProcessorTest {
      */
     @Test(expected = WrongEpochException.class)
     public void testSeal() throws Throwable {
-        RequestMsg request = getRequestMsg(getBasicHeader(false, true),
+        RequestMsg request = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getSealRequestMsg(LARGER_SEAL_EPOCH));
 
         batchProcessor.addTask(BatchWriterOperation.Type.SEAL, request);
         // There isn't a getter for sealEpoch of BatchProcessor, so here we create
         // two RESET request, one with default epoch (old) and one with large epoch.
         // The former one should throw an exception and the latter one should succeed.
-        RequestMsg badRequest = getRequestMsg(getBasicHeader(false, true),
+        RequestMsg badRequest = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getResetLogUnitRequestMsg(100L));
         RequestMsg goodRequest = getRequestMsg(getResetHeaderLargerEpoch(), getResetLogUnitRequestMsg(100L));
         batchProcessor.addTask(BatchWriterOperation.Type.RESET, goodRequest).join();
@@ -268,9 +270,9 @@ public class BatchProcessorTest {
     @Test(expected = QuotaExceededException.class)
     public void testQuotaExceeded() throws Throwable {
         long epochWaterMark = 100L;
-        RequestMsg badRequest = getRequestMsg(getBasicHeader(false, true),
+        RequestMsg badRequest = getRequestMsg(getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getResetLogUnitRequestMsg(epochWaterMark));
-        RequestMsg goodRequest = getRequestMsg(getHeaderHighPriority(false, true),
+        RequestMsg goodRequest = getRequestMsg(getHeaderHighPriority(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getResetLogUnitRequestMsg(epochWaterMark));
 
         when(mockStreamLog.quotaExceeded()).thenReturn(true);

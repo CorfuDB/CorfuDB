@@ -1,5 +1,7 @@
 package org.corfudb.runtime.clients;
 
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -36,7 +38,7 @@ public class SequencerClient extends AbstractClient {
      */
     public CompletableFuture<SequencerMetrics> requestMetrics() {
         return sendRequestWithFuture(getDefaultSequencerMetricsRequestMsg(),
-                false, true);
+                ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
@@ -48,7 +50,7 @@ public class SequencerClient extends AbstractClient {
      */
     public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens) {
         return sendRequestWithFuture(getTokenRequestMsg(numTokens, streamIDs),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -60,7 +62,7 @@ public class SequencerClient extends AbstractClient {
     public CompletableFuture<StreamsAddressResponse> getStreamsAddressSpace(
             List<StreamAddressRange> streamsAddressesRange) {
         return sendRequestWithFuture(getStreamsAddressRequestMsg(streamsAddressesRange),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -74,12 +76,12 @@ public class SequencerClient extends AbstractClient {
     public CompletableFuture<TokenResponse> nextToken(List<UUID> streamIDs, long numTokens,
                                                       TxResolutionInfo conflictInfo) {
         return sendRequestWithFuture(getTokenRequestMsg(numTokens, streamIDs, conflictInfo),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     public CompletableFuture<Void> trimCache(Long address) {
         return sendRequestWithFuture(getSequencerTrimRequestMsg(address),
-                false, false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -102,8 +104,7 @@ public class SequencerClient extends AbstractClient {
                         initialToken,
                         readyStateEpoch,
                         bootstrapWithoutTailsUpdate),
-                false,
-                false);
+                ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**

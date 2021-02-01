@@ -17,6 +17,8 @@ import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -82,7 +84,7 @@ public class RequestHandlerMethods {
             log.error("handle[{}]: Unhandled exception processing {} request",
                     req.getHeader().getRequestId(), req.getPayload().getPayloadCase(), e);
 
-            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             r.sendResponse(getResponseMsg(responseHeader, getUnknownErrorMsg(e)), ctx);
         }
     }

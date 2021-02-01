@@ -12,6 +12,8 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -151,14 +153,14 @@ public class LayoutServer extends AbstractServer {
         final long serverEpoch = getServerEpoch();
 
         if (payloadEpoch <= serverEpoch) {
-            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             ResponseMsg response = getResponseMsg(responseHeader, getLayoutResponseMsg(getCurrentLayout()));
             r.sendResponse(response, ctx);
         } else {
             log.warn("handleLayoutRequest[{}]: Payload epoch {} ahead of Server epoch {}",
                     req.getHeader().getRequestId(), payloadEpoch, serverEpoch);
 
-            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             ResponseMsg response = getResponseMsg(responseHeader, getWrongEpochErrorMsg(serverEpoch));
             r.sendResponse(response, ctx);
         }
@@ -183,7 +185,7 @@ public class LayoutServer extends AbstractServer {
             log.warn("handleBootstrapLayoutRequest[{}]: Got a request to bootstrap a server which is "
                     + "already bootstrapped, rejecting!", requestHeader.getRequestId());
 
-            responseHeader = getHeaderMsg(requestHeader, false, true);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             response = getResponseMsg(responseHeader, getBootstrappedErrorMsg());
             r.sendResponse(response, ctx);
             return;
@@ -195,14 +197,14 @@ public class LayoutServer extends AbstractServer {
             log.warn("handleBootstrapLayoutRequest[{}]: The Layout in the request payload is null",
                     requestHeader.getRequestId());
 
-            responseHeader = getHeaderMsg(requestHeader, false, false);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader,
                     getBootstrapLayoutResponseMsg(false));
         } else if (layout.getClusterId() == null) {
             log.warn("handleBootstrapLayoutRequest[{}]: The layout={} does not have a clusterId",
                     requestHeader.getRequestId(), layout);
 
-            responseHeader = getHeaderMsg(requestHeader, false, false);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader,
                     getBootstrapLayoutResponseMsg(false));
         } else {
@@ -210,7 +212,7 @@ public class LayoutServer extends AbstractServer {
             setCurrentLayout(layout);
             serverContext.setServerEpoch(layout.getEpoch(), r);
 
-            responseHeader = getHeaderMsg(requestHeader, false, true);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             response = getResponseMsg(responseHeader,
                     getBootstrapLayoutResponseMsg(true));
         }
@@ -245,7 +247,7 @@ public class LayoutServer extends AbstractServer {
         final Rank prepareRank = new Rank(payload.getRank(), getUUID(requestHeader.getClientId()));
 
         if (payloadEpoch != serverEpoch) {
-            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             ResponseMsg response = getResponseMsg(responseHeader, getWrongEpochErrorMsg(serverEpoch));
             r.sendResponse(response, ctx);
             return;
@@ -260,7 +262,7 @@ public class LayoutServer extends AbstractServer {
             log.debug("handlePrepareLayoutRequest[{}]: Rejected phase 1 prepare of rank={}, phase1Rank={}",
                     requestHeader.getRequestId(), prepareRank, phase1Rank);
 
-            responseHeader = getHeaderMsg(requestHeader, false, false);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getPrepareLayoutResponseMsg(
                     false, phase1Rank.getRank(), proposedLayout));
         } else {
@@ -271,7 +273,7 @@ public class LayoutServer extends AbstractServer {
             setPhase1Rank(prepareRank, payloadEpoch);
             log.debug("handlePrepareLayoutRequest[{}]: New phase 1 rank={}", requestHeader.getRequestId(), prepareRank);
 
-            responseHeader = getHeaderMsg(requestHeader, false, true);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             response = getResponseMsg(responseHeader, getPrepareLayoutResponseMsg(
                     true, highestProposedRank.getRank(), proposedLayout));
         }
@@ -306,7 +308,7 @@ public class LayoutServer extends AbstractServer {
         final Rank proposeRank = new Rank(payload.getRank(), getUUID(requestHeader.getClientId()));
 
         if (payloadEpoch != serverEpoch) {
-            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             ResponseMsg response = getResponseMsg(responseHeader, getWrongEpochErrorMsg(serverEpoch));
             r.sendResponse(response, ctx);
             return;
@@ -320,7 +322,7 @@ public class LayoutServer extends AbstractServer {
             log.debug("handleProposeLayoutRequest[{}]: Rejected phase 2 propose of rank={}, phase1Rank=none",
                     requestHeader.getRequestId(), proposeRank);
 
-            responseHeader = getHeaderMsg(requestHeader, false, false);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getProposeLayoutResponseMsg(false, -1L));
 
             r.sendResponse(response, ctx);
@@ -333,7 +335,7 @@ public class LayoutServer extends AbstractServer {
             log.debug("handleProposeLayoutRequest[{}]: Rejected phase 2 propose of rank={}, phase1Rank={}",
                     requestHeader.getRequestId(), proposeRank, phase1Rank);
 
-            responseHeader = getHeaderMsg(requestHeader, false, false);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getProposeLayoutResponseMsg(false, phase1Rank.getRank()));
 
             r.sendResponse(response, ctx);
@@ -348,7 +350,7 @@ public class LayoutServer extends AbstractServer {
             log.warn("handleProposeLayoutRequest[{}]: The Layout in the request payload is null",
                     requestHeader.getRequestId());
 
-            responseHeader = getHeaderMsg(requestHeader, false, false);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getProposeLayoutResponseMsg(false, phase1Rank.getRank()));
 
             r.sendResponse(response, ctx);
@@ -357,7 +359,7 @@ public class LayoutServer extends AbstractServer {
             log.debug("handleProposeLayoutRequest[{}]: layout {} and payload {} epoch should be the same",
                     requestHeader.getRequestId(), proposeLayout.getEpoch(), payloadEpoch);
 
-            responseHeader = getHeaderMsg(requestHeader, false, false);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getProposeLayoutResponseMsg(false, phase1Rank.getRank()));
 
             r.sendResponse(response, ctx);
@@ -370,7 +372,7 @@ public class LayoutServer extends AbstractServer {
             log.debug("handleProposeLayoutRequest[{}]: Rejected phase 2 propose of rank={}, phase2Rank={}",
                     requestHeader.getRequestId(), proposeRank, phase2Rank);
 
-            responseHeader = getHeaderMsg(requestHeader, false, false);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getProposeLayoutResponseMsg(false, phase2Rank.getRank()));
 
             r.sendResponse(response, ctx);
@@ -381,7 +383,7 @@ public class LayoutServer extends AbstractServer {
                 requestHeader.getRequestId(), proposeRank, proposeLayout);
 
         setPhase2Data(new Phase2Data(proposeRank, proposeLayout), payloadEpoch);
-        responseHeader = getHeaderMsg(requestHeader, false, true);
+        responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         response = getResponseMsg(responseHeader, getProposeLayoutResponseMsg(true, proposeRank.getRank()));
 
         r.sendResponse(response, ctx);
@@ -407,7 +409,7 @@ public class LayoutServer extends AbstractServer {
             log.warn("forceLayout[{}]: Trying to force a layout with an old epoch: payloadEpoch={}, serverEpoch={}",
                     requestHeader.getRequestId(), payloadEpoch, serverEpoch);
 
-            responseHeader = getHeaderMsg(requestHeader, false, false);
+            responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getCommitLayoutResponseMsg(false));
             r.sendResponse(response, ctx);
             return;
@@ -418,7 +420,7 @@ public class LayoutServer extends AbstractServer {
         setCurrentLayout(layout);
         serverContext.setServerEpoch(layout.getEpoch(), r);
         log.warn("forceLayout[{}]: Forcing new layout={}", requestHeader.getRequestId(), layout);
-        responseHeader = getHeaderMsg(requestHeader, false, true);
+        responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         response = getResponseMsg(responseHeader, getCommitLayoutResponseMsg(true));
         r.sendResponse(response, ctx);
     }
@@ -456,7 +458,7 @@ public class LayoutServer extends AbstractServer {
         final Layout layout = getLayout(payload.getLayout());
 
         if (payloadEpoch < serverEpoch) {
-            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             ResponseMsg response = getResponseMsg(responseHeader, getWrongEpochErrorMsg(serverEpoch));
             r.sendResponse(response, ctx);
             return;
@@ -465,7 +467,7 @@ public class LayoutServer extends AbstractServer {
         setCurrentLayout(layout);
         serverContext.setServerEpoch(payloadEpoch, r);
 
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader,
                 getCommitLayoutResponseMsg(true));
 
