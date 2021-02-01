@@ -93,6 +93,11 @@ public class ThreadSafeStreamView implements IStreamView {
     }
 
     @Override
+    public synchronized List<ILogData> remainingAtMost(int maxEntries) {
+        return stream.remainingAtMost(maxEntries);
+    }
+
+    @Override
     public synchronized boolean hasNext() {
         return stream.hasNext();
     }

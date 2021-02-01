@@ -1,8 +1,5 @@
 package org.corfudb.infrastructure;
 
-import static org.corfudb.util.MetricsUtils.sizeOf;
-
-
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
@@ -16,10 +13,13 @@ import java.util.Optional;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.util.Memory;
 import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+
+import static java.lang.Math.toIntExact;
 
 /**
  * LogUnit server cache.
@@ -82,9 +82,9 @@ public class LogUnitServerCache {
             log.warn("Number of streams in this data is higher that threshold {}." +
                 "This may impact the server performance", MAX_STREAM_THRESHOLD);
         }
-        return logData.getSizeEstimate() +
-            (int)(sizeOf.deepSizeOf(logData.getMetadataMap())) +
-            KEY_SIZE;
+
+        long result = Math.addExact(logData.getSizeEstimate(), (Memory.sizeOf.deepSizeOf(logData.getMetadataMap())));
+        return toIntExact(Math.addExact(result, KEY_SIZE));
     }
 
     /**

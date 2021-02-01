@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableSet;
 
 import org.corfudb.infrastructure.AbstractServer;
@@ -29,8 +28,6 @@ public class SequencerHandlerTest extends AbstractClientTest {
 
     @Override
     Set<AbstractServer> getServersForTest() {
-        MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-
         ServerContext sc = new ServerContextBuilder()
                 .setMemory(true)
                 .setSingle(true)

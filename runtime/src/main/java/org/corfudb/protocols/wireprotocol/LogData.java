@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Created by mwei on 8/15/16.
  */
 @Slf4j
-public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
+public class LogData implements IMetadata, ILogData {
 
     public static final int NOT_KNOWN = -1;
 
@@ -290,7 +290,6 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
         return outArray;
     }
 
-    @Override
     public void doSerialize(ByteBuf buf) {
         if (serializedCache != null) {
             serializedCache.buffer.resetReaderIndex();
@@ -309,7 +308,7 @@ public class LogData implements ICorfuPayload<LogData>, IMetadata, ILogData {
     }
 
     private void doSerializePayloadInternal(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, type);
+        ICorfuPayload.serialize(buf, type.asByte());
         if (type == DataType.DATA) {
             if (data == null) {
                 int lengthIndex = buf.writerIndex();

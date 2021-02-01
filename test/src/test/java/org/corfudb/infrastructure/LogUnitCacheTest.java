@@ -2,11 +2,8 @@ package org.corfudb.infrastructure;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
-import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
@@ -20,6 +17,8 @@ import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.corfudb.infrastructure.LogUnitServerAssertions.assertThat;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadLogRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getRangeWriteLogRequestMsg;
 
 /**
  * Created by WenbinZhu on 5/30/19.
@@ -80,19 +79,18 @@ public class LogUnitCacheTest extends AbstractServerTest {
         }
 
         // Range write is not cached on server.
-        sendRequest(CorfuMsgType.RANGE_WRITE.payloadMsg(new RangeWriteMsg(payloads))).join();
+        sendRequest(getRangeWriteLogRequestMsg(payloads), false, false).join();
 
         // Non-cacheable reads should not affect the data cache on server.
-        CompletableFuture<ReadResponse> future = sendRequest(CorfuMsgType.READ_REQUEST
-                .payloadMsg(new ReadRequest(addresses, false)));
+        CompletableFuture<ReadResponse> future =
+                sendRequest(getReadLogRequestMsg(addresses, false), false, false);
 
 
         checkReadResponse(future.join(), size);
-        assertThat(logUnitServer.getDataCache().getSize()).isEqualTo(0);
+        assertThat(logUnitServer.getDataCache().getSize()).isZero();
 
         // Cacheable reads should update the data cache on server.
-        future = sendRequest(CorfuMsgType.READ_REQUEST
-                .payloadMsg(new ReadRequest(addresses, true)));
+        future = sendRequest(getReadLogRequestMsg(addresses, true), false, false);
 
         checkReadResponse(future.join(), size);
         assertThat(logUnitServer.getDataCache().getSize()).isEqualTo(size);

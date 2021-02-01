@@ -59,6 +59,9 @@ public abstract class AbstractQueuedStreamView extends
     @Getter
     private final ReadOptions readOptions;
 
+    @Getter
+    private final StreamOptions streamOptions;
+
     /** Create a new queued stream view.
      *
      * @param streamId  The ID of the stream
@@ -72,6 +75,7 @@ public abstract class AbstractQueuedStreamView extends
                 .clientCacheable(streamOptions.isCacheEntries())
                 .ignoreTrim(streamOptions.isIgnoreTrimmed())
                 .build();
+        this.streamOptions = streamOptions;
     }
 
     /** Add the given address to the resolved queue of the
@@ -396,6 +400,34 @@ public abstract class AbstractQueuedStreamView extends
                 .filter(entry -> !entry.isHole())
                 .collect(Collectors.toList());
     }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public List<ILogData> remainingAtMost(int maxEntries) {
+        // TODO: instrument remainingUpTo directly to limit the number of
+        // of entries returned instead of calling it.
+        if (maxEntries < 1) {
+            throw new IllegalArgumentException(
+                    "remainingAtMost(): maxEntries cannot be less than 1.");
+        }
+
+        long maxGlobal = getMaxGlobalFromMaxEntries(maxEntries);
+        if (Address.nonAddress(maxGlobal)) {
+            return Collections.emptyList();
+        }
+
+        return remainingUpTo(maxGlobal);
+    }
+
+    /**
+     * Get the largest address to read from the the current global pointer
+     * and the maximum number of entries to read.
+     *
+     * @return largest address to read
+     */
+    protected abstract long getMaxGlobalFromMaxEntries(int maxEntries);
 
     /**
      * Fill the read queue for the current context. This method is called

@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.proto.RpcCommon.LayoutMsg;
@@ -27,6 +28,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -38,7 +40,7 @@ import java.util.stream.Collectors;
  * by the majority of the service RPCs.
  */
 @Slf4j
-public class CorfuProtocolCommon {
+public final class CorfuProtocolCommon {
     // Prevent class from being instantiated
     private CorfuProtocolCommon() {
     }
@@ -253,6 +255,28 @@ public class CorfuProtocolCommon {
                 .setStart(streamAddressRange.getStart())
                 .setEnd(streamAddressRange.getEnd())
                 .build();
+    }
+
+    /**
+     * Returns a StreamAddressResponse object from its log tail, epoch, and List
+     * of address map entries, each consisting of a UUID and a StreamAddressSpace,
+     * represented in Protobuf.
+     *
+     * @param tail   the log tail
+     * @param epoch  the epoch the response was sealed with
+     * @param map    a list of address map entries represented in Protobuf
+     * @return       an equivalent StreamsAddressResponse object
+     */
+    public static StreamsAddressResponse getStreamsAddressResponse(long tail, long epoch,
+                                                                   List<UuidToStreamAddressSpacePairMsg> map) {
+        StreamsAddressResponse response = new StreamsAddressResponse(tail,
+                map.stream().collect(Collectors.<UuidToStreamAddressSpacePairMsg, UUID, StreamAddressSpace>toMap(
+                        entry -> getUUID(entry.getStreamUuid()),
+                        entry -> getStreamAddressSpace(entry.getAddressSpace())
+                )));
+
+        response.setEpoch(epoch);
+        return response;
     }
 
     /**

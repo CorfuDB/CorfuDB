@@ -1,6 +1,5 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -64,8 +63,6 @@ import org.corfudb.security.sasl.SaslUtils;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
 import org.corfudb.security.tls.SslContextConstructor;
 import org.corfudb.util.CFUtils;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.Sleep;
 
@@ -171,14 +168,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
     private SslContext sslContext;
 
-    @Deprecated
-    private final Map<CorfuMsgType, String> timerNameCache;
-
-    /**
-     * Timer map for measuring request
-     */
-    private final Map<RequestPayloadMsg.PayloadCase, String> protoTimerNameCache;
-
     /**
      * If true this instance will manage the life-cycle of the event loop. For example, when the
      * router is stopped the event loop will be released for GC.
@@ -217,25 +206,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         this.handlerMap = new ConcurrentHashMap<>();
         this.responseHandlerMap = new EnumMap<>(ResponsePayloadMsg.PayloadCase.class);
         this.errorHandlerMap = new EnumMap<>(ErrorCase.class);
-
-        // Set timer mapping
-        ImmutableMap.Builder<CorfuMsgType, String> mapBuilder = ImmutableMap.builder();
-        for (CorfuMsgType type : CorfuMsgType.values()) {
-            mapBuilder.put(type,
-                    CorfuComponent.CLIENT_ROUTER.toString() + type.name().toLowerCase());
-        }
-
-        timerNameCache = mapBuilder.build();
-
-        // Set timer mapping for protobuf messages
-        ImmutableMap.Builder<RequestPayloadMsg.PayloadCase, String> protoMapBuilder = ImmutableMap
-                .builder();
-        for (RequestPayloadMsg.PayloadCase type : RequestPayloadMsg.PayloadCase.values()) {
-            protoMapBuilder.put(type,
-                    CorfuComponent.CLIENT_ROUTER.toString() + type.name().toLowerCase());
-        }
-
-        protoTimerNameCache = protoMapBuilder.build();
 
         timeoutConnect = parameters.getConnectionTimeout().toMillis();
         timeoutResponse = parameters.getRequestTimeout().toMillis();
@@ -292,7 +262,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
                         log.trace("Registered {} to handle messages of type {}", client, x);
                     });
         } catch (UnsupportedOperationException ex) {
-            log.error("No registered CorfuMsg handler for client {}", client, ex);
+            log.trace("No registered CorfuMsg handler for client {}", client, ex);
         }
 
         if (!client.getHandledCases().isEmpty()) {
@@ -485,13 +455,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
             return f;
         }
 
-        // Set up the timer and context to measure request
-        final Timer roundTripMsgTimer = CorfuRuntime.getDefaultMetrics()
-                .timer(timerNameCache.get(message.getMsgType()));
-
-        final Timer.Context roundTripMsgContext = MetricsUtils
-                .getConditionalContext(roundTripMsgTimer);
-
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
 
@@ -508,16 +471,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
         log.trace("Sent message: {}", message);
 
-        // Generate a benchmarked future to measure the underlying request
-        final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
-            MetricsUtils.stopConditionalContext(roundTripMsgContext);
-            return x;
-        });
-
         // Generate a timeout future, which will complete exceptionally
         // if the main future is not completed.
-        final CompletableFuture<T> cfTimeout =
-                CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             // CFUtils.within() can wrap different kinds of exceptions in
             // CompletionException, just dealing with TimeoutException here since
@@ -581,13 +537,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
         CorfuMessage.RequestMsg request = getRequestMsg(header, payload);
 
-        // Set up the timer and context to measure request
-        final Timer roundTripMsgTimer = CorfuRuntime.getDefaultMetrics()
-                .timer(protoTimerNameCache.get(payload.getPayloadCase()));
-
-        final Timer.Context roundTripMsgContext = MetricsUtils
-                .getConditionalContext(roundTripMsgTimer);
-
         // Generate a future and put it in the completion table.
         final CompletableFuture<T> cf = new CompletableFuture<>();
         outstandingRequests.put(thisRequestId, cf);
@@ -598,16 +547,9 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
             log.trace("Sent request message: {}", TextFormat.shortDebugString(request.getHeader()));
         }
 
-        // Generate a benchmarked future to measure the underlying request
-        final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
-            MetricsUtils.stopConditionalContext(roundTripMsgContext);
-            return x;
-        });
-
         // Generate a timeout future, which will complete exceptionally
         // if the main future is not completed.
-        final CompletableFuture<T> cfTimeout =
-                CFUtils.within(cfBenchmarked, Duration.ofMillis(timeoutResponse));
+        final CompletableFuture<T> cfTimeout = CFUtils.within(cf, Duration.ofMillis(timeoutResponse));
         cfTimeout.exceptionally(e -> {
             // CFUtils.within() can wrap different kinds of exceptions in
             // CompletionException, just dealing with TimeoutException here since

@@ -7,7 +7,6 @@ import java.io.ObjectOutputStream;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.ServerErrors.BootstrappedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.DataCorruptionErrorMsg;
-import org.corfudb.runtime.proto.ServerErrors.DataOutrankedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.NotBootstrappedErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.NotReadyErrorMsg;
 import org.corfudb.runtime.proto.ServerErrors.OverwriteErrorMsg;
@@ -22,7 +21,7 @@ import org.corfudb.runtime.proto.ServerErrors.WrongEpochErrorMsg;
  * in server_errors.proto and are used by several of the service RPCs.
  */
 @Slf4j
-public class CorfuProtocolServerErrors {
+public final class CorfuProtocolServerErrors {
     // Prevent class from being instantiated
     private CorfuProtocolServerErrors() {}
 
@@ -91,20 +90,6 @@ public class CorfuProtocolServerErrors {
                         .build())
                 .build();
     }
-
-    /**
-     * Returns the Protobuf representation of a DATA_OUTRANKED error.
-     *
-     * @return   a ServerErrorMsg containing a DATA_OUTRANKED error
-     */
-    public static ServerErrorMsg getDataOutrankedErrorMsg() {
-        return ServerErrorMsg.newBuilder()
-                .setDataOutrankedError(DataOutrankedErrorMsg.getDefaultInstance())
-                .build();
-    }
-
-    // Method below will be added in later PR with other LogUnit updates
-    // public static ServerErrorMsg getValueAdoptedErrorMsg(ReadResponse rr)
 
     /**
      * Returns the Protobuf representation of a DATA_CORRUPTION error.

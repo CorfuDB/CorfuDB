@@ -2,17 +2,8 @@ package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.Message;
-
-import java.util.*;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -21,11 +12,27 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.Queue;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
 import org.corfudb.runtime.object.transactions.TransactionType;
-
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.CorfuGuidGenerator;
 import org.corfudb.util.serializer.ISerializer;
-import lombok.Getter;
+
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Wrapper over the CorfuTable.
@@ -58,12 +65,6 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     @Getter
     private final MetadataOptions metadataOptions;
 
-    /**
-     * List of Metrics captured on this table
-     */
-    @Getter
-    private final TableMetrics metrics;
-
     @Getter
     private final Class<K> keyClass;
 
@@ -72,6 +73,9 @@ public class Table<K extends Message, V extends Message, M extends Message> {
 
     @Getter
     private final Class<M> metadataClass;
+
+    @Getter
+    private final Set<UUID> streamTags;
 
     /**
      * In case this table is opened as a Queue, we need the Guid generator to support enqueue operations.
@@ -104,12 +108,14 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                  @Nonnull final CorfuRuntime corfuRuntime,
                  @Nonnull final ISerializer serializer,
                  @Nonnull final Supplier<StreamingMap<K, V>> streamingMapSupplier,
-                 @NonNull final ICorfuVersionPolicy.VersionPolicy versionPolicy) {
+                 @NonNull final ICorfuVersionPolicy.VersionPolicy versionPolicy,
+                 @NonNull final Set<UUID> streamTags) {
 
         this.corfuRuntime = corfuRuntime;
         this.namespace = namespace;
         this.fullyQualifiedTableName = fullyQualifiedTableName;
         this.streamUUID = CorfuRuntime.getStreamID(this.fullyQualifiedTableName);
+        this.streamTags = streamTags;
         this.metadataOptions = Optional.ofNullable(metadataSchema)
                 .map(schema -> MetadataOptions.builder()
                         .metadataEnabled(true)
@@ -122,8 +128,8 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setStreamName(this.fullyQualifiedTableName)
                 .setSerializer(serializer)
                 .setArguments(new ProtobufIndexer(valueSchema), streamingMapSupplier, versionPolicy)
+                .setStreamTags(streamTags)
                 .open();
-        this.metrics = new TableMetrics(this.fullyQualifiedTableName, corfuRuntime.getParameters().getMetricRegistry());
         this.keyClass = kClass;
         this.valueClass = vClass;
         this.metadataClass = mClass;

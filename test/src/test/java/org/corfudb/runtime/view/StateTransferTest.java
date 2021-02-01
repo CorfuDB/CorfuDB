@@ -24,6 +24,8 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.clients.TestRule;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatus;
 import org.corfudb.runtime.view.ClusterStatusReport.ClusterStatusReliability;
 import org.corfudb.runtime.view.ClusterStatusReport.ConnectivityStatus;
@@ -571,8 +573,8 @@ public class StateTransferTest extends AbstractViewTest {
                 .build();
 
         // Drop read responses to make sure state transfer will fail if it happens
-        addServerRule(SERVERS.PORT_1, new TestRule().matches(m ->
-                m.getMsgType().equals(CorfuMsgType.READ_RESPONSE)).drop());
+        addServerRule(SERVERS.PORT_1, new TestRule().responseMatches(m ->
+                m.getPayload().getPayloadCase().equals(ResponsePayloadMsg.PayloadCase.READ_LOG_RESPONSE)).drop());
 
         bootstrapAllServers(layout);
 
@@ -658,8 +660,8 @@ public class StateTransferTest extends AbstractViewTest {
         AtomicLong allowedWrites = new AtomicLong(rangeWriteAllowedCount);
 
         // Allow only addresses 0 - 49 to be written.
-        addClientRule(rt, SERVERS.ENDPOINT_1, new TestRule().matches(
-                msg -> msg.getMsgType().equals(CorfuMsgType.RANGE_WRITE) &&
+        addClientRule(rt, SERVERS.ENDPOINT_1, new TestRule().requestMatches(msg ->
+                msg.getPayload().getPayloadCase().equals(RequestPayloadMsg.PayloadCase.RANGE_WRITE_LOG_REQUEST) &&
                         allowedWrites.decrementAndGet() < 0).drop());
 
         final RestoreRedundancyMergeSegments action1 = RestoreRedundancyMergeSegments
@@ -696,8 +698,8 @@ public class StateTransferTest extends AbstractViewTest {
         AtomicLong deltaBatches = new AtomicLong(0L);
 
         // Now count how many batches are transferred.
-        addClientRule(rt, SERVERS.ENDPOINT_1, new TestRule().matches(
-                msg -> msg.getMsgType().equals(CorfuMsgType.RANGE_WRITE) &&
+        addClientRule(rt, SERVERS.ENDPOINT_1, new TestRule().requestMatches(msg ->
+                msg.getPayload().getPayloadCase().equals(RequestPayloadMsg.PayloadCase.RANGE_WRITE_LOG_REQUEST) &&
                         deltaBatches.incrementAndGet() > 0));
 
         action1.impl(rt);

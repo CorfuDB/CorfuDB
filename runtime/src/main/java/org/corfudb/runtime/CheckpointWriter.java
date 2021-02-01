@@ -1,7 +1,5 @@
 package org.corfudb.runtime;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -19,8 +17,6 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.view.CacheOption;
 import org.corfudb.runtime.view.StreamsView;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 

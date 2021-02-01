@@ -2,12 +2,21 @@ package org.corfudb.runtime.collections;
 
 import com.google.common.collect.Sets;
 import com.google.protobuf.Message;
-
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.StreamSubscriptionException;
+import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.ObjectsView;
+import org.corfudb.runtime.view.StreamOptions;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.stream.IStreamView;
 
+import javax.annotation.Nonnull;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,18 +29,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-import javax.annotation.Nonnull;
-
-import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
-import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.StreamSubscriptionException;
-import org.corfudb.runtime.view.Address;
-import org.corfudb.runtime.view.ObjectsView;
-import org.corfudb.runtime.view.StreamOptions;
-import org.corfudb.runtime.view.TableRegistry;
-import org.corfudb.runtime.view.stream.IStreamView;
-
 /**
  * A simple thread based subscription engine where each subscriber or listener gets
  * a thread which will listen on the tables of interest to it and moves at a rate
@@ -40,6 +37,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
  * Created by hisundar on 04/28/2020.
  */
 @Slf4j
+@Deprecated
 public class StreamManager {
 
     private static final int DEFAULT_NUM_SUBSCRIBERS = 6; // Max number of threads.
@@ -93,11 +91,11 @@ public class StreamManager {
      * @param streamListener   client listener
      * @param namespace        namespace of interest
      * @param tablesOfInterest only updates from these tables will be returned
-     * @param startAddress     address to start the notifications from
+     * @param lastAddress      last processed address, new notifications start from lastAddress + 1
      */
     synchronized <K extends Message, V extends Message, M extends Message>
     void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
-                   @Nonnull List<TableSchema<K, V, M>> tablesOfInterest, long startAddress) {
+                   @Nonnull List<TableSchema<K, V, M>> tablesOfInterest, long lastAddress) {
         if (subscriptions.containsKey(streamListener)) {
             // Multiple subscribers subscribing to same namespace and table is allowed.
             // Which is why we use the caller's hashcode() and equals() are used to validate re-subscription.
@@ -119,10 +117,10 @@ public class StreamManager {
         tablesOfInterest.forEach(t -> {
             log.info("table name = {} ID {}", t.getTableName(), CorfuRuntime.getStreamID(t.getTableName()));
         });
-        log.info("StreamManager::subscribe {}, startAddress {}, namespace {}, tables {}",
-                streamListener, startAddress, namespace, tablesOfInterest.toString());
+        log.info("StreamManager::subscribe {}, lastAddress {}, namespace {}, tables {}",
+                streamListener, lastAddress, namespace, tablesOfInterest.toString());
         SubscriberTask task = new SubscriberTask(this,
-                streamListener, namespace, tablesOfInterest, startAddress);
+                streamListener, namespace, tablesOfInterest, lastAddress);
         final ScheduledFuture<?> scheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(
                 task, 0, DEFAULT_SLEEP_MILLIS, TimeUnit.MILLISECONDS);
         subscriptions.put(streamListener, new StreamSubscriber(task, scheduledFuture));
@@ -135,14 +133,14 @@ public class StreamManager {
      * @param namespace        namespace of interest
      * @param streamTag        only updates of tables with the stream tag will be polled
      * @param tablesOfInterest only updates from these tables will be returned
-     * @param startAddress     address to start the notifications from
+     * @param lastAddress      last processed address, new notifications start from lastAddress + 1
      * @throws NoSuchElementException   if any table of interest is never registered
      * @throws IllegalArgumentException if any table of interest is not opened before subscription
      */
     synchronized <K extends Message, V extends Message, M extends Message>
     void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
                    @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
-                   long startAddress) {
+                   long lastAddress) {
         TableRegistry registry = runtime.getTableRegistry();
         List<TableSchema<K, V, M>> tableSchemas = tablesOfInterest
                 .stream()
@@ -154,7 +152,7 @@ public class StreamManager {
                 })
                 .collect(Collectors.toList());
 
-        subscribe(streamListener, namespace, tableSchemas, startAddress);
+        subscribe(streamListener, namespace, tableSchemas, lastAddress);
     }
 
     /**
@@ -229,7 +227,7 @@ public class StreamManager {
                        @Nonnull StreamListener listener,
                        @Nonnull String namespace,
                        @Nonnull List<TableSchema<K, V, M>> tableSchemas,
-                       long startAddress) {
+                       long lastAddress) {
             this.streamManager = streamManager;
             this.listener = listener;
             this.namespace = namespace;
@@ -247,7 +245,7 @@ public class StreamManager {
 
             this.txnStream = runtime.getStreamsView()
                     .get(ObjectsView.TRANSACTION_STREAM_ID, options);
-            this.txnStream.seek(startAddress + 1);
+            this.txnStream.seek(lastAddress + 1);
         }
 
         public void run() {
@@ -270,11 +268,7 @@ public class StreamManager {
                             .forEach(streamId -> entries.put(tablesOfInterest.get(streamId),
                                     // Only extract the list of updates per stream as a list
                                     multiObjSMREntry.getSMRUpdates(streamId).stream().map(smrEntry ->
-                                            CorfuStreamEntry.fromSMREntry(smrEntry,
-                                                    epoch,
-                                                    tablesOfInterest.get(streamId).getKeyClass(),
-                                                    tablesOfInterest.get(streamId).getPayloadClass(),
-                                                    tablesOfInterest.get(streamId).getMetadataClass())
+                                            CorfuStreamEntry.fromSMREntry(smrEntry, epoch)
                                     ).collect(Collectors.toList())));
 
                     if (!entries.isEmpty()) {

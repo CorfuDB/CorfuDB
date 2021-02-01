@@ -1,7 +1,5 @@
 package org.corfudb.runtime.object.transactions;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,7 +15,6 @@ import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
@@ -29,8 +26,6 @@ import org.corfudb.runtime.object.ICorfuSMRProxyInternal;
 import org.corfudb.runtime.object.VersionLockedObject;
 import org.corfudb.runtime.object.transactions.TransactionalContext.PreCommitListener;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.Utils;
 
 /**
@@ -157,27 +152,11 @@ public abstract class AbstractTransactionalContext implements
     @Getter
     private final Map<UUID, Long> knownStreamPosition = new HashMap<>();
 
-    /**
-     * Metrics related fields for registry and the context marking the beginning of a transaction.
-     */
-    @Getter
-    private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-    private static final String TXN_OP_DURATION_TIMER_NAME = CorfuComponent.OBJECT.toString() +
-            "txn-op-duration";
-    private final Timer txDurationTimer = metrics.timer(TXN_OP_DURATION_TIMER_NAME);
-    @Getter
-    private final Timer.Context txOpDurationContext;
-
     AbstractTransactionalContext(Transaction transaction) {
         transactionID = Utils.genPseudorandomUUID();
         this.transaction = transaction;
-
-        startTime = System.currentTimeMillis();
-
-        txOpDurationContext = MetricsUtils.getConditionalContext(txDurationTimer);
-
-        parentContext = TransactionalContext.getCurrentContext();
-
+        this.startTime = System.currentTimeMillis();
+        this.parentContext = TransactionalContext.getCurrentContext();
         AbstractTransactionalContext.log.debug("TXBegin[{}]", this);
     }
 

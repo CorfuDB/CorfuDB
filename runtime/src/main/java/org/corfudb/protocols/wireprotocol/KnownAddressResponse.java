@@ -1,9 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
-import io.netty.buffer.ByteBuf;
-
 import java.util.Set;
-
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -13,21 +10,7 @@ import lombok.Data;
  */
 @Data
 @AllArgsConstructor
-public class KnownAddressResponse implements ICorfuPayload<KnownAddressResponse> {
+public class KnownAddressResponse {
 
     private final Set<Long> knownAddresses;
-
-    /**
-     * Deserialization Constructor from Bytebuf to KnownAddressRequest.
-     *
-     * @param buf The buffer to deserialize
-     */
-    public KnownAddressResponse(ByteBuf buf) {
-        knownAddresses = ICorfuPayload.setFromBuffer(buf, Long.class);
-    }
-
-    @Override
-    public void doSerialize(ByteBuf buf) {
-        ICorfuPayload.serialize(buf, knownAddresses);
-    }
 }
