@@ -27,12 +27,14 @@ public class StreamSubscriptionMetrics {
         this.listenerId = String.format("listener_%s_%s_%s", listener, namespace, streamTag);
         this.percentiles = new double[]{0.5, 0.95, 0.99};
         this.deliveryTimer = runtime.getRegistry()
-                .map(registry -> Timer.builder(listenerId + ".delivery.timer")
+                .map(registry -> Timer.builder("stream_sub.delivery.timer")
+                        .tags("listenerId", listenerId)
                         .publishPercentiles(percentiles)
                         .publishPercentileHistogram(true)
                         .register(registry));
         this.pollingTimer = runtime.getRegistry()
-                .map(registry -> Timer.builder(listenerId + ".polling.timer")
+                .map(registry -> Timer.builder("stream_sub.polling.timer")
+                        .tags("listenerId", listenerId)
                         .publishPercentiles(percentiles)
                         .publishPercentileHistogram(true)
                         .register(registry));
