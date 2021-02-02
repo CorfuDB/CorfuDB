@@ -6,6 +6,7 @@ import com.google.common.reflect.TypeToken;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -19,8 +20,11 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
+import org.corfudb.runtime.ExampleSchemas;
+import org.corfudb.runtime.ExampleSchemas.ExampleTableName;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.collections.CorfuStoreShim;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
@@ -244,10 +248,10 @@ public class CorfuStoreBrowser {
             if (diskPath != null) {
                 optionsBuilder.persistentDataPath(Paths.get(diskPath));
             }
-            final Table<TableName, TableName, ManagedMetadata> table = store.openTable(
+            final Table<ExampleTableName, ExampleTableName, ManagedMetadata> table = store.openTable(
                     namespace, tablename,
-                    TableName.class,
-                    TableName.class,
+                    ExampleTableName.class,
+                    ExampleTableName.class,
                     ManagedMetadata.class,
                     optionsBuilder.build());
 
@@ -259,7 +263,7 @@ public class CorfuStoreBrowser {
              * increasing the time it takes to load data if we are trying to fill up disk.
              */
             new Random().nextBytes(array);
-            TableName dummyVal = TableName.newBuilder().setNamespace(namespace+tablename)
+            ExampleTableName dummyVal = ExampleTableName.newBuilder().setNamespace(namespace+tablename)
                     .setTableName(new String(array, StandardCharsets.UTF_16)).build();
             log.info("WARNING: Loading {} items of {} size in {} batchSized transactions into {}${}",
                     numItems, itemSize, batchSize, namespace, tablename);
@@ -267,7 +271,7 @@ public class CorfuStoreBrowser {
             while (itemsRemaining > 0) {
                 ManagedTxnContext tx = store.tx(namespace);
                 for (int j = batchSize; j > 0 && itemsRemaining > 0; j--, itemsRemaining--) {
-                    TableName dummyKey = TableName.newBuilder()
+                    ExampleTableName dummyKey = ExampleTableName.newBuilder()
                             .setNamespace(Integer.toString(itemsRemaining))
                             .setTableName(Integer.toString(j)).build();
                     tx.putRecord(table, dummyKey, dummyVal, ManagedMetadata.getDefaultInstance());
@@ -292,7 +296,7 @@ public class CorfuStoreBrowser {
     public long listenOnTable(String namespace, String tableName, int stopAfter) {
         verifyNamespaceAndTablename(namespace, tableName);
         CorfuStoreShim store = new CorfuStoreShim(runtime);
-        final Table<TableName, TableName, ManagedMetadata> table;
+        final Table<ExampleTableName, ExampleTableName, ManagedMetadata> table;
         try {
             TableOptions.TableOptionsBuilder<Object, Object> optionsBuilder = TableOptions.builder();
             if (diskPath != null) {
@@ -300,13 +304,13 @@ public class CorfuStoreBrowser {
             }
             table = store.openTable(
                     namespace, tableName,
-                    TableName.class,
-                    TableName.class,
+                    ExampleTableName.class,
+                    ExampleTableName.class,
                     ManagedMetadata.class,
                     optionsBuilder.build());
         } catch (Exception ex) {
-            log.error("Unable to open table "+namespace+"$"+tableName);
-            return 0;
+            log.error("Unable to open table " + namespace + "$" + tableName);
+            throw new RuntimeException("Unable to open table.");
         }
 
         int tableSize = table.count();
@@ -315,16 +319,12 @@ public class CorfuStoreBrowser {
 
         class StreamDumper implements StreamListener {
             @Getter
-            TableSchema tableSchema;
-
-            @Getter
             AtomicLong txnRead;
 
             @Getter
             volatile boolean isError;
 
             public StreamDumper() {
-                tableSchema = new TableSchema(tableName, TableName.class, TableName.class, ManagedMetadata.class);
                 this.txnRead = new AtomicLong(0);
             }
 
@@ -333,7 +333,7 @@ public class CorfuStoreBrowser {
                 log.info("onNext invoked with {}. Read so far {}", results.getEntries().size(),
                         txnRead.get());
                 results.getEntries().forEach((schema, entries) -> {
-                    if (!schema.getTableName().equals(tableSchema.getTableName())) {
+                    if (!schema.getTableName().equals(tableName)) {
                         log.warn("Not my table {}", schema);
                         return;
                     }
@@ -371,9 +371,10 @@ public class CorfuStoreBrowser {
         }
 
         StreamDumper streamDumper = new StreamDumper();
-        List<TableSchema<Message, Message, Message>> tablesOfInterest = new ArrayList<>();
-        tablesOfInterest.add(streamDumper.getTableSchema());
-        store.subscribe(streamDumper, namespace, tablesOfInterest, null);
+        List<String> tablesOfInterest = Collections.singletonList(tableName);
+        String streamTag = ExampleTableName.getDescriptor().getOptions()
+                .getExtension(CorfuOptions.tableSchema).getStreamTag(0);
+        store.subscribeListener(streamDumper, namespace, streamTag, tablesOfInterest, null);
         while (streamDumper.getTxnRead().get() < stopAfter || streamDumper.isError()) {
             final int SLEEP_DURATION_MILLIS = 100;
             try {
@@ -383,7 +384,7 @@ public class CorfuStoreBrowser {
             }
         }
 
-        store.unsubscribe(streamDumper);
+        store.unsubscribeListener(streamDumper);
 
         return streamDumper.getTxnRead().get();
     }
