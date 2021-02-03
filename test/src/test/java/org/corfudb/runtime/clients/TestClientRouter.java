@@ -23,6 +23,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.TestServerRouter;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.service.CorfuProtocolMessage;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.CorfuRuntime;
@@ -289,7 +291,7 @@ public class TestClientRouter implements IClientRouter {
     public  <T> CompletableFuture<T> sendRequestAndGetCompletable(RequestPayloadMsg payload,
                                                                   long epoch, RpcCommon.UuidMsg clusterId,
                                                                   PriorityLevel priority,
-                                                                  boolean ignoreClusterId, boolean ignoreEpoch) {
+                                                                  ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         // Simulate a "disconnected endpoint"
         if (!connected) {
             log.trace("Disconnected endpoint " + host + ":" + port);
@@ -367,7 +369,7 @@ public class TestClientRouter implements IClientRouter {
      */
     @Override
     public void sendRequest(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
-                            PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch) {
+                            PriorityLevel priority, ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         final long thisRequestId = requestID.getAndIncrement();
         RpcCommon.UuidMsg protoClientId = CorfuProtocolCommon.getUuidMsg(clientID);
 

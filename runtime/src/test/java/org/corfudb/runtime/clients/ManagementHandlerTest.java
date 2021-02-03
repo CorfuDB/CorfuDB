@@ -6,6 +6,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
@@ -59,7 +61,7 @@ public class ManagementHandlerTest {
      * @param ignoreEpoch       indicates if the message is epoch aware
      * @return                  the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, 0L,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -110,8 +112,9 @@ public class ManagementHandlerTest {
     }
 
     private void testHandleReportFailure(boolean handlingSuccessful) {
+        EpochCheck ignoreEpoch = handlingSuccessful ? EpochCheck.IGNORE : EpochCheck.CHECK;
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, handlingSuccessful),
+                getBasicHeader(ClusterIdCheck.CHECK, ignoreEpoch),
                 getReportFailureResponseMsg(handlingSuccessful)
         );
 
@@ -142,8 +145,9 @@ public class ManagementHandlerTest {
     }
 
     private void testHandleHealFailure(boolean handlingSuccessful) {
+        EpochCheck ignoreEpoch = handlingSuccessful ? EpochCheck.IGNORE : EpochCheck.CHECK;
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, handlingSuccessful),
+                getBasicHeader(ClusterIdCheck.CHECK, ignoreEpoch),
                 getHealFailureResponseMsg(handlingSuccessful)
         );
 
@@ -174,8 +178,9 @@ public class ManagementHandlerTest {
     }
 
     private void testHandleManagementBootstrap(boolean bootstrapped) {
+        EpochCheck ignoreEpoch = bootstrapped ? EpochCheck.IGNORE : EpochCheck.CHECK;
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, bootstrapped),
+                getBasicHeader(ClusterIdCheck.CHECK, ignoreEpoch),
                 getBootstrapManagementResponseMsg(bootstrapped)
         );
 
@@ -194,7 +199,7 @@ public class ManagementHandlerTest {
     public void testHandleManagementLayout() {
         final Layout layout = getBasicLayout(ImmutableList.of("localhost:9000"));
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getManagementLayoutResponseMsg(layout)
         );
 
@@ -213,7 +218,7 @@ public class ManagementHandlerTest {
     public void testHandleQueryNode() {
         final NodeState state = NodeState.getNotReadyNodeState("localhost:9000");
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getQueryNodeResponseMsg(state)
         );
 
@@ -232,7 +237,7 @@ public class ManagementHandlerTest {
     public void testHandleOrchestrator() {
         // Test with an ORCHESTRATOR_RESPONSE of type QueryResponse.
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getQueriedWorkflowResponseMsg(true)
         );
 
@@ -247,7 +252,7 @@ public class ManagementHandlerTest {
 
         // Test with an ORCHESTRATOR_RESPONSE of type CreateWorkflowResponse.
         response = getResponseMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getCreatedWorkflowResponseMsg(DEFAULT_UUID)
         );
 

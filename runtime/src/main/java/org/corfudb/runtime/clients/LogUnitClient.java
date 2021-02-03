@@ -7,7 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import lombok.Getter;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
@@ -17,7 +18,6 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.proto.service.LogUnit.TailRequestMsg.Type;
 import org.corfudb.util.serializer.Serializers;
 
@@ -72,7 +72,7 @@ public class LogUnitClient extends AbstractClient {
         LogData logData = new LogData(DataType.DATA, payload);
         logData.setBackpointerMap(backpointerMap);
         logData.setGlobalAddress(address);
-        return sendRequestWithFuture(getWriteLogRequestMsg(logData), false, false);
+        return sendRequestWithFuture(getWriteLogRequestMsg(logData), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -82,7 +82,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completable future which returns true on success.
      */
     public CompletableFuture<Boolean> write(ILogData payload) {
-        return sendRequestWithFuture(getWriteLogRequestMsg((LogData) payload), false, false);
+        return sendRequestWithFuture(getWriteLogRequestMsg((LogData) payload), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -106,7 +106,7 @@ public class LogUnitClient extends AbstractClient {
             }
         }
 
-        return sendRequestWithFuture(getRangeWriteLogRequestMsg(range), false, false);
+        return sendRequestWithFuture(getRangeWriteLogRequestMsg(range), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -128,7 +128,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> read(List<Long> addresses, boolean cacheable) {
-        return sendRequestWithFuture(getReadLogRequestMsg(addresses, cacheable), false, false);
+        return sendRequestWithFuture(getReadLogRequestMsg(addresses, cacheable), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -139,7 +139,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns an InspectAddressesResponse
      */
     public CompletableFuture<InspectAddressesResponse> inspectAddresses(List<Long> addresses) {
-        return sendRequestWithFuture(getInspectAddressesRequestMsg(addresses), false, false);
+        return sendRequestWithFuture(getInspectAddressesRequestMsg(addresses), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -149,7 +149,7 @@ public class LogUnitClient extends AbstractClient {
      * received.
      */
     public CompletableFuture<TailsResponse> getLogTail() {
-        return sendRequestWithFuture(getTailRequestMsg(Type.LOG_TAIL), false, false);
+        return sendRequestWithFuture(getTailRequestMsg(Type.LOG_TAIL), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -159,7 +159,7 @@ public class LogUnitClient extends AbstractClient {
      * received.
      */
     public CompletableFuture<TailsResponse> getAllTails() {
-        return sendRequestWithFuture(getTailRequestMsg(Type.ALL_STREAMS_TAIL), false, false);
+        return sendRequestWithFuture(getTailRequestMsg(Type.ALL_STREAMS_TAIL), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -168,7 +168,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a CompletableFuture which will complete with the committed tail once received.
      */
     public CompletableFuture<Long> getCommittedTail() {
-        return sendRequestWithFuture(getCommittedTailRequestMsg(), false, false);
+        return sendRequestWithFuture(getCommittedTailRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -178,7 +178,7 @@ public class LogUnitClient extends AbstractClient {
      * @return an empty completableFuture
      */
     public CompletableFuture<Void> updateCommittedTail(long committedTail) {
-        return sendRequestWithFuture(getUpdateCommittedTailRequestMsg(committedTail), false, false);
+        return sendRequestWithFuture(getUpdateCommittedTailRequestMsg(committedTail), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -187,7 +187,7 @@ public class LogUnitClient extends AbstractClient {
      * @return A CompletableFuture which will complete with the address space map for all streams.
      */
     public CompletableFuture<StreamsAddressResponse> getLogAddressSpace() {
-        return sendRequestWithFuture(getLogAddressSpaceRequestMsg(), false, false);
+        return sendRequestWithFuture(getLogAddressSpaceRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -196,7 +196,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a CompletableFuture for the starting address
      */
     public CompletableFuture<Long> getTrimMark() {
-        return sendRequestWithFuture(getTrimMarkRequestMsg(), false, false);
+        return sendRequestWithFuture(getTrimMarkRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -207,7 +207,7 @@ public class LogUnitClient extends AbstractClient {
      * @return Known addresses.
      */
     public CompletableFuture<KnownAddressResponse> requestKnownAddresses(long startRange, long endRange) {
-        return sendRequestWithFuture(getKnownAddressRequestMsg(startRange, endRange), false, false);
+        return sendRequestWithFuture(getKnownAddressRequestMsg(startRange, endRange), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -217,21 +217,21 @@ public class LogUnitClient extends AbstractClient {
      * @return an empty completableFuture
      */
     public CompletableFuture<Void> prefixTrim(Token address) {
-        return sendRequestWithFuture(getTrimLogRequestMsg(address), false, false);
+        return sendRequestWithFuture(getTrimLogRequestMsg(address), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
      * Send a compact request that will delete the trimmed parts of the log.
      */
     public CompletableFuture<Void> compact() {
-        return sendRequestWithFuture(getCompactRequestMsg(), false, true);
+        return sendRequestWithFuture(getCompactRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
      * Send a flush cache request that will flush the logunit cache.
      */
     public CompletableFuture<Void> flushCache() {
-        return sendRequestWithFuture(getFlushCacheRequestMsg(), false, true);
+        return sendRequestWithFuture(getFlushCacheRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
@@ -241,6 +241,6 @@ public class LogUnitClient extends AbstractClient {
      * @return a completable future which returns true on success.
      */
     public CompletableFuture<Boolean> resetLogUnit(long epoch) {
-        return sendRequestWithFuture(getResetLogUnitRequestMsg(epoch), false, true);
+        return sendRequestWithFuture(getResetLogUnitRequestMsg(epoch), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 }

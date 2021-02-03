@@ -2,6 +2,8 @@ package org.corfudb.runtime.clients;
 
 import java.util.concurrent.CompletableFuture;
 
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
@@ -51,7 +53,7 @@ public interface IClientRouter {
      */
     <T> CompletableFuture<T> sendRequestAndGetCompletable(CorfuMessage.RequestPayloadMsg payload, long epoch,
                                                           UuidMsg clusterId, CorfuMessage.PriorityLevel priority,
-                                                          boolean ignoreClusterId, boolean ignoreEpoch);
+                                                          ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch);
 
     /**
      * @deprecated [RM]
@@ -73,7 +75,7 @@ public interface IClientRouter {
      * @param ignoreEpoch
      */
     void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch, UuidMsg clusterId,
-                     CorfuMessage.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch);
+                     CorfuMessage.PriorityLevel priority, ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch);
 
     /**
      * Complete a given outstanding request with a completion value.

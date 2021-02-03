@@ -20,6 +20,8 @@ import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.FailureDetector;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.runtime.CorfuRuntime;
@@ -217,11 +219,11 @@ public class ManagementServer extends AbstractServer {
 
         if (layout == null || layout.getClusterId() == null) {
             log.error("handleBootstrapManagement[{}]: Incomplete layout {}", req.getHeader().getRequestId(), layout);
-            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getBootstrapManagementResponseMsg(false));
         } else {
             final Layout managementLayout = serverContext.getManagementLayout();
-            responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
 
             if (managementLayout != null) {
                 log.warn("handleBootstrapManagement[{}]: Already bootstrapped with {}, "
@@ -270,7 +272,7 @@ public class ManagementServer extends AbstractServer {
             log.error("handleReportFailure[{}]: Discarding stale detector message received. detectorEpoch:{} " +
                     "latestLayoutEpoch:{}", req.getHeader().getRequestId(), payload.getDetectorEpoch(), layout.getEpoch());
 
-            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getReportFailureResponseMsg(false));
             r.sendResponse(response, ctx);
             return;
@@ -305,7 +307,7 @@ public class ManagementServer extends AbstractServer {
             response = getResponseMsg(req.getHeader(), getReportFailureResponseMsg(true));
         } else {
             log.error("handleReportFailure[{}]: Failure handling unsuccessful.", req.getHeader().getRequestId());
-            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getReportFailureResponseMsg(false));
         }
 
@@ -344,7 +346,7 @@ public class ManagementServer extends AbstractServer {
             log.error("handleHealFailure[{}]: Discarding request received... detectorEpoch:{} latestLayoutEpoch:{}",
                     req.getHeader().getRequestId(), payload.getDetectorEpoch(), layout.getEpoch());
 
-            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getHealFailureResponseMsg(false));
             r.sendResponse(response, ctx);
             return;
@@ -384,7 +386,7 @@ public class ManagementServer extends AbstractServer {
             log.info("handleHealFailure[{}]: healing handling " +
                     "already in progress... Skipping.", req.getHeader().getRequestId());
 
-            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getHealFailureResponseMsg(false));
             r.sendResponse(response, ctx);
             return;
@@ -394,7 +396,7 @@ public class ManagementServer extends AbstractServer {
             response = getResponseMsg(req.getHeader(), getHealFailureResponseMsg(true));
         } else {
             log.error("handleHealFailure[{}]: healing handling unsuccessful.", req.getHeader().getRequestId());
-            responseHeader = getHeaderMsg(req.getHeader(), false, false);
+            responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
             response = getResponseMsg(responseHeader, getHealFailureResponseMsg(false));
         }
 
@@ -423,7 +425,7 @@ public class ManagementServer extends AbstractServer {
                 .getNode(serverContext.getLocalEndpoint())
                 .orElseGet(this::buildDefaultNodeState);
 
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getQueryNodeResponseMsg(nodeState));
         r.sendResponse(response, ctx);
     }

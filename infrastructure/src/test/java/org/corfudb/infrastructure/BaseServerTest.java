@@ -5,6 +5,8 @@ import io.netty.channel.ChannelHandlerContext;
 import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -67,7 +69,7 @@ public class BaseServerTest {
      * @param ignoreEpoch       indicates if the message is epoch aware
      * @return                  the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, 0L,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -110,7 +112,7 @@ public class BaseServerTest {
     @Test
     public void testPing() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getPingRequestMsg()
         );
 
@@ -134,7 +136,7 @@ public class BaseServerTest {
     @Test
     public void testSealValidEpoch() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getSealRequestMsg(1L)
         );
 
@@ -159,7 +161,7 @@ public class BaseServerTest {
     @Test
     public void testSealWrongEpoch() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getSealRequestMsg(1L)
         );
 
@@ -186,7 +188,7 @@ public class BaseServerTest {
     @Test
     public void testVersionRequest() throws SerializerException {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getVersionRequestMsg()
         );
 
@@ -217,7 +219,7 @@ public class BaseServerTest {
     @Test
     public void testReset() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getResetRequestMsg()
         );
 
@@ -245,7 +247,7 @@ public class BaseServerTest {
     @Test
     public void testRestart() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getRestartRequestMsg()
         );
 

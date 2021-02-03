@@ -2,6 +2,8 @@ package org.corfudb.infrastructure;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
@@ -79,18 +81,18 @@ public class LogUnitCacheTest extends AbstractServerTest {
         }
 
         // Range write is not cached on server.
-        sendRequest(getRangeWriteLogRequestMsg(payloads), false, false).join();
+        sendRequest(getRangeWriteLogRequestMsg(payloads), ClusterIdCheck.CHECK, EpochCheck.CHECK).join();
 
         // Non-cacheable reads should not affect the data cache on server.
         CompletableFuture<ReadResponse> future =
-                sendRequest(getReadLogRequestMsg(addresses, false), false, false);
+                sendRequest(getReadLogRequestMsg(addresses, false), ClusterIdCheck.CHECK, EpochCheck.CHECK);
 
 
         checkReadResponse(future.join(), size);
         assertThat(logUnitServer.getDataCache().getSize()).isZero();
 
         // Cacheable reads should update the data cache on server.
-        future = sendRequest(getReadLogRequestMsg(addresses, true), false, false);
+        future = sendRequest(getReadLogRequestMsg(addresses, true), ClusterIdCheck.CHECK, EpochCheck.CHECK);
 
         checkReadResponse(future.join(), size);
         assertThat(logUnitServer.getDataCache().getSize()).isEqualTo(size);

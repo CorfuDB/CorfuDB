@@ -12,6 +12,8 @@ import java.util.UUID;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.proto.service.Base.HandshakeResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
@@ -166,7 +168,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
 
         // Note: Some fields in the header are unused during the handshake process.
         HeaderMsg header = getHeaderMsg(0, CorfuMessage.PriorityLevel.NORMAL, 0,
-                DEFAULT_UUID, this.clientId, false, true);
+                DEFAULT_UUID, this.clientId, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         RequestMsg request = getRequestMsg(header, getHandshakeRequestMsg(this.clientId, this.nodeId));
 
         ctx.writeAndFlush(request);

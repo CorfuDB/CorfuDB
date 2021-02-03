@@ -6,6 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -75,7 +77,7 @@ public class LayoutServerTest {
      * @param ignoreEpoch       indicates if the message is epoch aware
      * @return                  the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, 0L,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -123,7 +125,7 @@ public class LayoutServerTest {
     public void testBootstrapLayoutAck() throws IOException {
         Layout defaultLayout = getDefaultLayout();
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getBootstrapLayoutRequestMsg(defaultLayout)
         );
 
@@ -148,7 +150,7 @@ public class LayoutServerTest {
     @Test
     public void testBootstrapNullLayout() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getBootstrapLayoutRequestMsg(null)
         );
 
@@ -176,7 +178,7 @@ public class LayoutServerTest {
         l.setClusterId(null);
 
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getBootstrapLayoutRequestMsg(l)
         );
 
@@ -201,7 +203,7 @@ public class LayoutServerTest {
     public void testBootstrappedLayout() throws IOException {
         Layout l = getDefaultLayout();
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getBootstrapLayoutRequestMsg(l)
         );
 
@@ -230,7 +232,7 @@ public class LayoutServerTest {
         Layout defaultLayout = getDefaultLayout();
         long payloadEpoch = 0L;
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getLayoutRequestMsg(payloadEpoch)
         );
 
@@ -257,7 +259,7 @@ public class LayoutServerTest {
     public void testGetLayoutNoBootstrap() {
         long payloadEpoch = 0L;
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getLayoutRequestMsg(payloadEpoch)
         );
 
@@ -273,7 +275,7 @@ public class LayoutServerTest {
         Layout l = getDefaultLayout();
         long wrongEpoch = 5L;
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getLayoutRequestMsg(wrongEpoch)
         );
 
@@ -306,7 +308,7 @@ public class LayoutServerTest {
         long defaultRank = -1L;
 
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getPrepareLayoutRequestMsg(payloadEpoch, phase1Rank)
         );
 
@@ -344,7 +346,7 @@ public class LayoutServerTest {
         long phase1Rank = 5L;
 
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getPrepareLayoutRequestMsg(payloadEpoch, phase1Rank)
         );
 
@@ -365,7 +367,7 @@ public class LayoutServerTest {
         long highestPhase1Rank = 10L;
 
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getPrepareLayoutRequestMsg(payloadEpoch, phase1Rank)
         );
 
@@ -401,7 +403,7 @@ public class LayoutServerTest {
         long phase1Rank = 5L;
 
         RequestMsg proposeRequest = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getProposeLayoutRequestMsg(payloadEpoch, phase1Rank, l)
         );
 
@@ -441,7 +443,7 @@ public class LayoutServerTest {
         long phase1Rank = 5L;
 
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getProposeLayoutRequestMsg(payloadEpoch, phase1Rank, l)
         );
 
@@ -463,7 +465,7 @@ public class LayoutServerTest {
         long defaultRank = -1L;
 
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getProposeLayoutRequestMsg(payloadEpoch, phase1Rank, l)
         );
 
@@ -497,7 +499,7 @@ public class LayoutServerTest {
         l.setEpoch(wrongEpoch);
 
         RequestMsg proposeRequest = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getProposeLayoutRequestMsg(payloadEpoch, phase1Rank, l)
         );
 
@@ -533,7 +535,7 @@ public class LayoutServerTest {
         long wrongProposeRank = 10L;
 
         RequestMsg proposeRequest = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getProposeLayoutRequestMsg(payloadEpoch, wrongProposeRank, l)
         );
 
@@ -568,7 +570,7 @@ public class LayoutServerTest {
         long phase1Rank = 5L;
 
         RequestMsg proposeRequest = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getProposeLayoutRequestMsg(payloadEpoch, phase1Rank, l)
         );
 
@@ -601,7 +603,7 @@ public class LayoutServerTest {
         Layout defaultLayout = getDefaultLayout();
         long payloadEpoch = 0L;
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getCommitLayoutRequestMsg(false, payloadEpoch, defaultLayout)
         );
 
@@ -629,7 +631,7 @@ public class LayoutServerTest {
         Layout defaultLayout = getDefaultLayout();
         long payloadEpoch = 0L;
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getCommitLayoutRequestMsg(false, payloadEpoch, defaultLayout)
         );
 
@@ -649,7 +651,7 @@ public class LayoutServerTest {
         long payloadEpoch = 0L;
         long serverEpoch = 5L;
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getCommitLayoutRequestMsg(false, payloadEpoch, l)
         );
 
@@ -681,7 +683,7 @@ public class LayoutServerTest {
         Layout defaultLayout = getDefaultLayout();
         long payloadEpoch = 0L;
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getCommitLayoutRequestMsg(true, payloadEpoch, defaultLayout)
         );
 
@@ -711,7 +713,7 @@ public class LayoutServerTest {
         long payloadEpoch = 0L;
         long serverEpoch = 5L;
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getCommitLayoutRequestMsg(true, payloadEpoch, l)
         );
 

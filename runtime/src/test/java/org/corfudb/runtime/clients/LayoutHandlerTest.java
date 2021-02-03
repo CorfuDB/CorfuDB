@@ -2,6 +2,8 @@ package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.exceptions.SerializerException;
@@ -60,7 +62,7 @@ public class LayoutHandlerTest {
      * @param ignoreEpoch       indicates if the message is epoch aware
      * @return                  the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, 0L,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -85,7 +87,7 @@ public class LayoutHandlerTest {
         Layout defaultLayout = getDefaultLayout();
 
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getLayoutResponseMsg(defaultLayout)
         );
 
@@ -107,7 +109,7 @@ public class LayoutHandlerTest {
         defaultLayout.setLayoutServers(new LinkedList<>());
 
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getLayoutResponseMsg(defaultLayout)
         );
 
@@ -123,12 +125,12 @@ public class LayoutHandlerTest {
     @Test
     public void testBootstrapLayout() {
         ResponseMsg responseACK = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getBootstrapLayoutResponseMsg(true)
         );
 
         ResponseMsg responseNACK = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getBootstrapLayoutResponseMsg(false)
         );
 
@@ -150,11 +152,11 @@ public class LayoutHandlerTest {
         Layout defaultLayout = getDefaultLayout();
         long defaultRank = 5L;
         ResponseMsg responseACK = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getPrepareLayoutResponseMsg(true, defaultRank, defaultLayout)
         );
         ResponseMsg responseREJECT = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getPrepareLayoutResponseMsg(false, defaultRank, defaultLayout)
         );
 
@@ -187,11 +189,11 @@ public class LayoutHandlerTest {
     public void testPropose() {
         long defaultRank = 5L;
         ResponseMsg responseACK = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getProposeLayoutResponseMsg(true, defaultRank)
         );
         ResponseMsg responseREJECT = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getProposeLayoutResponseMsg(false, defaultRank)
         );
 
@@ -215,12 +217,12 @@ public class LayoutHandlerTest {
     @Test
     public void testCommit() {
         ResponseMsg responseACK = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getCommitLayoutResponseMsg(true)
         );
 
         ResponseMsg responseNACK = getResponseMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getCommitLayoutResponseMsg(false)
         );
 

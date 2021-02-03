@@ -5,6 +5,8 @@ import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
@@ -64,7 +66,7 @@ public class BaseHandlerTest {
      * @param ignoreEpoch       indicates if the message is epoch aware
      * @return                  the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, 0L,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -87,7 +89,7 @@ public class BaseHandlerTest {
     @Test
     public void testHandlePing() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getPingResponseMsg()
         );
 
@@ -105,7 +107,7 @@ public class BaseHandlerTest {
     @Test
     public void testHandleRestart() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getRestartResponseMsg()
         );
 
@@ -123,7 +125,7 @@ public class BaseHandlerTest {
     @Test
     public void testHandleReset() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getResetResponseMsg()
         );
 
@@ -141,7 +143,7 @@ public class BaseHandlerTest {
     @Test
     public void testHandleSeal() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getSealResponseMsg()
         );
 
@@ -159,7 +161,7 @@ public class BaseHandlerTest {
     @Test
     public void testHandleVersionResponse() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getVersionResponseMsg(new VersionInfo(Collections.singletonMap("--address", "localhost"), "localhost"))
         );
 
@@ -182,7 +184,7 @@ public class BaseHandlerTest {
     @Test
     public void testHandleWrongEpochError() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getWrongEpochErrorMsg(2L)
         );
 
@@ -205,7 +207,7 @@ public class BaseHandlerTest {
     public void testHandleWrongClusterError() {
         final UUID EXPECTED_UUID = UUID.randomUUID();
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getWrongClusterErrorMsg(getUuidMsg(EXPECTED_UUID), getUuidMsg(DEFAULT_UUID))
         );
 
@@ -228,7 +230,7 @@ public class BaseHandlerTest {
     @Test
     public void testHandleNotReadyError() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getNotReadyErrorMsg()
         );
 
@@ -247,7 +249,7 @@ public class BaseHandlerTest {
     @Test
     public void testHandleBootstrappedError() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getBootstrappedErrorMsg()
         );
 
@@ -266,7 +268,7 @@ public class BaseHandlerTest {
     @Test
     public void testHandleNotBootstrappedError() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getNotBootstrappedErrorMsg()
         );
 
@@ -285,7 +287,7 @@ public class BaseHandlerTest {
     @Test
     public void testHandleUnknownError() {
         ResponseMsg response = getResponseMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getUnknownErrorMsg(new Exception("Unknown Exception Test"))
         );
 

@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -10,11 +11,15 @@ import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
@@ -79,7 +84,7 @@ public class RequestHandlerMethods {
             log.error("handle[{}]: Unhandled exception processing {} request",
                     req.getHeader().getRequestId(), req.getPayload().getPayloadCase(), e);
 
-            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             r.sendResponse(getResponseMsg(responseHeader, getUnknownErrorMsg(e)), ctx);
         }
     }
@@ -130,10 +135,51 @@ public class RequestHandlerMethods {
                         mtt, mh, mtt).getTarget().bindTo(server).invoke();
             }
 
-            final HandlerMethod handler = h::handle;
+            // Install pre-conditions on handler
+            final HandlerMethod handler = generateConditionalHandler(annotation.type(), h);
+            // Install the handler in the map
             handlerMap.put(annotation.type(), handler);
         } catch (Throwable e) {
             throw new UnrecoverableCorfuError("Exception during request handler registration", e);
         }
+    }
+
+    /**
+     * Generate a conditional handler, which instruments the handler with metrics if
+     * configured as enabled and checks whether the server is shutdown and ready.
+     * @param type          The type the request message is being handled for.
+     * @param handler       The {@link RequestHandlerMethods.HandlerMethod} which handles the message.
+     * @return              A new {@link RequestHandlerMethods.HandlerMethod} which conditionally executes the
+     *                      handler based on preconditions (whether the server is shutdown/ready).
+     */
+    private HandlerMethod generateConditionalHandler(@NonNull final PayloadCase type,
+                                                     @NonNull final HandlerMethod handler) {
+        // Generate a timer based on the Corfu request type
+        final Optional<Timer> timer = getTimer(type);
+
+        // Register the handler. Depending on metrics collection configuration by MetricsUtil,
+        // handler will be instrumented by the metrics context.
+        return (req, ctx, r) -> {
+            Runnable handlerRunnable = () -> handler.handle(req, ctx, r);
+            if (timer.isPresent()) {
+                timer.get().record(handlerRunnable);
+            } else {
+                handlerRunnable.run();
+            }
+        };
+    }
+
+    // Create a timer using cached timer name for the corresponding type
+    private Optional<Timer> getTimer(@Nonnull PayloadCase type) {
+        timerNameCache.computeIfAbsent(type,
+                aType -> ("corfu.infrastructure.message-handler." +
+                        aType.name().toLowerCase()));
+        double[] percentiles = new double[]{0.50, 0.95, 0.99};
+
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> Timer.builder(timerNameCache.get(type))
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
     }
 }

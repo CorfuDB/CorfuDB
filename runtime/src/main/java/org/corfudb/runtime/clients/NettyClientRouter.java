@@ -1,7 +1,6 @@
 package org.corfudb.runtime.clients;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.TextFormat;
 import io.netty.bootstrap.Bootstrap;
@@ -41,13 +40,14 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.CorfuProtocolCommon;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler;
 import org.corfudb.protocols.wireprotocol.ClientHandshakeHandler.ClientHandshakeEvent;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
 import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -55,7 +55,6 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterrupte
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
 import org.corfudb.runtime.proto.service.CorfuMessage;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg;
 import org.corfudb.runtime.RuntimeParameters;
@@ -509,7 +508,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
             CorfuMessage.RequestPayloadMsg payload,
             long epoch, RpcCommon.UuidMsg clusterId,
             CorfuMessage.PriorityLevel priority,
-            boolean ignoreClusterId, boolean ignoreEpoch) {
+            ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
 
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return a exceptionally completed with the timeout.
@@ -597,7 +596,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
     @Override
     public void sendRequest(CorfuMessage.RequestPayloadMsg payload, long epoch,
                             RpcCommon.UuidMsg clusterId,
-                            CorfuMessage.PriorityLevel priority, boolean ignoreClusterId, boolean ignoreEpoch) {
+                            CorfuMessage.PriorityLevel priority, ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         // Get the next request ID
         final long thisRequestId = requestID.getAndIncrement();
         RpcCommon.UuidMsg clientId = CorfuProtocolCommon.getUuidMsg(parameters.getClientId());
@@ -750,7 +749,7 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
         // Note: the epoch and clusterId are ignored for this message
         sendRequestAndGetCompletable(getPingRequestMsg(), 0, getUuidMsg(DEFAULT_UUID),
-                CorfuMessage.PriorityLevel.NORMAL, true, true);
+                CorfuMessage.PriorityLevel.NORMAL, ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
 
         log.trace("keepAlive: sent ping to {}", this.channel.remoteAddress());
     }

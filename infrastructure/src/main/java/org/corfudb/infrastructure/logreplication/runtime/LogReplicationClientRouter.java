@@ -13,6 +13,8 @@ import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRunti
 import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapterException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.utils.CorfuMessageConverterUtils;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.Messages.CorfuMessage;
@@ -262,7 +264,7 @@ public class LogReplicationClientRouter implements IClientRouter {
     @Override
     public  <T> CompletableFuture<T> sendRequestAndGetCompletable(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
                                                                   org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
-                                                                  boolean ignoreClusterId, boolean ignoreEpoch) {
+                                                                  ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         // This is an empty stub. This method is not being used anywhere in the LR framework.
         return null;
     }
@@ -301,7 +303,7 @@ public class LogReplicationClientRouter implements IClientRouter {
     @Override
     public void sendRequest(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
                             org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
-                            boolean ignoreClusterId, boolean ignoreEpoch) {
+                            ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         // This is an empty stub. This method is not being used anywhere in the LR framework.
     }
 
