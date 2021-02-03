@@ -10,9 +10,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.protocols.logprotocol.MultiSMREntry;
@@ -25,6 +30,7 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.exceptions.WriteSizeException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
@@ -47,7 +53,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
     public CorfuRuntime r;
 
     @Before
-    public void setRuntime() throws Exception {
+    public void setRuntime() {
         // This module *really* needs separate & independent runtimes.
         r = getDefaultRuntime().connect(); // side-effect of using AbstractViewTest::getRouterFunction
         r = getNewRuntime(getDefaultNode()).connect();
@@ -242,7 +248,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         final int numKeys = 5;
         final String author = "Me, myself, and I";
         final Long fudgeFactor = 75L;
-        final int smallBatchSize = 4;
 
         StreamingMap<String, Long> m = instantiateMap(streamName);
         for (int i = 0; i < numKeys; i++) {
@@ -264,7 +269,6 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, (CorfuTable) m);
         cpw.setSerializer(serializer);
         cpw.setValueMutator((l) -> (Long) l + fudgeFactor);
-        cpw.setBatchSize(smallBatchSize);
 
         // Write all CP data.
         r.getObjectsView().TXBuild()
@@ -344,16 +348,22 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         // Instantiate map and write first keys
         Map<String, Long> m = instantiateMap(streamName);
         for (int i = 0; i < numKeys; i++) {
-            String key = keyPrefixFirst + Integer.toString(i);
+            String key = keyPrefixFirst + i;
             m.put(key, (long) i);
             saveHist.accept(key, (long) i);
         }
 
         // Set up CP writer, with interleaved writes for middle keys
         middleTracker = -1;
-        CheckpointWriter<CorfuTable> cpw = new CheckpointWriter(getRuntime(), streamId, author, (CorfuTable) m);
+        CheckpointWriter<CorfuTable<String, Long>> cpw = new CheckpointWriter<>(
+                getRuntime(), streamId, author, (CorfuTable<String, Long>) m);
         cpw.setSerializer(serializer);
-        cpw.setBatchSize(1);
+        /* setting the batch threshold percentage so low that it carries only one smr entries
+        * per checkpoint entry. This test looks into the continuation record and this will
+        * eliminate batchSize strategy dependency altogether.
+        */
+        final double batchThresholdPercentage = 0.000005;
+        cpw.setBatchThresholdPercentage(batchThresholdPercentage);
         cpw.setPostAppendFunc((cp, pos) -> {
             // No mutation, be we need to add a history snapshot at this START/END location.
             history.add(ImmutableMap.copyOf(snapshot));
@@ -456,12 +466,307 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         }
     }
 
+    /** Test the CheckpointWriter write size limit.
+     *
+     * CheckpointWriter aggregates a batch of SMREntries into one
+     * CheckpointEntry. This test uses large-sized SMREntries to verify
+     * that batching will not violate the maxWriteSize limit.
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void checkpointWriterSizeLimitTest() throws Exception {
+        final String streamName = "mystream5";
+        final UUID streamId = CorfuRuntime.getStreamID(streamName);
+        final String keyPrefix = "a-prefix";
+        final int numKeys = 50;
+        final String author = "Me, myself, and I";
+        final String mutationSuffix = "_mutation_suffix";
+        // max write size set to 25MB
+        final int maxWriteSize = 25 << 20;
+
+        StreamingMap<String, String> m = instantiateStringMap(streamName);
+        Map<String, String> mockedMap = new HashMap<>();
+
+        for (int i = 0; i < numKeys; i++) {
+            // each entry is 1 MB
+            String payload = getRandomStringOfSize(1 << 20);
+            m.put(keyPrefix + i, payload);
+            mockedMap.put(keyPrefix + i, payload + mutationSuffix);
+        }
+
+        // set the max write size to 25 MB
+        getRuntime().getParameters().setMaxWriteSize(maxWriteSize);
+        // disable payload compression
+        getRuntime().getParameters().setCodecType(Codec.Type.NONE);
+        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, m);
+        cpw.setSerializer(serializer);
+        // set a mutator to later verify that checkpointWriter has processed the entries
+        cpw.setValueMutator((l) -> l + mutationSuffix);
+
+        // Write all CP data.
+        r.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .build()
+                .begin();
+        Token snapshot = TransactionalContext
+                .getCurrentContext()
+                .getSnapshotTimestamp();
+        try {
+            cpw.startCheckpoint(snapshot);
+            cpw.appendObjectState(m.entryStream());
+            cpw.finishCheckpoint();
+
+            // Instantiate new runtime & map.
+            setRuntime();
+            Map<String, String> m2 = instantiateStringMap(streamName);
+            assertThat(m2).containsExactlyEntriesOf(mockedMap);
+        } finally {
+            r.getObjectsView().TXEnd();
+        }
+
+        // At least 3 continuations
+        // 25 * 0.95 = 23.75, 23 + 23 + 4 = 50
+        long startAddress = snapshot.getSequence() + 1;
+        assertThat(r.getAddressSpaceView().read(startAddress).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.START);
+        final long contRecordffset = startAddress + 1;
+        assertThat(r.getAddressSpaceView().read(contRecordffset).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
+        final long cont2Recordffset = startAddress + 2;
+        assertThat(r.getAddressSpaceView().read(cont2Recordffset).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
+        final long cont3Recordffset = startAddress + 3;
+        assertThat(r.getAddressSpaceView().read(cont3Recordffset).getCheckpointType())
+                .isEqualTo(CheckpointEntry.CheckpointEntryType.CONTINUATION);
+    }
+
+    /**
+     * CheckpointWriter has BATCH_THRESHOLD_PERCENTAGE which decreases the
+     * writeSizeLimit to BATCH_THRESHOLD_PERCENTAGE * writeSizeLimit.
+     * This test checks that a new checkpointEntry is created when the
+     * total size of SMREntries exceeds the decreased writeSizeLimit.
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void checkpointWriterSizeLimitMarginTest() throws Exception {
+        final String streamName = "mystream6";
+        final UUID streamId = CorfuRuntime.getStreamID(streamName);
+        final String keyPrefix = "a-prefix";
+        final String author = "Me, myself, and I";
+        // max write size set to 25 MB
+        final int maxWriteSize = 25 << 20;
+
+        StreamingMap<String, String> m = instantiateStringMap(streamName);
+        Map<String, String> mockedMap = new HashMap<>();
+
+        // set the max write size to 25 MB
+        getRuntime().getParameters().setMaxWriteSize(maxWriteSize);
+        getRuntime().getParameters().setCodecType(Codec.Type.NONE);
+        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, m);
+        cpw.setSerializer(serializer);
+        final double batchThresholdPercentage = cpw.getBatchThresholdPercentage();
+
+        int i = 0;
+        int numBytesPerCheckpointEntry = 0;
+        // each entry is 1 MB
+        String payload = getRandomStringOfSize(1 << 20);
+        int nextSmrEntrySize = getSerializedSMREntrySize(keyPrefix + i, payload,
+                cpw.getKeyMutator(), cpw.getValueMutator(), cpw.getSerializer());
+
+        while (numBytesPerCheckpointEntry + nextSmrEntrySize < batchThresholdPercentage * getRuntime().getParameters().getMaxWriteSize()) {
+            m.put(keyPrefix + i, payload);
+            mockedMap.put(keyPrefix + i, payload);
+            payload = getRandomStringOfSize(1 << 20);
+            numBytesPerCheckpointEntry += nextSmrEntrySize;
+            nextSmrEntrySize = getSerializedSMREntrySize(keyPrefix + i, payload,
+                    cpw.getKeyMutator(), cpw.getValueMutator(), cpw.getSerializer());
+            i++;
+        }
+
+        int numSmrEntries = i;
+
+        // Write all CP data.
+        r.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .build()
+                .begin();
+        Token snapshot = TransactionalContext
+                .getCurrentContext()
+                .getSnapshotTimestamp();
+        try {
+            cpw.startCheckpoint(snapshot);
+            cpw.appendObjectState(m.entryStream());
+            cpw.finishCheckpoint();
+
+            // Instantiate new runtime & map.
+            setRuntime();
+            Map<String, String> m2 = instantiateStringMap(streamName);
+            for (i = 0; i < numSmrEntries; i++) {
+                assertThat(m2.get(keyPrefix + i)).describedAs("get " + i)
+                        .isEqualTo(mockedMap.get(keyPrefix + i));
+            }
+            // 1 CheckpointEntry for SMREntries, 1 CheckpointEntry for finishCheckpoint()
+            assertThat(cpw.getNumEntries()).isEqualTo(2);
+        } finally {
+            r.getObjectsView().TXEnd();
+        }
+
+        // batchThresholdPercentage * maxWriteSize < (numBytesPerCheckpointEntry + lastEntrySize) < maxWriteSize
+        final int lastEntrySizeUpperBound = getRuntime().getParameters().getMaxWriteSize() - numBytesPerCheckpointEntry;
+        final int lastEntrySizeLowerBound = (int) Math.ceil(
+                getRuntime().getParameters().getMaxWriteSize() * batchThresholdPercentage - numBytesPerCheckpointEntry);
+
+        int left = 1;
+        int right = 1 << 20;
+        String lastPayload = "";
+        while (left < right) {
+            int mid = (left + right) / 2;
+            lastPayload = getRandomStringOfSize(mid);
+            int currentSize = getSerializedSMREntrySize(keyPrefix + i, lastPayload,
+                    cpw.getKeyMutator(), cpw.getValueMutator(), cpw.getSerializer());
+            if (currentSize > lastEntrySizeUpperBound) {
+                right = mid;
+            } else if (currentSize < lastEntrySizeLowerBound) {
+                left = mid + 1;
+            } else {
+                m.put(keyPrefix + numSmrEntries, lastPayload);
+                mockedMap.put(keyPrefix + numSmrEntries, lastPayload);
+                break;
+            }
+        }
+        numSmrEntries++;
+
+        // Write all CP data.
+        r.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .build()
+                .begin();
+        snapshot = TransactionalContext
+                .getCurrentContext()
+                .getSnapshotTimestamp();
+        try {
+            cpw.startCheckpoint(snapshot);
+            cpw.appendObjectState(m.entryStream());
+            cpw.finishCheckpoint();
+
+            // Instantiate new runtime & map.
+            setRuntime();
+            Map<String, String> m2 = instantiateStringMap(streamName);
+            for (i = 0; i < numSmrEntries - 1; i++) {
+                assertThat(m2.get(keyPrefix + i)).describedAs("get " + i)
+                        .isEqualTo(mockedMap.get(keyPrefix + i));
+            }
+            i = numSmrEntries - 1;
+            assertThat(m2.get(keyPrefix + i)).describedAs("get " + i)
+                    .isEqualTo(mockedMap.get(keyPrefix + i));
+            // 2 CheckpointEntries from previous run
+            // 2 CheckpointEntries for SMREntries
+            // 1 CheckpointEntry for finishCheckpoint()
+            assertThat(cpw.getNumEntries()).isEqualTo(5);
+        } finally {
+            r.getObjectsView().TXEnd();
+        }
+    }
+
+    /**
+     * When log entry compression is set to NONE and BATCH_THRESHOLD_PERCENTAGE is very small,
+     * although the total size of SMR entries could pass the check in appendObjectState(), it
+     * could fail in writing the CheckpointEntry into stream (WriteSizeException) due to the
+     * slight overhead of packing SMR entries into CheckpointEntry.
+     */
+    @Test(expected = WriteSizeException.class)
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void checkpointWriterSizeLimitViolationTest() throws Exception {
+        final String streamName = "mystream7";
+        final UUID streamId = CorfuRuntime.getStreamID(streamName);
+        final String keyPrefix = "a-prefix";
+        final String author = "Me, myself, and I";
+        // max write size set to 25 MB
+        final int maxWriteSize = 25 << 20;
+
+        StreamingMap<String, String> m = instantiateStringMap(streamName);
+
+        // set the max write size to 25 MB
+        getRuntime().getParameters().setMaxWriteSize(maxWriteSize);
+        getRuntime().getParameters().setCodecType(Codec.Type.NONE);
+        CheckpointWriter cpw = new CheckpointWriter(getRuntime(), streamId, author, m);
+        cpw.setSerializer(serializer);
+        final double batchThresholdPercentage = 1;
+        cpw.setBatchThresholdPercentage(batchThresholdPercentage);
+
+        int i = 0;
+        int numBytesPerCheckpointEntry = 0;
+        // first entry is 20 MB
+        int payloadLength = 20 << 20;
+        String payload = getRandomStringOfSize(payloadLength);
+        int nextSmrEntrySize = getSerializedSMREntrySize(keyPrefix + i, payload,
+                cpw.getKeyMutator(), cpw.getValueMutator(), cpw.getSerializer());
+        int reducedMaxWriteSize = (int)Math.floor(batchThresholdPercentage * maxWriteSize);
+
+        // Create entries whose size add up to be in range [reducedMaxWriteSize - 100, reducedMaxWriteSize)
+        while (numBytesPerCheckpointEntry + 100 < reducedMaxWriteSize) {
+            if (nextSmrEntrySize + numBytesPerCheckpointEntry >= reducedMaxWriteSize) {
+                payloadLength /= 2;
+                payload = getRandomStringOfSize(payloadLength);
+                nextSmrEntrySize = getSerializedSMREntrySize(keyPrefix + i, payload,
+                        cpw.getKeyMutator(), cpw.getValueMutator(), cpw.getSerializer());
+                continue;
+            }
+            m.put(keyPrefix + i, payload);
+            numBytesPerCheckpointEntry += nextSmrEntrySize;
+            i++;
+        }
+
+        // Write all CP data.
+        r.getObjectsView().TXBuild()
+                .type(TransactionType.SNAPSHOT)
+                .build()
+                .begin();
+        Token snapshot = TransactionalContext
+                .getCurrentContext()
+                .getSnapshotTimestamp();
+        try {
+            cpw.startCheckpoint(snapshot);
+            cpw.appendObjectState(m.entryStream());
+            cpw.finishCheckpoint();
+        } finally {
+            r.getObjectsView().TXEnd();
+        }
+    }
+
+    private int getSerializedSMREntrySize(
+            String key, String value, Function<Object, Object> keyMutator, Function<Object, Object> valueMutator, ISerializer serializer) {
+        ByteBuf b = Unpooled.buffer();
+        SMREntry each = new SMREntry("put",
+                new Object[]{keyMutator.apply(key),
+                        valueMutator.apply(value)},
+                serializer);
+        each.serialize(b);
+        return b.writerIndex();
+    }
+
+    private String getRandomStringOfSize(int size) {
+        byte[] buf = new byte[size];
+        ThreadLocalRandom.current().nextBytes(buf);
+        return new String(buf);
+    }
+
     private StreamingMap<String, Long> instantiateMap(String streamName) {
         Serializers.registerSerializer(serializer);
         return r.getObjectsView()
                 .build()
                 .setStreamName(streamName)
                 .setTypeToken(new TypeToken<CorfuTable<String, Long>>() {})
+                .setSerializer(serializer)
+                .open();
+    }
+
+    private StreamingMap<String, String> instantiateStringMap(String streamName) {
+        Serializers.registerSerializer(serializer);
+        return r.getObjectsView()
+                .build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                 .setSerializer(serializer)
                 .open();
     }

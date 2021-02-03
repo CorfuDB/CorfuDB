@@ -310,9 +310,10 @@ public class WorkflowIT extends AbstractIT {
         // +1 because of extra NO_OP entry added by checkpointer
         assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isEqualTo(entriesCount+1);
 
-        // 2 Checkpoint entries for the start and end.
-        // 1000 entries being checkpointed = 20 checkpoint entries due to batch size of 50.
-        final int checkpointEntriesCount = 22;
+        /* 2 Checkpoint entries for the start and end.
++         * 1000 entries being checkpointed into just 1 entry after removing the batchSize dependency
++         */
+        final int checkpointEntriesCount = 3;
 
         // Write another batch of 1_000 entries.
         for (int i = 0; i < entriesCount; i++) {
