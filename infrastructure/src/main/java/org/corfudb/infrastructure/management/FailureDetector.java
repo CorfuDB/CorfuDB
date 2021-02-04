@@ -103,10 +103,6 @@ public class FailureDetector implements IDetector {
         );
     }
 
-    private void registerTimerForNodeIfNeeded(String node) {
-        MeterRegistryProvider.getInstance().ifPresent(registry -> registry.timer("failure-detector.ping-latency", "node", node));
-    }
-
     /**
      * PollRound consists of iterations. In each iteration, the FailureDetector pings all the
      * responsive nodes in the layout and also collects their {@link NodeState}-s to provide {@link ClusterState}.
