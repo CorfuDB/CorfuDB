@@ -30,7 +30,6 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.stream.AddressMapStreamView;
-import org.corfudb.runtime.view.stream.BackpointerStreamView;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.serializer.ISerializer;
@@ -482,12 +481,7 @@ public class CheckpointSmokeTest extends AbstractViewTest {
                                         boolean write1, boolean write2, boolean write3)
             throws Exception {
         final UUID checkpointStreamID = CorfuRuntime.getCheckpointStreamIdFromId(streamId);
-        IStreamView sv;
-        if (r.getParameters().isFollowBackpointersEnabled()) {
-            sv = new BackpointerStreamView(r, checkpointStreamID);
-        } else {
-            sv = new AddressMapStreamView(r, checkpointStreamID);
-        }
+        IStreamView sv = new AddressMapStreamView(r, checkpointStreamID);
         Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
         mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, "The perfect time");
 

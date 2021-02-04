@@ -314,8 +314,7 @@ public abstract class AbstractQueuedStreamView extends
      * list off there.
      * */
     @Override
-    protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal,
-                                            Function<ILogData, Boolean> contextCheckFn) {
+    protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal) {
         NavigableSet<Long> readSet = new TreeSet<>();
 
         // Scan backward in the stream to find interesting
@@ -366,24 +365,10 @@ public abstract class AbstractQueuedStreamView extends
                 // Case of Checkpoint will never load these addresses, cause this is another stream
                 .filter(x -> x.containsStream(context.id))
                 .collect(Collectors.toList());
-
-        // If any entries change the context,
-        // don't return anything greater than
-        // that entry
-        Optional<ILogData> contextEntry = readFrom.stream()
-                .filter(contextCheckFn::apply).findFirst();
-        if (contextEntry.isPresent()) {
-            log.trace("getNextEntries[{}] context switch @ {}", this,
-                    contextEntry.get().getGlobalAddress());
-            int idx = readFrom.indexOf(contextEntry.get());
-            readFrom = readFrom.subList(0, idx + 1);
-            // NOTE: readSet's clear() changed underlying context.readQueue
-            readSet.headSet(contextEntry.get().getGlobalAddress(), true).clear();
-        } else {
-            // Clear the entries which were read
-            context.readQueue.headSet(maxGlobal, true).clear();
-            context.readCpQueue.headSet(maxGlobal, true).clear();
-        }
+        
+        // Clear the entries which were read
+        context.readQueue.headSet(maxGlobal, true).clear();
+        context.readCpQueue.headSet(maxGlobal, true).clear();
 
         // Transfer the addresses of the read entries to the resolved queue
         readFrom.forEach(entry -> addToResolvedQueue(context, entry.getGlobalAddress()));
