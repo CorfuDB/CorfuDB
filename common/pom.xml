@@ -17,6 +17,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>org.roaringbitmap</groupId>
+            <artifactId>RoaringBitmap</artifactId>
+            <version>0.8.13</version>
+        </dependency>
+        <dependency>
             <groupId>org.ehcache</groupId>
             <artifactId>sizeof</artifactId>
             <version>0.3.0</version>

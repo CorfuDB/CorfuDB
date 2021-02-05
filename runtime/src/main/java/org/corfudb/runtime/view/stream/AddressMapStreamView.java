@@ -13,8 +13,10 @@ import org.corfudb.runtime.view.StreamOptions;
 import javax.annotation.Nonnull;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.NavigableSet;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -171,7 +173,9 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
         // Transfer discovered addresses to queue. We must limit to maxGlobal,
         // as startAddress could be ahead of maxGlobal---in case it reflects
         // the tail of the stream.
-        queue.addAll(streamAddressSpace.copyAddressesToSet(maxGlobal));
+        Set<Long> prefix = new HashSet<>();
+        streamAddressSpace.forEachUpTo(maxGlobal, prefix::add);
+        queue.addAll(prefix);
 
         final long trimMark = streamAddressSpace.getTrimMark();
 

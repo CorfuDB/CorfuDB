@@ -140,11 +140,6 @@
             <artifactId>rocksdbjni</artifactId>
             <version>6.8.1</version>
         </dependency>
-        <dependency>
-            <groupId>org.roaringbitmap</groupId>
-            <artifactId>RoaringBitmap</artifactId>
-            <version>0.8.13</version>
-        </dependency>
         <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
         <dependency>
             <groupId>com.google.protobuf</groupId>
