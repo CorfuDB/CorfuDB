@@ -10,7 +10,6 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.junit.Before;
 import org.junit.Test;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -244,9 +243,9 @@ public class SequencerServerTest extends AbstractServerTest {
         // This one should not be updated
         long newTailC = tailC - 1;
 
-        tailMap.put(streamA, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailA)));
-        tailMap.put(streamB, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailB)));
-        tailMap.put(streamC, new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(newTailC)));
+        tailMap.put(streamA, new StreamAddressSpace(Address.NON_ADDRESS, Collections.singleton(newTailA)));
+        tailMap.put(streamB, new StreamAddressSpace(Address.NON_ADDRESS, Collections.singleton(newTailB)));
+        tailMap.put(streamC, new StreamAddressSpace(Address.NON_ADDRESS, Collections.singleton(newTailC)));
 
         // Modifying the sequencerEpoch to simulate sequencer reset.
         server.setSequencerEpoch(-1L);
@@ -331,7 +330,7 @@ public class SequencerServerTest extends AbstractServerTest {
                 getBootstrapSequencerRequestMsg(
                         Collections.singletonMap(streamA, new StreamAddressSpace(
                                 Address.NON_ADDRESS,
-                                Roaring64NavigableMap.bitmapOf(num)
+                                Collections.singleton(num)
                         )),
                         num,
                         newEpoch,

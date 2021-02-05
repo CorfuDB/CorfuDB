@@ -5,8 +5,8 @@ import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.junit.Test;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.util.UUID;
 
@@ -117,14 +117,14 @@ public class SequencerViewTest extends AbstractViewTest {
         UUID streamA = UUID.nameUUIDFromBytes("stream A".getBytes());
         // Request 3 tokens on the Sequencer.
         final int tokenCount = 3;
-        Roaring64NavigableMap expectedMap = new Roaring64NavigableMap();
-        for (int i = 0; i < tokenCount; i++) {
+        StreamAddressSpace expectedMap = new StreamAddressSpace();
+        for (long i = 0; i < tokenCount; i++) {
             r.getSequencerView().next(streamA);
-            expectedMap.add(i);
+            expectedMap.addAddress(i);
         }
         // Request StreamAddressSpace should succeed.
         assertThat(r.getSequencerView().getStreamAddressSpace(
-                new StreamAddressRange(streamA,  tokenCount, Address.NON_ADDRESS)).getAddressMap())
+                new StreamAddressRange(streamA,  tokenCount, Address.NON_ADDRESS)))
                 .isEqualTo(expectedMap);
 
         // Increment the epoch.
@@ -136,7 +136,7 @@ public class SequencerViewTest extends AbstractViewTest {
         // Request StreamAddressSpace should fail with a WrongEpochException initially
         // This is then retried internally and returned with a valid response.
         assertThat(r.getSequencerView().getStreamAddressSpace(
-                new StreamAddressRange(streamA,  tokenCount, Address.NON_ADDRESS)).getAddressMap())
+                new StreamAddressRange(streamA,  tokenCount, Address.NON_ADDRESS)))
                 .isEqualTo(expectedMap);
     }
 }

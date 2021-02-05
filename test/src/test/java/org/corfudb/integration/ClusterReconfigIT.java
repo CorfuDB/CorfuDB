@@ -45,6 +45,7 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.StreamsView;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -1147,18 +1148,26 @@ public class ClusterReconfigIT extends AbstractIT {
                 .open();
 
         // Verify sequencer has correct address map for this stream (addresses and trim mark)
-        StreamAddressSpace addressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
+        StreamAddressSpace streamAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
                 .getRuntimeLayout())
                 .getAddressMap().get(streamId);
+        StreamAddressSpace cpStreamAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
+                .getRuntimeLayout())
+                .getAddressMap().get(CorfuRuntime.getCheckpointStreamIdFromId(streamId));
+        long globalTail = Utils.getLogTail(runtime2.getLayoutView()
+                .getRuntimeLayout());
 
-        assertThat(addressSpace.getTrimMark()).isEqualTo(numEntries);
-        if (trim) {
-            // Addresses were trimmed, cardinality of addresses should be 0
-            assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(0L);
-        } else {
-            // Extra entry corresponds to entry added by checkpointer.
-            assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(numEntries+1);
-        }
+        final int checkpointSize = 3;
+
+        assertThat(globalTail).isEqualTo(numEntries // number of writes
+                + checkpointSize // START | CONT | END
+                );
+
+        // Since on fail-over the sequencer state is built, it only accounts of the latest checkpoint
+        assertThat(streamAddressSpace.size()).isEqualTo(0);
+        assertThat(streamAddressSpace.getTrimMark()).isEqualTo(numEntries);
+        assertThat(cpStreamAddressSpace.size()).isEqualTo(checkpointSize);
+        assertThat(cpStreamAddressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
 
         // Verify START_ADDRESS of checkpoint for stream
         StreamAddressSpace checkpointAddressSpace = Utils.getLogAddressSpace(runtime2.getLayoutView()
@@ -1166,9 +1175,9 @@ public class ClusterReconfigIT extends AbstractIT {
                 .getAddressMap().get(checkpointStreamId);
 
         // Addresses should correspond to: start, continuation and end records. (total 3 records)
-        assertThat(checkpointAddressSpace.getAddressMap().getLongCardinality()).isEqualTo(numCheckpointRecordsDefault);
+        assertThat(checkpointAddressSpace.size()).isEqualTo(numCheckpointRecordsDefault);
         CheckpointEntry cpEntry = (CheckpointEntry) runtime2.getAddressSpaceView()
-                .read(checkpointAddressSpace.getHighestAddress())
+                .read(checkpointAddressSpace.getTail())
                 .getPayload(runtime2);
         assertThat(cpEntry.getDict().get(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS)).
                 isEqualTo(String.valueOf(numEntries));

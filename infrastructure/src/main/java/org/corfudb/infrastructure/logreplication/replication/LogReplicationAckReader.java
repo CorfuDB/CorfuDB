@@ -316,7 +316,7 @@ public class LogReplicationAckReader {
             // Count how many entries are present in the Tx Stream (this can include holes,
             // valid entries and invalid entries), but we count them all (equal weight).
             // An invalid entry, is a transactional entry with no streams to replicate (which will be ignored)
-            totalEntries = txStreamAddressSpace.getAddressMap().getLongCardinality();
+            totalEntries = txStreamAddressSpace.size();
         }
 
         log.trace("getTxStreamTotalEntries:: entries={} in range ({}, {}]", totalEntries, lowerBoundary, upperBoundary);

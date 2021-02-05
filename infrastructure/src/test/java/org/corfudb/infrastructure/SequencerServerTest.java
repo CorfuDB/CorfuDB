@@ -29,7 +29,6 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 import java.io.ObjectInputStream;
 import java.util.ArrayList;
@@ -325,9 +324,9 @@ public class SequencerServerTest {
         long globalTailA = 0;
         long globalTailB = 1;
         StreamAddressSpace streamAddressSpaceA = new StreamAddressSpace(Address.NON_ADDRESS,
-                Roaring64NavigableMap.bitmapOf(globalTailA));
-        StreamAddressSpace streamAddressSpaceB = new StreamAddressSpace(Address.ABORTED,
-                Roaring64NavigableMap.bitmapOf(globalTailB));
+                Collections.singleton(globalTailA));
+        StreamAddressSpace streamAddressSpaceB = new StreamAddressSpace(Address.NON_ADDRESS,
+                Collections.singleton(globalTailB));
         tailMap.put(streamA, streamAddressSpaceA);
         tailMap.put(streamB, streamAddressSpaceB);
 
@@ -390,9 +389,9 @@ public class SequencerServerTest {
         long globalTailA = 0;
         long globalTailB = 1;
         StreamAddressSpace streamAddressSpaceA = new StreamAddressSpace(Address.NON_ADDRESS,
-                Roaring64NavigableMap.bitmapOf(globalTailA));
-        StreamAddressSpace streamAddressSpaceB = new StreamAddressSpace(Address.ABORTED,
-                Roaring64NavigableMap.bitmapOf(globalTailB));
+                Collections.singleton(globalTailA));
+        StreamAddressSpace streamAddressSpaceB = new StreamAddressSpace(Address.NON_ADDRESS,
+                Collections.singleton(globalTailB));
         tailMap.put(streamA, streamAddressSpaceA);
         tailMap.put(streamB, streamAddressSpaceB);
         long bootstrapMsgEpoch = 1;
@@ -434,8 +433,7 @@ public class SequencerServerTest {
 
         // Verify the values. Note that global tail is of streamB as it was greater than streamA.
         assertEquals(globalTailB, response.getPayload().getStreamsAddressResponse().getLogTail());
-        assertEquals(Roaring64NavigableMap.bitmapOf(globalTailA),
-                responseStreamAddressSpace.getAddressMap());
+        assertEquals(new StreamAddressSpace(Collections.singleton(globalTailA)), responseStreamAddressSpace);
         assertEquals(Address.NON_ADDRESS, responseStreamAddressSpace.getTrimMark());
 
 
@@ -470,17 +468,15 @@ public class SequencerServerTest {
                         getStreamAddressSpace(uuidToStreamAddressSpacePairMsg.getAddressSpace());
                 assertEquals(globalTailB,
                         finalResponse.getPayload().getStreamsAddressResponse().getLogTail());
-                assertEquals(Roaring64NavigableMap.bitmapOf(globalTailA),
-                        responseStreamAddressSpaceA.getAddressMap());
+                assertEquals(new StreamAddressSpace(Collections.singleton(globalTailA)), responseStreamAddressSpaceA);
                 assertEquals(Address.NON_ADDRESS, responseStreamAddressSpaceA.getTrimMark());
             } else {
                 StreamAddressSpace responseStreamAddressSpaceB =
                         getStreamAddressSpace(uuidToStreamAddressSpacePairMsg.getAddressSpace());
                 assertEquals(globalTailB,
                         finalResponse.getPayload().getStreamsAddressResponse().getLogTail());
-                assertEquals(Roaring64NavigableMap.bitmapOf(globalTailB),
-                        responseStreamAddressSpaceB.getAddressMap());
-                assertEquals(Address.ABORTED, responseStreamAddressSpaceB.getTrimMark());
+                assertEquals(new StreamAddressSpace(Collections.singleton(globalTailB)), responseStreamAddressSpaceB);
+                assertEquals(Address.NON_ADDRESS, responseStreamAddressSpaceB.getTrimMark());
             }
         });
 
@@ -630,9 +626,9 @@ public class SequencerServerTest {
         long globalTailB = 1;
 
         StreamAddressSpace streamAddressSpaceA = new StreamAddressSpace(1L,
-                Roaring64NavigableMap.bitmapOf(globalTailA));
+                Collections.singleton(globalTailA));
         StreamAddressSpace streamAddressSpaceB = new StreamAddressSpace(2L,
-                Roaring64NavigableMap.bitmapOf(globalTailB));
+                Collections.singleton(globalTailB));
         tailMap.put(streamA, streamAddressSpaceA);
         tailMap.put(streamB, streamAddressSpaceB);
         long sequencerEpoch = 1;

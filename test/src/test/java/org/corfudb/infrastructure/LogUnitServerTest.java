@@ -397,7 +397,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         // Retrieve address space from current log unit server (write path)
         StreamAddressSpace addressSpace = s1.getStreamAddressSpace(streamID);
         assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
-        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(minAddress + 1);
+        assertThat(addressSpace.size()).isEqualTo(minAddress + 1);
 
         // Instantiate new log unit server (restarts) so the log is read and address maps are rebuilt.
         LogUnitServer newServer = new LogUnitServer(new ServerContextBuilder()
@@ -408,7 +408,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         // Retrieve address space from new initialized log unit server (bootstrap path)
         addressSpace = newServer.getStreamAddressSpace(streamID);
         assertThat(addressSpace.getTrimMark()).isEqualTo(Address.NON_EXIST);
-        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(minAddress + 1);
+        assertThat(addressSpace.size()).isEqualTo(minAddress + 1);
 
         // Trim the log, and verify that trim mark is updated on log unit
         newServer.prefixTrim(trimMark);
@@ -417,7 +417,7 @@ public class LogUnitServerTest extends AbstractServerTest {
         // Retrieve address space from current log unit server (after a prefix trim)
         addressSpace = newServer.getStreamAddressSpace(streamID);
         assertThat(addressSpace.getTrimMark()).isEqualTo(trimMark);
-        assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(maxAddress - trimMark);
+        assertThat(addressSpace.size()).isEqualTo(maxAddress - trimMark);
     }
 
     @Test

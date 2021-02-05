@@ -306,11 +306,11 @@ public class UtilsTest {
     UUID s3Id = UUID.randomUUID();
     final long nodeBGlobalTail = 205;
 
-    StreamAddressSpace s2IdPartial =
-            new StreamAddressSpace(30l, nodeALogAddressSpace.get(s2Id).getAddressMap());
-    s2IdPartial.addAddress(201);
-    s2IdPartial.addAddress(202);
-    s2IdPartial.addAddress(203);
+    StreamAddressSpace s2IdPartial = nodeALogAddressSpace.get(s2Id).copy();
+    s2IdPartial.trim(30L);
+    s2IdPartial.addAddress(201L);
+    s2IdPartial.addAddress(202L);
+    s2IdPartial.addAddress(203L);
 
     Map<UUID, StreamAddressSpace> nodeBLogAddressSpace =
             ImmutableMap.of(s2Id, s2IdPartial, s3Id, getRandomStreamSpace(nodeAGlobalTail - 1));

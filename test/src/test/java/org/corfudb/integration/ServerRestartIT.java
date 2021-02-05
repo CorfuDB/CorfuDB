@@ -805,8 +805,8 @@ public class ServerRestartIT extends AbstractIT {
             // Verify address space and trim mark is properly set for the given stream.
             assertThat(addressSpace.getTrimMark()).isEqualTo(cpAddress.getSequence());
 
-            assertThat(addressSpace.getAddressMap().getLongCardinality()).isEqualTo(expectedAddresses.size());
-            expectedAddresses.forEach(address -> assertThat(addressSpace.getAddressMap().contains(address)).isTrue());
+            assertThat(addressSpace.size()).isEqualTo(expectedAddresses.size());
+            expectedAddresses.forEach(address -> assertThat(addressSpace.contains(address)).isTrue());
         } finally {
             if (r != null) r.shutdown();
             if (runtimeRestart != null) runtimeRestart.shutdown();

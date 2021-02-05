@@ -35,7 +35,6 @@ import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.JsonUtils;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 /**
  * Created by mwei on 8/1/16.
@@ -86,17 +85,6 @@ public interface ICorfuPayload<T> {
                     .put(StreamAddressRange.class, buffer ->
                             new StreamAddressRange(new UUID(buffer.readLong(), buffer.readLong()),
                                     buffer.readLong(), buffer.readLong()))
-                    .put(StreamAddressSpace.class, buffer -> {
-                        long trimMark = buffer.readLong();
-                        Roaring64NavigableMap map = new Roaring64NavigableMap();
-                        try (ByteBufInputStream inputStream = new ByteBufInputStream(buffer)) {
-                            map.deserialize(inputStream);
-                            return new StreamAddressSpace(trimMark, map);
-                        } catch (IOException ioe) {
-                            throw new SerializerException("Exception when attempting to " +
-                                    "deserialize stream address space.", ioe);
-                        }
-                    })
                     .put(LogReplicationEntryMetadata.class, buffer -> {
                         LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata();
                         metadata.setTopologyConfigId(buffer.readLong());
@@ -377,26 +365,12 @@ public interface ICorfuPayload<T> {
             buffer.writeInt(((Codec.Type) payload).getId());
         } else if (payload instanceof PriorityLevel) {
             buffer.writeByte(((PriorityLevel) payload).asByte());
-        } else if (payload instanceof StreamAddressSpace) {
-            StreamAddressSpace streamAddressSpace = (StreamAddressSpace) payload;
-            buffer.writeLong(streamAddressSpace.getTrimMark());
-            serialize(buffer, streamAddressSpace.getAddressMap());
         } else if (payload instanceof StreamAddressRange) {
             StreamAddressRange streamRange = (StreamAddressRange) payload;
             buffer.writeLong(streamRange.getStreamID().getMostSignificantBits());
             buffer.writeLong(streamRange.getStreamID().getLeastSignificantBits());
             buffer.writeLong(streamRange.getStart());
             buffer.writeLong(streamRange.getEnd());
-        } else if (payload instanceof Roaring64NavigableMap) {
-            Roaring64NavigableMap mrb = (Roaring64NavigableMap) payload;
-            // Improve compression
-            mrb.runOptimize();
-            try (ByteBufOutputStream outputStream = new ByteBufOutputStream(buffer);
-                 DataOutputStream dataOutputStream =  new DataOutputStream(outputStream)){
-                mrb.serialize(dataOutputStream);
-            } catch (IOException ioe) {
-                throw new SerializerException("Unexpected error while serializing to a byte array");
-            }
         } else if (payload instanceof LogReplicationEntryMetadata) {
             LogReplicationEntryMetadata metadata = (LogReplicationEntryMetadata) payload;
             buffer.writeLong(metadata.getTopologyConfigId());
