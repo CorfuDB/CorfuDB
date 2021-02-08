@@ -457,6 +457,8 @@ public class CorfuStoreTest extends AbstractViewTest {
 
         assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getStreamTag(0)).isEqualTo(streamTag1);
         assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getStreamTag(1)).isEqualTo(streamTag2);
+
+        assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getOwnershipValidation()).isTrue();
     }
 
     /**
