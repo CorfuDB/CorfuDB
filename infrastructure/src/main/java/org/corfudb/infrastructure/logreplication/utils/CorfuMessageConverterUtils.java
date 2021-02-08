@@ -82,7 +82,7 @@ public class CorfuMessageConverterUtils {
                         .setPayload(Any.pack(Messages.LogReplicationQueryLeadershipResponse.newBuilder()
                                 .setEpoch(leaderShipResponse.getEpoch())
                                 .setIsLeader(leaderShipResponse.isLeader())
-                                .setEndpoint(leaderShipResponse.getEndpoint())
+                                .setNodeId(leaderShipResponse.getNodeId())
                                 .build()))
                         .build();
             case LOG_REPLICATION_METADATA_REQUEST:
@@ -98,7 +98,7 @@ public class CorfuMessageConverterUtils {
                 return protoCorfuMsg
                         .setType(CorfuMessageType.LOG_REPLICATION_LEADERSHIP_LOSS)
                         .setPayload(Any.pack(Messages.LogReplicationLeadershipLoss.newBuilder()
-                                .setEndpoint(leadershipLoss.getEndpoint())
+                                .setNodeId(leadershipLoss.getNodeId())
                                 .build()))
                         .build();
             default:

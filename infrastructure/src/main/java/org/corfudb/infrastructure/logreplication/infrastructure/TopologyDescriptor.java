@@ -13,7 +13,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -152,35 +151,23 @@ public class TopologyDescriptor {
     /**
      * Get the Cluster Descriptor to which a given endpoint belongs to.
      *
-     * @param endpoint
      * @param nodeId
      * @return cluster descriptor to which endpoint belongs to.
      */
-    public ClusterDescriptor getClusterDescriptor(String endpoint, Optional<String> nodeId) {
+    public ClusterDescriptor getClusterDescriptor(String nodeId) {
         List<ClusterDescriptor> clusters = Stream.of(activeClusters.values(), standbyClusters.values(),
                 invalidClusters.values())
                 .flatMap(Collection::stream)
                 .collect(Collectors.toList());
 
-        if (!nodeId.isPresent()) {
-            for(ClusterDescriptor cluster : clusters) {
-                for (NodeDescriptor node : cluster.getNodesDescriptors()) {
-                    if (node.getEndpoint().equals(endpoint)) {
-                        return cluster;
-                    }
+        for(ClusterDescriptor cluster : clusters) {
+            for (NodeDescriptor node : cluster.getNodesDescriptors()) {
+                if (node.getNodeId().equals(nodeId)) {
+                    return cluster;
                 }
             }
-            log.warn("Endpoint {} does not belong to any cluster defined in {}", endpoint, clusters);
-        } else {
-            for(ClusterDescriptor cluster : clusters) {
-                for (NodeDescriptor node : cluster.getNodesDescriptors()) {
-                    if (node.getRealNodeId().toString().equals(nodeId.get())) {
-                        return cluster;
-                    }
-                }
-            }
-            log.warn("Node {} does not belong to any cluster defined in {}", nodeId.get(), clusters);
         }
+        log.warn("Node {} does not belong to any cluster defined in {}", nodeId, clusters);
 
         return null;
     }

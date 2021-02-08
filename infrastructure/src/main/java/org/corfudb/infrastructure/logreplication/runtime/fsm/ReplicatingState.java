@@ -35,26 +35,26 @@ public class ReplicatingState implements LogReplicationRuntimeState {
     public LogReplicationRuntimeState processEvent(LogReplicationRuntimeEvent event) throws IllegalTransitionException {
         switch (event.getType()) {
             case ON_CONNECTION_DOWN:
-                String endpointDown = event.getEndpoint();
+                String nodeIdDown = event.getNodeId();
                 // Update list of valid connections.
-                fsm.updateDisconnectedEndpoints(endpointDown);
+                fsm.updateDisconnectedNodes(nodeIdDown);
 
                 // If the leader is the node that become unavailable, verify new leader and attempt to reconnect.
-                if (fsm.getRemoteLeader().isPresent() && fsm.getRemoteLeader().get().equals(endpointDown)) {
-                    log.warn("Connection to remote leader endpoint={} is down. Attempt to reconnect.", endpointDown);
-                    fsm.resetRemoteLeaderEndpoint();
+                if (fsm.getRemoteLeaderNodeId().isPresent() && fsm.getRemoteLeaderNodeId().get().equals(nodeIdDown)) {
+                    log.warn("Connection to remote leader id={} is down. Attempt to reconnect.", nodeIdDown);
+                    fsm.resetRemoteLeaderNodeId();
                     // If remaining connections verify leadership on connected endpoints, otherwise, return to init
                     // state, until a connection is available.
-                    return fsm.getConnectedEndpoints().size() == 0 ? fsm.getStates().get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY) :
+                    return fsm.getConnectedNodes().size() == 0 ? fsm.getStates().get(LogReplicationRuntimeStateType.WAITING_FOR_CONNECTIVITY) :
                             fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
                 }
 
-                log.debug("Connection lost to non-leader node {}", endpointDown);
+                log.debug("Connection lost to non-leader node {}", nodeIdDown);
                 // If a non-leader node loses connectivity, reconnect async and continue.
                 return null;
             case ON_CONNECTION_UP:
                 // Some node got connected, update connected endpoints
-                fsm.updateConnectedEndpoints(event.getEndpoint());
+                fsm.updateConnectedNodes(event.getNodeId());
                 return null;
             case LOCAL_LEADER_LOSS:
                 return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);

@@ -147,8 +147,8 @@ public class CorfuLogReplicationRuntime {
 
     @Getter
     private final LogReplicationSourceManager sourceManager;
-    private volatile Set<String> connectedEndpoints;
-    private volatile Optional<String> leaderEndpoint = Optional.empty();
+    private volatile Set<String> connectedNodes;
+    private volatile Optional<String> leaderNodeId = Optional.empty();
 
     @Getter
     public final String remoteClusterId;
@@ -163,7 +163,7 @@ public class CorfuLogReplicationRuntime {
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, remoteClusterId),
             metadataManager);
-        this.connectedEndpoints = new HashSet<>();
+        this.connectedNodes = new HashSet<>();
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build();
         this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
                 TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
@@ -270,30 +270,30 @@ public class CorfuLogReplicationRuntime {
         sourceManager.getLogReplicationFSM().setTopologyConfigId(newConfig.getTopologyConfigId());
     }
 
-    public synchronized void updateConnectedEndpoints(String endpoint) {
-        connectedEndpoints.add(endpoint);
+    public synchronized void updateConnectedNodes(String nodeId) {
+        connectedNodes.add(nodeId);
     }
 
-    public synchronized void updateDisconnectedEndpoints(String endpoint) {
-        connectedEndpoints.remove(endpoint);
+    public synchronized void updateDisconnectedNodes(String nodeId) {
+        connectedNodes.remove(nodeId);
     }
 
-    public synchronized void setRemoteLeaderEndpoint(String leader) {
-        log.debug("Set remote leader endpoint {}", leader);
-        leaderEndpoint = Optional.ofNullable(leader);
+    public synchronized void setRemoteLeaderNodeId(String leaderId) {
+        log.debug("Set remote leader node id {}", leaderId);
+        leaderNodeId = Optional.ofNullable(leaderId);
     }
 
-    public synchronized void resetRemoteLeaderEndpoint() {
-        log.debug("Reset remote leader endpoint");
-        leaderEndpoint = Optional.empty(); }
+    public synchronized void resetRemoteLeaderNodeId() {
+        log.debug("Reset remote leader node id");
+        leaderNodeId = Optional.empty(); }
 
-    public synchronized Optional<String> getRemoteLeader() {
-        log.trace("Retrieve remote leader endpoint {}", leaderEndpoint);
-        return leaderEndpoint;
+    public synchronized Optional<String> getRemoteLeaderNodeId() {
+        log.trace("Retrieve remote leader node id {}", leaderNodeId);
+        return leaderNodeId;
     }
 
-    public synchronized Set<String> getConnectedEndpoints() {
-        return connectedEndpoints;
+    public synchronized Set<String> getConnectedNodes() {
+        return connectedNodes;
     }
 
     /**

@@ -24,24 +24,16 @@ public class LogReplicationRuntimeEvent {
         NEGOTIATION_FAILED
     }
 
-    /*
-     * Communication Event Type
-     */
+    // Communication Event Type
     private LogReplicationRuntimeEventType type;
 
-    /*
-     * Endpoint associated to this communication event.
-     */
-    private String endpoint;
+    // NodeId associated to this communication event.
+    private String nodeId;
 
-    /*
-     *  Negotiation result, input to Log Replication State Machine
-     */
+    // Negotiation result, input to Log Replication State Machine
     private LogReplicationEvent negotiationResult;
 
-    /*
-     * Exception for ON_ERROR event
-     */
+    // Exception for ON_ERROR event
     private Throwable t;
 
     /**
@@ -58,9 +50,9 @@ public class LogReplicationRuntimeEvent {
      *
      * @param type runtime event type
      */
-    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, String endpoint) {
+    public LogReplicationRuntimeEvent(LogReplicationRuntimeEventType type, String nodeId) {
         this.type = type;
-        this.endpoint = endpoint;
+        this.nodeId = nodeId;
     }
 
     /**

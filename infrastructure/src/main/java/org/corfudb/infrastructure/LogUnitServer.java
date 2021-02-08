@@ -147,7 +147,9 @@ public class LogUnitServer extends AbstractServer {
      */
     @ServerHandler(type = CorfuMsgType.TAIL_REQUEST)
     public void handleTailRequest(CorfuPayloadMsg<TailsRequest> msg, ChannelHandlerContext ctx, IServerRouter r) {
-        log.debug("handleTailRequest: received a tail request {}", msg);
+        if (log.isTraceEnabled()) {
+            log.trace("handleTailRequest: received a tail request {}", msg);
+        }
         batchWriter.<TailsResponse>addTask(TAILS_QUERY, msg)
                 .thenAccept(tailsResp -> {
                     r.sendResponse(ctx, msg, CorfuMsgType.TAIL_RESPONSE.payloadMsg(tailsResp));

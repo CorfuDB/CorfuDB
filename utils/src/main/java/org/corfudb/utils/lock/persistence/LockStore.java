@@ -108,7 +108,7 @@ public class LockStore {
                         .build();
                 // acquire(update) the lock in data store if it is stale
                 update(lockId, newLockData, timestamp);
-                log.debug("Lock: {} Client:{} acquired lock. Expired lease in datastore: {} ", lockId, clientId, lockInDatastore.get());
+                log.debug("Lock: {} Client:{} acquired lock {}. Expired lease in datastore: {} ", lockId, clientId, newLockData, lockInDatastore.get());
                 return true;
             } else {
                 // cannot acquire if some other client holds the lock (non stale)
@@ -146,7 +146,7 @@ public class LockStore {
                     .setLeaseRenewalNumber(lockInDatastore.get().getLeaseRenewalNumber() + 1)
                     .build();
             update(lockId, newLockData, timestamp);
-            log.debug("Lock: {} Client:{} renewed lease.", lockId, clientId);
+            log.debug("Lock: {} Client:{} renewed lease, new lock is {}.", lockId, clientId, newLockData);
             return true;
         }
     }
@@ -288,6 +288,10 @@ public class LockStore {
                 // check if the lease has expired
                 boolean leaseExpired = observedLock.timestamp.isBefore(Instant.now().minusSeconds(leaseDuration));
                 log.info("LockStore: check if lease is expired : {}", leaseExpired);
+                if (leaseExpired) {
+                    log.debug("LockStore: lock {} lease is expired, leaseDuration={}, timestamp={}, and now={}",
+                            lockId, leaseDuration, observedLock.timestamp, Instant.now());
+                }
                 return leaseExpired;
             }
         } else {

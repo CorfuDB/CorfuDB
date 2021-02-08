@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
 import org.corfudb.runtime.Messages.CorfuMessage;
-import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 
@@ -19,11 +18,11 @@ import java.util.concurrent.Executors;
 public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapter {
 
     /**
-     * Map of remote endpoint to Channel
+     * Map of remote node id to Channel
      */
     private volatile Map<String, CorfuNettyClientChannel> channels;
 
-    private ExecutorService executorService;
+    private final ExecutorService executorService;
 
     /**
      * Constructor
@@ -44,9 +43,9 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
         executorService.submit(() -> {
             ClusterDescriptor remoteCluster = getRemoteClusterDescriptor();
             for (NodeDescriptor node : remoteCluster.getNodesDescriptors()) {
-                log.info("Create Netty Channel to remote {}", node.getEndpoint());
+                log.info("Create Netty Channel to remote node {}@{}:{}", node.getNodeId(), node.getHost(), node.getPort());
                 CorfuNettyClientChannel channel = new CorfuNettyClientChannel(node, getRouter().getParameters().getNettyEventLoop(), this);
-                this.channels.put(node.getEndpoint(), channel);
+                this.channels.put(node.getNodeId(), channel);
             }
         });
     }
@@ -57,29 +56,23 @@ public class NettyLogReplicationClientChannelAdapter extends IClientChannelAdapt
     }
 
     @Override
-    public void send(String endpoint, CorfuMessage msg) {
+    public void send(String nodeId, CorfuMessage msg) {
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return a exceptionally completed with the timeout.
-        if (channels.containsKey(endpoint)) {
-            log.info("Sending message to {} on cluster {}, type={}", endpoint, getRemoteClusterDescriptor().getClusterId(), msg.getType());
-            channels.get(endpoint).send(msg);
+        if (channels.containsKey(nodeId)) {
+            log.info("Sending message to node {}@{} on cluster {}, type={}", nodeId,
+                    getRemoteClusterDescriptor().getEndpointByNodeId(nodeId),
+                    getRemoteClusterDescriptor().getClusterId(), msg.getType());
+            channels.get(nodeId).send(msg);
         } else {
-            log.warn("Channel to {} does not exist, message of type={} is dropped", endpoint, msg.getType());
+            log.warn("Channel to node {}@{} does not exist, message of type={} is dropped", nodeId,
+                    getRemoteClusterDescriptor().getEndpointByNodeId(nodeId), msg.getType());
         }
     }
 
     @Override
-    public void onConnectionUp(String endpoint) {
-        executorService.submit(() -> super.onConnectionUp(endpoint));
-    }
-
-    private String getLeaderEndpoint() {
-        if(getRemoteLeader().isPresent()) {
-            return getRemoteLeader().get();
-        } else {
-            log.warn("No remote leader on cluster id={}", getRemoteClusterDescriptor().getClusterId());
-            throw new NetworkException("No connection to leader.", getRemoteClusterDescriptor().getClusterId());
-        }
+    public void onConnectionUp(String nodeId) {
+        executorService.submit(() -> super.onConnectionUp(nodeId));
     }
 
     public void completeExceptionally(Exception exception) {
