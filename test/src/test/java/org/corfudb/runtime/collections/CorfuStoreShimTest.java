@@ -19,6 +19,7 @@ import org.corfudb.runtime.view.Address;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -863,6 +864,182 @@ public class CorfuStoreShimTest extends AbstractViewTest {
     }
 
     /**
+     * Example to see how nested secondary indexes work when a secondary index is set on a 'oneOf' field.
+     * This test combines all possibilities of secondary indexes on 'oneOf' properties:
+     * (1) Index is set directly on a 'oneOf' attribute that is not nested (first level of proto definition)
+     * (2) Index is set directly on a 'oneOf' nested attribute (not the first level of proto definition)
+     * (3) Index is set on a 'oneOf' field contained within a repeated field, covering all these scenarios:
+     *      (a) Index is on a primitive type (within the oneOf)
+     *      (b) Index non-Primitive type (within the oneOf)
+     *      (c) Index is on a repeated field of the 'oneOf' attribute (e.g., in example_schemas.proto consider
+     *         the case of contacts.number.mobile)
+     *
+     * Please see example_schemas.proto: ContactBook
+     *
+     * In this test, we create 3 contact books: work, friends & family
+     * A 'contact book' is composed of a list of 'contact', each contact has a 'name' and its 'contactInformation'
+     * is either an 'address' (which has a field city) or a 'phone number' (contactInformation is 'oneOf')
+     * A 'common' phone number, is a number shared across different contacts
+     *
+     * * ContactBookWork (4 contacts):
+     *   - 1 with San Francisco Address
+     *   - 3 with Phone Number: 1 contact with common phone number (home and mobile)
+     *                          1 work contact with unique phone number
+     *                          1 contact with a common mobile number (its own home number)
+     * * ContactBookFriends (3 contacts):
+     *   - 1 with San Francisco Address
+     *   - 2 with Phone Number:
+     *                          1 friend contact with unique phone number
+     *                          1 contact with a common mobile number (its own home number)
+     *
+     * * ContactBookFamily (4 contacts):
+     *   - 1 with Los Angeles Address
+     *   - 3 with Phone Number: 1 contact with common phone number (home and mobile)
+     *                          1 work contact with unique phone number
+     *                          1 contact with a common mobile number (its own home number)
+     *
+     * @throws Exception exception
+     */
+    @Test
+    public void testNestedSecondaryIndexesOneOfFields() throws Exception {
+
+        CorfuRuntime corfuRuntime = getTestRuntime();
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+
+        final String someNamespace = "IT-namespace";
+        final String tableName = "MyContactBooks";
+
+        // Create & Register the table, that contains all 'ContactBook'
+        Table<Uuid, ExampleSchemas.ContactBook, ManagedMetadata> table = shimStore.openTable(
+                someNamespace,
+                tableName,
+                Uuid.class,
+                ExampleSchemas.ContactBook.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        ManagedMetadata user = ManagedMetadata.newBuilder().setCreateUser("user_UT").build();
+
+        // Common mobile number (nested repeated field in a 'oneOf' field) which will be present across all contactBooks
+        final String commonMobile = "408-2219873";
+
+        // Create contacts with address as contactInformation
+        List<ExampleSchemas.Contact> contactsWithAddress = getContactsWithAddress();
+
+        // Create contacts with phoneNumber as contactInformation
+        List<ExampleSchemas.Contact> contactsWithPhone = getContactsWithPhone(commonMobile);
+
+        // (1) Contact Book for Work Colleagues: contacts in SFO, with PhoneNumber1, PhoneNumber2
+        int index = 1;
+        Uuid contactBookWorkId = getUuid();
+        final String contactBookWorkName = "Work Contacts";
+        ExampleSchemas.ContactBook contactBookWork = ExampleSchemas.ContactBook.newBuilder()
+                .setId(ExampleSchemas.ContactBookId.newBuilder().setName(contactBookWorkName).build())
+                .setBrand("Bloom Daily Planners Contacts")
+                .addContacts(contactsWithAddress.get(index - 1)) // San Francisco Address
+                .addContacts(contactsWithPhone.get(0)) // Common phone number (work and family)
+                .addContacts(contactsWithPhone.get(index)) // Unique work number with common mobile
+                .build();
+
+        // (2) Contact Book for Friends
+        index++;
+        Uuid contactBookFriendsId = getUuid();
+        ExampleSchemas.ContactBook contactBookFriends = ExampleSchemas.ContactBook.newBuilder()
+                .setId(ExampleSchemas.ContactBookId.newBuilder().setUuid(contactBookFriendsId.toString()).build())
+                .setApplication("iPhone")
+                .addContacts(contactsWithAddress.get(index - 1)) // San Francisco Address
+                .addContacts(contactsWithPhone.get(index)) // Unique friends number with common mobile
+                .build();
+
+        // (3) Contact Book for Family
+        index++;
+        Uuid contactBookFamilyId = getUuid();
+        ExampleSchemas.ContactBook contactBookFamily = ExampleSchemas.ContactBook.newBuilder()
+                .setId(ExampleSchemas.ContactBookId.newBuilder().setUuid(contactBookFamilyId.toString()).build())
+                .setApplication("iPhone")
+                .addContacts(contactsWithAddress.get(index - 1)) // Los Angeles Address
+                .addContacts(contactsWithPhone.get(index)) // Unique family number with common mobile
+                .addContacts(contactsWithPhone.get(++index)) // Unique family with unique phone number
+                .addContacts(contactsWithPhone.get(++index)) // Common phone number (work and family)
+                .build();
+
+        // Add Contact Books (work, friends, family)
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
+            txn.putRecord(tableName, contactBookWorkId, contactBookWork, user);
+            txn.putRecord(tableName, contactBookFriendsId, contactBookFriends, user);
+            txn.putRecord(tableName, contactBookFamilyId, contactBookFamily, user);
+            txn.commit();
+        }
+
+        List<Uuid> contactBooksWithAddressSFO = Arrays.asList(contactBookWorkId, contactBookFriendsId);
+        List<Uuid> contactBooksWithCommonNumber = Arrays.asList(contactBookWorkId, contactBookFamilyId);
+        List<Uuid> contactBooksWithCommonMobile = Arrays.asList(contactBookWorkId, contactBookFriendsId, contactBookFamilyId);
+        List<Uuid> contactBooksIPhone = Arrays.asList(contactBookFriendsId, contactBookFamilyId);
+
+
+        // Get by secondary index, retrieve number of contactBooks that have contacts with address in San Francisco
+        // only contactBookWork and contactBookFriends have contacts with address in SFO.
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.ContactBook, ManagedMetadata>> contactBooks = readWriteTxn
+                    .getByIndex(table, "city", "San Francisco");
+            assertThat(contactBooks.size()).isEqualTo(contactBooksWithAddressSFO.size());
+            contactBooks.forEach(cb -> assertThat(contactBooksWithAddressSFO).contains(cb.getKey()));
+            readWriteTxn.commit();
+        }
+
+        ExampleSchemas.PhoneNumber phoneNumberCommon = ExampleSchemas.PhoneNumber.newBuilder()
+                .setHome("352-546-890")
+                .addMobile("611-9458741")
+                .build();
+
+        // Get by secondary index, retrieve number of contactBooks that have contacts with 'phoneNumberAllBooks'
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.ContactBook, ManagedMetadata>> contactBooks = readWriteTxn
+                    .getByIndex(table, "number", phoneNumberCommon);
+            assertThat(contactBooks.size()).isEqualTo(contactBooksWithCommonNumber.size());
+            contactBooks.forEach(cb -> assertThat(contactBooksWithCommonNumber).contains(cb.getKey()));
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve number of contactBooks that have contacts with 'commonMobile'
+        // (a contained repeated field of a 'oneOf' property
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.ContactBook, ManagedMetadata>> contactBooks = readWriteTxn
+                    .getByIndex(table, "mobile", commonMobile);
+            assertThat(contactBooks.size()).isEqualTo(contactBooksWithCommonMobile.size());
+            contactBooks.forEach(cb -> assertThat(contactBooksWithCommonMobile).contains(cb.getKey()));
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve number of contactBooks that are named contactBookWorkName
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.ContactBook, ManagedMetadata>> contactBooks = readWriteTxn
+                    .getByIndex(table, "name", contactBookWorkName);
+            assertThat(contactBooks.size()).isEqualTo(1);
+            contactBooks.forEach(cb -> cb.getPayload().getId().getName().equals(contactBookWorkName));
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve number of contactBooks that are "iPhone" contact books
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.ContactBook, ManagedMetadata>> contactBooks = readWriteTxn
+                    .getByIndex(table, "application", "iPhone");
+            assertThat(contactBooks.size()).isEqualTo(contactBooksIPhone.size());
+            contactBooks.forEach(cb -> assertThat(contactBooksIPhone).contains(cb.getKey()));
+            readWriteTxn.commit();
+        }
+
+        // Get by secondary index, retrieve number of contactBooks that have an empty photo (only John in work book)
+        try (ManagedTxnContext readWriteTxn = shimStore.tx(someNamespace)) {
+            List<CorfuStoreEntry<Uuid, ExampleSchemas.ContactBook, ManagedMetadata>> contactBooks = readWriteTxn
+                    .getByIndex(table, "file", "/images/empty.png");
+            assertThat(contactBooks.size()).isEqualTo(1);
+            contactBooks.forEach(cb -> assertThat(cb.getKey()).isEqualTo(contactBookWorkId));
+            readWriteTxn.commit();
+        }
+    }
+
+    /**
      * Simple example to prove an invalid nested secondary index definition will
      * throw an error on openTable (the name is invalid from the root of the secondary index).
      * Please see example_schemas.proto.
@@ -1654,5 +1831,97 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             Long order = ((ExampleSchemas.ExampleValue)records.get(i).getEntry()).getAnotherKey();
             assertThat(order).isEqualTo(validator.get(i));
         }
+    }
+
+    // ****** Utility Functions *******
+
+    private Uuid getUuid() {
+        UUID id = UUID.randomUUID();
+        return Uuid.newBuilder()
+                .setMsb(id.getMostSignificantBits())
+                .setLsb(id.getLeastSignificantBits())
+                .build();
+    }
+
+    private List<ExampleSchemas.Contact> getContactsWithPhone(String commonMobile) {
+        // Phone Number common across all three ContactBooks
+        final ExampleSchemas.PhoneNumber phoneNumberCommon = ExampleSchemas.PhoneNumber.newBuilder()
+                .setHome("352-546-890")
+                .addMobile("611-9458741")
+                .build();
+
+        final ExampleSchemas.PhoneNumber phoneNumberWorkBook = ExampleSchemas.PhoneNumber.newBuilder()
+                .addMobile(commonMobile)
+                .addMobile("708-7841235")
+                .setHome("921-3456709")
+                .build();
+
+        final ExampleSchemas.PhoneNumber phoneNumberFriendsBook = ExampleSchemas.PhoneNumber.newBuilder()
+                .setHome("987-7846985")
+                .addMobile(commonMobile)
+                .build();
+
+        final ExampleSchemas.PhoneNumber phoneNumberFamilyBook = ExampleSchemas.PhoneNumber.newBuilder()
+                .addMobile(commonMobile)
+                .build();
+
+        final ExampleSchemas.PhoneNumber phoneNumberUnique = ExampleSchemas.PhoneNumber.newBuilder()
+                .setHome("111-11-1111")
+                .build();
+
+        List<String> namesForPhones = Arrays.asList("Mark & Lisa", "Mary (work)", "Jane (friend)", "Steven (cousin)", "Matt (uncle)", "Lisa (aunt)");
+        List<ExampleSchemas.PhoneNumber> phoneNumbers = Arrays.asList(phoneNumberCommon, phoneNumberWorkBook,
+                phoneNumberFriendsBook, phoneNumberFamilyBook, phoneNumberUnique, phoneNumberCommon);
+        List<ExampleSchemas.Contact> contactsWithPhone = new ArrayList<>();
+
+        for (int i = 0; i < namesForPhones.size(); i++) {
+            contactsWithPhone.add(ExampleSchemas.Contact.newBuilder()
+                    .setPhoto(ExampleSchemas.Photo.newBuilder().setDescription("No Description Available").build())
+                    .setName(namesForPhones.get(i))
+                    .setNumber(phoneNumbers.get(i))
+                    .build());
+        }
+
+        return contactsWithPhone;
+    }
+
+    /**
+     * Return a list of 'Contacts' with address as 'contactInformation'
+     */
+    private List<ExampleSchemas.Contact> getContactsWithAddress() {
+        final ExampleSchemas.Contact contactSFOWork = ExampleSchemas.Contact.newBuilder()
+                .setName("Jhon")
+                .setPhoto(ExampleSchemas.Photo.newBuilder().setFile("/images/empty.png").build())
+                .setAddress(ExampleSchemas.Address.newBuilder()
+                        .setNumber(1)
+                        .setStreet("Arches")
+                        .setUnit("108")
+                        .setCity("San Francisco")
+                        .build())
+                .build();
+
+        final ExampleSchemas.Contact contactSFOFriends = ExampleSchemas.Contact.newBuilder()
+                .setName("Marc")
+                .setPhoto(ExampleSchemas.Photo.newBuilder().setFile("/images/marc.png").build())
+                .setAddress(ExampleSchemas.Address.newBuilder()
+                        .setNumber(1)
+                        .setStreet("El Camino Real")
+                        .setUnit("4256")
+                        .setCity("San Francisco")
+                        .build())
+                .build();
+
+        final ExampleSchemas.Contact contactLAFamily = ExampleSchemas.Contact.newBuilder()
+                .setName("Jane")
+                .setPhoto(ExampleSchemas.Photo.newBuilder().setFile("/images/jane.png").build())
+                .setAddress(ExampleSchemas.Address.newBuilder()
+                        .setNumber(1)
+                        .setStreet("Hollywood Blvd.")
+                        .setUnit("214")
+                        .setCity("Los Angeles")
+                        .build())
+                .build();
+
+        return Arrays.asList(contactSFOWork, contactSFOFriends, contactLAFamily);
     }
 }

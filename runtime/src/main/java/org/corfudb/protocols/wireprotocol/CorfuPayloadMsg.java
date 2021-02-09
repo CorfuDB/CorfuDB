@@ -29,7 +29,6 @@ public class CorfuPayloadMsg<T> extends CorfuMsg {
     @Getter
     private T payload;
 
-
     public CorfuPayloadMsg(CorfuMsgType msgType, T payload) {
         super(msgType);
         this.payload = payload;
