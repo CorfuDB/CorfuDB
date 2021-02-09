@@ -8,6 +8,7 @@ import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.BootstrapUtil;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.exceptions.OverwriteException;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.util.Sleep;
 import org.junit.After;
@@ -281,9 +282,14 @@ public class StateTransferIT extends AbstractIT {
         final int timeOut = 200;
         return CompletableFuture.runAsync(() -> {
             while (stopFlag.get()) {
-                TokenResponse token = writerRuntime.getSequencerView().next();
-                writerRuntime.getAddressSpaceView().write(token, "Test Payload".getBytes());
-                Sleep.sleepUninterruptibly(Duration.ofMillis(timeOut));
+                try {
+                    TokenResponse token = writerRuntime.getSequencerView().next();
+                    writerRuntime.getAddressSpaceView().write(token, "Test Payload".getBytes());
+                    Sleep.sleepUninterruptibly(Duration.ofMillis(timeOut));
+                }
+                catch (OverwriteException oe) {
+                    // Continue writing
+                }
             }
         });
     }
