@@ -29,7 +29,7 @@ public final class CorfuProtocolLogData {
         logData.doSerialize(buf);
 
         return LogDataMsg.newBuilder()
-                .setEntry(ByteString.copyFrom(buf.resetReaderIndex().array()))
+                .setEntry(ByteString.copyFrom(buf.array(), buf.readerIndex(), buf.readableBytes()))
                 .build();
     }
 
