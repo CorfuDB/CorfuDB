@@ -67,6 +67,7 @@ message SampleTableAMsg {
     option (org.corfudb.runtime.table_schema).stream_tag = "sample_streamer_1";
     option (org.corfudb.runtime.table_schema).stream_tag = "sample_streamer_2";
     option (org.corfudb.runtime.table_schema).requires_backup_support = true;
+    option (org.corfudb.runtime.table_schema).ownership_validation = true;
     option (org.corfudb.runtime.table_schema).is_federated = true;
 
     optional string payload = 1;
