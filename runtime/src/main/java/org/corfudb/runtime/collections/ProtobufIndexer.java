@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Descriptors;
+import com.google.protobuf.Descriptors.OneofDescriptor;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Message;
 
@@ -9,9 +10,11 @@ import org.corfudb.runtime.CorfuOptions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -54,9 +57,9 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
                         (key, val) -> getIndexedValues(indexPath, val.getPayload()));
     }
 
-    private <T> Iterable<T> getIndexedValues(String indexName, Message messageToIndex) {
+    private <T> Iterable<T> getIndexedValues(String indexPath, Message messageToIndex) {
         // Separate nested fields, as full path is a 'dot' separated String, e.g., 'person.address.street'
-        String[] nestedFields = indexName.split("\\.");
+        String[] nestedFields = indexPath.split("\\.");
 
         // Auxiliary variables used for the case of repeated fields
         List<Message> repeatedMessages = new ArrayList<>(); // Non-Primitive Types
@@ -64,37 +67,54 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
         boolean upperLevelRepeatedField = false;
 
         Message subMessage = messageToIndex;
-        FieldDescriptor nestedDescriptor;
+        FieldDescriptor nestedFieldDescriptor;
+        boolean lastNestedField;
+        Map<String, FieldDescriptor> oneOfFieldNameToDescriptor = new HashMap<>();
 
+        // Navigate over each level of the secondary index (from root to the last indexed key), e.g., contact.person.phoneNumber
         for (int i = 0; i < nestedFields.length; i++) {
-            nestedDescriptor = subMessage.getDescriptorForType().findFieldByName(nestedFields[i]);
+            nestedFieldDescriptor = subMessage.getDescriptorForType().findFieldByName(nestedFields[i]);
+            lastNestedField = (i == (nestedFields.length - 1));
 
-            if (nestedDescriptor == null) {
-                throw new IllegalArgumentException(String.format("Secondary key %s, invalid field %s", indexName, nestedFields[i]));
+            if (nestedFieldDescriptor == null) {
+                throw new IllegalArgumentException(String.format("Secondary key %s, invalid field %s", indexPath, nestedFields[i]));
             }
 
-            boolean lastNestedField = (i == (nestedFields.length - 1));
+            OneofDescriptor oneOfDescriptor = inspectDescriptorForOneOfFields(nestedFieldDescriptor, oneOfFieldNameToDescriptor);
 
-            if (nestedDescriptor.isRepeated()) {
+            if (nestedFieldDescriptor.isRepeated()) {
+                // Process repeated fields
+                // In this case iterate over each repeated entry, accumulate actual 'values' if its a primitive,
+                // accumulate 'messages' if its a non-primitive type (for further inspection)
                 upperLevelRepeatedField = true;
-                subMessage = processRepeatedField(subMessage, indexName,
-                        nestedFields[i], lastNestedField, repeatedMessages, repeatedValues);
+                subMessage = processRepeatedField(subMessage, indexPath, nestedFields[i], lastNestedField,
+                        repeatedMessages, repeatedValues);
             } else if (upperLevelRepeatedField) {
-                // Case upper field was marked as a 'repeated' field
-                // requires further iteration over each repeated message
-                subMessage = processFieldAfterARepeatedField(nestedFields[i], repeatedMessages, repeatedValues, lastNestedField);
+                // Case where an upper field was marked as a 'repeated', requires further iteration over
+                // each repeated message
+                subMessage = processFieldAfterARepeatedField(nestedFields[i], repeatedMessages, repeatedValues,
+                        lastNestedField, oneOfFieldNameToDescriptor.containsKey(nestedFields[i]) ?
+                                oneOfDescriptor : null);
             } else {
-                if (nestedDescriptor.getType().equals(FieldDescriptor.Type.MESSAGE)) {
-                    subMessage = (Message) subMessage.getField(nestedDescriptor);
+                // Case: Non-Primitive type (message)
+                if (nestedFieldDescriptor.getType().equals(FieldDescriptor.Type.MESSAGE)) {
+                    if (isValidField(oneOfDescriptor, subMessage, nestedFields[i])) {
+                        subMessage = (Message) subMessage.getField(nestedFieldDescriptor);
+                    }
                 } else {
-                    // If its the last level it can be a primitive type, but if there are remaining
-                    // levels in the secondary key, it is malformed
+                    // Case: Primitive Type
                     if (i != (nestedFields.length - 1)) {
+                        // If its the last level it can be a primitive type, but if there are remaining
+                        // levels in the secondary key, it is malformed
                         throw new IllegalArgumentException(String.format("Malformed secondary key=%s, " +
-                                "primitive field:: %s", indexName, nestedFields[i]));
+                                "field <%s> of type PRIMITIVE.", indexPath, nestedFields[i]));
                     }
 
-                    return Arrays.asList((T) ClassUtils.cast(subMessage.getField(nestedDescriptor)));
+                    if (isValidField(oneOfDescriptor, subMessage, nestedFields[i])) {
+                        return Arrays.asList((T) ClassUtils.cast(subMessage.getField(nestedFieldDescriptor)));
+                    } else {
+                        return Collections.emptyList();
+                    }
                 }
             }
         }
@@ -106,38 +126,72 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
         }
     }
 
+    /**
+     * Inspect field descriptor to verify if it contains a 'oneOf' type field.
+     */
+    private OneofDescriptor inspectDescriptorForOneOfFields(FieldDescriptor nestedFieldDescriptor,
+                                                            Map<String, FieldDescriptor> oneOfFieldNameToDescriptor) {
+        OneofDescriptor oneOfDescriptor = nestedFieldDescriptor.getContainingOneof();
+        if (oneOfDescriptor != null) {
+            List<FieldDescriptor> descriptors = oneOfDescriptor.getFields();
+            for (FieldDescriptor fieldDescriptor : descriptors) {
+                oneOfFieldNameToDescriptor.put(fieldDescriptor.getName(), fieldDescriptor);
+            }
+        }
+        return oneOfDescriptor;
+    }
+
+    /**
+     * Verify if message is valid.
+     *
+     * In the case of a 'oneOf' type field, it is valid if the field set is exactly 'fieldName'
+     */
+    private boolean isValidField(OneofDescriptor oneOfDescriptor, Message message, String fieldName) {
+        if (oneOfDescriptor != null) {
+            return message.getOneofFieldDescriptor(oneOfDescriptor).getName().equals(fieldName);
+        }
+        return true;
+    }
+
     private <T> Message processFieldAfterARepeatedField(String fieldName, List<Message> repeatedMessages,
-                                                        List<T> repeatedValues, boolean lastNestedField) {
+                                                        List<T> repeatedValues, boolean lastNestedField,
+                                                        OneofDescriptor oneOfDescriptor) {
         List<Message> nextLevelRepeatedMessages = new ArrayList<>();
         Message lastProcessedMessage = null;
 
         for (Message repeatedMessage : repeatedMessages) {
             FieldDescriptor descriptor = repeatedMessage.getDescriptorForType().findFieldByName(fieldName);
+
             if (descriptor.getType().equals(FieldDescriptor.Type.MESSAGE)) {
-                // Replace upper level repeated message by next field, as we need to get all instances for this field
-                lastProcessedMessage = (Message) repeatedMessage.getField(descriptor);
-                if (lastNestedField) {
-                    repeatedValues.add(ClassUtils.cast(lastProcessedMessage));
-                } else {
-                    nextLevelRepeatedMessages.add(lastProcessedMessage);
+                // Non-Primitive type
+                if (isValidField(oneOfDescriptor, repeatedMessage, fieldName)) {
+                    lastProcessedMessage = (Message) repeatedMessage.getField(descriptor);
+
+                    if (lastNestedField) {
+                        // Case: last nested field (values to return, either primitive or non-primitives)
+                        repeatedValues.add(ClassUtils.cast(lastProcessedMessage));
+                    } else {
+                        // Case: intermediate nested field (accumulate messages in this level)
+                        nextLevelRepeatedMessages.add(lastProcessedMessage);
+                    }
                 }
-            } else {
-                // Primitive Type, directly add the indexed value to be returned
+            } else if (isValidField(oneOfDescriptor, repeatedMessage, fieldName)) {
+                // Primitive Type
                 repeatedValues.add(ClassUtils.cast(repeatedMessage.getField(descriptor)));
             }
         }
 
         if (!nextLevelRepeatedMessages.isEmpty()) {
-                repeatedMessages.clear();
-                repeatedMessages.addAll(nextLevelRepeatedMessages);
+            repeatedMessages.clear();
+            repeatedMessages.addAll(nextLevelRepeatedMessages);
         }
 
         return lastProcessedMessage;
     }
 
-    private <T> Message processRepeatedField(Message subMessage,
-                                      String secondaryKey, String nestedIndexName, boolean lastNestedField,
-                                      List<Message> repeatedMessages, List<T> repeatedValues) {
+    private <T> Message processRepeatedField(Message subMessage, String indexPath,
+                                             String nestedIndexName, boolean lastNestedField,
+                                             List<Message> repeatedMessages, List<T> repeatedValues) {
         Message repeatedMessage = subMessage;
         List<Message> messages = new ArrayList<>();
 
@@ -168,7 +222,7 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
                     // A Primitive type is valid, only if it is the last level in the chain,
                     // otherwise, this is a malformed nested secondary key
                     if (!lastNestedField) {
-                        throw new IllegalArgumentException(String.format("Malformed secondary key='%s', primitive field:: %s", secondaryKey, nestedIndexName));
+                        throw new IllegalArgumentException(String.format("Malformed secondary key='%s', primitive field:: %s", indexPath, nestedIndexName));
                     }
 
                     repeatedValues.add(ClassUtils.cast(msg.getRepeatedField(descriptor, index)));
@@ -272,9 +326,7 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
     }
 
     @Override
-    public Optional<
-            Index.Spec<Message, CorfuRecord<Message, Message>, ?>
-            > get(Index.Name name) {
+    public Optional<Index.Spec<Message, CorfuRecord<Message, Message>, ?>> get(Index.Name name) {
         return Optional.ofNullable(name).map(indexName -> {
             String indexNamePath = indexName.get();
             if (!indices.containsKey(indexName)) {

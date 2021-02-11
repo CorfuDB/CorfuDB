@@ -2,9 +2,9 @@ package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import lombok.Data;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
+import org.corfudb.util.Utils;
 
 import java.util.UUID;
-import org.corfudb.util.Utils;
 
 /**
  * This class represents a Log Replication Event.

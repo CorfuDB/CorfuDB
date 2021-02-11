@@ -7,8 +7,8 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -49,11 +49,11 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
      * @param entry
      */
     @Override
-    public void updateAck(LogReplicationEntry entry) {
+    public void updateAck(LogReplicationEntryMsg entry) {
         updateAck(entry.getMetadata().getSnapshotSyncSeqNum());
 
         // If only a given stream has been replicated, update with the sequence number
-        if (entry.getMetadata().getMessageMetadataType() == MessageType.SNAPSHOT_REPLICATED) {
+        if (entry.getMetadata().getEntryType() == LogReplicationEntryType.SNAPSHOT_REPLICATED) {
             ackReader.setAckedTsAndSyncType(entry.getMetadata().getSnapshotSyncSeqNum(),
                     ReplicationStatusVal.SyncType.SNAPSHOT);
         } else {
@@ -71,7 +71,7 @@ public class SnapshotSenderBufferManager extends SenderBufferManager {
      * @param cf
      */
     @Override
-    public void addCFToAcked(LogReplicationEntry message, CompletableFuture<LogReplicationEntry> cf) {
+    public void addCFToAcked(LogReplicationEntryMsg message, CompletableFuture<LogReplicationEntryMsg> cf) {
         pendingCompletableFutureForAcks.put(message.getMetadata().getSnapshotSyncSeqNum(), cf);
     }
 

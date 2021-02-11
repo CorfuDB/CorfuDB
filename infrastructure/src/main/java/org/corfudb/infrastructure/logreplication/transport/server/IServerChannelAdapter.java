@@ -3,9 +3,9 @@ package org.corfudb.infrastructure.logreplication.transport.server;
 import lombok.Getter;
 import lombok.Setter;
 import org.corfudb.infrastructure.ServerContext;
-import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
-import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationServerRouter;
+import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
+import org.corfudb.runtime.proto.service.CorfuMessage;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -39,14 +39,14 @@ public abstract class IServerChannelAdapter {
      *
      * @param msg corfu message (protoBuf definition)
      */
-    public abstract void send(CorfuMessage msg);
+    public abstract void send(CorfuMessage.ResponseMsg msg);
 
     /**
      * Receive a message from Client.
      *
      * @param msg received corfu message
      */
-    public void receive(CorfuMessage msg) {
+    public void receive(CorfuMessage.RequestMsg msg) {
         getRouter().receive(msg);
     }
 

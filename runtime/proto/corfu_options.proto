@@ -19,6 +19,8 @@ message SchemaOptions {
     repeated string stream_tag = 5;
     // Nested Secondary Key (repeated field)
     repeated NestedSecondaryIndex nested_secondary_key = 6;
+    // Should the entry of table be validated for ownership
+    optional bool ownership_validation = 7;
 }
 
 message NestedSecondaryIndex {

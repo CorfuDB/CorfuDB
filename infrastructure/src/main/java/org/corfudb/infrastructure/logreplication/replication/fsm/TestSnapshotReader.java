@@ -1,15 +1,19 @@
 package org.corfudb.infrastructure.logreplication.replication.fsm;
 
+import com.google.protobuf.ByteString;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
-import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+
+import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryMsg;
 
 /**
  * Dummy implementation of snapshot reader for testing purposes.
@@ -49,13 +53,19 @@ public class TestSnapshotReader implements SnapshotReader {
     @Override
     public SnapshotReadMessage read(UUID snapshotRequestId) {
         // Connect to endpoint
-        List<LogReplicationEntry> messages = new ArrayList<>();
+        List<LogReplicationEntryMsg> messages = new ArrayList<>();
 
         for (long i : seqNumsToRead) {
             Object data = runtime.getAddressSpaceView().read(i).getPayload(runtime);
-            LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_MESSAGE,
-                topologyConfigId, i, baseSnapshot, snapshotRequestId);
-            messages.add(new LogReplicationEntry(metadata, (byte[]) data));
+            LogReplicationEntryMetadataMsg metadata = LogReplicationEntryMetadataMsg.newBuilder()
+                    .setEntryType(LogReplicationEntryType.SNAPSHOT_MESSAGE)
+                    .setTopologyConfigID(topologyConfigId)
+                    .setTimestamp(i)
+                    .setSnapshotTimestamp(baseSnapshot)
+                    .setSyncRequestId(getUuidMsg(snapshotRequestId))
+                    .build();
+
+            messages.add(getLrEntryMsg(ByteString.copyFrom((byte[]) data), metadata));
             globalIndex++;
         }
         return new SnapshotReadMessage(messages, (globalIndex + offset) == baseSnapshot);

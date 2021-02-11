@@ -7,7 +7,7 @@ import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationMetadata.ReplicationStatusVal;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationAckReader;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -37,7 +37,7 @@ public class LogEntrySenderBufferManager extends SenderBufferManager {
      * @param cf
      */
     @Override
-    public void addCFToAcked(LogReplicationEntry message, CompletableFuture<LogReplicationEntry> cf) {
+    public void addCFToAcked(LogReplicationEntryMsg message, CompletableFuture<LogReplicationEntryMsg> cf) {
         pendingCompletableFutureForAcks.put(message.getMetadata().getTimestamp(), cf);
     }
 
@@ -71,7 +71,7 @@ public class LogEntrySenderBufferManager extends SenderBufferManager {
      * @param entry
      */
     @Override
-    public void updateAck(LogReplicationEntry entry) {
+    public void updateAck(LogReplicationEntryMsg entry) {
         updateAck(entry.getMetadata().getTimestamp());
     }
 

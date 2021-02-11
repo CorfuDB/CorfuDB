@@ -3,14 +3,14 @@ package org.corfudb.infrastructure.logreplication.replication.receive;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
+import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
-import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager.LogReplicationMetadataType;
-import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.collections.TxBuilder;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.StreamOptions;
@@ -25,6 +25,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Stream;
+
+import static org.corfudb.protocols.CorfuProtocolCommon.getUUID;
+import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractOpaqueEntries;
 
 /**
  * This class represents the entity responsible of writing streams' snapshots into the standby cluster DB.
@@ -145,8 +148,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * If the metadata has wrong message type or baseSnapshot, throw an exception
      * @param metadata
      */
-    private void verifyMetadata(LogReplicationEntryMetadata metadata) throws ReplicationWriterException {
-        if (metadata.getMessageMetadataType() != MessageType.SNAPSHOT_MESSAGE ||
+    private void verifyMetadata(LogReplicationEntryMetadataMsg metadata) throws ReplicationWriterException {
+        if (metadata.getEntryType() != LogReplicationEntryType.SNAPSHOT_MESSAGE ||
                 metadata.getSnapshotTimestamp() != srcGlobalSnapshot ||
                 metadata.getSnapshotSyncSeqNum() != recvSeq) {
             log.error("Expected snapshot={}, received snapshot={}, expected seq={}, received seq={}",
@@ -260,39 +263,41 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
      * @param message snapshot log entry
      */
     @Override
-    public void apply(LogReplicationEntry message) {
+    public void apply(LogReplicationEntryMsg message) {
 
         verifyMetadata(message.getMetadata());
 
         if (message.getMetadata().getSnapshotSyncSeqNum() != recvSeq ||
-                message.getMetadata().getMessageMetadataType() != MessageType.SNAPSHOT_MESSAGE) {
+                message.getMetadata().getEntryType() != LogReplicationEntryType.SNAPSHOT_MESSAGE) {
             log.error("Received {} Expecting snapshot message sequencer number {} != recvSeq {} or wrong message type {} expecting {}",
                     message.getMetadata(), message.getMetadata().getSnapshotSyncSeqNum(), recvSeq,
-                    message.getMetadata().getMessageMetadataType(), MessageType.SNAPSHOT_MESSAGE);
+                    message.getMetadata().getEntryType(), LogReplicationEntryType.SNAPSHOT_MESSAGE);
             throw new ReplicationWriterException("Message is out of order or wrong type");
         }
 
+        List<OpaqueEntry> opaqueEntryList = extractOpaqueEntries(message);
+
         // For snapshot message, it has only one opaque entry.
-        if (message.getOpaqueEntryList().size() > 1) {
-            log.error(" Get {} instead of one opaque entry in Snapshot Message", message.getOpaqueEntryList().size());
+        if (opaqueEntryList.size() > 1) {
+            log.error(" Get {} instead of one opaque entry in Snapshot Message", opaqueEntryList.size());
             return;
         }
 
-        OpaqueEntry opaqueEntry = message.getOpaqueEntryList().get(0);
+        OpaqueEntry opaqueEntry = opaqueEntryList.get(0);
         if (opaqueEntry.getEntries().keySet().size() != 1) {
             log.error("The opaqueEntry has more than one entry {}", opaqueEntry);
             return;
         }
         UUID uuid = opaqueEntry.getEntries().keySet().stream().findFirst().get();
         processOpaqueEntry(opaqueEntry.getEntries().get(uuid), message.getMetadata().getSnapshotSyncSeqNum(),
-                regularToShadowStreamId.get(uuid), message.getMetadata().getSyncRequestId());
+                regularToShadowStreamId.get(uuid), getUUID(message.getMetadata().getSyncRequestId()));
         recvSeq++;
 
     }
 
     @Override
-    public void apply(List<LogReplicationEntry> messages) {
-        for (LogReplicationEntry msg : messages) {
+    public void apply(List<LogReplicationEntryMsg> messages) {
+        for (LogReplicationEntryMsg msg : messages) {
             apply(msg);
         }
     }

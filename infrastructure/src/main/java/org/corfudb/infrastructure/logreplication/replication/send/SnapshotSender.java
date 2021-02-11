@@ -2,6 +2,7 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Tag;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -14,10 +15,10 @@ import org.corfudb.infrastructure.logreplication.replication.fsm.LogReplicationF
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.ReadProcessor;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReadMessage;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.SnapshotReader;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntryMetadata;
-import org.corfudb.protocols.wireprotocol.logreplication.MessageType;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryType;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 
@@ -30,6 +31,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_TIMEOUT_MS;
+import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEntryAckMsg;
 
 /**
  * This class is responsible of transmitting a consistent view of the data at a given timestamp,
@@ -83,7 +86,7 @@ public class SnapshotSender {
                         new AtomicLong(0)));
     }
 
-    private CompletableFuture<LogReplicationEntry> snapshotSyncAck;
+    private CompletableFuture<LogReplicationEntryMsg> snapshotSyncAck;
 
     /**
      * Initiate Snapshot Sync, this entails reading and sending data for a given snapshot.
@@ -136,12 +139,12 @@ public class SnapshotSender {
             if (completed) {
                 // Block until ACK from last sent message is received
                 try {
-                    LogReplicationEntry ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                    LogReplicationEntryMsg ack = snapshotSyncAck.get(DEFAULT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                     if (ack.getMetadata().getSnapshotTimestamp() == baseSnapshotTimestamp &&
-                            ack.getMetadata().getMessageMetadataType().equals(MessageType.SNAPSHOT_TRANSFER_COMPLETE)) {
+                            ack.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_TRANSFER_COMPLETE)) {
                         // Snapshot Sync Transfer Completed
                         log.info("Snapshot sync transfer completed for {} on timestamp={}, ack={}", snapshotSyncEventId,
-                                baseSnapshotTimestamp, ack.getMetadata());
+                                baseSnapshotTimestamp, TextFormat.shortDebugString(ack.getMetadata()));
                         snapshotSyncTransferComplete(snapshotSyncEventId);
                     } else {
                         log.warn("Expected ack for {}, but received for a different snapshot {}", baseSnapshotTimestamp,
@@ -183,7 +186,9 @@ public class SnapshotSender {
         }
     }
 
-    private int processReads(List<LogReplicationEntry> logReplicationEntries, UUID snapshotSyncEventId, boolean completed) {
+    private int processReads(List<LogReplicationEntryMsg> logReplicationEntries,
+                             UUID snapshotSyncEventId,
+                             boolean completed) {
         int numMessages = 0;
 
         // If we are starting a snapshot sync, send a start marker.
@@ -205,7 +210,7 @@ public class SnapshotSender {
 
         // If Snapshot is complete, add end marker
         if (completed) {
-            LogReplicationEntry endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
+            LogReplicationEntryMsg endDataMessage = getSnapshotSyncEndMarker(snapshotSyncEventId);
             log.info("SnapshotSender sent out SNAPSHOT_END message {} ", endDataMessage.getMetadata());
             snapshotSyncAck = dataSenderBufferManager.sendWithBuffering(endDataMessage);
             numMessages++;
@@ -220,18 +225,30 @@ public class SnapshotSender {
      * @param snapshotSyncEventId snapshot sync event identifier
      * @return snapshot sync start marker as LogReplicationEntry
      */
-    private LogReplicationEntry getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_START, fsm.getTopologyConfigId(),
-                snapshotSyncEventId, Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
-        LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata);
-        return emptyEntry;
+    private LogReplicationEntryMsg getSnapshotSyncStartMarker(UUID snapshotSyncEventId) {
+        LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_START)
+                .setTopologyConfigID(fsm.getTopologyConfigId())
+                .setSyncRequestId(getUuidMsg(snapshotSyncEventId))
+                .setTimestamp(Address.NON_ADDRESS)
+                .setPreviousTimestamp(Address.NON_ADDRESS)
+                .setSnapshotTimestamp(baseSnapshotTimestamp)
+                .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+                .build();
+        return getLrEntryAckMsg(metadata);
     }
 
-    private LogReplicationEntry getSnapshotSyncEndMarker(UUID snapshotSyncEventId) {
-        LogReplicationEntryMetadata metadata = new LogReplicationEntryMetadata(MessageType.SNAPSHOT_END, fsm.getTopologyConfigId(), snapshotSyncEventId,
-                Address.NON_ADDRESS, Address.NON_ADDRESS, baseSnapshotTimestamp, Address.NON_ADDRESS);
-        LogReplicationEntry emptyEntry = new LogReplicationEntry(metadata);
-        return emptyEntry;
+    private LogReplicationEntryMsg getSnapshotSyncEndMarker(UUID snapshotSyncEventId) {
+        LogReplication.LogReplicationEntryMetadataMsg metadata = LogReplication.LogReplicationEntryMetadataMsg.newBuilder()
+                .setEntryType(LogReplicationEntryType.SNAPSHOT_END)
+                .setTopologyConfigID(fsm.getTopologyConfigId())
+                .setSyncRequestId(getUuidMsg(snapshotSyncEventId))
+                .setTimestamp(Address.NON_ADDRESS)
+                .setPreviousTimestamp(Address.NON_ADDRESS)
+                .setSnapshotTimestamp(baseSnapshotTimestamp)
+                .setSnapshotSyncSeqNum(Address.NON_ADDRESS)
+                .build();
+        return getLrEntryAckMsg(metadata);
     }
 
     /**

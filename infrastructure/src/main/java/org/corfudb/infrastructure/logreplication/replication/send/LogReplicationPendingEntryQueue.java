@@ -2,7 +2,7 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 
 import java.util.ArrayList;
 
@@ -65,7 +65,7 @@ public class LogReplicationPendingEntryQueue {
         list.removeIf(a -> (a.getData().getMetadata().getSnapshotSyncSeqNum() <= seqNum));
     }
 
-    public void append(LogReplicationEntry data) {
+    public void append(LogReplicationEntryMsg data) {
         LogReplicationPendingEntry entry = new LogReplicationPendingEntry(data);
         list.add(entry);
     }

@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.logreplication.DataSender;
 import org.corfudb.infrastructure.logreplication.replication.send.LogReplicationEventMetadata;
 import org.corfudb.infrastructure.logreplication.runtime.CorfuLogReplicationRuntime;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationMetadataResponse;
+import org.corfudb.runtime.LogReplication.LogReplicationMetadataResponseMsg;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -139,12 +139,14 @@ public class WaitSnapshotApplyState implements LogReplicationState {
             log.debug("Verify snapshot sync apply status, sync={}", transitionEventId);
 
             // Query metadata on remote cluster to verify the status of the snapshot sync apply
-            CompletableFuture<LogReplicationMetadataResponse> metadataResponseCompletableFuture = dataSender.sendMetadataRequest();
-            LogReplicationMetadataResponse metadataResponse = metadataResponseCompletableFuture.get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
+            CompletableFuture<LogReplicationMetadataResponseMsg>
+                    metadataResponseCompletableFuture =dataSender.sendMetadataRequest();
+            LogReplicationMetadataResponseMsg metadataResponse = metadataResponseCompletableFuture
+                    .get(CorfuLogReplicationRuntime.DEFAULT_TIMEOUT, TimeUnit.MILLISECONDS);
 
             // If snapshot sync apply phase has been completed on remote cluster, transition to Log Entry Sync
             // (incremental update replication), otherwise, schedule new query.
-            if (metadataResponse.getLastLogProcessed() == metadataResponse.getSnapshotApplied() &&
+            if (metadataResponse.getLastLogEntryTimestamp() == metadataResponse.getSnapshotApplied() &&
                     metadataResponse.getSnapshotApplied() == baseSnapshotTimestamp) {
                 log.info("Snapshot sync apply is complete appliedTs={}, baseTs={}", metadataResponse.getSnapshotApplied(),
                         baseSnapshotTimestamp);

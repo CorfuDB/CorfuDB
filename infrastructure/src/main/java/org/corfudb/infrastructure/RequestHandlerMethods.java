@@ -69,6 +69,16 @@ public class RequestHandlerMethods {
     }
 
     /**
+     * Given a {@link RequestMsg} return the corresponding handler.
+     *
+     * @param request   The request message to handle.
+     * @return          The appropriate {@link HandlerMethod}.
+     */
+    protected HandlerMethod getHandler(RequestMsg request) {
+        return handlerMap.get(request.getPayload().getPayloadCase());
+    }
+
+    /**
      * Handle an incoming Corfu request message.
      *
      * @param req       The request message to handle.
@@ -77,7 +87,7 @@ public class RequestHandlerMethods {
      */
     @SuppressWarnings("unchecked")
     public void handle(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        final HandlerMethod handler = handlerMap.get(req.getPayload().getPayloadCase());
+        final HandlerMethod handler = getHandler(req);
         try {
             handler.handle(req, ctx, r);
         } catch (Exception e) {

@@ -3,21 +3,20 @@ package org.corfudb.infrastructure.logreplication.runtime;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
+import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionException;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeEvent;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.LogReplicationRuntimeStateType;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppedState;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
-import org.corfudb.infrastructure.logreplication.runtime.fsm.IllegalTransitionException;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.NegotiatingState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.ReplicatingState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.StoppedState;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.UnrecoverableState;
 import org.corfudb.infrastructure.logreplication.runtime.fsm.VerifyingRemoteLeaderState;
-import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.logreplication.runtime.fsm.WaitingForConnectionsState;
 
 import java.util.HashMap;
 import java.util.HashSet;
