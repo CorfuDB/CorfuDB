@@ -57,7 +57,7 @@ public class LogReplicationClientRouter implements IClientRouter {
     public static String REMOTE_LEADER = "REMOTE_LEADER";
 
     @Getter
-    private LogReplicationRuntimeParameters parameters;
+    private final LogReplicationRuntimeParameters parameters;
 
     /**
      * The handlers registered to this router.
@@ -111,17 +111,17 @@ public class LogReplicationClientRouter implements IClientRouter {
     /**
      * Remote Cluster/Site Full Descriptor
      */
-    private ClusterDescriptor remoteClusterDescriptor;
+    private final ClusterDescriptor remoteClusterDescriptor;
 
     /**
      * Remote Cluster/Site unique identifier
      */
-    private String remoteClusterId;
+    private final String remoteClusterId;
 
     /**
      * Runtime FSM, to insert connectivity events
      */
-    private CorfuLogReplicationRuntime runtimeFSM;
+    private final CorfuLogReplicationRuntime runtimeFSM;
 
     /**
      * Log Replication Client Constructor
@@ -182,7 +182,7 @@ public class LogReplicationClientRouter implements IClientRouter {
     @Override
     public  <T> CompletableFuture<T> sendRequestAndGetCompletable(
             @Nonnull RequestPayloadMsg payload,
-            @Nonnull String endpoint) {
+            @Nonnull String nodeId) {
 
         HeaderMsg.Builder header = HeaderMsg.newBuilder()
                 .setIgnoreClusterId(true)
@@ -202,7 +202,7 @@ public class LogReplicationClientRouter implements IClientRouter {
 
                 // If no endpoint is specified, the message is to be sent to the remote leader node.
                 // We should block until a connection to the leader is established.
-                if (endpoint.equals(REMOTE_LEADER)) {
+                if (nodeId.equals(REMOTE_LEADER)) {
                     // Check the connection future. If connected, continue with sending the message.
                     // If timed out, return a exceptionally completed with the timeout.
                     // Because in Log Replication, messages are sent to the leader node, the connection future
@@ -218,8 +218,8 @@ public class LogReplicationClientRouter implements IClientRouter {
                     }
 
                     // Get Remote Leader
-                    if (runtimeFSM.getRemoteLeader().isPresent()) {
-                        endpoint = runtimeFSM.getRemoteLeader().get();
+                    if (runtimeFSM.getRemoteLeaderNodeId().isPresent()) {
+                        nodeId = runtimeFSM.getRemoteLeaderNodeId().get();
                     } else {
                         log.error("Leader not found to remote cluster {}", remoteClusterId);
                         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
@@ -230,12 +230,12 @@ public class LogReplicationClientRouter implements IClientRouter {
 
                 // In the case the message is intended for a specific endpoint, we do not
                 // block on connection future, this is the case of leader verification.
-                log.info("Send message to {}, type={}", endpoint, payload.getPayloadCase());
-                channelAdapter.send(endpoint, getRequestMsg(header.build(), payload));
+                log.info("Send message to {}, type={}", nodeId, payload.getPayloadCase());
+                channelAdapter.send(nodeId, getRequestMsg(header.build(), payload));
             } catch (NetworkException ne) {
-                log.error("Caught Network Exception while trying to send message to remote leader {}", endpoint);
+                log.error("Caught Network Exception while trying to send message to remote leader {}", nodeId);
                 runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
-                        endpoint));
+                        nodeId));
                 throw ne;
             } catch (Exception e) {
                 outstandingRequests.remove(requestId);
@@ -299,8 +299,8 @@ public class LogReplicationClientRouter implements IClientRouter {
         // Get the next request ID.
         message.setRequestID(requestID.getAndIncrement());
         // Get Remote Leader
-        if (runtimeFSM.getRemoteLeader().isPresent()) {
-            String remoteLeader = runtimeFSM.getRemoteLeader().get();
+        if (runtimeFSM.getRemoteLeaderNodeId().isPresent()) {
+            String remoteLeader = runtimeFSM.getRemoteLeaderNodeId().get();
             this.requestSample = MeterRegistryProvider.getInstance().map(Timer::start);
             //channelAdapter.send(remoteLeader, CorfuMessageConverterUtils.toProtoBuf(message));
             log.trace("Sent one-way message: {}", message);
@@ -480,24 +480,24 @@ public class LogReplicationClientRouter implements IClientRouter {
     /**
      * Connection Up Callback.
      *
-     * @param endpoint endpoint of the remote node to which connection was established.
+     * @param nodeId id of the remote node to which connection was established.
      */
-    public synchronized void onConnectionUp(String endpoint) {
-        log.info("Connection established to remote endpoint {}", endpoint);
-        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_UP, endpoint));
+    public synchronized void onConnectionUp(String nodeId) {
+        log.info("Connection established to remote node {}", nodeId);
+        runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_UP, nodeId));
     }
 
     /**
      * Connection Down Callback.
      *
-     * @param endpoint endpoint of the remote node to which connection came down.
+     * @param nodeId id of the remote node to which connection came down.
      */
-    public synchronized void onConnectionDown(String endpoint) {
-        log.info("Connection lost to remote endpoint {} on cluster {}", endpoint, remoteClusterId);
+    public synchronized void onConnectionDown(String nodeId) {
+        log.info("Connection lost to remote node {} on cluster {}", nodeId, remoteClusterId);
         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ON_CONNECTION_DOWN,
-                endpoint));
+                nodeId));
         // Attempt to reconnect to this endpoint
-        channelAdapter.connectAsync(endpoint);
+        channelAdapter.connectAsync(nodeId);
     }
 
     /**
@@ -507,7 +507,7 @@ public class LogReplicationClientRouter implements IClientRouter {
         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ERROR, t));
     }
 
-    public Optional<String> getRemoteLeaderEndpoint() {
-        return runtimeFSM.getRemoteLeader();
+    public Optional<String> getRemoteLeaderNodeId() {
+        return runtimeFSM.getRemoteLeaderNodeId();
     }
 }
