@@ -11,7 +11,6 @@ import org.corfudb.infrastructure.IServerRouter;
 import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.transport.server.IServerChannelAdapter;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -93,18 +92,6 @@ public class LogReplicationServerRouter implements IServerRouter {
     // ============ IServerRouter Methods =============
 
     @Override
-    public void sendResponse(CorfuMsg inMsg, CorfuMsg outMsg) {
-        log.trace("Ready to send response {}", outMsg.getMsgType());
-        outMsg.copyBaseFields(inMsg);
-        try {
-            //serverAdapter.send(CorfuMessageConverterUtils.toProtoBuf(outMsg));
-            log.trace("Sent response: {}", outMsg);
-        } catch (IllegalArgumentException e) {
-            log.warn("Illegal response type. Ignoring message.", e);
-        }
-    }
-
-    @Override
     public void sendResponse(ResponseMsg response, ChannelHandlerContext ctx) {
         log.trace("Ready to send response {}", response.getPayload().getPayloadCase());
         try {
@@ -113,13 +100,6 @@ public class LogReplicationServerRouter implements IServerRouter {
         } catch (IllegalArgumentException e) {
             log.warn("Illegal response type. Ignoring message.", e);
         }
-    }
-
-    @Override
-    public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
-        // This is specific to Netty implementation, which for the Log Replication Server
-        // is implemented as one of many transport plugins. This is here as we inherit the
-        // infrastructure design from CorfuServer but should be removed in the future.
     }
 
     @Override

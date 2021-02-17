@@ -12,7 +12,6 @@ import java.util.UUID;
 import javax.net.ssl.SSLHandshakeException;
 import lombok.extern.slf4j.Slf4j;
 
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.protocols.wireprotocol.HandshakeState;
 import org.corfudb.runtime.proto.service.Base.HandshakeRequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -36,7 +35,6 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
     private final String corfuVersion;
     private final HandshakeState handshakeState;
     private final int timeoutInSeconds;
-    private final Set<CorfuMsg> messages = ConcurrentHashMap.newKeySet();
     private final Set<ResponseMsg> responseMessages = ConcurrentHashMap.newKeySet();
     private static final  AttributeKey<UUID> clientIdAttrKey = AttributeKey.valueOf("ClientID");
     private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
@@ -120,8 +118,6 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
         ctx.writeAndFlush(response);
 
         // Flush messages in backlog
-        messages.forEach(ctx::writeAndFlush);
-        messages.clear();
         responseMessages.forEach(ctx::writeAndFlush);
         responseMessages.clear();
 
@@ -223,9 +219,7 @@ public class ServerHandshakeHandler extends ChannelDuplexHandler {
             log.debug("write: Handshake already completed, not appending corfu message to queue");
             super.write(ctx, msg, promise);
         } else {
-            if (msg instanceof CorfuMsg){
-                this.messages.add((CorfuMsg) msg);
-            } else if (msg instanceof ResponseMsg){
+            if (msg instanceof ResponseMsg){
                 this.responseMessages.add((ResponseMsg) msg);
             } else {
                 log.warn("write: Invalid message received through the pipeline by Handshake handler, Dropping it." +

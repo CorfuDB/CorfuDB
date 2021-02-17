@@ -5,7 +5,6 @@ import io.netty.channel.ChannelHandlerContext;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.runtime.clients.ClientMsgHandler;
 import org.corfudb.runtime.clients.ClientResponseHandler;
 import org.corfudb.runtime.clients.ClientResponseHandler.Handler;
 import org.corfudb.runtime.clients.IClient;
@@ -31,10 +30,6 @@ public class LogReplicationHandler implements IClient, IHandler<LogReplicationCl
     @Setter
     @Getter
     private IClientRouter router;
-
-    @Getter
-    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
-            .generateHandlers(MethodHandles.lookup(), this);
 
     /**
      * The handler and handlers which implement this client.
