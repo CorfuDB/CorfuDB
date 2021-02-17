@@ -35,9 +35,6 @@ public class NettyCorfuMessageDecoder extends ByteToMessageDecoder {
         byte msgMark = byteBuf.readByte();
 
         switch (MessageMarker.typeMap.get(msgMark)) {
-            case LEGACY_MSG_MARK:
-                list.add(CorfuMsg.deserialize(byteBuf));
-                break;
             case PROTO_REQUEST_MSG_MARK:
                 try (ByteBufInputStream msgInputStream = new ByteBufInputStream(byteBuf)) {
                     try {

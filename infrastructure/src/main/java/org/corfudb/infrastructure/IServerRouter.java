@@ -4,14 +4,9 @@ import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
-import org.corfudb.protocols.wireprotocol.WrongClusterMsg;
 import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
@@ -34,9 +29,6 @@ public interface IServerRouter {
 
     // Lombok annotations are not allowed for the interfaces.
     Logger log = LoggerFactory.getLogger(IServerRouter.class);
-
-    @Deprecated
-    void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg);
 
     void sendResponse(ResponseMsg response, ChannelHandlerContext ctx);
 
@@ -71,134 +63,6 @@ public interface IServerRouter {
      * @param serverContext A current server context.
      */
     void setServerContext(ServerContext serverContext);
-
-    /**
-     * @deprecated [RM]
-     * Send WRONG_EPOCH message.
-     *
-     * @param msg The incoming message.
-     * @param ctx The context of the channel handler.
-     */
-    @Deprecated
-    default void sendWrongEpochMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-        sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_EPOCH, getServerEpoch()));
-        log.trace("Incoming message with wrong epoch, got {}, expected {}, message was: {}",
-                msg.getEpoch(), getServerEpoch(), msg);
-    }
-
-    /**
-     * @deprecated [RM]
-     * Send LAYOUT_NOBOOTSTRAP message.
-     *
-     * @param msg The incoming message.
-     * @param ctx The context of the channel handler.
-     */
-    @Deprecated
-    default void sendNoBootstrapMessage(CorfuMsg msg, ChannelHandlerContext ctx) {
-        sendResponse(ctx, msg, new CorfuMsg(CorfuMsgType.LAYOUT_NOBOOTSTRAP));
-        log.trace("Received message but not bootstrapped! Message={}", msg);
-    }
-
-    /**
-     * @deprecated [RM]
-     * Send WRONG_CLUSTER_ID message.
-     *
-     * @param msg              The incoming message.
-     * @param ctx              The context of the channel handler.
-     * @param currentClusterID The current cluster id.
-     */
-    @Deprecated
-    default void sendWrongClusterIdMessage(CorfuMsg msg, ChannelHandlerContext ctx, UUID currentClusterID) {
-        sendResponse(ctx, msg, new CorfuPayloadMsg<>(CorfuMsgType.WRONG_CLUSTER_ID,
-                new WrongClusterMsg(currentClusterID, msg.getClusterID())));
-        log.trace("Incoming message with a wrong cluster ID, got {}, expected {}, message was {}",
-                msg.getClusterID(), currentClusterID, msg);
-    }
-
-    /**
-     * @deprecated [RM]
-     * Validate the epoch of a CorfuMsg, and send a WRONG_EPOCH response if
-     * the server is in the wrong epoch. Ignored if the message type is reset (which
-     * is valid in any epoch).
-     *
-     * @param msg The incoming message to validate.
-     * @param ctx The context of the channel handler.
-     * @return True, if the epoch is correct, but false otherwise.
-     */
-    @Deprecated
-    default boolean epochIsValid(CorfuMsg msg, ChannelHandlerContext ctx) {
-        long serverEpoch = getServerEpoch();
-        if (msg.getEpoch() != serverEpoch) {
-            sendWrongEpochMessage(msg, ctx);
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * @deprecated [RM]
-     * Validate that the message's cluster ID is equal to the cluster ID of a bootstrapped layout.
-     *
-     * @param msg           The incoming message.
-     * @param ctx           The context of the channel handler.
-     * @param currentLayout The layout a server was bootstrapped with.
-     * @return True, if the message's cluster ID is equal to this node's cluster ID, otherwise false.
-     */
-    @Deprecated
-    default boolean clusterIdIsValid(CorfuMsg msg, ChannelHandlerContext ctx, Layout currentLayout) {
-        UUID currentClusterID = currentLayout.getClusterId();
-
-        boolean clusterIdsMatch = msg.getClusterID()
-                .equals(currentClusterID);
-
-        if (!clusterIdsMatch) {
-            sendWrongClusterIdMessage(msg, ctx, currentClusterID);
-        }
-        return clusterIdsMatch;
-    }
-
-    /**
-     * @deprecated [RM]
-     * Validate the incoming message. The message is valid if:
-     * 1) The flag ignoreEpoch is set to true or it's set to false, and the epoch is valid for all the messages.
-     * 2) Also if the flag ignoreClusterId is set to false,
-     *      a. The current layout server should be bootstrapped and
-     *      b. the message's cluster ID should be equal to the bootstrapped layout's cluster ID.
-     *
-     * @param msg The incoming message.
-     * @param ctx The context of the channel handler.
-     * @return True, if it's a valid message, and false otherwise.
-     */
-    @Deprecated
-    default boolean messageIsValid(CorfuMsg msg, ChannelHandlerContext ctx) {
-        if (!msg.getMsgType().ignoreEpoch && !epochIsValid(msg, ctx)) {
-            return false;
-        }
-
-        if(!msg.getMsgType().ignoreClusterId){
-            return getCurrentLayout()
-                    .map(layout -> clusterIdIsValid(msg, ctx, layout))
-                    .orElseGet(() -> {
-                        sendNoBootstrapMessage(msg, ctx);
-                        return false;
-                    });
-        }
-        return true;
-    }
-
-    /**
-     * @deprecated [RM]
-     * Send Response through a generic transport layer (not Netty-specific)
-     *
-     * Currently, this is used for the Log Replication Server which supports any
-     * custom defined transport layer, a default implementation is available to
-     * avoid empty implementations on CorfuServer.
-     *
-     * @param inMsg
-     * @param outMsg
-     */
-    @Deprecated
-    default void sendResponse(CorfuMsg inMsg, CorfuMsg outMsg) {}
 
     /**
      * Send a WRONG_EPOCH error response.

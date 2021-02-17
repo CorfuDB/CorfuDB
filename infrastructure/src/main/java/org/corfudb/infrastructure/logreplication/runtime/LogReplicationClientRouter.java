@@ -15,7 +15,6 @@ import org.corfudb.infrastructure.logreplication.transport.client.ChannelAdapter
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.clients.IClient;
 import org.corfudb.runtime.clients.IClientRouter;
 import org.corfudb.runtime.exceptions.NetworkException;
@@ -166,11 +165,6 @@ public class LogReplicationClientRouter implements IClientRouter {
         return this;
     }
 
-    @Override
-    public <T> CompletableFuture<T> sendMessageAndGetCompletable(CorfuMsg message) {
-        throw new UnsupportedOperationException("Deprecated API.");
-    }
-
     /**
      * Send a request message and get a completable future to be fulfilled by the reply.
      *
@@ -287,27 +281,6 @@ public class LogReplicationClientRouter implements IClientRouter {
                                                                   ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         // This is an empty stub. This method is not being used anywhere in the LR framework.
         return null;
-    }
-
-    /**
-     * Send a one way message, without adding a completable future.
-     *
-     * @param message The message to send.
-     */
-    @Override
-    public void sendMessage(CorfuMsg message) {
-        // Get the next request ID.
-        message.setRequestID(requestID.getAndIncrement());
-        // Get Remote Leader
-        if (runtimeFSM.getRemoteLeaderNodeId().isPresent()) {
-            String remoteLeader = runtimeFSM.getRemoteLeaderNodeId().get();
-            this.requestSample = MeterRegistryProvider.getInstance().map(Timer::start);
-            //channelAdapter.send(remoteLeader, CorfuMessageConverterUtils.toProtoBuf(message));
-            log.trace("Sent one-way message: {}", message);
-        } else {
-            log.error("Leader not found to remote cluster {}, dropping {}", remoteClusterId, message.getMsgType());
-            runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.REMOTE_LEADER_LOSS));
-        }
     }
 
     /**

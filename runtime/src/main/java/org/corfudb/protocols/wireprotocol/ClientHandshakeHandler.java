@@ -44,7 +44,6 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
     private final UUID nodeId;
     private final int handshakeTimeout;
     private final HandshakeState handshakeState;
-    private final Set<CorfuMsg> messages = ConcurrentHashMap.newKeySet();
     private final Set<RequestMsg> requestMessages = ConcurrentHashMap.newKeySet();
     private static final String READ_TIMEOUT_HANDLER = "readTimeoutHandler";
 
@@ -90,20 +89,8 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             return;
         }
 
-        if (m instanceof CorfuMsg) {
-            CorfuMsg msg = (CorfuMsg) m;
-            if (this.handshakeState.completed()) {
-                // If handshake completed successfully, but still a message came through this handler,
-                // send on to the next handler in order to avoid message loss.
-                super.channelRead(ctx, msg);
-            } else {
-                log.debug("channelRead: Dropping the message as the handshake "
-                        + "was not completed. Message - {}", msg.getMsgType().name());
-            }
-
-            return;
-        } else if (!(m instanceof ResponseMsg)) {
-            log.error("channelRead: Message received is not a CorfuMsg or ResponseMsg type. Message - {}", m);
+        if (!(m instanceof ResponseMsg)) {
+            log.error("channelRead: Message received is not a ResponseMsg type. Message - {}", m);
             return;
         }
 
@@ -144,9 +131,6 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
 
         log.info("channelRead: Handshake succeeded. Server Corfu Version: [{}]", corfuVersion);
 
-        // Flush messages in backlog
-        messages.forEach(ctx::writeAndFlush);
-        messages.clear();
         requestMessages.forEach(ctx::writeAndFlush);
         requestMessages.clear();
 
@@ -250,9 +234,7 @@ public class ClientHandshakeHandler extends ChannelDuplexHandler {
             super.write(ctx, msg, promise);
         } else {
             // Otherwise, queue messages in order until the handshake completes.
-            if (msg instanceof CorfuMsg){
-                this.messages.add((CorfuMsg) msg);
-            } else if (msg instanceof RequestMsg){
+            if (msg instanceof RequestMsg) {
                 this.requestMessages.add((RequestMsg) msg);
             } else {
                 log.warn("write: Invalid message received through the pipeline by Handshake handler, Dropping it." +

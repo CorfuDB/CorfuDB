@@ -502,7 +502,7 @@ public class LayoutServerTest extends AbstractServerTest {
         IServerRouter router = Mockito.mock(IServerRouter.class);
         ChannelHandlerContext context = Mockito.mock(ChannelHandlerContext.class);
         Mockito.doAnswer(invocation -> null)
-                .when(router).sendResponse(Mockito.any(), Mockito.any(), Mockito.any());
+                .when(router).sendResponse(Mockito.any(), Mockito.any());
 
         final long newSealEpoch = newLayout.getEpoch() + 1L;
 
@@ -526,7 +526,6 @@ public class LayoutServerTest extends AbstractServerTest {
         // with Mockito.doAnswer(...) to bump up the epoch.
         CorfuMessage.RequestMsg proposeReq = getRequest(getProposeLayoutRequestMsg(newLayout.getEpoch(), msgRank, newLayout));
         spyLayoutServer.handleProposeLayoutRequest(proposeReq, context, router);
-
 
         // Make sure the epoch has actually changed.
         Assertions.assertThat(newSealEpoch)

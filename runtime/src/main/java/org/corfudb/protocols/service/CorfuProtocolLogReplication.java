@@ -4,8 +4,8 @@ import com.google.protobuf.ByteString;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMetadataMsg;
 import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
@@ -110,7 +110,7 @@ public final class CorfuProtocolLogReplication {
 
         if (dataBuf.capacity() == 0) return opaqueEntryList;
 
-        int opaqueEntryListSize = ICorfuPayload.fromBuffer(dataBuf, Integer.class);
+        int opaqueEntryListSize = CorfuProtocolCommon.fromBuffer(dataBuf, Integer.class);
         for (int i = 0; i < opaqueEntryListSize; i++) {
             opaqueEntryList.add(OpaqueEntry.deserialize(dataBuf));
         }
@@ -137,7 +137,7 @@ public final class CorfuProtocolLogReplication {
     public static byte[] generatePayload(List<OpaqueEntry> opaqueEntryList) {
         ByteBuf buf = Unpooled.buffer();
         Integer size = opaqueEntryList.size();
-        ICorfuPayload.serialize(buf, size);
+        CorfuProtocolCommon.serialize(buf, size);
 
         for (OpaqueEntry opaqueEntry : opaqueEntryList) {
             OpaqueEntry.serialize(buf, opaqueEntry);
@@ -154,7 +154,7 @@ public final class CorfuProtocolLogReplication {
     public static byte[] generatePayload(OpaqueEntry... opaqueEntries) {
         ByteBuf buf = Unpooled.buffer();
         Integer size = opaqueEntries.length;
-        ICorfuPayload.serialize(buf, size);
+        CorfuProtocolCommon.serialize(buf, size);
 
         for (OpaqueEntry opaqueEntry : opaqueEntries) {
             OpaqueEntry.serialize(buf, opaqueEntry);
