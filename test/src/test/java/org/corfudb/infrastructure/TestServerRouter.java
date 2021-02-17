@@ -110,10 +110,6 @@ public class TestServerRouter implements IServerRouter {
         return servers;
     }
 
-    public void sendServerMessage(RequestMsg request) {
-        sendServerMessage(request, null);
-    }
-
     public void sendServerMessage(RequestMsg request, ChannelHandlerContext ctx) {
         AbstractServer as = requestTypeHandlerMap.get(request.getPayload().getPayloadCase());
         if (validateRequest(request, ctx)) {

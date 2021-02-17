@@ -6,7 +6,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
 import org.corfudb.protocols.CorfuProtocolCommon;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 
 /**
  * The rank of the node in a graph. Sorting nodes according to rank used to search for
@@ -18,7 +17,7 @@ import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 @EqualsAndHashCode
 @Getter
 @ToString
-public class NodeRank implements ICorfuPayload, Comparable<NodeRank> {
+public class NodeRank implements Comparable<NodeRank> {
     public static final NodeRank EMPTY_NODE_RANK = new NodeRank("--", Integer.MIN_VALUE);
 
     private final String endpoint;
@@ -52,11 +51,5 @@ public class NodeRank implements ICorfuPayload, Comparable<NodeRank> {
     public NodeRank(ByteBuf buf){
         endpoint = CorfuProtocolCommon.fromBuffer(buf, String.class);
         numConnections = CorfuProtocolCommon.fromBuffer(buf, Integer.class);
-    }
-
-    @Override
-    public void doSerialize(ByteBuf buf) {
-        CorfuProtocolCommon.serialize(buf, endpoint);
-        CorfuProtocolCommon.serialize(buf, numConnections);
     }
 }

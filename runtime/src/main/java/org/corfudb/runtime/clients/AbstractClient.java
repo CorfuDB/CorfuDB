@@ -6,13 +6,11 @@ import lombok.Getter;
 import lombok.Setter;
 
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
-import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 
 import static org.corfudb.protocols.CorfuProtocolCommon.getUuidMsg;
-import static org.corfudb.protocols.service.CorfuProtocolMessage.priorityTypeMap;
 
 /**
  * Abstract clients stamped with an epoch to send messages stamped with the required epoch.
@@ -42,10 +40,7 @@ public abstract class AbstractClient implements IClient {
 
     <T> CompletableFuture<T> sendRequestWithFuture(RequestPayloadMsg payload,
                                                    ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
-        PriorityLevel protoPriorityLevel =
-                priorityTypeMap.getOrDefault(priorityLevel, PriorityLevel.NORMAL);
-
         return router.sendRequestAndGetCompletable(payload, epoch,
-                getUuidMsg(clusterID), protoPriorityLevel, ignoreClusterId, ignoreEpoch);
+                getUuidMsg(clusterID), priorityLevel, ignoreClusterId, ignoreEpoch);
     }
 }

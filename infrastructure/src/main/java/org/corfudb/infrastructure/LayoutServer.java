@@ -234,7 +234,7 @@ public class LayoutServer extends AbstractServer {
             return;
         }
 
-        final long payloadEpoch = payload.getEpoch();;
+        final long payloadEpoch = payload.getEpoch();
         final long serverEpoch = getServerEpoch();
 
         final Rank phase1Rank = getPhase1Rank(payloadEpoch);

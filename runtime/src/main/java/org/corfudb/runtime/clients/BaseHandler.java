@@ -12,7 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.service.CorfuProtocolBase;
-import org.corfudb.protocols.wireprotocol.ExceptionMsg;
+import org.corfudb.runtime.exceptions.DeserializationFailedException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
 import org.corfudb.runtime.exceptions.WrongClusterException;
 import org.corfudb.runtime.exceptions.WrongEpochException;
@@ -152,7 +152,7 @@ public class BaseHandler implements IClient {
         try (ObjectInputStream ois = new ObjectInputStream(bs.newInput())) {
             payloadThrowable = (Throwable) ois.readObject();
         } catch (Exception ex) {
-            throw new ExceptionMsg.DeserializationFailedException();
+            throw new DeserializationFailedException();
         }
 
         throw payloadThrowable;

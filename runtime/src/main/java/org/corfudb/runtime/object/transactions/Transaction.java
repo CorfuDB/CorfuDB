@@ -31,14 +31,14 @@ public class Transaction {
      * The type of context to build.
      */
     @Default
-    final TransactionType type = TransactionType.OPTIMISTIC;;
+    final TransactionType type = TransactionType.OPTIMISTIC;
 
     /**
      * For snapshot transactions, the address the
      * snapshot will start at.
      */
     @Default
-    final Token snapshot = Token.UNINITIALIZED;;
+    final Token snapshot = Token.UNINITIALIZED;
 
     /**
      * Start the transaction with the parameters given

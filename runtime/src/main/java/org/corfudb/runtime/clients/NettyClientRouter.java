@@ -35,7 +35,6 @@ import javax.annotation.Nonnull;
 import javax.net.ssl.SSLException;
 
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 

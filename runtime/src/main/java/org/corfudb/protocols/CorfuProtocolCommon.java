@@ -14,8 +14,8 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
 import org.corfudb.protocols.wireprotocol.ITypedEnum;
+import org.corfudb.protocols.wireprotocol.PayloadConstructor;
 import org.corfudb.protocols.wireprotocol.SequencerMetrics;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
@@ -330,8 +330,8 @@ public final class CorfuProtocolCommon {
      * De-serialization handlers.
      */
     @Getter
-    static final ConcurrentHashMap<Class<?>, ICorfuPayload.PayloadConstructor<?>> constructorMap = new ConcurrentHashMap<>(
-            ImmutableMap.<Class<?>, ICorfuPayload.PayloadConstructor<?>>builder()
+    static final ConcurrentHashMap<Class<?>, PayloadConstructor<?>> constructorMap = new ConcurrentHashMap<>(
+            ImmutableMap.<Class<?>, PayloadConstructor<?>>builder()
                     .put(Byte.class, ByteBuf::readByte)
                     .put(Integer.class, ByteBuf::readInt)
                     .put(Long.class, ByteBuf::readLong)
@@ -470,34 +470,7 @@ public final class CorfuProtocolCommon {
             }
         }
 
-        if (!ICorfuPayload.class.isAssignableFrom(clazz)) {
-            throw new RuntimeException("Unknown class " + clazz + " for deserialization");
-        }
-
-        // Grab the constructor and get convert it to a lambda.
-        try {
-            Constructor<?> t = clazz.getConstructor(ByteBuf.class);
-            MethodHandle mh = lookup.unreflectConstructor(t);
-            MethodType mt = MethodType.methodType(Object.class, ByteBuf.class);
-
-            try {
-                CallSite metafactory = LambdaMetafactory.metafactory(
-                        lookup,
-                        "construct",
-                        MethodType.methodType(ICorfuPayload.PayloadConstructor.class),
-                        mt, mh, mh.type()
-                );
-                constructorMap.put(clazz, (ICorfuPayload.PayloadConstructor<T>) metafactory.getTarget().invokeExact());
-                return (T) constructorMap.get(clazz).construct(buf);
-            } catch (Throwable th) {
-                throw new RuntimeException(th);
-            }
-        } catch (NoSuchMethodException nsme) {
-            throw new RuntimeException("CorfuPayloads must include a ByteBuf " +
-                    "constructor! for class: " + clazz.toString());
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException(e);
-        }
+        throw new RuntimeException("Unknown class " + clazz + " for deserialization");
     }
 
     /**
@@ -536,8 +509,8 @@ public final class CorfuProtocolCommon {
     public static <T> void serialize(ByteBuf buffer, T payload) {
         // If it's an ICorfuPayload, use the defined serializer.
         // Otherwise serialize the primitive type.
-        if (payload instanceof ICorfuPayload) {
-            ((ICorfuPayload) payload).doSerialize(buffer);
+        if (payload instanceof ITypedEnum) {
+            ((ITypedEnum) payload).doSerialize(buffer);
         } else if (payload instanceof Byte) {
             buffer.writeByte((Byte) payload);
         } else if (payload instanceof Short) {
@@ -629,9 +602,8 @@ public final class CorfuProtocolCommon {
     // Temporary message header markers indicating message type.
     @AllArgsConstructor
     public enum MessageMarker {
-        LEGACY_MSG_MARK(0x1),
-        PROTO_REQUEST_MSG_MARK(0x2),
-        PROTO_RESPONSE_MSG_MARK(0x3);
+        PROTO_REQUEST_MSG_MARK(0x1),
+        PROTO_RESPONSE_MSG_MARK(0x2);
 
         public static final Map<Byte, MessageMarker> typeMap =
                 Arrays.stream(MessageMarker.values())

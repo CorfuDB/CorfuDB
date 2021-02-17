@@ -4,7 +4,6 @@ import io.netty.channel.ChannelHandlerContext;
 import java.util.Set;
 
 import org.corfudb.runtime.proto.ServerErrors.ServerErrorMsg.ErrorCase;
-import org.corfudb.runtime.proto.service.CorfuMessage;
 import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponsePayloadMsg.PayloadCase;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
