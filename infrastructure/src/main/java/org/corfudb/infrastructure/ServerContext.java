@@ -182,23 +182,18 @@ public class ServerContext implements AutoCloseable {
     }
 
     int getBaseServerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--base-server-threads");
-        return threadCount == null ? 1 : threadCount;
-    }
-
-    int getLayoutServerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--layout-server-threads");
-        return threadCount == null ? 1 : threadCount;
+        int threadCount = Integer.parseInt(getServerConfig(String.class, "--base-server-threads"));
+        return threadCount == 0 ? 1 : threadCount;
     }
 
     public int getLogunitThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--logunit-threads");
-        return threadCount == null ? Runtime.getRuntime().availableProcessors() * 2 : threadCount;
+        int threadCount = Integer.parseInt(getServerConfig(String.class, "--logunit-threads"));
+        return threadCount == 0 ? Runtime.getRuntime().availableProcessors() * 2 : threadCount;
     }
 
     public int getManagementServerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--management-server-threads");
-        return threadCount == null ? 4 : threadCount;
+        int threadCount = Integer.parseInt(getServerConfig(String.class, "--management-server-threads"));
+        return threadCount == 0 ? 4 : threadCount;
     }
 
     public String getPluginConfigFilePath() {
