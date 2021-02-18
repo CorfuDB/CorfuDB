@@ -1,6 +1,7 @@
 package org.corfudb.infrastructure.logreplication.transport.sample;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.protobuf.TextFormat;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -10,21 +11,21 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.protobuf.ProtobufDecoder;
-import io.netty.handler.codec.protobuf.ProtobufEncoder;
-import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
-import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
+import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleStateHandler;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
 import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
-import org.corfudb.runtime.Messages.CorfuMessage;
+import org.corfudb.protocols.wireprotocol.NettyCorfuMessageDecoder;
+import org.corfudb.protocols.wireprotocol.NettyCorfuMessageEncoder;
 import org.corfudb.runtime.exceptions.NetworkException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.security.sasl.SaslUtils;
 import org.corfudb.security.sasl.plaintext.PlainTextSaslNettyClient;
 import org.corfudb.security.tls.SslContextConstructor;
@@ -36,7 +37,7 @@ import java.util.concurrent.ThreadFactory;
 
 @Slf4j
 @ChannelHandler.Sharable
-public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<CorfuMessage> {
+public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<ResponseMsg> {
 
     /**
      * The currently registered channel.
@@ -130,8 +131,8 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<CorfuMe
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, CorfuMessage msg) {
-        log.info("Received msg type={}", msg.getType());
+    protected void channelRead0(ChannelHandlerContext ctx, ResponseMsg msg) {
+        log.info("Received msg type={}", msg.getPayload().getPayloadCase());
         adapter.receive(msg);
     }
 
@@ -145,7 +146,7 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<CorfuMe
     public void channelActive(ChannelHandlerContext ctx) {
         log.info("channelActive: Outgoing connection established to: {} from id={}", ctx.channel().remoteAddress(), ctx.channel().localAddress());
         channel = ctx.channel();
-        adapter.onConnectionUp(node.getEndpoint());
+        adapter.onConnectionUp(node.getNodeId());
     }
 
     /**
@@ -157,11 +158,11 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<CorfuMe
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
         log.info("channelActive: Outgoing connection lost to: {} from id={}", ctx.channel().remoteAddress(), ctx.channel().localAddress());
-        adapter.onConnectionDown(node.getEndpoint());
+        adapter.onConnectionDown(node.getNodeId());
     }
 
     public void close() {
-        log.debug("Close channel to {}", node.getEndpoint());
+        log.debug("Close channel to {}", node.getNodeId());
         shutdown = true;
         adapter.onError(new NetworkException("Channel closed", node.getClusterId()));
         if (channel != null && channel.isOpen()) {
@@ -171,7 +172,8 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<CorfuMe
         this.eventLoopGroup.shutdownGracefully();
     }
 
-    /** Get the {@link ChannelInitializer} used for initializing the Netty channel pipeline.
+    /**
+     * Get the {@link ChannelInitializer} used for initializing the Netty channel pipeline.
      *
      * @return A {@link ChannelInitializer} which initializes the pipeline.
      */
@@ -184,27 +186,28 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<CorfuMe
                 if (parameters.isTlsEnabled()) {
                     ch.pipeline().addLast("ssl", sslContext.newHandler(ch.alloc()));
                 }
-
+                ch.pipeline().addLast(new LengthFieldPrepender(4));
+                ch.pipeline().addLast(new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE,
+                        0, 4, 0,
+                        4));
                 if (parameters.isSaslPlainTextEnabled()) {
                     PlainTextSaslNettyClient saslNettyClient =
                             SaslUtils.enableSaslPlainText(parameters.getUsernameFile(),
                                     parameters.getPasswordFile());
                     ch.pipeline().addLast("sasl/plain-text", saslNettyClient);
                 }
+                ch.pipeline().addLast(new NettyCorfuMessageDecoder());
+                ch.pipeline().addLast(new NettyCorfuMessageEncoder());
 
-                ch.pipeline().addLast(new ProtobufVarint32FrameDecoder());
-                ch.pipeline().addLast(new ProtobufDecoder(CorfuMessage.getDefaultInstance()));
-                ch.pipeline().addLast(new ProtobufVarint32LengthFieldPrepender());
-                ch.pipeline().addLast(new ProtobufEncoder());
                 ch.pipeline().addLast(CorfuNettyClientChannel.this);
             }
         };
     }
 
-    public void send(CorfuMessage message) {
+    public void send(RequestMsg message) {
         // Write the message out to the channel.
         channel.writeAndFlush(message, channel.voidPromise());
-        log.info("Sent message: {}", message);
+        log.info("Sent message: {}", TextFormat.shortDebugString(message));
     }
 
     /**
@@ -217,7 +220,7 @@ public class CorfuNettyClientChannel extends SimpleChannelInboundHandler<CorfuMe
         if (shutdown) {
             return;
         }
-        log.info("Connect Async {}", node.getEndpoint());
+        log.info("Connect Async {}", node.getNodeId());
         // Use the bootstrap to create a new channel.
         ChannelFuture f = bootstrap.connect(node.getHost(), Integer.valueOf(node.getPort()));
         f.addListener((ChannelFuture cf) -> channelConnectionFutureHandler(cf, bootstrap));

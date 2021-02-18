@@ -73,8 +73,7 @@ message TailRequestMsg {
   enum Type {
     INVALID = 0;
     LOG_TAIL = 1;
-    STREAMS_TAILS = 2;
-    ALL_STREAMS_TAIL = 3;
+    ALL_STREAMS_TAIL = 2;
   }
 
   Type req_type = 1;
@@ -104,7 +103,8 @@ message LogAddressSpaceRequestMsg {
 
 message LogAddressSpaceResponseMsg {
   int64 log_tail = 1;
-  repeated UuidToStreamAddressSpacePairMsg address_map = 2;
+  int64 epoch = 2;
+  repeated UuidToStreamAddressSpacePairMsg address_map = 3;
 }
 
 // Request for known addresses in the log unit

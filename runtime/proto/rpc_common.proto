@@ -49,13 +49,7 @@ message LayoutMsg {
  *       no longer present and that was subsumed by a checkpoint).
  */
 message StreamAddressSpaceMsg {
-  // Holds the last trimmed address for this stream.
-  // Note: keeping the last trimmed address is required in order to properly set the stream tail on sequencer resets
-  // when a stream has been checkpointed and trimmed and there are no further updates to this stream.
-  uint64 trim_mark = 1;
-
-  // Holds the complete map of addresses for this stream.
-  // Note: currently of type Roaring64NavigableMap.
+  // Holds the last trimmed address for this stream and complete map of addresses for this stream.
   bytes address_map = 2;
 }
 

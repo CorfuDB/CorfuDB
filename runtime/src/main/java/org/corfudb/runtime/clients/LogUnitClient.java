@@ -1,41 +1,40 @@
 package org.corfudb.runtime.clients;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-
-import lombok.Getter;
-
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
-import org.corfudb.protocols.wireprotocol.IMetadata;
-import org.corfudb.protocols.wireprotocol.InspectAddressesRequest;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
-import org.corfudb.protocols.wireprotocol.KnownAddressRequest;
 import org.corfudb.protocols.wireprotocol.KnownAddressResponse;
-import org.corfudb.protocols.wireprotocol.RangeWriteMsg;
-import org.corfudb.protocols.wireprotocol.ReadRequest;
 import org.corfudb.protocols.wireprotocol.ReadResponse;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
-import org.corfudb.protocols.wireprotocol.TailsRequest;
 import org.corfudb.protocols.wireprotocol.TailsResponse;
 import org.corfudb.protocols.wireprotocol.Token;
-import org.corfudb.protocols.wireprotocol.TrimRequest;
-import org.corfudb.protocols.wireprotocol.WriteRequest;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.CorfuComponent;
+import org.corfudb.runtime.proto.service.LogUnit.TailRequestMsg.Type;
 import org.corfudb.util.serializer.Serializers;
 
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getCommittedTailRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getCompactRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getFlushCacheRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getInspectAddressesRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getKnownAddressRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getLogAddressSpaceRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getRangeWriteLogRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getReadLogRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getResetLogUnitRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTailRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimLogRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getTrimMarkRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getUpdateCommittedTailRequestMsg;
+import static org.corfudb.protocols.service.CorfuProtocolLogUnit.getWriteLogRequestMsg;
 
 /**
  * A client to send messages to a LogUnit.
@@ -57,44 +56,23 @@ public class LogUnitClient extends AbstractClient {
         return getRouter().getPort();
     }
 
-    @Getter
-    MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
-
-    private Timer.Context getTimerContext(String opName) {
-        final String timerName = String.format("%s%s:%s-%s",
-                CorfuComponent.LOG_UNIT_CLIENT.toString(),
-                getHost(),
-                getPort().toString(),
-                opName);
-        Timer t = getMetricRegistry().timer(timerName);
-        return t.time();
-    }
-
     /**
      * Asynchronously write to the logging unit.
      *
      * @param address        the address to write to.
-     * @param rank           the rank of this write (used for quorum replication).
      * @param writeObject    the object, pre-serialization, to write.
      * @param backpointerMap the map of backpointers to write.
      * @return a completable future which returns true on success.
      */
     public CompletableFuture<Boolean> write(long address,
-                                            IMetadata.DataRank rank,
                                             Object writeObject,
                                             Map<UUID, Long> backpointerMap) {
-        Timer.Context context = getTimerContext("writeObject");
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
-        WriteRequest wr = new WriteRequest(DataType.DATA, payload);
-        wr.setRank(rank);
-        wr.setBackpointerMap(backpointerMap);
-        wr.setGlobalAddress(address);
-        CompletableFuture<Boolean> cf = sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        LogData logData = new LogData(DataType.DATA, payload);
+        logData.setBackpointerMap(backpointerMap);
+        logData.setGlobalAddress(address);
+        return sendRequestWithFuture(getWriteLogRequestMsg(logData), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -104,7 +82,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completable future which returns true on success.
      */
     public CompletableFuture<Boolean> write(ILogData payload) {
-        return sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(new WriteRequest(payload)));
+        return sendRequestWithFuture(getWriteLogRequestMsg((LogData) payload), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -128,7 +106,7 @@ public class LogUnitClient extends AbstractClient {
             }
         }
 
-        return sendMessageWithFuture(CorfuMsgType.RANGE_WRITE.payloadMsg(new RangeWriteMsg(range)));
+        return sendRequestWithFuture(getRangeWriteLogRequestMsg(range), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -150,16 +128,8 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> read(List<Long> addresses, boolean cacheable) {
-        Timer.Context context = getTimerContext("read");
-        CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
-                CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(addresses, cacheable)));
-
-        return cf.thenApply(x -> {
-            context.stop();
-            return x;
-        });
+        return sendRequestWithFuture(getReadLogRequestMsg(addresses, cacheable), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
-
 
     /**
      * Check if addresses are committed on log unit server, which returns a future
@@ -169,8 +139,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns an InspectAddressesResponse
      */
     public CompletableFuture<InspectAddressesResponse> inspectAddresses(List<Long> addresses) {
-        return sendMessageWithFuture(CorfuMsgType.INSPECT_ADDRESSES_REQUEST
-                .payloadMsg(new InspectAddressesRequest(addresses)));
+        return sendRequestWithFuture(getInspectAddressesRequestMsg(addresses), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -180,7 +149,7 @@ public class LogUnitClient extends AbstractClient {
      * received.
      */
     public CompletableFuture<TailsResponse> getLogTail() {
-        return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.payloadMsg(new TailsRequest(TailsRequest.LOG_TAIL)));
+        return sendRequestWithFuture(getTailRequestMsg(Type.LOG_TAIL), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -190,7 +159,7 @@ public class LogUnitClient extends AbstractClient {
      * received.
      */
     public CompletableFuture<TailsResponse> getAllTails() {
-        return sendMessageWithFuture(CorfuMsgType.TAIL_REQUEST.payloadMsg(TailsRequest.ALL_STREAMS_TAIL));
+        return sendRequestWithFuture(getTailRequestMsg(Type.ALL_STREAMS_TAIL), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -199,7 +168,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a CompletableFuture which will complete with the committed tail once received.
      */
     public CompletableFuture<Long> getCommittedTail() {
-        return sendMessageWithFuture(CorfuMsgType.COMMITTED_TAIL_REQUEST.msg());
+        return sendRequestWithFuture(getCommittedTailRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -209,7 +178,7 @@ public class LogUnitClient extends AbstractClient {
      * @return an empty completableFuture
      */
     public CompletableFuture<Void> updateCommittedTail(long committedTail) {
-        return sendMessageWithFuture(CorfuMsgType.UPDATE_COMMITTED_TAIL.payloadMsg(committedTail));
+        return sendRequestWithFuture(getUpdateCommittedTailRequestMsg(committedTail), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -218,7 +187,7 @@ public class LogUnitClient extends AbstractClient {
      * @return A CompletableFuture which will complete with the address space map for all streams.
      */
     public CompletableFuture<StreamsAddressResponse> getLogAddressSpace() {
-        return sendMessageWithFuture(CorfuMsgType.LOG_ADDRESS_SPACE_REQUEST.msg());
+        return sendRequestWithFuture(getLogAddressSpaceRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -227,7 +196,7 @@ public class LogUnitClient extends AbstractClient {
      * @return a CompletableFuture for the starting address
      */
     public CompletableFuture<Long> getTrimMark() {
-        return sendMessageWithFuture(CorfuMsgType.TRIM_MARK_REQUEST.msg());
+        return sendRequestWithFuture(getTrimMarkRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -237,10 +206,8 @@ public class LogUnitClient extends AbstractClient {
      * @param endRange   End of range (inclusive).
      * @return Known addresses.
      */
-    public CompletableFuture<KnownAddressResponse> requestKnownAddresses(long startRange,
-                                                                         long endRange) {
-        return sendMessageWithFuture(CorfuMsgType.KNOWN_ADDRESS_REQUEST
-                .payloadMsg(new KnownAddressRequest(startRange, endRange)));
+    public CompletableFuture<KnownAddressResponse> requestKnownAddresses(long startRange, long endRange) {
+        return sendRequestWithFuture(getKnownAddressRequestMsg(startRange, endRange), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -250,24 +217,22 @@ public class LogUnitClient extends AbstractClient {
      * @return an empty completableFuture
      */
     public CompletableFuture<Void> prefixTrim(Token address) {
-        return sendMessageWithFuture(CorfuMsgType.PREFIX_TRIM
-                .payloadMsg(new TrimRequest(address)));
+        return sendRequestWithFuture(getTrimLogRequestMsg(address), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
      * Send a compact request that will delete the trimmed parts of the log.
      */
     public CompletableFuture<Void> compact() {
-        return sendMessageWithFuture(CorfuMsgType.COMPACT_REQUEST.msg());
+        return sendRequestWithFuture(getCompactRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
      * Send a flush cache request that will flush the logunit cache.
      */
     public CompletableFuture<Void> flushCache() {
-        return sendMessageWithFuture(CorfuMsgType.FLUSH_CACHE.msg());
+        return sendRequestWithFuture(getFlushCacheRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
-
 
     /**
      * Send a reset request.
@@ -276,6 +241,6 @@ public class LogUnitClient extends AbstractClient {
      * @return a completable future which returns true on success.
      */
     public CompletableFuture<Boolean> resetLogUnit(long epoch) {
-        return sendMessageWithFuture(CorfuMsgType.RESET_LOGUNIT.payloadMsg(epoch));
+        return sendRequestWithFuture(getResetLogUnitRequestMsg(epoch), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 }

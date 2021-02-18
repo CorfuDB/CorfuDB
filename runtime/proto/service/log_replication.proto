@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package org.corfudb.runtime;
+option java_package = "org.corfudb.runtime";
+
+import "rpc_common.proto";
+
+message LogReplicationEntryMetadataMsg {
+  int64 topologyConfigID = 1;
+  LogReplicationEntryType entry_type = 2;
+  int64 timestamp = 3;
+  int64 previousTimestamp = 4;
+  UuidMsg syncRequestId = 5;
+  int64 snapshotTimestamp = 6;
+  int64 snapshotSyncSeqNum = 7;
+}
+
+message LogReplicationEntryMsg {
+  LogReplicationEntryMetadataMsg metadata = 1;
+  bytes data = 2;
+}
+
+message LogReplicationMetadataRequestMsg {
+}
+
+message LogReplicationMetadataResponseMsg {
+  uint64 topologyConfigID = 1;
+  string version = 2;
+  uint64 snapshotStart = 3;
+  uint64 snapshotTransferred = 4;
+  uint64 snapshotApplied = 5;
+  uint64 lastLogEntryTimestamp = 6;
+}
+
+message LogReplicationLeadershipLossResponseMsg {
+  string nodeId = 1;
+}
+
+message LogReplicationLeadershipRequestMsg {
+}
+
+message LogReplicationLeadershipResponseMsg {
+  bool isLeader = 2;
+  string nodeId = 3;
+}
+
+enum LogReplicationEntryType {
+  LOG_ENTRY_MESSAGE = 0;
+  SNAPSHOT_MESSAGE = 1;
+  SNAPSHOT_START = 2;
+  LOG_ENTRY_REPLICATED = 3;
+  SNAPSHOT_REPLICATED = 4;
+  SNAPSHOT_END = 5;
+  SNAPSHOT_TRANSFER_COMPLETE = 6;
+}

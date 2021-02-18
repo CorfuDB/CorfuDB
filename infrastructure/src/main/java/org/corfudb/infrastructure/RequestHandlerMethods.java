@@ -1,6 +1,6 @@
 package org.corfudb.infrastructure;
 
-import com.codahale.metrics.Timer;
+import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelHandlerContext;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -11,17 +11,19 @@ import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import javax.annotation.Nonnull;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
-import org.corfudb.util.CorfuComponent;
-import org.corfudb.util.MetricsUtils;
 
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getUnknownErrorMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
@@ -67,6 +69,16 @@ public class RequestHandlerMethods {
     }
 
     /**
+     * Given a {@link RequestMsg} return the corresponding handler.
+     *
+     * @param request   The request message to handle.
+     * @return          The appropriate {@link HandlerMethod}.
+     */
+    protected HandlerMethod getHandler(RequestMsg request) {
+        return handlerMap.get(request.getPayload().getPayloadCase());
+    }
+
+    /**
      * Handle an incoming Corfu request message.
      *
      * @param req       The request message to handle.
@@ -75,14 +87,14 @@ public class RequestHandlerMethods {
      */
     @SuppressWarnings("unchecked")
     public void handle(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r) {
-        final HandlerMethod handler = handlerMap.get(req.getPayload().getPayloadCase());
+        final HandlerMethod handler = getHandler(req);
         try {
             handler.handle(req, ctx, r);
         } catch (Exception e) {
             log.error("handle[{}]: Unhandled exception processing {} request",
                     req.getHeader().getRequestId(), req.getPayload().getPayloadCase(), e);
 
-            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+            HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
             r.sendResponse(getResponseMsg(responseHeader, getUnknownErrorMsg(e)), ctx);
         }
     }
@@ -133,31 +145,51 @@ public class RequestHandlerMethods {
                         mtt, mh, mtt).getTarget().bindTo(server).invoke();
             }
 
-            // Install pre-conditions on handler and place the handler in the map
+            // Install pre-conditions on handler
             final HandlerMethod handler = generateConditionalHandler(annotation.type(), h);
+            // Install the handler in the map
             handlerMap.put(annotation.type(), handler);
         } catch (Throwable e) {
             throw new UnrecoverableCorfuError("Exception during request handler registration", e);
         }
     }
 
+    /**
+     * Generate a conditional handler, which instruments the handler with metrics if
+     * configured as enabled and checks whether the server is shutdown and ready.
+     * @param type          The type the request message is being handled for.
+     * @param handler       The {@link RequestHandlerMethods.HandlerMethod} which handles the message.
+     * @return              A new {@link RequestHandlerMethods.HandlerMethod} which conditionally executes the
+     *                      handler based on preconditions (whether the server is shutdown/ready).
+     */
     private HandlerMethod generateConditionalHandler(@NonNull final PayloadCase type,
                                                      @NonNull final HandlerMethod handler) {
         // Generate a timer based on the Corfu request type
-        final Timer timer = getTimer(type);
+        final Optional<Timer> timer = getTimer(type);
 
         // Register the handler. Depending on metrics collection configuration by MetricsUtil,
         // handler will be instrumented by the metrics context.
         return (req, ctx, r) -> {
-            try (Timer.Context context = MetricsUtils.getConditionalContext(timer)) {
-                handler.handle(req, ctx, r);
+            Runnable handlerRunnable = () -> handler.handle(req, ctx, r);
+            if (timer.isPresent()) {
+                timer.get().record(handlerRunnable);
+            } else {
+                handlerRunnable.run();
             }
         };
     }
 
-    private Timer getTimer(@Nonnull PayloadCase type) {
+    // Create a timer using cached timer name for the corresponding type
+    private Optional<Timer> getTimer(@Nonnull PayloadCase type) {
         timerNameCache.computeIfAbsent(type,
-                aType -> (CorfuComponent.INFRA_MSG_HANDLER + aType.name().toLowerCase()));
-        return ServerContext.getMetrics().timer(timerNameCache.get(type));
+                aType -> ("corfu.infrastructure.message-handler." +
+                        aType.name().toLowerCase()));
+        double[] percentiles = new double[]{0.50, 0.95, 0.99};
+
+        return MeterRegistryProvider.getInstance()
+                .map(registry -> Timer.builder(timerNameCache.get(type))
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
     }
 }

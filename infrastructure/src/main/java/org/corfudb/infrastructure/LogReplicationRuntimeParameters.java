@@ -10,7 +10,6 @@ import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.runtime.RuntimeParameters;
 import org.corfudb.runtime.RuntimeParametersBuilder;
-import org.corfudb.util.MetricsUtils;
 
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
@@ -57,7 +56,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
         private long topologyConfigId;
         private LogReplicationConfig replicationConfig;
         private IChannelContext channelContext;
-        private int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
 
         private LogReplicationRuntimeParametersBuilder() {
         }
@@ -207,11 +205,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             return this;
         }
 
-        public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder prometheusMetricsPort(int prometheusMetricsPort) {
-            super.prometheusMetricsPort(prometheusMetricsPort);
-            return this;
-        }
-
         public LogReplicationRuntimeParameters.LogReplicationRuntimeParametersBuilder systemDownHandler(Runnable systemDownHandler) {
             super.systemDownHandler(systemDownHandler);
             return this;
@@ -246,7 +239,6 @@ public class LogReplicationRuntimeParameters extends RuntimeParameters {
             runtimeParameters.setShutdownNettyEventLoop(shutdownNettyEventLoop);
             runtimeParameters.setCustomNettyChannelOptions(customNettyChannelOptions);
             runtimeParameters.setUncaughtExceptionHandler(uncaughtExceptionHandler);
-            runtimeParameters.setPrometheusMetricsPort(prometheusMetricsPort);
             runtimeParameters.setSystemDownHandler(systemDownHandler);
             runtimeParameters.setBeforeRpcHandler(beforeRpcHandler);
             runtimeParameters.setLocalCorfuEndpoint(localCorfuEndpoint);

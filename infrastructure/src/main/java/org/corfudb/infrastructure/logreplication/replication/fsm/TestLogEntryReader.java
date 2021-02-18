@@ -2,7 +2,7 @@ package org.corfudb.infrastructure.logreplication.replication.fsm;
 
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.LogEntryReader;
 import org.corfudb.infrastructure.logreplication.replication.send.logreader.StreamsLogEntryReader;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.view.Address;
 
 import java.util.UUID;
@@ -13,7 +13,7 @@ import java.util.UUID;
 public class TestLogEntryReader implements LogEntryReader {
 
     @Override
-    public LogReplicationEntry read(UUID logEntryRequestId) {
+    public LogReplication.LogReplicationEntryMsg read(UUID logEntryRequestId) {
         return null;
     }
 

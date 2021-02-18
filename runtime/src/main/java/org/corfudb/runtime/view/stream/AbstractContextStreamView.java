@@ -146,11 +146,11 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
         return entry;
     }
 
-    /** {@inheritDoc}
+    /**
+     * {@inheritDoc}
      */
     @Override
     public final synchronized List<ILogData> remainingUpTo(long maxGlobal) {
-
         // Pop the context if it has changed.
         if (getCurrentContext().getGlobalPointer()
                 >= getCurrentContext().maxGlobalAddress) {
@@ -159,8 +159,7 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
                     last.id, last.maxGlobalAddress);
         }
 
-        final List<ILogData> entries = getNextEntries(getCurrentContext(), maxGlobal,
-                this::doesEntryUpdateContext);
+        final List<ILogData> entries = getNextEntries(getCurrentContext(), maxGlobal);
 
         // Nothing read, nothing to process.
         if (entries.size() == 0) {
@@ -170,20 +169,6 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
                 getCurrentContext().setGlobalPointerCheckGCTrimMark(maxGlobal);
             }
             return entries;
-        }
-
-        // Check if the last entry updates the context.
-        if (doesEntryUpdateContext(entries.get(entries.size() - 1))) {
-
-            // Remove the entry which updates the context
-            entries.remove(entries.size() - 1);
-
-            // do a read again, which will consume the inner context
-            entries.addAll(remainingUpTo(maxGlobal));
-
-            // and now read again, in case the context returned, to make
-            // sure we get up to maxGlobal.
-            entries.addAll(remainingUpTo(maxGlobal));
         }
 
         // Otherwise update the pointer
@@ -236,12 +221,9 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
      *
      * @param context           The context to retrieve the next entry from.
      * @param maxGlobal         The maximum global address to read to.
-     * @param contextCheckFn    A function which returns true if the entry changes the
-     *                          stream context.
      * @return                  A list of the next entries for this context
      */
-    protected List<ILogData> getNextEntries(T context, long maxGlobal,
-                                                     Function<ILogData, Boolean> contextCheckFn) {
+    protected List<ILogData> getNextEntries(T context, long maxGlobal) {
         final List<ILogData> dataList = new ArrayList<>();
         ILogData thisData;
 
@@ -252,25 +234,9 @@ public abstract class AbstractContextStreamView<T extends AbstractStreamContext>
             // Update the pointer, because the underlying implementation
             // will expect it to be updated when we call getNextEntry() again.
             updatePointer(thisData);
-
-            // If this entry changes the context, don't continue reading.
-            if (contextCheckFn.apply(thisData)) {
-                break;
-            }
         }
 
         return dataList;
-    }
-
-    /** Check whether the given entry updates the context.
-     *
-     * @param data  The entry to check.
-     * @return      True, if the entry will update the context.
-     */
-    protected boolean doesEntryUpdateContext(final ILogData data) {
-        return data.hasBackpointer(getCurrentContext().id)
-                && data.getBackpointer(getCurrentContext().id)
-                        .equals(Address.COW_BACKPOINTER);
     }
 
     /** Update the global pointer, given an entry.

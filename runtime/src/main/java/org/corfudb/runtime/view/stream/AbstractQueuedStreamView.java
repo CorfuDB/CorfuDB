@@ -59,6 +59,9 @@ public abstract class AbstractQueuedStreamView extends
     @Getter
     private final ReadOptions readOptions;
 
+    @Getter
+    private final StreamOptions streamOptions;
+
     /** Create a new queued stream view.
      *
      * @param streamId  The ID of the stream
@@ -72,6 +75,7 @@ public abstract class AbstractQueuedStreamView extends
                 .clientCacheable(streamOptions.isCacheEntries())
                 .ignoreTrim(streamOptions.isIgnoreTrimmed())
                 .build();
+        this.streamOptions = streamOptions;
     }
 
     /** Add the given address to the resolved queue of the
@@ -310,8 +314,7 @@ public abstract class AbstractQueuedStreamView extends
      * list off there.
      * */
     @Override
-    protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal,
-                                            Function<ILogData, Boolean> contextCheckFn) {
+    protected List<ILogData> getNextEntries(QueuedStreamContext context, long maxGlobal) {
         NavigableSet<Long> readSet = new TreeSet<>();
 
         // Scan backward in the stream to find interesting
@@ -362,24 +365,10 @@ public abstract class AbstractQueuedStreamView extends
                 // Case of Checkpoint will never load these addresses, cause this is another stream
                 .filter(x -> x.containsStream(context.id))
                 .collect(Collectors.toList());
-
-        // If any entries change the context,
-        // don't return anything greater than
-        // that entry
-        Optional<ILogData> contextEntry = readFrom.stream()
-                .filter(contextCheckFn::apply).findFirst();
-        if (contextEntry.isPresent()) {
-            log.trace("getNextEntries[{}] context switch @ {}", this,
-                    contextEntry.get().getGlobalAddress());
-            int idx = readFrom.indexOf(contextEntry.get());
-            readFrom = readFrom.subList(0, idx + 1);
-            // NOTE: readSet's clear() changed underlying context.readQueue
-            readSet.headSet(contextEntry.get().getGlobalAddress(), true).clear();
-        } else {
-            // Clear the entries which were read
-            context.readQueue.headSet(maxGlobal, true).clear();
-            context.readCpQueue.headSet(maxGlobal, true).clear();
-        }
+        
+        // Clear the entries which were read
+        context.readQueue.headSet(maxGlobal, true).clear();
+        context.readCpQueue.headSet(maxGlobal, true).clear();
 
         // Transfer the addresses of the read entries to the resolved queue
         readFrom.forEach(entry -> addToResolvedQueue(context, entry.getGlobalAddress()));
@@ -396,6 +385,34 @@ public abstract class AbstractQueuedStreamView extends
                 .filter(entry -> !entry.isHole())
                 .collect(Collectors.toList());
     }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public List<ILogData> remainingAtMost(int maxEntries) {
+        // TODO: instrument remainingUpTo directly to limit the number of
+        // of entries returned instead of calling it.
+        if (maxEntries < 1) {
+            throw new IllegalArgumentException(
+                    "remainingAtMost(): maxEntries cannot be less than 1.");
+        }
+
+        long maxGlobal = getMaxGlobalFromMaxEntries(maxEntries);
+        if (Address.nonAddress(maxGlobal)) {
+            return Collections.emptyList();
+        }
+
+        return remainingUpTo(maxGlobal);
+    }
+
+    /**
+     * Get the largest address to read from the the current global pointer
+     * and the maximum number of entries to read.
+     *
+     * @return largest address to read
+     */
+    protected abstract long getMaxGlobalFromMaxEntries(int maxEntries);
 
     /**
      * Fill the read queue for the current context. This method is called

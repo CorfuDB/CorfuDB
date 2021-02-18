@@ -11,6 +11,7 @@ import org.corfudb.infrastructure.ServerContext;
 import org.corfudb.infrastructure.logreplication.LogReplicationConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.DiscoveryServiceEvent.DiscoveryServiceEventType;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.CorfuReplicationClusterManagerAdapter;
+import org.corfudb.infrastructure.logreplication.infrastructure.plugins.DefaultClusterConfig;
 import org.corfudb.infrastructure.logreplication.infrastructure.plugins.LogReplicationPluginConfig;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo;
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.ClusterRole;
@@ -22,7 +23,7 @@ import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicat
 import org.corfudb.infrastructure.logreplication.utils.LogReplicationStreamNameTableManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.RetryExhaustedException;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.retry.ExponentialBackoffRetry;
@@ -39,6 +40,7 @@ import javax.annotation.Nonnull;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -124,7 +126,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     /**
      * Current node's id
      */
-    private Optional<String> localNodeId = Optional.empty();
+    private String localNodeId;
 
     /**
      * Current node information
@@ -328,7 +330,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             topologyDescriptor.getTopologyConfigId(), localClusterDescriptor.getClusterId());
 
         logReplicationServerHandler = new LogReplicationServer(serverContext, logReplicationConfig,
-            logReplicationMetadataManager, localCorfuEndpoint, topologyDescriptor.getTopologyConfigId());
+            logReplicationMetadataManager, localCorfuEndpoint, topologyDescriptor.getTopologyConfigId(), localNodeId);
         logReplicationServerHandler.setActive(localClusterDescriptor.getRole().equals(ClusterRole.ACTIVE));
 
         interClusterReplicationService = new CorfuInterClusterReplicationServerNode(serverContext,
@@ -375,11 +377,11 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      * @param update   indicates if the discovered topology should immediately be reflected as current (cached)
      */
     private boolean clusterPresentInTopology(TopologyDescriptor topology, boolean update) {
-        ClusterDescriptor tmpClusterDescriptor = topology.getClusterDescriptor(localEndpoint, localNodeId);
+        ClusterDescriptor tmpClusterDescriptor = topology.getClusterDescriptor(localNodeId);
         NodeDescriptor tmpNodeDescriptor = null;
 
         if (tmpClusterDescriptor != null) {
-            tmpNodeDescriptor = tmpClusterDescriptor.getNode(localEndpoint, localNodeId);
+            tmpNodeDescriptor = tmpClusterDescriptor.getNode(localNodeId);
 
             if (update) {
                 localClusterDescriptor = tmpClusterDescriptor;
@@ -597,7 +599,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         logReplicationMetadataManager.setupTopologyConfigId(topologyDescriptor.getTopologyConfigId());
 
         // Reset the Replication Status on Active and Standby
-        logReplicationMetadataManager.resetReplicationStatus();
+        resetReplicationStatusTableWithRetry();
 
         log.debug("Persist new topologyConfigId {}, cluster id={}, role={}", topologyDescriptor.getTopologyConfigId(),
                 localClusterDescriptor.getClusterId(), localClusterDescriptor.getRole());
@@ -669,7 +671,7 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
     private boolean clusterRoleChanged(TopologyDescriptor discoveredTopology) {
         if (localClusterDescriptor != null) {
             return localClusterDescriptor.getRole() !=
-                    discoveredTopology.getClusterDescriptor(localEndpoint, localNodeId).getRole();
+                    discoveredTopology.getClusterDescriptor(localNodeId).getRole();
         }
 
         return false;
@@ -728,10 +730,10 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         topologyDescriptor = newConfig;
 
         // Update local cluster descriptor
-        localClusterDescriptor = topologyDescriptor.getClusterDescriptor(localEndpoint, localNodeId);
+        localClusterDescriptor = topologyDescriptor.getClusterDescriptor(localNodeId);
 
         // Update local node descriptor
-        localNodeDescriptor = localClusterDescriptor.getNode(localEndpoint, localNodeId);
+        localNodeDescriptor = localClusterDescriptor.getNode(localNodeId);
     }
 
     private void updateReplicationManagerTopology(TopologyDescriptor newConfig) {
@@ -906,13 +908,44 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
             File nodeIdFile = new File(nodeIdFilePath);
             try (BufferedReader bufferedReader = new BufferedReader(new FileReader(nodeIdFile))) {
                 String line = bufferedReader.readLine();
-                localNodeId = Optional.of(line.split("=")[1].trim().toLowerCase());
+                localNodeId = line.split("=")[1].trim().toLowerCase();
                 log.info("setupLocalNodeId succeeded, node id is {}", localNodeId);
-            } catch (Exception e) {
-                log.warn("setupLocalNodeId failed", e);
+            } catch (IOException e) {
+                log.error("setupLocalNodeId failed", e);
+                throw new IllegalStateException(e.getCause());
             }
         } else {
-            log.warn("setupLocalNodeId failed, because nodeId file path is missing!");
+            log.error("setupLocalNodeId failed, because nodeId file path is missing!");
+            // For testing purpose, it uses the default host to assign node id
+            if (getLocalHost().equals(DefaultClusterConfig.getDefaultHost())) {
+                localNodeId = DefaultClusterConfig.getDefaultNodeId(localEndpoint);
+                if (localNodeId != null) {
+                    log.info("setupLocalNodeId failed, using default node id {} for test", localNodeId);
+                } else {
+                    throw new IllegalStateException("SetupLocalNodeId failed for testing");
+                }
+            } else {
+                throw new IllegalArgumentException("NodeId file path is missing");
+            }
+        }
+    }
+
+    private void resetReplicationStatusTableWithRetry() {
+        try {
+            IRetry.build(IntervalRetry.class, () -> {
+                try {
+                    logReplicationMetadataManager.resetReplicationStatus();
+                } catch (TransactionAbortedException tae) {
+                    log.error("Error while attempting to resetReplicationStatusTable in DiscoveryService's role change", tae);
+                    throw new RetryNeededException();
+                }
+
+                log.debug("resetReplicationStatusTable succeeds");
+                return null;
+            }).run();
+        } catch (InterruptedException e) {
+            log.error("Unrecoverable exception when attempting to resetReplicationStatusTable in DiscoveryService's role change.", e);
+            throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
 }

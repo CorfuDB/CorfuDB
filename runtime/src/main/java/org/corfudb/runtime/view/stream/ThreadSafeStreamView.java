@@ -24,20 +24,7 @@ public class ThreadSafeStreamView implements IStreamView {
     public ThreadSafeStreamView(final CorfuRuntime runtime,
                                  final UUID streamId,
                                  @Nonnull final StreamOptions options) {
-        if (runtime.getParameters().isFollowBackpointersEnabled()) {
-            stream = new BackpointerStreamView(runtime, streamId, options);
-        } else {
-            stream = new AddressMapStreamView(runtime, streamId, options);
-        }
-    }
-
-    public ThreadSafeStreamView(final CorfuRuntime runtime,
-                                 final UUID streamId) {
-        if (runtime.getParameters().isFollowBackpointersEnabled()) {
-            stream = new BackpointerStreamView(runtime, streamId, StreamOptions.DEFAULT);
-        } else {
-            stream = new AddressMapStreamView(runtime, streamId, StreamOptions.DEFAULT);
-        }
+        stream = new AddressMapStreamView(runtime, streamId, options);
     }
 
     @Override
@@ -90,6 +77,11 @@ public class ThreadSafeStreamView implements IStreamView {
     @Override
     public synchronized List<ILogData> remainingUpTo(long maxGlobal) {
         return stream.remainingUpTo(maxGlobal);
+    }
+
+    @Override
+    public synchronized List<ILogData> remainingAtMost(int maxEntries) {
+        return stream.remainingAtMost(maxEntries);
     }
 
     @Override

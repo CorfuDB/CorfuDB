@@ -20,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.management.ClusterStateContext;
 import org.corfudb.infrastructure.management.ReconfigurationEventHandler;
 import org.corfudb.infrastructure.orchestrator.Orchestrator;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.ClusterState;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.SerializerException;
@@ -99,7 +101,7 @@ public class ManagementServerTest {
      * @param ignoreEpoch       indicates if the message is epoch aware
      * @return                  the corresponding HeaderMsg
      */
-    private HeaderMsg getBasicHeader(boolean ignoreClusterId, boolean ignoreEpoch) {
+    private HeaderMsg getBasicHeader(ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         return getHeaderMsg(requestCounter.incrementAndGet(), PriorityLevel.NORMAL, 1L,
                 getUuidMsg(DEFAULT_UUID), getUuidMsg(DEFAULT_UUID), ignoreClusterId, ignoreEpoch);
     }
@@ -203,7 +205,7 @@ public class ManagementServerTest {
     @Test
     public void testOrchestratorRequest() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getQueryWorkflowRequestMsg(DEFAULT_UUID)
         );
 
@@ -221,7 +223,7 @@ public class ManagementServerTest {
         // Here we do not use the API to facilitate creating a scenario where
         // this exception can occur.
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 RequestPayloadMsg.newBuilder()
                     .setBootstrapManagementRequest(
                             BootstrapManagementRequestMsg.newBuilder()
@@ -261,7 +263,7 @@ public class ManagementServerTest {
     @Test
     public void testBootstrapManagementNullClusterId() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getBootstrapManagementRequestMsg(getBasicLayout(1L, null))
         );
 
@@ -289,7 +291,7 @@ public class ManagementServerTest {
     @Test
     public void testBootstrapManagementAlreadyBootstrapped() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getBootstrapManagementRequestMsg(getBasicLayout(1L, DEFAULT_UUID))
         );
 
@@ -317,7 +319,7 @@ public class ManagementServerTest {
     public void testBootstrapManagement() {
         final Layout layout = getBasicLayout(1L, DEFAULT_UUID);
         RequestMsg request = getRequestMsg(
-                getBasicHeader(true, true),
+                getBasicHeader(ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 getBootstrapManagementRequestMsg(layout)
         );
 
@@ -344,7 +346,7 @@ public class ManagementServerTest {
     @Test
     public void testManagementLayoutNotBootstrapped() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getManagementLayoutRequestMsg()
         );
 
@@ -363,7 +365,7 @@ public class ManagementServerTest {
     public void testManagementLayout() {
         final Layout layout = getBasicLayout(1L, DEFAULT_UUID);
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getManagementLayoutRequestMsg()
         );
 
@@ -390,7 +392,7 @@ public class ManagementServerTest {
     @Test
     public void testQueryNode() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, false),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.CHECK),
                 getQueryNodeRequestMsg()
         );
 
@@ -421,7 +423,7 @@ public class ManagementServerTest {
     @Test
     public void testReportFailureNotBootstrapped() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getReportFailureRequestMsg(1L, new HashSet<>(Collections.singletonList(NODES.get(1))))
         );
 
@@ -444,7 +446,7 @@ public class ManagementServerTest {
     @Test
     public void testReportFailureOldPolling() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getReportFailureRequestMsg(0L, new HashSet<>(Collections.singletonList(NODES.get(1))))
         );
 
@@ -475,7 +477,7 @@ public class ManagementServerTest {
     public void testReportFailure() {
         final String UNRESPONSIVE_NODE = "localhost:9003";
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getReportFailureRequestMsg(1L, new HashSet<>(Arrays.asList(NODES.get(1), UNRESPONSIVE_NODE)))
         );
 
@@ -536,7 +538,7 @@ public class ManagementServerTest {
     @Test
     public void testHealFailureNotBootstrapped() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getHealFailureRequestMsg(1L, new HashSet<>(Collections.singletonList(NODES.get(1))))
         );
 
@@ -559,7 +561,7 @@ public class ManagementServerTest {
     @Test
     public void testHealFailureOldPolling() {
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getHealFailureRequestMsg(0L, new HashSet<>(Collections.singletonList(NODES.get(1))))
         );
 
@@ -590,7 +592,7 @@ public class ManagementServerTest {
     public void testHealFailure() {
         final String UNRESPONSIVE_NODE = "localhost:9003";
         RequestMsg request = getRequestMsg(
-                getBasicHeader(false, true),
+                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
                 getHealFailureRequestMsg(1L, new HashSet<>(Arrays.asList(NODES.get(1), UNRESPONSIVE_NODE)))
         );
 

@@ -1,5 +1,6 @@
 package org.corfudb.protocols.wireprotocol;
 
+import com.google.protobuf.TextFormat;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufOutputStream;
 import io.netty.channel.ChannelHandlerContext;
@@ -10,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
-import static org.corfudb.protocols.CorfuProtocolCommon.MessageMarker.LEGACY_MSG_MARK;
 import static org.corfudb.protocols.CorfuProtocolCommon.MessageMarker.PROTO_REQUEST_MSG_MARK;
 import static org.corfudb.protocols.CorfuProtocolCommon.MessageMarker.PROTO_RESPONSE_MSG_MARK;
 
@@ -34,12 +34,7 @@ public class NettyCorfuMessageEncoder extends MessageToByteEncoder<Object> {
     @Override
     protected void encode(ChannelHandlerContext channelHandlerContext, Object object, ByteBuf byteBuf) {
         try {
-            if (object instanceof CorfuMsg) {
-                CorfuMsg corfuMsg = (CorfuMsg) object;
-                // Temporary -- Marks the Corfu msg as legacy.
-                byteBuf.writeByte(LEGACY_MSG_MARK.asByte());
-                corfuMsg.serialize(byteBuf);
-            } else if (object instanceof RequestMsg) {
+            if (object instanceof RequestMsg) {
                 RequestMsg request = (RequestMsg) object;
                 try (ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(byteBuf)) {
                     try {
@@ -48,7 +43,8 @@ public class NettyCorfuMessageEncoder extends MessageToByteEncoder<Object> {
                         request.writeTo(requestOutputStream);
                     } catch (IOException e) {
                         log.warn("encode[{}]: Exception occurred when encoding request {}, caused by {}",
-                                request.getHeader().getRequestId(), request.getHeader(), e.getCause(), e);
+                                request.getHeader().getRequestId(), TextFormat.shortDebugString(request.getHeader()),
+                                e.getCause(), e);
                     }
                 }
             } else if (object instanceof ResponseMsg) {
@@ -61,7 +57,8 @@ public class NettyCorfuMessageEncoder extends MessageToByteEncoder<Object> {
                         response.writeTo(responseOutputStream);
                     } catch (IOException e) {
                         log.warn("encode[{}]: Exception occurred when encoding response {}, caused by {}",
-                                response.getHeader().getRequestId(), response.getHeader(), e.getCause(), e);
+                                response.getHeader().getRequestId(), TextFormat.shortDebugString(response.getHeader()),
+                                e.getCause(), e);
                     }
                 }
             } else {

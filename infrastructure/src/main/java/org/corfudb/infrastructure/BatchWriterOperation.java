@@ -1,11 +1,9 @@
 package org.corfudb.infrastructure;
 
 import java.util.concurrent.CompletableFuture;
-
 import lombok.Data;
-
 import lombok.ToString;
-import org.corfudb.protocols.wireprotocol.CorfuPayloadMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 
 /**
  * This container is used by the logunit to add work to the batch writer. Its also used
@@ -26,7 +24,7 @@ public class BatchWriterOperation<T> {
     }
 
     private final Type type;
-    private final CorfuPayloadMsg msg;
+    private final RequestMsg request;
     private T resultValue;
     private final CompletableFuture<T> futureResult = new CompletableFuture<>();
 

@@ -1,16 +1,24 @@
 package org.corfudb.runtime.view.stream;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.protocols.service.CorfuProtocolLogReplication.extractOpaqueEntries;
+import static org.corfudb.protocols.service.CorfuProtocolLogReplication.generatePayload;
 
 
 import com.google.common.reflect.TypeToken;
+
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import lombok.extern.slf4j.Slf4j;
+import org.assertj.core.api.Assertions;
 import org.corfudb.CustomSerializer;
 import org.corfudb.protocols.logprotocol.OpaqueEntry;
+import org.corfudb.protocols.service.CorfuProtocolLogReplication;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.LogReplication;
 import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.exceptions.SerializerException;
@@ -62,6 +70,42 @@ public class OpaqueStreamTest extends AbstractViewTest {
             log.debug(entry.getVersion() + " " + entry.getEntries());
         });
 
+    }
+
+    /**
+     * Ensure that {@link CorfuProtocolLogReplication#extractOpaqueEntries} and
+     * {@link CorfuProtocolLogReplication#generatePayload} are inverse of one another.
+     */
+    @Test
+    public void extractAndGenerate() {
+        CorfuRuntime runtime = getDefaultRuntime();
+        ISerializer customSerializer = new CustomSerializer((byte) (Serializers.SYSTEM_SERIALIZERS_COUNT + 2));
+        Serializers.registerSerializer(customSerializer);
+
+        UUID streamId = UUID.randomUUID();
+
+        CorfuTable<Integer, Integer> map = runtime.getObjectsView()
+                .build()
+                .setStreamID(streamId)
+                .setTypeToken(new TypeToken<CorfuTable<Integer, Integer>>() {})
+                .setSerializer(customSerializer)
+                .open() ;
+
+        final int entryCount = 3;
+        runtime.getObjectsView().TXBegin();
+        for (int key = 0; key < entryCount; key++) {
+            map.put(key, key);
+        }
+        runtime.getObjectsView().TXEnd();
+
+        Serializers.removeSerializer(customSerializer);
+
+        CorfuRuntime newRuntime = getNewRuntime(getDefaultNode()).connect();
+
+        IStreamView streamView = newRuntime.getStreamsView().get(streamId);
+        OpaqueStream opaqueStream = new OpaqueStream(newRuntime, streamView);
+        List<OpaqueEntry> entries = opaqueStream.streamUpTo(Integer.MAX_VALUE).collect(Collectors.toList());
+        Assertions.assertThat(extractOpaqueEntries(generatePayload(entries)).size()).isEqualTo(entries.size());
     }
 
     @Test

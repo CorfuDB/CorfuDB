@@ -2,10 +2,7 @@ package org.corfudb.infrastructure;
 
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.DEFAULT_MAX_NUM_MSG_PER_BATCH;
 import static org.corfudb.infrastructure.logreplication.LogReplicationConfig.MAX_DATA_MSG_SIZE_SUPPORTED;
-import static org.corfudb.util.MetricsUtils.isMetricsReportingSetUp;
 
-
-import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.netty.channel.EventLoopGroup;
@@ -33,16 +30,15 @@ import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.infrastructure.datastore.DataStore;
 import org.corfudb.infrastructure.datastore.KvDataStore.KvRecord;
 import org.corfudb.infrastructure.paxos.PaxosDataStore;
-import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.failuredetector.FailureDetectorMetrics;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.WrongEpochException;
+import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.view.ConservativeFailureHandlerPolicy;
 import org.corfudb.runtime.view.IReconfigurationHandlerPolicy;
 import org.corfudb.runtime.view.Layout;
 import org.corfudb.runtime.view.Layout.LayoutSegment;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.NodeLocator;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.utils.lock.Lock;
@@ -153,9 +149,6 @@ public class ServerContext implements AutoCloseable {
     private final String localEndpoint;
 
     @Getter
-    private static final MetricRegistry metrics = new MetricRegistry();
-
-    @Getter
     private final Set<String> dsFilePrefixesForCleanup =
             Sets.newHashSet(PaxosDataStore.PREFIX_PHASE_1, PaxosDataStore.PREFIX_PHASE_2, PREFIX_LAYOUTS);
 
@@ -186,31 +179,21 @@ public class ServerContext implements AutoCloseable {
         nodeLocator = NodeLocator
                 .parseString(serverConfig.get("--address") + ":" + serverConfig.get("<port>"));
         localEndpoint = nodeLocator.toEndpointUrl();
-
-        // Metrics setup & reporting configuration
-        if (!isMetricsReportingSetUp(metrics)) {
-            MetricsUtils.metricsReportingSetup(metrics);
-        }
     }
 
     int getBaseServerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--base-server-threads");
-        return threadCount == null ? 1 : threadCount;
-    }
-
-    int getLayoutServerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--layout-server-threads");
-        return threadCount == null ? 1 : threadCount;
+        int threadCount = Integer.parseInt(getServerConfig(String.class, "--base-server-threads"));
+        return threadCount == 0 ? 1 : threadCount;
     }
 
     public int getLogunitThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--logunit-threads");
-        return threadCount == null ? Runtime.getRuntime().availableProcessors() * 2 : threadCount;
+        int threadCount = Integer.parseInt(getServerConfig(String.class, "--logunit-threads"));
+        return threadCount == 0 ? Runtime.getRuntime().availableProcessors() * 2 : threadCount;
     }
 
     public int getManagementServerThreadCount() {
-        Integer threadCount = getServerConfig(Integer.class, "--management-server-threads");
-        return threadCount == null ? 4 : threadCount;
+        int threadCount = Integer.parseInt(getServerConfig(String.class, "--management-server-threads"));
+        return threadCount == 0 ? 4 : threadCount;
     }
 
     public String getPluginConfigFilePath() {
@@ -268,7 +251,7 @@ public class ServerContext implements AutoCloseable {
      * @return
      */
     public int getLogReplicationMaxDataMessageSize() {
-        String val = getServerConfig(String.class, "--max-data-message-size");
+        String val = getServerConfig(String.class, "--max-replication-data-message-size");
         return val == null ? MAX_DATA_MSG_SIZE_SUPPORTED : Integer.parseInt(val);
     }
 

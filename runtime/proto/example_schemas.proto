@@ -20,8 +20,8 @@ message Uuid {
 }
 
 message ExampleValue {
-    option (org.corfudb.runtime.table_schema).stream_tag = "searchStreamer";
-    option (org.corfudb.runtime.table_schema).stream_tag = "slowStreamer";
+    option (org.corfudb.runtime.table_schema).stream_tag = "search_streamer";
+    option (org.corfudb.runtime.table_schema).stream_tag = "slow_streamer";
     option (org.corfudb.runtime.table_schema).requires_backup_support = true;
     option (org.corfudb.runtime.table_schema).is_federated = true;
 
@@ -29,8 +29,8 @@ message ExampleValue {
     fixed64 anotherKey = 2 [(org.corfudb.runtime.schema).secondary_key = true];
     Uuid uuid = 3 [(org.corfudb.runtime.schema).secondary_key = true];
     fixed64 entryIndex = 4;
-    NonPrimitiveValue non_primitive_field_level_0 = 5 [(org.corfudb.runtime.schema).nested_secondary_keys =
-                                                   "non_primitive_field_level_0.key_1_level_1, non_primitive_field_level_0.key_2_level_1.key_1_level_2"];
+    NonPrimitiveValue non_primitive_field_level_0 = 5 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "non_primitive_field_level_0.key_1_level_1"},
+                                                      (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "non_primitive_field_level_0.key_2_level_1.key_1_level_2"}];
 }
 
 message NonPrimitiveValue {
@@ -45,30 +45,30 @@ message NonPrimitiveNestedValue {
 
 message InvalidExampleValue {
     string field1 = 1;
-    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_keys =
-                                                   "field1.key1Level1, field2.key2Level1.key1Level2"];
+    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field1.key1Level1"},
+                                 (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2.key2Level1.key1Level2"}];
 }
 
 message InvalidNestedSecondaryIndex {
     string field1 = 1;
-    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_keys =
-                                  "field2.key_1_level_1, field2.key_2_level_1.deprecated"];
+    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2.key_1_level_1"},
+                                 (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2.key_2_level_1.deprecated"}];
 }
 
 message InvalidFullNestedSecondaryIndex {
     string field1 = 1;
-    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_keys =
-                                  "field2.key_1_level_1.key_1_level_2, field2.key_2_level_1.key_1_level_2"];
+    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2.key_1_level_1.key_1_level_2"},
+                                 (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2.key_2_level_1.key_1_level_2"}];
 }
 
 message NotNestedSecondaryIndex {
     string field1 = 1;
-    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_keys = "field2"];
-    fixed64 field3 = 3 [(org.corfudb.runtime.schema).nested_secondary_keys = "field3"];
+    NonPrimitiveValue field2 = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "field2"}];
+    fixed64 field3 = 3 [(org.corfudb.runtime.schema).nested_secondary_key = {index_path: "field3"}];
 }
 
 message ClassRoom {
-    repeated Student students = 1 [(org.corfudb.runtime.schema).nested_secondary_keys = "students.age"];
+    repeated Student students = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "students.age"}];
     Infrastructure classInfra = 2;
 }
 
@@ -80,7 +80,38 @@ message Student {
 message Person {
     string name = 1;
     fixed64 age = 2;
-    PhoneNumber phoneNumber = 3 [(org.corfudb.runtime.schema).nested_secondary_keys = "phoneNumber.mobile"];
+    PhoneNumber phoneNumber = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "phoneNumber.mobile"}];
+    Children children = 4;
+}
+
+message InvalidAdultDefaultIndexName {
+    Person person = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.age"},
+                      (org.corfudb.runtime.schema).nested_secondary_key = { index_path:"person.children.child.age"}];
+    Company work = 2;
+}
+
+message InvalidAdultCustomIndexName {
+    Person person = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.age" index_name: "howOld"},
+                      (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.children.child.age" index_name: "howOld"}];
+    Company work = 2;
+}
+
+message Adult {
+    Person person = 1 [
+                       // Default Index Name will be 'age'
+                       (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.age"},
+                       // Explicit (custom) Index Name
+                       (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.children.child.age" index_name: "kidsAge" }];
+    Company work = 2;
+}
+
+message Children {
+    repeated Child child = 1;
+}
+
+message Child {
+    string name = 1;
+    fixed64 age = 2;
 }
 
 message PhoneNumber {
@@ -89,11 +120,11 @@ message PhoneNumber {
 }
 
 message Office {
-    repeated Department departments = 1 [(org.corfudb.runtime.schema).nested_secondary_keys = "departments.members.phoneNumbers"];
+    repeated Department departments = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "departments.members.phoneNumbers"}];
 }
 
 message Company {
-    repeated Office office = 1 [(org.corfudb.runtime.schema).nested_secondary_keys = "office.departments"];
+    repeated Office office = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "office.departments"}];
 }
 
 message Department {
@@ -107,7 +138,8 @@ message Member {
 }
 
 message School {
-    repeated ClassRoom classRooms = 1 [(org.corfudb.runtime.schema).nested_secondary_keys = "classRooms.classInfra.numberDesks, classRooms.classInfra.others"];
+    repeated ClassRoom classRooms = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "classRooms.classInfra.numberDesks"},
+                                      (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "classRooms.classInfra.others"}];
 }
 
 message Infrastructure {
@@ -117,7 +149,7 @@ message Infrastructure {
 }
 
 message Network {
-    repeated Device devices = 1 [(org.corfudb.runtime.schema).nested_secondary_keys = "devices.router"];
+    repeated Device devices = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "devices.router"}];
 }
 
 message Device {
@@ -129,4 +161,49 @@ message Router {
     repeated string interfaces = 2;
     string cpu = 3;
     string ram = 4;
+}
+
+message ContactBook {
+    repeated Contact contacts = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "contacts.number"},
+                                  (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "contacts.address.city"},
+                                  (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "contacts.number.mobile"},
+                                  (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "contacts.photo.file"}];
+    ContactBookId id = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "id.uuid"},
+                          (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "id.name"}];
+    oneof type {
+        // If physical Contact Book, brand
+        string brand = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "brand"}];
+        // If virtual Contact Book, application for contacts
+        string application = 4 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "application"}];
+    }
+}
+
+message ContactBookId {
+    oneof identifier {
+        string uuid = 1;
+        string name = 2;
+    }
+}
+
+message Contact {
+    string name = 1;
+    oneof contactInformation {
+        PhoneNumber number = 2;
+        Address address = 3;
+    }
+    Photo photo = 4;
+}
+
+message Photo {
+    oneof format {
+        string file = 1;
+        string description = 2;
+    }
+}
+
+message Address {
+    fixed64 number = 1;
+    string city = 2;
+    string street = 3;
+    string unit = 4;
 }

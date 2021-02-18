@@ -76,7 +76,7 @@ public class SequencerView extends AbstractView {
     }
 
     /**
-     * Return the next token in the sequencer for the global tail or the tails
+     * Return the current global tail token in the sequencer or the tails
      * of multiple streams.
      *
      * @param streamIds the streams to query

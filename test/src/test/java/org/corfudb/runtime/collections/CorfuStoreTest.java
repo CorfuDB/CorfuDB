@@ -4,7 +4,6 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Message;
-
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
@@ -449,10 +448,8 @@ public class CorfuStoreTest extends AbstractViewTest {
                 .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTag(0);
         String streamTag2 = SampleSchema.SampleTableAMsg.getDescriptor()
                 .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTag(1);
-        assertThat(streamTag1).isEqualTo("searchStreamer");
-        assertThat(streamTag2).isEqualTo("slowStreamer");
-
-        log.debug(streamTag1+","+streamTag2);
+        assertThat(streamTag1).isEqualTo("sample_streamer_1");
+        assertThat(streamTag2).isEqualTo("sample_streamer_2");
 
         final TableRegistry tableRegistry = corfuRuntime.getTableRegistry();
         final CorfuStoreMetadata.TableName tableNameProto = CorfuStoreMetadata.TableName.newBuilder()
@@ -460,6 +457,8 @@ public class CorfuStoreTest extends AbstractViewTest {
 
         assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getStreamTag(0)).isEqualTo(streamTag1);
         assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getStreamTag(1)).isEqualTo(streamTag2);
+
+        assertThat(tableRegistry.getRegistryTable().get(tableNameProto).getMetadata().getTableOptions().getOwnershipValidation()).isTrue();
     }
 
     /**

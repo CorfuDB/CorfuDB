@@ -1,14 +1,13 @@
 package org.corfudb.infrastructure;
 
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
@@ -29,13 +28,6 @@ import java.util.Optional;
 @Slf4j
 @ChannelHandler.Sharable
 public class NettyServerRouter extends ChannelInboundHandlerAdapter implements IServerRouter {
-
-    /**
-     * @deprecated [RM]
-     * This map stores the mapping from message type to netty server handler.
-     */
-    @Deprecated
-    private final Map<CorfuMsgType, AbstractServer> handlerMap;
 
     /**
      * This map stores the mapping from message types to server handler.
@@ -68,16 +60,9 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         this.serverContext = serverContext;
         this.serverEpoch = serverContext.getServerEpoch();
         this.servers = servers;
-        handlerMap = new EnumMap<>(CorfuMsgType.class);
         requestTypeHandlerMap = new EnumMap<>(PayloadCase.class);
 
         servers.forEach(server -> {
-            try {
-                server.getHandler().getHandledTypes().forEach(handledType -> handlerMap.put(handledType, server));
-            } catch (UnsupportedOperationException ex) {
-                log.error("No registered CorfuMsg handler for server {}", server, ex);
-            }
-
             server.getHandlerMethods().getHandledTypes().forEach(handledType ->
                         requestTypeHandlerMap.put(handledType, server));
         });
@@ -109,21 +94,6 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
     }
 
     /**
-     * @deprecated [RM]
-     * Send a netty message through this router, setting the fields in the outgoing message.
-     *
-     * @param ctx    Channel handler context to use.
-     * @param inMsg  Incoming message to respond to.
-     * @param outMsg Outgoing message.
-     */
-    @Deprecated
-    public void sendResponse(ChannelHandlerContext ctx, CorfuMsg inMsg, CorfuMsg outMsg) {
-        outMsg.copyBaseFields(inMsg);
-        ctx.writeAndFlush(outMsg, ctx.voidPromise());
-        log.trace("Sent response: {}", outMsg);
-    }
-
-    /**
      * Send a response message through this router.
      *
      * @param response The response message to send.
@@ -133,7 +103,7 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
         ctx.writeAndFlush(response, ctx.voidPromise());
 
         if(log.isTraceEnabled()) {
-            log.trace("Sent response: {}", response);
+            log.trace("Sent response: {}", TextFormat.shortDebugString(response));
         }
     }
 
@@ -150,56 +120,26 @@ public class NettyServerRouter extends ChannelInboundHandlerAdapter implements I
      */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        if (msg instanceof CorfuMsg) {
-            // The incoming message should have been transformed to a CorfuMsg earlier in the pipeline.
-            CorfuMsg m = ((CorfuMsg) msg);
-            // We get the handler for this message from the map
-            AbstractServer handler = handlerMap.get(m.getMsgType());
-            if (handler == null) {
-                // The message was unregistered, we are dropping it.
-                log.warn("channelRead: Received unregistered message {}, dropping", m);
-            } else {
-                if (messageIsValid(m, ctx)) {
-                    // Route the message to the handler.
-                    if (log.isTraceEnabled()) {
-                        log.trace("channelRead: Message routed to {}: {}", handler.getClass().getSimpleName(), msg);
-                    }
+        RequestMsg request = ((RequestMsg) msg);
+        RequestPayloadMsg payload = request.getPayload();
 
-                    try {
-                        handler.handleMessage(m, ctx, this);
-                    } catch (Throwable t) {
-                        log.error("channelRead: Handling {} failed due to {}:{}",
-                                m != null ? m.getMsgType() : "UNKNOWN",
-                                t.getClass().getSimpleName(),
-                                t.getMessage(),
-                                t);
-                    }
-                }
-            }
-        } else if (msg instanceof RequestMsg) {
-            RequestMsg request = ((RequestMsg) msg);
-            RequestPayloadMsg payload = request.getPayload();
-
-            AbstractServer handler = requestTypeHandlerMap.get(payload.getPayloadCase());
-            if (handler == null) {
-                log.warn("channelRead: Received unregistered request {}, dropping", payload.getPayloadCase());
-            } else {
-                if (validateRequest(request, ctx)) {
-                    if (log.isTraceEnabled()) {
-                        log.trace("channelRead: Request routed to {}: {}",
-                                handler.getClass().getSimpleName(), request);
-                    }
-
-                    try {
-                        handler.handleMessage(request, ctx, this);
-                    } catch (Throwable t) {
-                        log.error("channelRead: Handling {} failed due to {}:{}",
-                                payload.getPayloadCase(), t.getClass().getSimpleName(), t.getMessage(), t);
-                    }
-                }
-            }
+        AbstractServer handler = requestTypeHandlerMap.get(payload.getPayloadCase());
+        if (handler == null) {
+            log.warn("channelRead: Received unregistered request {}, dropping", payload.getPayloadCase());
         } else {
-            log.error("channelRead: Unknown message of class {} received", msg.getClass());
+            if (validateRequest(request, ctx)) {
+                if (log.isTraceEnabled()) {
+                    log.trace("channelRead: Request routed to {}: {}",
+                            handler.getClass().getSimpleName(), TextFormat.shortDebugString(request));
+                }
+
+                try {
+                    handler.handleMessage(request, ctx, this);
+                } catch (Throwable t) {
+                    log.error("channelRead: Handling {} failed due to {}:{}",
+                            payload.getPayloadCase(), t.getClass().getSimpleName(), t.getMessage(), t);
+                }
+            }
         }
     }
 

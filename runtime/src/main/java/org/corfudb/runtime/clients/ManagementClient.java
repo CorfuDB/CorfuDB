@@ -5,6 +5,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 import javax.annotation.Nonnull;
+
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.NodeState;
 import org.corfudb.protocols.wireprotocol.orchestrator.CreateWorkflowResponse;
 import org.corfudb.protocols.wireprotocol.orchestrator.QueryResponse;
@@ -46,7 +49,7 @@ public class ManagementClient extends AbstractClient {
      * bootstrap was successful, false otherwise.
      */
     public CompletableFuture<Boolean> bootstrapManagement(Layout l) {
-        return sendRequestWithFuture(getBootstrapManagementRequestMsg(l), true, true);
+        return sendRequestWithFuture(getBootstrapManagementRequestMsg(l), ClusterIdCheck.IGNORE, EpochCheck.IGNORE);
     }
 
     /**
@@ -57,7 +60,7 @@ public class ManagementClient extends AbstractClient {
      * @return               A future which will return TRUE if completed successfully else returns FALSE.
      */
     public CompletableFuture<Boolean> handleFailure(long detectorEpoch, Set<String> failedNodes) {
-        return sendRequestWithFuture(getReportFailureRequestMsg(detectorEpoch, failedNodes), false, true);
+        return sendRequestWithFuture(getReportFailureRequestMsg(detectorEpoch, failedNodes), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
@@ -68,11 +71,11 @@ public class ManagementClient extends AbstractClient {
      * @return               A future which will be return TRUE if completed successfully else returns FALSE.
      */
     public CompletableFuture<Boolean> handleHealing(long detectorEpoch, Set<String> healedNodes) {
-        return sendRequestWithFuture(getHealFailureRequestMsg(detectorEpoch, healedNodes), false, true);
+        return sendRequestWithFuture(getHealFailureRequestMsg(detectorEpoch, healedNodes), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     public CompletableFuture<NodeState> sendNodeStateRequest() {
-        return sendRequestWithFuture(getQueryNodeRequestMsg(), false, false);
+        return sendRequestWithFuture(getQueryNodeRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.CHECK);
     }
 
     /**
@@ -81,7 +84,7 @@ public class ManagementClient extends AbstractClient {
      * @return A future which returns the layout persisted by the management server on completion.
      */
     public CompletableFuture<Layout> getLayout() {
-        return sendRequestWithFuture(getManagementLayoutRequestMsg(), false, true);
+        return sendRequestWithFuture(getManagementLayoutRequestMsg(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
     }
 
     /**
@@ -94,7 +97,7 @@ public class ManagementClient extends AbstractClient {
         RequestPayloadMsg payload = getAddNodeRequestMsg(endpoint);
 
         return CFUtils.getUninterruptibly(
-                sendRequestWithFuture(payload, true, true),
+                sendRequestWithFuture(payload, ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 TimeoutException.class
         );
     }
@@ -120,7 +123,7 @@ public class ManagementClient extends AbstractClient {
                 stripeIndex, isLayoutServer, isSequencerServer, isLogUnitServer);
 
         return CFUtils.getUninterruptibly(
-                sendRequestWithFuture(payload, true, true),
+                sendRequestWithFuture(payload, ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 TimeoutException.class
         );
     }
@@ -136,7 +139,7 @@ public class ManagementClient extends AbstractClient {
         RequestPayloadMsg payload = getRestoreRedundancyMergeSegmentsRequestMsg(endpoint);
 
         return CFUtils.getUninterruptibly(
-                sendRequestWithFuture(payload, true, true),
+                sendRequestWithFuture(payload, ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 TimeoutException.class
         );
     }
@@ -151,7 +154,7 @@ public class ManagementClient extends AbstractClient {
         RequestPayloadMsg payload = getQueryWorkflowRequestMsg(workflowId);
 
         return CFUtils.getUninterruptibly(
-                sendRequestWithFuture(payload, true, true),
+                sendRequestWithFuture(payload, ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 TimeoutException.class
         );
     }
@@ -166,7 +169,7 @@ public class ManagementClient extends AbstractClient {
         RequestPayloadMsg payload = getRemoveNodeRequestMsg(endpoint);
 
         return CFUtils.getUninterruptibly(
-                sendRequestWithFuture(payload, true, true),
+                sendRequestWithFuture(payload, ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 TimeoutException.class
         );
     }
@@ -183,7 +186,7 @@ public class ManagementClient extends AbstractClient {
         RequestPayloadMsg payload = getForceRemoveNodeRequestMsg(endpoint);
 
         return CFUtils.getUninterruptibly(
-                sendRequestWithFuture(payload, true, true),
+                sendRequestWithFuture(payload, ClusterIdCheck.IGNORE, EpochCheck.IGNORE),
                 TimeoutException.class
         );
     }

@@ -5,13 +5,19 @@ import com.google.common.collect.Lists;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.Address;
 
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -20,21 +26,24 @@ import java.util.UUID;
 
 import static org.corfudb.util.serializer.CorfuSerializer.corfuPayloadMagic;
 
+@Slf4j
 /**
  *
  *
  * Created by Maithem on 2/3/20.
  */
-public class OpaqueEntry {
+public class OpaqueEntry implements Serializable {
+
+    private static final int INT_BYTES = 4;
 
     private static OpaqueEntry empty = new OpaqueEntry(Address.NON_EXIST, Collections.emptyMap());
 
     @Getter
-    final Map<UUID, List<SMREntry>> entries;
+    Map<UUID, List<SMREntry>> entries;
 
     @Getter
     // TODO(Maithem): Inconsistent behavior when full-sync vs delta (for full sync the versions will change)
-    final long version;
+    long version;
 
 
     public OpaqueEntry(long version, Map<UUID, List<SMREntry>> updates) {
@@ -83,7 +92,7 @@ public class OpaqueEntry {
 
         if (logData.hasPayloadCodec()) {
             // if the payload has a codec we need to decode it before deserialization
-            ByteBuf compressedBuf = ICorfuPayload.fromBuffer(payload, ByteBuf.class);
+            ByteBuf compressedBuf = CorfuProtocolCommon.fromBuffer(payload, ByteBuf.class);
             byte[] compressedArrayBuf= new byte[compressedBuf.readableBytes()];
             compressedBuf.readBytes(compressedArrayBuf);
             payloadBuf = Unpooled.wrappedBuffer(logData.getPayloadCodecType()
@@ -128,5 +137,29 @@ public class OpaqueEntry {
                 throw new IllegalStateException("Unknown type " + entry.getType());
         }
         return new OpaqueEntry(version, res);
+    }
+
+    public static void write(FileOutputStream fileOutput, OpaqueEntry opaqueEntry) throws IOException {
+        ByteBuf byteBuf = Unpooled.buffer();
+        OpaqueEntry.serialize(byteBuf, opaqueEntry);
+        int size = byteBuf.writerIndex();
+        byte[] intBytes = ByteBuffer.allocate(INT_BYTES).putInt(size).array();
+        byte[] dataBytes = Arrays.copyOfRange(byteBuf.array(), 0, size);
+
+        fileOutput.write(intBytes);
+        fileOutput.write(dataBytes);
+    }
+
+    public static OpaqueEntry read(FileInputStream fileInput) throws IOException {
+        byte[] intBytes = new byte[INT_BYTES];
+        fileInput.read(intBytes);
+        int size = ByteBuffer.wrap(intBytes).getInt();
+
+        byte[] dataBytes = new byte[size];
+        fileInput.read(dataBytes);
+
+        ByteBuf byteBuf = Unpooled.wrappedBuffer(dataBytes);
+        OpaqueEntry opaqueEntry = OpaqueEntry.deserialize(byteBuf);
+        return opaqueEntry;
     }
 }

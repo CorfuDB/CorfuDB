@@ -8,9 +8,7 @@ import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
-import org.corfudb.common.metrics.MetricsServer;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.common.metrics.servers.PrometheusMetricsServer;
 import org.corfudb.infrastructure.logreplication.infrastructure.CorfuInterClusterReplicationServer;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
@@ -50,16 +48,17 @@ public class CorfuServer {
                     + "\n"
                     + "Usage:\n"
                     + "\tcorfu_server (-l <path>|-m) [-nsNA] [-a <address>|-q <interface-name>] "
+                    + "[--max-replication-data-message-size=<msg-size>] "
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
                     + "[--plugin=<plugin-config-file-path>]"
-                    + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
+                    + "[--base-server-threads=<base_server_threads>] "
                     + "[--log-size-quota-percentage=<max_log_size_percentage>]"
                     + "[--logunit-threads=<logunit_threads>] [--management-server-threads=<management_server_threads>]"
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
-                    + "[--metrics] [--metrics-port <metrics_port>]"
+                    + "[--metrics]"
                     + "[--snapshot-batch=<batch-size>] [--lock-lease=<lease-duration>]"
                     + "[-P <prefix>] [-R <retention>] <port>\n"
                     + "\n"
@@ -157,26 +156,23 @@ public class CorfuServer {
                     + "                                                                          "
                     + "              [default: TLSv1.1,TLSv1.2].\n"
                     + " --base-server-threads=<base_server_threads>                              "
-                    + "              Number of threads dedicated for the base server.\n          "
+                    + "              Number of threads dedicated for the base server [default: 0].\n"
                     + " --log-size-quota-percentage=<max_log_size_percentage>                    "
                     + "              The max size as percentage of underlying file-store size.\n "
                     + "              If this limit is exceeded "
                     + "              write requests will be rejected [default: 100.0].\n         "
                     + "                                                                          "
-                    + " --layout-server-threads=<layout_server_threads>                          "
-                    + "              Number of threads dedicated for the layout server.\n        "
-                    + "                                                                          "
                     + " --management-server-threads=<management_server_threads>                  "
-                    + "              Number of threads dedicated for the management server.\n"
+                    + "              Number of threads dedicated for the management server [default: 0].\n"
                     + "                                                                          "
                     + " --logunit-threads=<logunit_threads>                  "
-                    + "              Number of threads dedicated for the logunit server.\n"
+                    + "              Number of threads dedicated for the logunit server [default: 0].\n"
                     + " --metrics                                                                "
                     + "              Enable metrics provider.\n                                  "
-                    + " --metrics-port=<metrics_port>                                            "
-                    + "              Metrics provider server port [default: 9999].\n             "
                     + " --snapshot-batch=<batch-size>                                            "
                     + "              Snapshot (Full) Sync batch size (number of entries)\n       "
+                    + " --max-replication-data-message-size=<msg-size>                                       "
+                    + "              The max size of replication data message in bytes.\n   "
                     + " --lock-lease=<lease-duration>                                            "
                     + "              Lock lease duration in seconds\n                            "
                     + " -h, --help                                                               "
@@ -442,16 +438,5 @@ public class CorfuServer {
 
         println("Serving on port " + port);
         println("Data location: " + dataLocation);
-    }
-
-    /**
-     * Generate metrics server config and start server.
-     *
-     * @param opts Command line parameters.
-     */
-    private static void setupMetrics(Map<String, Object> opts) {
-        PrometheusMetricsServer.Config config = PrometheusMetricsServer.Config.parse(opts);
-        MetricsServer server = new PrometheusMetricsServer(config, ServerContext.getMetrics());
-        server.start();
     }
 }

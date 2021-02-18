@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableMap;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.util.MetricsUtils;
 
 import java.time.Duration;
 import java.util.Map;
@@ -42,8 +41,6 @@ public class RuntimeParametersBuilder {
         };
     protected volatile Runnable beforeRpcHandler = () -> {
         };
-    protected int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
-
     public RuntimeParametersBuilder tlsEnabled(boolean tlsEnabled) {
         this.tlsEnabled = tlsEnabled;
         return this;
@@ -154,11 +151,6 @@ public class RuntimeParametersBuilder {
         return this;
     }
 
-    public RuntimeParametersBuilder prometheusMetricsPort(int prometheusMetricsPort) {
-        this.prometheusMetricsPort = prometheusMetricsPort;
-        return this;
-    }
-
     public RuntimeParametersBuilder systemDownHandler(Runnable systemDownHandler) {
         this.systemDownHandler = systemDownHandler;
         return this;
@@ -193,7 +185,6 @@ public class RuntimeParametersBuilder {
         runtimeParameters.setShutdownNettyEventLoop(shutdownNettyEventLoop);
         runtimeParameters.setCustomNettyChannelOptions(customNettyChannelOptions);
         runtimeParameters.setUncaughtExceptionHandler(uncaughtExceptionHandler);
-        runtimeParameters.setPrometheusMetricsPort(prometheusMetricsPort);
         runtimeParameters.setSystemDownHandler(systemDownHandler);
         runtimeParameters.setBeforeRpcHandler(beforeRpcHandler);
         return runtimeParameters;

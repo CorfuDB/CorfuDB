@@ -3,8 +3,8 @@ package org.corfudb.infrastructure;
 import io.netty.channel.ChannelHandlerContext;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
@@ -25,17 +25,6 @@ public abstract class AbstractServer {
     private final AtomicReference<ServerState> state = new AtomicReference<>(ServerState.READY);
 
     /**
-     * @deprecated [RM]
-     * Get the message handler for this instance.
-     *
-     * @return A message handler.
-     */
-    @Deprecated
-    public HandlerMethods getHandler() {
-        throw new UnsupportedOperationException("This operation is not supported");
-    }
-
-    /**
      * Get the request handlers for this instance.
      *
      * @return The request handler methods.
@@ -52,35 +41,12 @@ public abstract class AbstractServer {
     }
 
     /**
-     * @deprecated [RM]
-     * @param msg  The incoming message.
-     * @return  True if the server is ready to handle this message, and false otherwise.
-     */
-    @Deprecated
-    public boolean isServerReadyToHandleMsg(CorfuMsg msg) {
-        throw new UnsupportedOperationException("This operation is not supported");
-    }
-
-    /**
      * Determine if the server is ready to handle a request.
      * @param request The incoming request message.
      * @return True if the server is ready to handle this request, and false otherwise.
      */
     public boolean isServerReadyToHandleMsg(RequestMsg request) {
         return getState() == ServerState.READY;
-    }
-
-    /**
-     * @deprecated [RM]
-     * A stub that handlers can override to manage their threading, otherwise
-     * the requests will be executed on the IO threads
-     * @param msg
-     * @param ctx
-     * @param r
-     */
-    @Deprecated
-    protected void processRequest(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        throw new UnsupportedOperationException("This operation is not supported");
     }
 
     /**
@@ -91,30 +57,6 @@ public abstract class AbstractServer {
      * @param r The router that took in the request.
      */
     protected abstract void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter r);
-
-
-    /**
-     * @deprecated [RM]
-     * Handle a incoming Netty message.
-     *
-     * @param msg An incoming message.
-     * @param ctx The channel handler context.
-     * @param r   The router that took in the message.
-     */
-    @Deprecated
-    public final void handleMessage(CorfuMsg msg, ChannelHandlerContext ctx, IServerRouter r) {
-        if (getState() == ServerState.SHUTDOWN) {
-            log.warn("Server received {} but is already shutdown.", msg.getMsgType().toString());
-            return;
-        }
-
-        if (!isServerReadyToHandleMsg(msg)) {
-            r.sendResponse(ctx, msg, CorfuMsgType.NOT_READY.msg());
-            return;
-        }
-
-        processRequest(msg, ctx, r);
-    }
 
     /**
      * Handle a incoming request message.
@@ -139,30 +81,8 @@ public abstract class AbstractServer {
     }
 
     private ResponseMsg getNotReadyError(HeaderMsg requestHeader) {
-        HeaderMsg responseHeader = getHeaderMsg(requestHeader, false, true);
+        HeaderMsg responseHeader = getHeaderMsg(requestHeader, ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         return getResponseMsg(responseHeader, getNotReadyErrorMsg());
-    }
-
-    /**
-     * @deprecated [RM]
-     * Handle an incoming message (not Netty specific).
-     *
-     * @param msg An incoming message.
-     * @param r   The router that took in the message.
-     */
-    @Deprecated
-    public final void handleMessage(CorfuMsg msg, IServerRouter r) {
-        if (getState() == ServerState.SHUTDOWN) {
-            log.warn("Server received {} but is already shutdown.", msg.getMsgType().toString());
-            return;
-        }
-
-        if (!isServerReadyToHandleMsg(msg)) {
-            r.sendResponse(msg, CorfuMsgType.NOT_READY.msg());
-            return;
-        }
-
-        processRequest(msg, null, r);
     }
 
     protected void setState(ServerState newState) {

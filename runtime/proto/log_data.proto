@@ -3,65 +3,13 @@ syntax = "proto3";
 package org.corfudb.runtime;
 option java_package = "org.corfudb.runtime.proto";
 
-import "rpc_common.proto";
-import "google/protobuf/wrappers.proto";
-
 /**
  * LogData and related Protobuf definitions.
  * Used by the LogUnit RPCs and ValueAdoptedErrorMsg.
  */
 
-message DataRankMsg {
-  int64 rank = 1;
-  UuidMsg id = 2;
-}
-
-// Types of metadata defined in IMetadata.java (LogUnitMetadataType).
-
-message LogUnitMetadataMsg {
-  DataRankMsg data_rank = 1;
-  repeated UuidToLongPairMsg backpointer_map = 2;
-  google.protobuf.Int64Value global_address = 3;
-  google.protobuf.Int32Value checkpoint_type = 4;
-  UuidMsg checkpoint_id = 5;
-  UuidMsg checkpointed_stream_id = 6;
-  google.protobuf.Int64Value checkpointed_stream_start_log_address = 7;
-  UuidMsg client_id = 8;
-  google.protobuf.Int64Value thread_id = 9;
-  google.protobuf.Int64Value epoch = 10;
-  google.protobuf.Int32Value codec_type_id = 11;
-}
-
-// Types of LogData defined in DataType.java
-// Note: All metadata aware.
-// Note: Currently, only DATA carries a payload.
-
-message LogDataEntryMsg {
-  bytes data = 1;
-}
-
-message LogDataEmptyMsg {
-}
-
-message LogDataHoleMsg {
-}
-
-message LogDataTrimmedMsg {
-}
-
-message LogDataRankOnlyMsg {
-}
-
 message LogDataMsg {
-  LogUnitMetadataMsg metadata = 1;
-
-  oneof payload {
-    LogDataEntryMsg log_data_entry = 11;
-    LogDataEmptyMsg log_data_empty = 12;
-    LogDataHoleMsg log_data_hole = 13;
-    LogDataTrimmedMsg log_data_trimmed = 14;
-    LogDataRankOnlyMsg log_data_rank_only = 15;
-  }
+  bytes entry = 1;
 }
 
 message ReadResponseMsg {

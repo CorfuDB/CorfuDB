@@ -2,7 +2,6 @@ package org.corfudb.infrastructure.logreplication.infrastructure;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.infrastructure.logreplication.proto.LogReplicationClusterInfo.NodeConfigurationMsg;
 
 import java.util.UUID;
@@ -23,12 +22,16 @@ public class NodeDescriptor {
     private final String clusterId;
 
     @Getter
-    private final UUID nodeId;        // Connection Identifier (APH UUID in the case of NSX)
+    private final String connectionId;    // Connection Identifier (APH UUID in the case of NSX, used by IClientChannelAdapter)
 
-    public NodeDescriptor(String host, String port, String siteId, UUID nodeId) {
+    @Getter
+    private final String nodeId;      // Represents the node's identifier as tracked by the Topology Provider
+
+    public NodeDescriptor(String host, String port, String siteId, String connectionId, String nodeId) {
         this.host = host;
         this.port = port;
         this.clusterId = siteId;
+        this.connectionId = connectionId;
         this.nodeId = nodeId;
     }
 
@@ -36,7 +39,8 @@ public class NodeDescriptor {
         NodeConfigurationMsg nodeConfig = NodeConfigurationMsg.newBuilder()
                 .setAddress(host)
                 .setPort(Integer.parseInt(port))
-                .setUuid(nodeId.toString()).build();
+                .setConnectionId(connectionId)
+                .setNodeId(nodeId).build();
         return nodeConfig;
     }
 

@@ -5,22 +5,26 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc;
-import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc.LogReplicationChannelStub;
-import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
-import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc.LogReplicationChannelBlockingStub;
+import org.corfudb.infrastructure.logreplication.LogReplicationChannelGrpc.LogReplicationChannelStub;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
+import org.corfudb.infrastructure.logreplication.infrastructure.NodeDescriptor;
+import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
 import org.corfudb.infrastructure.logreplication.transport.client.IClientChannelAdapter;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 import org.corfudb.util.NodeLocator;
 
+import javax.annotation.Nonnull;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * This is a default implementation of a custom channel for Log Replication Servers inter-communication
@@ -37,11 +41,11 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     private final Map<String, ManagedChannel> channelMap;
     private final Map<String, LogReplicationChannelBlockingStub> blockingStubMap;
     private final Map<String, LogReplicationChannelStub> asyncStubMap;
+    private final ExecutorService executorService;
 
-    private StreamObserver<CorfuMessage> requestObserver;
-    private StreamObserver<CorfuMessage> responseObserver;
+    private StreamObserver<RequestMsg> requestObserver;
+    private StreamObserver<ResponseMsg> responseObserver;
 
-    private ExecutorService executorService;
 
     /** A {@link CompletableFuture} which is completed when a connection to a remote leader is set,
      * and  messages can be sent to the remote node.
@@ -50,7 +54,10 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
     volatile CompletableFuture<Void> connectionFuture;
 
     /** Construct client for accessing LogReplicationService server using the existing channel. */
-    public GRPCLogReplicationClientChannelAdapter(String localClusterId, ClusterDescriptor remoteClusterDescriptor, LogReplicationClientRouter adapter) {
+    public GRPCLogReplicationClientChannelAdapter(
+            String localClusterId,
+            ClusterDescriptor remoteClusterDescriptor,
+            LogReplicationClientRouter adapter) {
         super(localClusterId, remoteClusterDescriptor, adapter);
 
         this.channelMap = new HashMap<>();
@@ -66,95 +73,111 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
         getRemoteClusterDescriptor().getNodesDescriptors().forEach(node -> {
             try {
                 NodeLocator nodeLocator = NodeLocator.parseString(node.getEndpoint());
-                log.info("GRPC create connection to {}:{}", nodeLocator.getHost(), nodeLocator.getPort());
+                log.info("GRPC create connection to node{}@{}:{}", node.getNodeId(), nodeLocator.getHost(), nodeLocator.getPort());
                 ManagedChannel channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort())
                         .usePlaintext()
                         .build();
-                channelMap.put(node.getEndpoint(), channel);
-                blockingStubMap.put(node.getEndpoint(), LogReplicationChannelGrpc.newBlockingStub(channel));
-                asyncStubMap.put(node.getEndpoint(), LogReplicationChannelGrpc.newStub(channel));
-                onConnectionUp(node.getEndpoint());
+                channelMap.put(node.getNodeId(), channel);
+                blockingStubMap.put(node.getNodeId(), LogReplicationChannelGrpc.newBlockingStub(channel));
+                asyncStubMap.put(node.getNodeId(), LogReplicationChannelGrpc.newStub(channel));
+                onConnectionUp(node.getNodeId());
             } catch (Exception e) {
-                onConnectionDown(node.getEndpoint());
+                onConnectionDown(node.getNodeId());
             }
         }));
     }
 
     @Override
-    public void connectAsync(String endpoint) {
+    public void connectAsync(String nodeId) {
+        Optional<String> endpoint = getRemoteClusterDescriptor().getNodesDescriptors()
+                .stream()
+                .filter(nodeDescriptor -> nodeDescriptor.getNodeId().toString().equals(nodeId))
+                .map(NodeDescriptor::getEndpoint)
+                .collect(Collectors.toList())
+                .stream()
+                .findFirst();
+        NodeLocator nodeLocator;
+        if (endpoint.isPresent()) {
+            nodeLocator = NodeLocator.parseString(endpoint.get());
+        } else {
+            throw new IllegalStateException("No endpoint found for node:" + nodeId);
+        }
         this.executorService.submit(() -> {
             try {
-                NodeLocator nodeLocator = NodeLocator.parseString(endpoint);
-                log.info("GRPC create connection to {}:{}", nodeLocator.getHost(), nodeLocator.getPort());
+                log.info("GRPC create connection to node {}@{}:{}", nodeId, nodeLocator.getHost(), nodeLocator.getPort());
                 ManagedChannel channel = ManagedChannelBuilder.forAddress(nodeLocator.getHost(), nodeLocator.getPort()).usePlaintext().build();
-                channelMap.put(endpoint, channel);
-                blockingStubMap.put(endpoint, LogReplicationChannelGrpc.newBlockingStub(channel));
-                asyncStubMap.put(endpoint, LogReplicationChannelGrpc.newStub(channel));
-                onConnectionUp(endpoint);
+                channelMap.put(nodeId, channel);
+                blockingStubMap.put(nodeId, LogReplicationChannelGrpc.newBlockingStub(channel));
+                asyncStubMap.put(nodeId, LogReplicationChannelGrpc.newStub(channel));
+                onConnectionUp(nodeId);
             } catch (Exception e) {
-                onConnectionDown(endpoint);
+                onConnectionDown(nodeId);
             }
         });
     }
 
     @Override
-    public void send(String endpoint, CorfuMessage msg) {
+    public void send(@Nonnull String nodeId, @Nonnull RequestMsg request) {
         // Check the connection future. If connected, continue with sending the message.
         // If timed out, return a exceptionally completed with the timeout.
-        switch (msg.getType()) {
-            case LOG_REPLICATION_ENTRY:
-                replicate(endpoint, msg);
+        switch (request.getPayload().getPayloadCase()) {
+            case LR_ENTRY:
+                replicate(nodeId, request);
                 break;
-            case LOG_REPLICATION_QUERY_LEADERSHIP:
-                queryLeadership(endpoint, msg);
+            case LR_LEADERSHIP_QUERY:
+                queryLeadership(nodeId, request);
                 break;
-            case LOG_REPLICATION_METADATA_REQUEST:
-                requestMetadata(endpoint, msg);
+            case LR_METADATA_REQUEST:
+                requestMetadata(nodeId, request);
                 break;
             default:
                 break;
         }
     }
 
-    private void queryLeadership(String endpoint, CorfuMessage msg) {
+    private void queryLeadership(String nodeId, RequestMsg request) {
         try {
-            if(blockingStubMap.containsKey(endpoint)) {
-                CorfuMessage response = blockingStubMap.get(endpoint).withWaitForReady().queryLeadership(msg);
+            if (blockingStubMap.containsKey(nodeId)) {
+                ResponseMsg response = blockingStubMap.get(nodeId).withWaitForReady().queryLeadership(request);
                 receive(response);
             } else {
-                log.warn("Stub not found for remote endpoint {}. Dropping message of type {}", endpoint, msg.getType());
+                log.warn("Stub not found for remote endpoint {}. Dropping message of type {}",
+                        nodeId, request.getPayload().getPayloadCase());
             }
         } catch (Exception e) {
-            log.error("Caught exception while sending message to query leadership status id {}", msg.getRequestID(), e);
-            getRouter().completeExceptionally(msg.getRequestID(), e);
+            log.error("Caught exception while sending message to query leadership status id {}",
+                    request.getHeader().getRequestId(), e);
+            getRouter().completeExceptionally(request.getHeader().getRequestId(), e);
         }
     }
 
-    private void requestMetadata(String endpoint, CorfuMessage msg) {
+    private void requestMetadata(String nodeId, RequestMsg request) {
         try {
-            if(blockingStubMap.containsKey(endpoint)) {
-                CorfuMessage response = blockingStubMap.get(endpoint).withWaitForReady().negotiate(msg);
+            if (blockingStubMap.containsKey(nodeId)) {
+                ResponseMsg response = blockingStubMap.get(nodeId).withWaitForReady().negotiate(request);
                 receive(response);
             } else {
-                log.warn("Stub not found for remote endpoint {}. Dropping message of type {}", endpoint, msg.getType());
+                log.warn("Stub not found for remote endpoint {}. Dropping message of type {}",
+                        nodeId, request.getPayload().getPayloadCase());
             }
         } catch (Exception e) {
-            log.error("Caught exception while sending message to query metadata id={}", msg.getRequestID(), e);
-            getRouter().completeExceptionally(msg.getRequestID(), e);
+            log.error("Caught exception while sending message to query metadata id={}",
+                    request.getHeader().getRequestId(), e);
+            getRouter().completeExceptionally(request.getHeader().getRequestId(), e);
         }
     }
 
-    private void replicate(String endpoint, CorfuMessage msg) {
-        if(requestObserver == null) {
-            responseObserver = new StreamObserver<CorfuMessage>() {
+    private void replicate(String nodeId, RequestMsg request) {
+        if (requestObserver == null) {
+            responseObserver = new StreamObserver<ResponseMsg>() {
                 @Override
-                public void onNext(CorfuMessage response) {
+                public void onNext(ResponseMsg response) {
                     try {
-                        log.info("Received ACK for {}", response.getRequestID());
+                        log.info("Received ACK for {}", response.getHeader().getRequestId());
                         receive(response);
                     } catch (Exception e) {
                         log.error("Caught exception while receiving ACK", e);
-                        getRouter().completeExceptionally(response.getRequestID(), e);
+                        getRouter().completeExceptionally(response.getHeader().getRequestId(), e);
                         requestObserver = null;
                     }
                 }
@@ -162,7 +185,7 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
                 @Override
                 public void onError(Throwable t) {
                     log.error("Error from response observer", t);
-                    getRouter().completeExceptionally(msg.getRequestID(), t);
+                    getRouter().completeExceptionally(request.getHeader().getRequestId(), t);
                     requestObserver = null;
                 }
 
@@ -175,17 +198,20 @@ public class GRPCLogReplicationClientChannelAdapter extends IClientChannelAdapte
 
             log.info("Initiate stub for replication");
 
-            if(asyncStubMap.containsKey(endpoint)) {
-                requestObserver = asyncStubMap.get(endpoint).replicate(responseObserver);
+            if(asyncStubMap.containsKey(nodeId)) {
+                requestObserver = asyncStubMap.get(nodeId).replicate(responseObserver);
             } else {
-                log.error("No stub found for remote endpoint {}. Message dropped type={}", endpoint, msg.getType());
+                log.error("No stub found for remote node {}@{}. Message dropped type={}",
+                        nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId),
+                        request.getPayload().getPayloadCase());
             }
         }
 
-        log.info("Send replication entry: {}", msg.getRequestID());
+        log.info("Send replication entry: {} to node {}@{}", request.getHeader().getRequestId(),
+                nodeId, getRemoteClusterDescriptor().getEndpointByNodeId(nodeId));
         if (responseObserver != null) {
             // Send log replication entries across channel
-            requestObserver.onNext(msg);
+            requestObserver.onNext(request);
         }
     }
 

@@ -55,6 +55,17 @@ public class ClientResponseHandler {
     }
 
     /**
+     * Construct a new instance of ClientResponseHandler.
+     *
+     * @param client The client that this ClientResponseHandler will register.
+     */
+    public ClientResponseHandler(IClient client, Map<PayloadCase, Handler> handlerMap) {
+        this.client = client;
+        this.handlerMap = handlerMap;
+        this.errorHandlerMap = new ConcurrentHashMap<>();
+    }
+
+    /**
      * Handle an incoming Response from server.
      *
      * @param response The Response to handle.

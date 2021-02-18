@@ -30,13 +30,6 @@ message OverwriteErrorMsg {
   int32 overwrite_cause_id = 1;
 }
 
-message DataOutrankedErrorMsg {
-}
-
-message ValueAdoptedErrorMsg {
-  repeated ReadResponseMsg response = 1;
-}
-
 message DataCorruptionErrorMsg {
   int64 address = 1;
 }
@@ -59,10 +52,8 @@ message ServerErrorMsg {
     WrongClusterErrorMsg wrong_cluster_error = 4;
     TrimmedErrorMsg trimmed_error = 5;
     OverwriteErrorMsg overwrite_error = 6;
-    DataOutrankedErrorMsg data_outranked_error = 7;
-    ValueAdoptedErrorMsg value_adopted_error = 8;
-    DataCorruptionErrorMsg data_corruption_error = 9;
-    BootstrappedErrorMsg bootstrapped_error = 10;
-    NotBootstrappedErrorMsg not_bootstrapped_error = 11;
+    DataCorruptionErrorMsg data_corruption_error = 7;
+    BootstrappedErrorMsg bootstrapped_error = 8;
+    NotBootstrappedErrorMsg not_bootstrapped_error = 9;
   }
 }

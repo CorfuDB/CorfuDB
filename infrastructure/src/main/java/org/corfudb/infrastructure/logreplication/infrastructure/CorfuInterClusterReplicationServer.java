@@ -1,19 +1,9 @@
 package org.corfudb.infrastructure.logreplication.infrastructure;
 
-import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
-
-
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.core.joran.spi.JoranException;
-import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.time.Duration;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
@@ -24,6 +14,16 @@ import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.time.Duration;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+
+import static org.corfudb.util.NetworkUtils.getAddressFromInterfaceName;
 
 /**
  * This class represents the Corfu Replication Server. This Server will be running on both ends
@@ -47,19 +47,19 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "\n"
                     + "Usage:\n"
                     + "\tlog_replication_server (-l <path>|-m) [-nsN] [-a <address>|-q <interface-name>] "
-                    + "[--max-num-snapshot-msg-per-batch=<batch-size>] "
-                    + "[--max-data-message-size=<msg-size>] "
+                    + "[--snapshot-batch=<batch-size>] "
+                    + "[--max-replication-data-message-size=<msg-size>] "
                     + "[--lock-lease=<lease-duration>]"
                     + "[-c <ratio>] [-d <level>] [-p <seconds>] "
                     + "[--plugin=<plugin-config-file-path>]"
-                    + "[--layout-server-threads=<layout_server_threads>] [--base-server-threads=<base_server_threads>] "
+                    + "[--base-server-threads=<base_server_threads>] "
                     + "[--log-size-quota-percentage=<max_log_size_percentage>]"
                     + "[--logunit-threads=<logunit_threads>] [--management-server-threads=<management_server_threads>]"
                     + "[-e [-u <keystore> -f <keystore_password_file>] [-r <truststore> -w <truststore_password_file>] "
                     + "[-b] [-g -o <username_file> -j <password_file>] "
                     + "[-k <seqcache>] [-T <threads>] [-B <size>] [-i <channel-implementation>] "
                     + "[-H <seconds>] [-I <cluster-id>] [-x <ciphers>] [-z <tls-protocols>]] "
-                    + "[--metrics] [--metrics-port <metrics_port>]"
+                    + "[--metrics]"
                     + "[-P <prefix>] [-R <retention>] <port>\n"
                     + "\n"
                     + "Options:\n"
@@ -154,29 +154,24 @@ public class CorfuInterClusterReplicationServer implements Runnable {
                     + "                                                                          "
                     + "              [default: TLSv1.1,TLSv1.2].\n"
                     + " --base-server-threads=<base_server_threads>                              "
-                    + "              Number of threads dedicated for the base server.\n          "
+                    + "              Number of threads dedicated for the base server [default: 0].\n"
                     + " --log-size-quota-percentage=<max_log_size_percentage>                    "
                     + "              The max size as percentage of underlying file-store size.\n "
                     + "              If this limit is exceeded "
                     + "              write requests will be rejected [default: 100.0].\n         "
                     + "                                                                          "
-                    + " --layout-server-threads=<layout_server_threads>                          "
-                    + "              Number of threads dedicated for the layout server.\n        "
-                    + "                                                                          "
                     + " --management-server-threads=<management_server_threads>                  "
-                    + "              Number of threads dedicated for the management server.\n"
+                    + "              Number of threads dedicated for the management server [default: 0].\n"
                     + "                                                                          "
                     + " --logunit-threads=<logunit_threads>                  "
-                    + "              Number of threads dedicated for the logunit server.\n"
+                    + "              Number of threads dedicated for the logunit server [default: 0].\n"
                     + " --metrics                                                                "
                     + "              Enable metrics provider.\n                                  "
-                    + " --metrics-port=<metrics_port>                                            "
-                    + "              Metrics provider server port [default: 9999].\n             "
                     + " --snapshot-batch=<batch-size>                                            "
                     + "              Snapshot (Full) Sync batch size.\n                          "
                     + "              The max number of messages per batch)\n                      "
                     + "                                                                          "
-                    + " --max-data-message-size=<msg-size>                                       "
+                    + " --max-replication-data-message-size=<msg-size>                                       "
                     + "              The max size of replication data message in bytes.\n   "
                     + "                                                                          "
                     + " --lock-lease=<lease-duration>                                            "

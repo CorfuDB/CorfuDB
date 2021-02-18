@@ -6,8 +6,8 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.util.Memory;
 import org.corfudb.runtime.view.Address;
-import org.corfudb.util.MetricsUtils;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Collections;
@@ -202,7 +202,7 @@ public class SequencerServerCache {
     public long byteSize() {
         log.debug("the cache has {} entries,  the object size used {}, calculated by beepSize {}",
                 size(), CONFLICTTXSTREAM_OBJ_SIZE,
-                cacheEntries.isEmpty() ? 0 : MetricsUtils.sizeOf.deepSizeOf(cacheEntries.peek()));
+                cacheEntries.isEmpty() ? 0 : Memory.sizeOf.deepSizeOf(cacheEntries.peek()));
         return size() * (ENTRY_OVERHEAD + CONFLICTTXSTREAM_OBJ_SIZE);
     }
 

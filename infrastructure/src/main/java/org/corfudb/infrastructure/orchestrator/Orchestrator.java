@@ -12,6 +12,8 @@ import org.corfudb.infrastructure.orchestrator.workflows.ForceRemoveWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.HealNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RemoveNodeWorkflow;
 import org.corfudb.infrastructure.orchestrator.workflows.RestoreRedundancyMergeSegmentsWorkflow;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
 import org.corfudb.protocols.wireprotocol.orchestrator.AddNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.ForceRemoveNodeRequest;
 import org.corfudb.protocols.wireprotocol.orchestrator.HealNodeRequest;
@@ -166,7 +168,7 @@ public class Orchestrator {
         log.trace("handleQuery[{}]: isActive={} for workflowId={}",
                 req.getHeader().getRequestId(), isActive, workflowId);
 
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response = getResponseMsg(responseHeader, getQueriedWorkflowResponseMsg(isActive));
         r.sendResponse(response, ctx);
     }
@@ -191,7 +193,7 @@ public class Orchestrator {
                                @Nonnull String endpoint) {
         final UUID id = activeWorkflows.inverse().get(endpoint);
 
-        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), false, true);
+        HeaderMsg responseHeader = getHeaderMsg(req.getHeader(), ClusterIdCheck.CHECK, EpochCheck.IGNORE);
         ResponseMsg response;
 
         if (id != null) {

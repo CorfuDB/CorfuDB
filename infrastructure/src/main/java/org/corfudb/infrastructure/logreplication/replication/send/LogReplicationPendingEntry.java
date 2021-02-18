@@ -3,7 +3,7 @@ package org.corfudb.infrastructure.logreplication.replication.send;
 import lombok.Data;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.logreplication.LogReplicationEntry;
+import org.corfudb.runtime.LogReplication.LogReplicationEntryMsg;
 
 /**
  * The element kept in the sliding window to remember the log entries sent over but hasn't been acknowledged by the
@@ -21,7 +21,7 @@ public class LogReplicationPendingEntry {
     private long currentTime = 0;
 
     @Getter
-    private LogReplicationEntry data;
+    private LogReplicationEntryMsg data;
 
     // The first time the log entry is sent over
     private long time;
@@ -29,7 +29,7 @@ public class LogReplicationPendingEntry {
     // The number of retries for this entry
     public int retry;
 
-    public LogReplicationPendingEntry(LogReplicationEntry data) {
+    public LogReplicationPendingEntry(LogReplicationEntryMsg data) {
         this.data = data;
         this.time = getCurrentTime();
         this.retry = 0;

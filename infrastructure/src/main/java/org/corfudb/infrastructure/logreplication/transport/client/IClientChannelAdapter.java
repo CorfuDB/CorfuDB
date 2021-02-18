@@ -1,11 +1,11 @@
 package org.corfudb.infrastructure.logreplication.transport.client;
 
 import lombok.Getter;
-
 import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
-import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
-import org.corfudb.runtime.Messages.CorfuMessage;
 import org.corfudb.infrastructure.logreplication.runtime.LogReplicationClientRouter;
+import org.corfudb.infrastructure.logreplication.transport.IChannelContext;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
 import javax.annotation.Nonnull;
 import java.util.Optional;
@@ -20,7 +20,6 @@ import java.util.Optional;
  * @author annym 05/15/2020
  */
 public abstract class IClientChannelAdapter {
-
 
     @Getter
     private final String localClusterId;
@@ -55,9 +54,9 @@ public abstract class IClientChannelAdapter {
     public void connectAsync() {}
 
     /**
-     * If connection is lost to a specific endpoint, attempt to reconnect to the specific endpoint.
+     * If connection is lost to a specific endpoint, attempt to reconnect to the specific node.
      */
-    public void connectAsync(String endpoint) {}
+    public void connectAsync(String nodeId) {}
 
     /**
      * Stop communication across Clusters.
@@ -74,10 +73,10 @@ public abstract class IClientChannelAdapter {
     /**
      * Send a message across the channel to a specific endpoint.
      *
-     * @param endpoint remote endpoint
-     * @param msg corfu message to be sent
+     * @param nodeId remote node id
+     * @param request corfu message to be sent
      */
-    public abstract void send(String endpoint, CorfuMessage msg);
+    public abstract void send(String nodeId, RequestMsg request);
 
     /**
      * Notify adapter of cluster change or reconfiguration.
@@ -95,7 +94,7 @@ public abstract class IClientChannelAdapter {
      *
      * @param msg received corfu message
      */
-    public void receive(CorfuMessage msg) {
+    public void receive(ResponseMsg msg) {
         getRouter().receive(msg);
     }
 
@@ -104,10 +103,10 @@ public abstract class IClientChannelAdapter {
      *
      * The implementer of the adapter must notify back on a connection being stablished.
      *
-     * @param endpoint remote endpoint for which the connection was established.
+     * @param nodeId remote node id for which the connection was established.
      */
-    public void onConnectionUp(String endpoint) {
-        getRouter().onConnectionUp(endpoint);
+    public void onConnectionUp(String nodeId) {
+        getRouter().onConnectionUp(nodeId);
     }
 
     /**
@@ -115,10 +114,10 @@ public abstract class IClientChannelAdapter {
      *
      * The implementer of the adapter must notify back on a connection being lost.
      *
-     * @param endpoint remote endpoint for which the connection was lost.
+     * @param nodeId remote node id for which the connection was lost.
      */
-    public void onConnectionDown(String endpoint) {
-        getRouter().onConnectionDown(endpoint);
+    public void onConnectionDown(String nodeId) {
+        getRouter().onConnectionDown(nodeId);
     }
 
     /**
@@ -138,6 +137,6 @@ public abstract class IClientChannelAdapter {
      * @return leader in remote cluster
      */
     public Optional<String> getRemoteLeader() {
-        return getRouter().getRemoteLeaderEndpoint();
+        return getRouter().getRemoteLeaderNodeId();
     }
 }

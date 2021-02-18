@@ -1,18 +1,7 @@
 package org.corfudb.runtime.view.stream;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.NavigableSet;
-import java.util.SortedSet;
-import java.util.TreeSet;
-import java.util.UUID;
-import java.util.function.Function;
-
-import javax.annotation.Nonnull;
-
 import com.google.common.collect.Iterables;
 import lombok.extern.slf4j.Slf4j;
-
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.runtime.CorfuRuntime;
@@ -20,7 +9,16 @@ import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
-import org.roaringbitmap.longlong.Roaring64NavigableMap;
+
+import javax.annotation.Nonnull;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.NavigableSet;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.UUID;
+import java.util.function.Function;
 
 
 /** A view of a stream implemented with address maps.
@@ -227,7 +225,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     private void processCheckpoint(StreamAddressSpace streamAddressSpace, Function<ILogData, Boolean> filter,
                                    NavigableSet<Long> queue) {
         SortedSet<Long> checkpointAddresses = new TreeSet<>(Collections.reverseOrder());
-        streamAddressSpace.getAddressMap().forEach(checkpointAddresses::add);
+        Arrays.stream(streamAddressSpace.toArray()).forEach(checkpointAddresses::add);
 
         // Checkpoint entries will be read in batches of a predefined size,
         // the reason not to read them all in a single call is that:
@@ -303,7 +301,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             // if this address is already resolved locally do not request the stream map to the sequencer as new
             // updates are not required to be synced (this benefits single runtime writers).
             if(isAddressToBackpointerResolved(startAddress, streamId)) {
-                return new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(startAddress));
+                return new StreamAddressSpace(Collections.singleton(startAddress));
             }
 
             log.trace("getStreamAddressMap[{}]: request stream address space between {} and {}.",
@@ -314,7 +312,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
         // Start and stop address are consecutive addresses, no need to request the address map for this stream,
         // the only address to include is startAddress (stopAddress is already resolved - not included in the lookup).
-        return new StreamAddressSpace(Address.NON_ADDRESS, Roaring64NavigableMap.bitmapOf(startAddress));
+        return new StreamAddressSpace(Collections.singleton(startAddress));
     }
 
     private boolean isAddressToBackpointerResolved(long startAddress, UUID streamId) {
@@ -383,7 +381,29 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
      * @return whether this stream is capable of being checkpointed
      */
     private boolean isCheckpointCapable() {
-        return !getId().equals(ObjectsView.TRANSACTION_STREAM_ID);
+        return !getId().equals(ObjectsView.TRANSACTION_STREAM_ID)
+                && getStreamOptions().isCheckpointCapable();
+    }
+
+    @Override
+    protected long getMaxGlobalFromMaxEntries(int maxEntries) {
+        if (maxEntries == Integer.MAX_VALUE) {
+            return Address.MAX;
+        }
+
+        StreamAddressSpace streamAddressSpace = runtime.getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(getId(), Address.MAX, getCurrentGlobalPosition()));
+
+        long size = streamAddressSpace.size();
+        if (size == 0L) {
+            return Address.NON_ADDRESS;
+        }
+
+        if (size <= maxEntries) {
+            return streamAddressSpace.getTail();
+        }
+
+        return streamAddressSpace.select(maxEntries - 1);
     }
 
     @Override

@@ -6,7 +6,6 @@ import io.netty.channel.EventLoopGroup;
 import lombok.Data;
 import lombok.ToString;
 import org.corfudb.comm.ChannelImplementation;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.runtime.clients.NettyClientRouter;
 
 import java.lang.Thread.UncaughtExceptionHandler;
@@ -163,12 +162,6 @@ public class RuntimeParameters {
          * the runtime's default handler runs, which logs an error level message.
          */
         public UncaughtExceptionHandler uncaughtExceptionHandler;
-
-        /**
-         * Port at which the {@link CorfuRuntime} will allow third-party
-         * collectors to pull for metrics.
-         */
-        public int prometheusMetricsPort = MetricsUtils.NO_METRICS_PORT;
 
         // Register handlers region
 
