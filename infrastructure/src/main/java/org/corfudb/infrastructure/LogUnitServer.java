@@ -156,7 +156,22 @@ public class LogUnitServer extends AbstractServer {
 
     @Override
     protected void processRequest(RequestMsg req, ChannelHandlerContext ctx, IServerRouter router) {
-        executor.submit(() -> getHandlerMethods().handle(req, ctx, router));
+
+        switch (req.getPayload().getPayloadCase()) {
+            case TAIL_REQUEST:
+            case LOG_ADDRESS_SPACE_REQUEST:
+            case TRIM_MARK_REQUEST:
+            case WRITE_LOG_REQUEST:
+            case RANGE_WRITE_LOG_REQUEST:
+                // Since all these handlers produce work for the BatchProcessor and are non-blocking
+                // they should execute directly on the network IO threads instead of delegating to
+                // the LogUnitServer executor that will in turn delegate to the BatchProcessor worker.
+                // This improves latency by reducing eliminating unnecessary thread coordination.
+                getHandlerMethods().handle(req, ctx, router);
+                break;
+            default:
+                executor.submit(() -> getHandlerMethods().handle(req, ctx, router));
+        }
     }
 
     /**
@@ -296,10 +311,10 @@ public class LogUnitServer extends AbstractServer {
 
         final RequestMsg batchProcessorReq = req;
         batchWriter.addTask(BatchWriterOperation.Type.WRITE, batchProcessorReq)
-                .thenRunAsync(() -> {
+                .thenRun(() -> {
                     dataCache.put(logData.getGlobalAddress(), logData);
                     router.sendResponse(getResponseMsg(batchProcessorReq.getHeader(), getWriteLogResponseMsg()), ctx);
-                }, executor)
+                })
                 .exceptionally(ex -> {
                     handleException(ex, ctx, batchProcessorReq, router);
                     return null;
