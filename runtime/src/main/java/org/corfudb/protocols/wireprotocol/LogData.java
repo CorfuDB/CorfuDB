@@ -120,8 +120,6 @@ public class LogData implements IMetadata, ILogData {
                         } catch (Throwable throwable) {
                             log.error("Exception caught at address {}, {}, {}",
                                     getGlobalAddress(), getStreams(), getType());
-                            log.error("Raw data buffer {}",
-                                    serializedBuf.resetReaderIndex().toString(Charset.defaultCharset()));
                             throw throwable;
                         } finally {
                             serializedBuf.release();
