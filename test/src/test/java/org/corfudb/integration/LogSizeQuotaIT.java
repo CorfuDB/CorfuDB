@@ -3,7 +3,6 @@ package org.corfudb.integration;
 import com.google.common.reflect.TypeToken;
 import org.apache.commons.io.FileUtils;
 import org.corfudb.infrastructure.log.StreamLogFiles;
-import org.corfudb.protocols.wireprotocol.PriorityLevel;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.MultiCheckpointWriter;
@@ -12,6 +11,7 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.QuotaExceededException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel;
 import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 

@@ -2,7 +2,6 @@ package org.corfudb.protocols.wireprotocol;
 
 import static org.assertj.core.api.Java6Assertions.assertThat;
 
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.util.Arrays;
@@ -10,12 +9,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.CheckpointEntry.CheckpointEntryType;
 import org.corfudb.runtime.view.Layout;
 import org.junit.Test;
 
-
-public class ICorfuPayloadTest {
+public class PayloadTest {
 
     @Test
     public void checkConstructorMap() {
@@ -24,14 +24,14 @@ public class ICorfuPayloadTest {
                 Layout.class, CheckpointEntryType.class, UUID.class, byte[].class, ByteBuf.class
         );
 
-        assertThat(ICorfuPayload.constructorMap.keySet()).containsAll(types);
+        assertThat(CorfuProtocolCommon.getConstructorMap().keySet()).containsAll(types);
     }
 
     @Test
     public void testBuildPayloadFromBuffer(){
         final int value = 12345;
         ByteBuf payload = Unpooled.buffer().writeInt(value);
-        Integer result = ICorfuPayload.fromBuffer(payload, Integer.class);
+        Integer result = CorfuProtocolCommon.fromBuffer(payload, Integer.class);
 
         assertThat(result).isEqualTo(value);
     }
@@ -44,9 +44,7 @@ public class ICorfuPayloadTest {
         payload.add("value1");
         payload.add("value2");
 
-        ICorfuPayload.serialize(buf, payload);
-
-        assertThat(ICorfuPayload.setFromBuffer(buf, String.class)).isEqualTo(payload);
+        CorfuProtocolCommon.serialize(buf, payload);
+        assertThat(CorfuProtocolCommon.setFromBuffer(buf, String.class)).isEqualTo(payload);
     }
-
 }
