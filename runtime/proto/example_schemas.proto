@@ -33,6 +33,12 @@ message ExampleValue {
                                                       (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "non_primitive_field_level_0.key_2_level_1.key_1_level_2"}];
 }
 
+message ExampleTableName {
+    option (org.corfudb.runtime.table_schema).stream_tag = "table_name_streamer";
+    string namespace = 1;
+    string table_name = 2;
+}
+
 message NonPrimitiveValue {
     fixed64 key_1_level_1 = 1;
     NonPrimitiveNestedValue key_2_level_1 = 2;
