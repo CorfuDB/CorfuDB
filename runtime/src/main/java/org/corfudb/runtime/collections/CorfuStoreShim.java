@@ -226,7 +226,18 @@ public class CorfuStoreShim {
      *
      * @param streamListener - callback context.
      */
+    @Deprecated
     public void unsubscribe(@Nonnull StreamListener streamListener) {
+        corfuStore.unsubscribe(streamListener);
+    }
+
+    /**
+     * Gracefully shutdown a streamer.
+     * Once this call returns no further stream updates will be returned.
+     *
+     * @param streamListener - callback context.
+     */
+    public void unsubscribeListener(@Nonnull StreamListener streamListener) {
         corfuStore.unsubscribeListener(streamListener);
     }
 
