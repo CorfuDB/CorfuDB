@@ -106,10 +106,10 @@ public class CorfuStoreBrowserMain {
                 browser = new CorfuStoreBrowser(runtime);
             }
             String namespace = Optional.ofNullable(opts.get("--namespace"))
-                    .map(n -> n.toString())
+                    .map(Object::toString)
                     .orElse(null);
             String tableName = Optional.ofNullable(opts.get("--tablename"))
-                    .map(t -> t.toString())
+                    .map(Object::toString)
                     .orElse(null);
             switch (Enum.valueOf(OperationType.class, operation)) {
                 case listTables:

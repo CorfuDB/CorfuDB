@@ -103,7 +103,6 @@ public class StreamLogFiles implements StreamLog {
 
     private ConcurrentMap<String, SegmentHandle> writeChannels;
     private final Set<FileChannel> channelsToSync;
-    private final MultiReadWriteLock segmentLocks = new MultiReadWriteLock();
     private final Optional<AtomicDouble> logUnitSizeBytes;
     private final Optional<AtomicLong> logUnitSizeEntries;
     private final Optional<AtomicLong> currentTrimMark;
@@ -966,26 +965,25 @@ public class StreamLogFiles implements StreamLog {
 
         ByteBuffer allRecordsBuf = ByteBuffer.allocate(totalBytes);
         long size = allRecordsBuf.remaining();
-        try (MultiReadWriteLock.AutoCloseableLock ignored =
-                     segmentLocks.acquireWriteLock(segment.getSegment())) {
-            for (int ind = 0; ind < entryBuffs.size(); ind++) {
-                long channelOffset = segment.getWriteChannel().position()
-                        + allRecordsBuf.position() + METADATA_SIZE;
-                allRecordsBuf.put(entryBuffs.get(ind));
-                Metadata metadata = metadataList.get(ind);
-                recordsMap.put(entries.get(ind).getGlobalAddress(),
-                        new AddressMetaData(metadata.getPayloadChecksum(),
-                                metadata.getLength(), channelOffset));
-            }
 
-            allRecordsBuf.flip();
-            writeByteBuffer(segment.getWriteChannel(), allRecordsBuf);
-            channelsToSync.add(segment.getWriteChannel());
-            // Sync the global and stream tail(s)
-            // TODO(Maithem): on ioexceptions the StreamLogFiles needs to be reinitialized
-            syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
-            logMetadata.update(entries);
+        for (int ind = 0; ind < entryBuffs.size(); ind++) {
+            long channelOffset = segment.getWriteChannel().position()
+                    + allRecordsBuf.position() + METADATA_SIZE;
+            allRecordsBuf.put(entryBuffs.get(ind));
+            Metadata metadata = metadataList.get(ind);
+            recordsMap.put(entries.get(ind).getGlobalAddress(),
+                    new AddressMetaData(metadata.getPayloadChecksum(),
+                            metadata.getLength(), channelOffset));
         }
+
+        allRecordsBuf.flip();
+        writeByteBuffer(segment.getWriteChannel(), allRecordsBuf);
+        channelsToSync.add(segment.getWriteChannel());
+        // Sync the global and stream tail(s)
+        // TODO(Maithem): on ioexceptions the StreamLogFiles needs to be reinitialized
+        syncTailSegment(entries.get(entries.size() - 1).getGlobalAddress());
+        logMetadata.update(entries);
+
         logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(size));
         writeDistributionSummary.ifPresent(summary -> summary.record(size));
         logUnitSizeEntries.ifPresent(counter -> counter.addAndGet(entries.size()));
@@ -1028,14 +1026,12 @@ public class StreamLogFiles implements StreamLog {
         long size = record.remaining();
         long channelOffset;
 
-        try (MultiReadWriteLock.AutoCloseableLock ignored =
-                     segmentLocks.acquireWriteLock(segment.getSegment())) {
-            channelOffset = segment.getWriteChannel().position() + METADATA_SIZE;
-            writeByteBuffer(segment.getWriteChannel(), record);
-            channelsToSync.add(segment.getWriteChannel());
-            syncTailSegment(address);
-            logMetadata.update(entry, false);
-        }
+        channelOffset = segment.getWriteChannel().position() + METADATA_SIZE;
+        writeByteBuffer(segment.getWriteChannel(), record);
+        channelsToSync.add(segment.getWriteChannel());
+        syncTailSegment(address);
+        logMetadata.update(entry, false);
+
         logUnitSizeBytes.ifPresent(counter -> counter.addAndGet(size));
         writeDistributionSummary.ifPresent(summary -> summary.record(size));
         logUnitSizeEntries.ifPresent(counter -> counter.incrementAndGet());
