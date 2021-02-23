@@ -36,16 +36,19 @@ public class DataStoreTest extends AbstractCorfuTest {
     private DataStore createInMemoryDataStore() {
         return new DataStore(new ImmutableMap.Builder<String, Object>()
                 .put("--memory", true)
-                .build(), fn -> { });
+                .build(), fn -> {});
     }
 
     @Test
     public void testPutGet() {
         final String numRetention = "10";
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
+        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> {});
         String value = UUID.randomUUID().toString();
         dataStore.put(TEST_RECORD, value);
+        assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);
+
+        dataStore.delete(TEST_RECORD);
         assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);
 
         dataStore.put(TEST_RECORD, "NEW_VALUE");
@@ -56,7 +59,7 @@ public class DataStoreTest extends AbstractCorfuTest {
     public void testDataCorruption() throws IOException {
         final String numRetention = "10";
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
+        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> {});
         String value = UUID.randomUUID().toString();
         dataStore.put(TEST_RECORD, value);
 
@@ -68,7 +71,7 @@ public class DataStoreTest extends AbstractCorfuTest {
         dsFile.close();
 
         // Simulate a restart of data store
-        final DataStore dataStore2 = createPersistDataStore(serviceDir, numRetention, fn -> { });
+        final DataStore dataStore2 = createPersistDataStore(serviceDir, numRetention, fn -> {});
         assertThatThrownBy(() -> dataStore2.get(TEST_RECORD))
                 .isInstanceOf(DataCorruptionException.class);
     }
@@ -77,12 +80,12 @@ public class DataStoreTest extends AbstractCorfuTest {
     public void testPutGetWithRestart() {
         final String numRetention = "10";
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
+        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> {});
         String value = UUID.randomUUID().toString();
         dataStore.put(TEST_RECORD, value);
 
         // Simulate a restart of data store
-        dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
+        dataStore = createPersistDataStore(serviceDir, numRetention, fn -> {});
         assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);
 
         dataStore.put(TEST_RECORD, "NEW_VALUE");
@@ -93,14 +96,14 @@ public class DataStoreTest extends AbstractCorfuTest {
     public void testDataStoreEviction() {
         final String numRetention = "10";
         final String serviceDir = PARAMETERS.TEST_TEMP_DIR;
-        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
+        DataStore dataStore = createPersistDataStore(serviceDir, numRetention, fn -> {});
 
         for (int i = 0; i < dataStore.getDsCacheSize() * 2; i++) {
             String value = UUID.randomUUID().toString();
             dataStore.put(TEST_RECORD, value);
 
             // Simulate a restart of data store
-            dataStore = createPersistDataStore(serviceDir, numRetention, fn -> { });
+            dataStore = createPersistDataStore(serviceDir, numRetention, fn -> {});
             assertThat(dataStore.get(TEST_RECORD)).isEqualTo(value);
             dataStore.put(TEST_RECORD, "NEW_VALUE");
             assertThat(dataStore.get(TEST_RECORD)).isEqualTo("NEW_VALUE");

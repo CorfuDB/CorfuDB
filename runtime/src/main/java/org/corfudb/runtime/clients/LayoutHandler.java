@@ -7,10 +7,7 @@ import java.util.UUID;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
-import org.corfudb.protocols.wireprotocol.CorfuMsgType;
 import org.corfudb.protocols.wireprotocol.LayoutPrepareResponse;
-import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.OutrankedException;
 import org.corfudb.runtime.view.Layout;
 
@@ -46,28 +43,9 @@ public class LayoutHandler implements IClient, IHandler<LayoutClient> {
      * The handler and handlers which implement this client.
      */
     @Getter
-    public ClientMsgHandler msgHandler = new ClientMsgHandler(this)
-            .generateHandlers(MethodHandles.lookup(), this);
-
-    /**
-     * For old CorfuMsg, use {@link #msgHandler}
-     * The handler and handlers which implement this client.
-     */
-    @Getter
     public ClientResponseHandler responseHandler = new ClientResponseHandler(this)
             .generateHandlers(MethodHandles.lookup(), this)
             .generateErrorHandlers(MethodHandles.lookup(), this);
-
-    /**
-     * TODO: Remove this method when Management RPC get landed.
-     */
-    @Deprecated
-    @ClientHandler(type = CorfuMsgType.LAYOUT_NOBOOTSTRAP)
-    private static Object handleNoBootstrap(CorfuMsg msg,
-                                            ChannelHandlerContext ctx, IClientRouter r)
-            throws Exception {
-        throw new NoBootstrapException();
-    }
 
     /**
      * Handle a layout response from the server.

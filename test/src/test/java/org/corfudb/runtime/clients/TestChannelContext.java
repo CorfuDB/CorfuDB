@@ -16,7 +16,6 @@ import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.CorfuProtocolCommon.MessageMarker;
-import org.corfudb.protocols.wireprotocol.CorfuMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
 import org.corfudb.runtime.proto.service.CorfuMessage.ResponseMsg;
 
@@ -50,16 +49,10 @@ public class TestChannelContext implements ChannelHandlerContext {
     void sendMessageAsync(Object o, Object orig) {
         CompletableFuture.runAsync(() -> {
             try {
-                Object origCapture = orig; //for debugging
                 if (o instanceof ByteBuf) {
                     byte msgMark = ((ByteBuf) o).readByte();
 
                     switch (MessageMarker.typeMap.get(msgMark)) {
-                        case LEGACY_MSG_MARK:
-                            CorfuMsg m = CorfuMsg.deserialize((ByteBuf) o);
-                            hmf.handleMessage(m);
-                            ((ByteBuf) o).release();
-                            break;
                         case PROTO_REQUEST_MSG_MARK:
                             try (ByteBufInputStream msgInputStream = new ByteBufInputStream((ByteBuf) o)) {
                                 RequestMsg requestMsg = RequestMsg.parseFrom(msgInputStream);
@@ -257,13 +250,7 @@ public class TestChannelContext implements ChannelHandlerContext {
     public ByteBuf simulateSerialization(Object message) {
         ByteBuf oBuf = Unpooled.buffer();
 
-        if (message instanceof CorfuMsg) {
-            CorfuMsg corfuMsg = (CorfuMsg) message;
-            // Marks the Corfu msg as legacy.
-            oBuf.writeByte(MessageMarker.LEGACY_MSG_MARK.asByte());
-            corfuMsg.serialize(oBuf);
-            oBuf.resetReaderIndex();
-        } else if (message instanceof RequestMsg) {
+        if (message instanceof RequestMsg) {
             RequestMsg requestMsg = (RequestMsg) message;
             try (ByteBufOutputStream requestOutputStream = new ByteBufOutputStream(oBuf)) {
                 // Marks the Corfu msg as a protobuf request.

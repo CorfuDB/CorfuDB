@@ -33,7 +33,7 @@ message LogReplicationMetadataResponseMsg {
 }
 
 message LogReplicationLeadershipLossResponseMsg {
-  string endpoint = 1;
+  string nodeId = 1;
 }
 
 message LogReplicationLeadershipRequestMsg {
@@ -41,7 +41,7 @@ message LogReplicationLeadershipRequestMsg {
 
 message LogReplicationLeadershipResponseMsg {
   bool isLeader = 2;
-  string endpoint = 3;
+  string nodeId = 3;
 }
 
 enum LogReplicationEntryType {

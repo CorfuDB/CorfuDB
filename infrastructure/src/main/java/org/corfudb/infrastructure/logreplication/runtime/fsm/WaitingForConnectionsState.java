@@ -28,7 +28,7 @@ public class WaitingForConnectionsState implements LogReplicationRuntimeState {
             case ON_CONNECTION_UP:
                 log.info("On connection up, event={}", event);
                 // Set Connected Endpoint for event transition.
-                fsm.updateConnectedEndpoints(event.getEndpoint());
+                fsm.updateConnectedNodes(event.getNodeId());
                 return fsm.getStates().get(LogReplicationRuntimeStateType.VERIFYING_REMOTE_LEADER);
             case LOCAL_LEADER_LOSS:
                 return fsm.getStates().get(LogReplicationRuntimeStateType.STOPPED);

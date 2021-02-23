@@ -135,10 +135,12 @@ public class LogReplicationAckReader {
         long maxReplicatedStreamTail = getMaxReplicatedStreamsTail(tailMap);
         StreamIteratorMetadata currentTxStreamProcessedTs = logEntryReader.getCurrentProcessedEntryMetadata();
 
-        log.trace("calculateRemainingEntriesToSend:: maxTailReplicateStreams={}, txStreamTail={}, lastTxStreamProcessedTs={}, " +
-                        "lastTxStreamProcessedStreamsPresent={}, sync={}",
-                maxReplicatedStreamTail, txStreamTail, currentTxStreamProcessedTs.getTimestamp(),
-                currentTxStreamProcessedTs.isStreamsToReplicatePresent(), lastSyncType);
+        if (log.isTraceEnabled()) {
+            log.trace("calculateRemainingEntriesToSend:: maxTailReplicateStreams={}, txStreamTail={}, lastTxStreamProcessedTs={}, " +
+                            "lastTxStreamProcessedStreamsPresent={}, sync={}",
+                    maxReplicatedStreamTail, txStreamTail, currentTxStreamProcessedTs.getTimestamp(),
+                    currentTxStreamProcessedTs.isStreamsToReplicatePresent(), lastSyncType);
+        }
 
         // No data to send on the active, so no replication remaining
         if (maxReplicatedStreamTail == Address.NON_ADDRESS) {
@@ -270,8 +272,10 @@ public class LogReplicationAckReader {
             // we haven't received confirmation of the recipient.
             if (currentTxStreamProcessedTs.isStreamsToReplicatePresent()) {
                 if (lastAckedTs == currentTxStreamProcessedTs.getTimestamp()) {
-                    log.trace("Log Entry Sync up to date, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
-                            txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
+                    if (log.isTraceEnabled()) {
+                        log.trace("Log Entry Sync up to date, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
+                                txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
+                    }
                     // (Case 2.0)
                     return noRemainingEntriesToSend;
                 }
@@ -279,8 +283,10 @@ public class LogReplicationAckReader {
                 // (Case 2.2)
                 // Last ack'ed timestamp should match the last processed tx stream timestamp.
                 // Calculate how many entries are missing, based on the tx stream's address map
-                log.trace("Log Entry Sync pending ACKs, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
-                        txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
+                if (log.isTraceEnabled()) {
+                    log.trace("Log Entry Sync pending ACKs, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
+                            txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
+                }
                 return getTxStreamTotalEntries(lastAckedTs, currentTxStreamProcessedTs.getTimestamp());
             }
 
@@ -288,15 +294,19 @@ public class LogReplicationAckReader {
             // Since last tx stream processed timestamp is not intended to be replicated
             // and we're at or beyond the last known tail, no entries remaining to be sent
             // at this point.
-            log.trace("Log Entry Sync up to date, no pending ACKs, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
-                    txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
+            if (log.isTraceEnabled()) {
+                log.trace("Log Entry Sync up to date, no pending ACKs, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}", lastAckedTs,
+                        txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent());
+            }
             return noRemainingEntriesToSend;
         }
 
         // (Cases 1.0 and 1.1)
         long remainingEntries = getTxStreamTotalEntries(lastAckedTs, txStreamTail);
-        log.trace("Log Entry Sync pending entries for processing, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}, remaining={}", lastAckedTs,
-                txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent(), remainingEntries);
+        if (log.isTraceEnabled()) {
+            log.trace("Log Entry Sync pending entries for processing, lastAckedTs={}, txStreamTail={}, currentTxProcessedTs={}, containsEntries={}, remaining={}", lastAckedTs,
+                    txStreamTail, currentTxStreamProcessedTs.getTimestamp(), currentTxStreamProcessedTs.isStreamsToReplicatePresent(), remainingEntries);
+        }
 
         if (!currentTxStreamProcessedTs.isStreamsToReplicatePresent()) {
             // Case 1.1

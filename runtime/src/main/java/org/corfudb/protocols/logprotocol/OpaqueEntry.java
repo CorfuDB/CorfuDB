@@ -6,7 +6,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.protocols.wireprotocol.ICorfuPayload;
+import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
 import org.corfudb.runtime.view.Address;
@@ -92,7 +92,7 @@ public class OpaqueEntry implements Serializable {
 
         if (logData.hasPayloadCodec()) {
             // if the payload has a codec we need to decode it before deserialization
-            ByteBuf compressedBuf = ICorfuPayload.fromBuffer(payload, ByteBuf.class);
+            ByteBuf compressedBuf = CorfuProtocolCommon.fromBuffer(payload, ByteBuf.class);
             byte[] compressedArrayBuf= new byte[compressedBuf.readableBytes()];
             compressedBuf.readBytes(compressedArrayBuf);
             payloadBuf = Unpooled.wrappedBuffer(logData.getPayloadCodecType()

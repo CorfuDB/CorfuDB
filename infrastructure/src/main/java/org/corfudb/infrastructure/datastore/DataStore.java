@@ -1,7 +1,5 @@
 package org.corfudb.infrastructure.datastore;
 
-import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
-
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.CacheWriter;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -9,8 +7,11 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 import org.corfudb.runtime.exceptions.DataCorruptionException;
 import org.corfudb.util.JsonUtils;
 
@@ -18,14 +19,16 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.function.Consumer;
+
+import static org.corfudb.infrastructure.utils.Persistence.syncDirectory;
 
 /**
  * Stores data as JSON.
@@ -73,7 +76,7 @@ public class DataStore implements KvDataStore {
 
         if ((opts.containsKey("--memory") && (Boolean) opts.get("--memory")) || !opts.containsKey("--log-path")) {
             this.logDirPath = null;
-            this.cleanupTask = fileName -> { };
+            this.cleanupTask = fileName -> {};
             cache = buildMemoryDs();
             inMem = true;
         } else {
@@ -93,18 +96,19 @@ public class DataStore implements KvDataStore {
         return Caffeine.newBuilder().build(k -> null);
     }
 
+    private static int getChecksum(byte[] bytes) {
+        return getChecksum(bytes, 0, bytes.length);
+    }
 
-    public static int getChecksum(byte[] bytes) {
+    private static int getChecksum(byte[] bytes, int off, int len) {
         Hasher hasher = Hashing.crc32c().newHasher();
-        for (byte a : bytes) {
-            hasher.putByte(a);
-        }
+        hasher.putBytes(bytes, off, len);
 
         return hasher.hash().asInt();
     }
 
     /**
-     * obtain a {@link LoadingCache}.
+     * Obtain a {@link LoadingCache}.
      * The cache is backed up by file-per-key under {@link DataStore::logDirPath}.
      * The cache size is bounded by {@link DataStore::dsCacheSize}.
      *
@@ -113,13 +117,16 @@ public class DataStore implements KvDataStore {
     private Cache<String, Object> buildPersistentDs() {
         return Caffeine.newBuilder()
                 .recordStats()
+                .maximumSize(dsCacheSize)
                 .writer(new CacheWriter<String, Object>() {
                     @Override
-                    public synchronized void write(@Nonnull String key, @Nonnull Object value) {
-
+                    public void write(@Nonnull String key, @Nonnull Object value) {
                         if (value == NullValue.NULL_VALUE) {
                             return;
                         }
+
+                        ByteBuf buffer = null;
+                        FileChannel writeChannel = null;
 
                         try {
                             String dsFileName = key + EXTENSION;
@@ -129,12 +136,19 @@ public class DataStore implements KvDataStore {
                             String jsonPayload = JsonUtils.parser.toJson(value, value.getClass());
                             byte[] bytes = jsonPayload.getBytes();
 
-                            ByteBuffer buffer = ByteBuffer.allocate(bytes.length
-                                    + Integer.BYTES);
-                            buffer.putInt(getChecksum(bytes));
-                            buffer.put(bytes);
-                            Files.write(tmpPath, buffer.array(), StandardOpenOption.CREATE,
+                            buffer = Unpooled.directBuffer(bytes.length + Integer.BYTES);
+                            buffer.writeInt(getChecksum(bytes));
+                            buffer.writeBytes(bytes);
+                            ByteBuffer nioBuffer = buffer.nioBuffer();
+
+                            writeChannel = FileChannel.open(tmpPath,
+                                    StandardOpenOption.WRITE, StandardOpenOption.CREATE,
                                     StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.SYNC);
+
+                            while (nioBuffer.hasRemaining()) {
+                                writeChannel.write(nioBuffer);
+                            }
+
                             Files.move(tmpPath, path, StandardCopyOption.REPLACE_EXISTING,
                                     StandardCopyOption.ATOMIC_MOVE);
                             syncDirectory(logDirPath);
@@ -143,22 +157,22 @@ public class DataStore implements KvDataStore {
                             cleanupTask.accept(dsFileName);
                         } catch (IOException e) {
                             throw new RuntimeException(e);
+                        } finally {
+                            if (buffer != null) {
+                                buffer.release();
+                            }
+                            IOUtils.closeQuietly(writeChannel);
                         }
                     }
 
                     @Override
-                    public synchronized void delete(@Nonnull String key,
-                                                    @Nullable Object value,
-                                                    @Nonnull RemovalCause cause) {
-                        try {
-                            Path path = Paths.get(logDirPath, key);
-                            Files.deleteIfExists(path);
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
+                    public void delete(@Nonnull String key,
+                                       @Nullable Object value,
+                                       @Nonnull RemovalCause cause) {
+                        // Delete should not remove the underlying file.
+                        // Removal of underlying file is done by cleanupTask.
                     }
                 })
-                .maximumSize(dsCacheSize)
                 .build();
     }
 
@@ -171,14 +185,12 @@ public class DataStore implements KvDataStore {
             byte[] bytes = Files.readAllBytes(path);
             ByteBuffer buf = ByteBuffer.wrap(bytes);
             int checksum = buf.getInt();
-            byte[] strBytes = Arrays.copyOfRange(bytes, 4, bytes.length);
-            if (checksum != getChecksum(strBytes)) {
+            if (checksum != getChecksum(bytes, 4, bytes.length - 4)) {
                 throw new DataCorruptionException();
             }
 
-            String json = new String(strBytes);
-            T val = JsonUtils.parser.fromJson(json, tClass);
-            return val;
+            String json = new String(bytes, 4, bytes.length - 4);
+            return JsonUtils.parser.fromJson(json, tClass);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -193,12 +205,12 @@ public class DataStore implements KvDataStore {
     }
 
     @Override
-    public synchronized <T> void put(KvRecord<T> key, T value) {
+    public <T> void put(KvRecord<T> key, T value) {
         cache.put(key.getFullKeyName(), value);
     }
 
     @Override
-    public synchronized <T> T get(KvRecord<T> key) {
+    public <T> T get(KvRecord<T> key) {
         String path = key.getFullKeyName();
         Object val = cache.get(path, k -> {
             if (!inMem) {
@@ -207,7 +219,6 @@ public class DataStore implements KvDataStore {
                     return loadedVal;
                 }
             }
-
             // We need to maintain a path -> null mapping for keys that were loaded, but
             // were empty. This is required to prevent loading an empty key more than once, which is expensive.
             return NullValue.NULL_VALUE;
@@ -223,7 +234,7 @@ public class DataStore implements KvDataStore {
     }
 
     @Override
-    public synchronized <T> void delete(KvRecord<T> key) {
+    public <T> void delete(KvRecord<T> key) {
         cache.invalidate(key.getFullKeyName());
     }
 }

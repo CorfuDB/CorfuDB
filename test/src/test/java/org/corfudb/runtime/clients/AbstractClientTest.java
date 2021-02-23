@@ -45,7 +45,6 @@ public abstract class AbstractClientTest extends AbstractCorfuTest {
     @After
     public void shutdownServers() {
         Set<AbstractServer> serverHashSet = new HashSet<>();
-        serverHashSet.addAll(serverRouter.handlerMap.values());
         serverHashSet.addAll(serverRouter.requestTypeHandlerMap.values());
         serverHashSet.forEach(AbstractServer::shutdown);
     }
