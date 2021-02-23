@@ -14,9 +14,12 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
+import io.micrometer.core.instrument.binder.cache.GuavaCacheMetrics;
 import io.netty.handler.timeout.TimeoutException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
@@ -118,23 +121,13 @@ public class AddressSpaceView extends AbstractView {
 
         Optional<MeterRegistry> metricsRegistry = runtime.getRegistry();
 
-        metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.miss_ratio",
+        metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.hit_ratio",
                 readCache,
-                cache -> cache.stats().missRate())
+                cache -> cache.stats().hitRate())
                 .strongReference(true)
                 .register(registry));
 
-        metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.load_count",
-                readCache,
-                cache -> cache.stats().loadCount())
-                .strongReference(true)
-                .register(registry));
-
-        metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.load_exception_count",
-                readCache,
-                cache -> cache.stats().loadExceptionCount())
-                .strongReference(true)
-                .register(registry));
+        metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
 
         double[] percentiles = new double[]{0.50, 0.95, 0.99};
 
