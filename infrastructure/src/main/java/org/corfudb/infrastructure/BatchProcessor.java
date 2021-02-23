@@ -99,11 +99,11 @@ public class BatchProcessor implements AutoCloseable {
         processorService.submit(this::process);
     }
 
-    private void recordRunnable(Runnable fsyncRunnable, Optional<Timer> fsyncTimer) {
-        if (fsyncTimer.isPresent()) {
-            fsyncTimer.get().record(fsyncRunnable);
+    private void recordRunnable(Runnable runnable, Optional<Timer> timer) {
+        if (timer.isPresent()) {
+            timer.get().record(runnable);
         } else {
-            fsyncRunnable.run();
+            runnable.run();
         }
     }
 
