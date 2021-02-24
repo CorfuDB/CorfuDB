@@ -41,7 +41,7 @@
         <logback.classic.version>1.2.3</logback.classic.version>
 
         <!-- Dependency versions -->
-        <junit.jupiter.version>5.4.2</junit.jupiter.version>
+        <junit.jupiter.version>5.7.1</junit.jupiter.version>
     </properties>
 
     <scm>
@@ -138,13 +138,7 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.8.0</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.marschall</groupId>
-            <artifactId>junit-lambda</artifactId>
-            <version>0.2.0</version>
+            <version>3.19.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -155,12 +149,12 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>1.7.25</version>
+            <version>1.7.30</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.12</version>
+            <version>1.18.18</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -222,7 +216,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-failsafe-plugin</artifactId>
-                        <version>3.0.0-M1</version>
+                        <version>3.0.0-M5</version>
                         <configuration>
                             <forkCount>1</forkCount>
                             <trimStackTrace>false</trimStackTrace>
@@ -256,7 +250,7 @@
             <extension>
                 <groupId>kr.motd.maven</groupId>
                 <artifactId>os-maven-plugin</artifactId>
-                <version>1.5.0.Final</version>
+                <version>1.7.0</version>
             </extension>
         </extensions>
 
@@ -376,7 +370,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.5.1</version> <!-- version < 3.5.1 has issue with annotation incremental compile-->
+                <version>3.8.1</version>
                 <configuration>
                     <compilerVersion>1.8</compilerVersion>
                     <source>1.8</source>
@@ -392,7 +386,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <version>2.6</version>
+                <version>3.2.0</version>
                 <executions>
                     <execution>
                         <goals>
@@ -436,7 +430,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.0.0-M1</version>
+                <version>3.0.0-M5</version>
                 <configuration>
                     <argLine>${argLine}</argLine>
                     <forkCount>1C</forkCount>
@@ -466,7 +460,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.3</version>
+                <version>0.8.6</version>
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
