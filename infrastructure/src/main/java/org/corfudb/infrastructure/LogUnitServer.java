@@ -135,7 +135,7 @@ public class LogUnitServer extends AbstractServer {
     public LogUnitServer(ServerContext serverContext, LogUnitServerInitializer serverInitializer) {
         this.serverContext = serverContext;
         config = LogUnitServerConfig.parse(serverContext.getServerConfig());
-        executor = serverContext.getExecutorService(serverContext.getLogunitThreadCount(), "LogUnit-");
+        executor = serverContext.getExecutorService(serverContext.getLogUnitThreadCount(), "LogUnit-");
 
         if (config.isMemoryMode()) {
             log.warn("Log unit opened in-memory mode (Maximum size={}). "
