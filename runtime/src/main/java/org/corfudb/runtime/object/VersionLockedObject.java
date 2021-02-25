@@ -546,7 +546,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @return an appropriate context
      */
     private ICorfuExecutionContext.Context getContext(ISMRStream stream) {
-        if (stream == optimisticStream) {
+        if (stream.equals(optimisticStream)) {
             return ICorfuExecutionContext.OPTIMISTIC;
         }
 

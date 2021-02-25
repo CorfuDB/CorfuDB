@@ -81,10 +81,7 @@ public class LogReplicationStreamNameTableManager {
     public boolean isUpgraded() {
         if (verifyTableExists(LOG_REPLICATION_PLUGIN_VERSION_TABLE)) {
             openExistingTable(LOG_REPLICATION_PLUGIN_VERSION_TABLE);
-            if (tableVersionMatchesPlugin()) {
-                return false;
-            }
-            return true;
+            return !tableVersionMatchesPlugin();
         }
         // TODO pankti: this may be the first time the replication server is initialized, so return false.
         //  But what about a case if the user has deleted the table?

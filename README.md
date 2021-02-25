@@ -1,10 +1,9 @@
-# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfu.png "Corfu")               
+# ![logo](https://github.com/CorfuDB/CorfuDB/blob/master/resources/corfu.png "Corfu")
 
 [![Join the chat at https://gitter.im/CorfuDB/CorfuDB](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/CorfuDB/CorfuDB?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
-[![Build Status](https://travis-ci.org/CorfuDB/CorfuDB.svg?branch=master)](https://travis-ci.org/CorfuDB/CorfuDB) 
 [![codecov](https://codecov.io/gh/CorfuDB/CorfuDB/branch/master/graph/badge.svg)](https://codecov.io/gh/CorfuDB/CorfuDB)
-
+[![Github Actions](https://github.com/CorfuDB/CorfuDB/actions/workflows/pull_request.yml/badge.svg)](https://github.com/CorfuDB/CorfuDB/actions)
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/83bcbf63024b4937999c9b0348672abf)](https://app.codacy.com/gh/CorfuDB/CorfuDB?utm_source=github.com&utm_medium=referral&utm_content=CorfuDB/CorfuDB&utm_campaign=Badge_Grade_Settings)
 
 Corfu is a consistency platform designed around the abstraction
 of a shared log. CorfuDB objects are in-memory, highly available
@@ -64,10 +63,11 @@ To build Corfu, you will need the Java JDK 8 as well as Apache Maven
 3.3 or later to invoke the build system.
 
 On Linux (Debian/Ubuntu), run:
+
 ```bash
-$ sudo add-apt-repository ppa:webupd8team/java
-$ sudo apt-get update
-$ sudo apt-get install oracle-java8-installer
+sudo add-apt-repository ppa:webupd8team/java
+sudo apt-get update
+sudo apt-get install oracle-java8-installer
 ```
 
 Your major release number of Debian/Ubuntu will determine whether the

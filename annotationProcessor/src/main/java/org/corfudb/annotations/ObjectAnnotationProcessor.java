@@ -314,17 +314,16 @@ public class ObjectAnnotationProcessor extends AbstractProcessor {
                         if (methodSet.stream().noneMatch(y -> {
                             // If this method is present in the parent, we need to check
                             // the parameters
-                            if (y.method.getSimpleName().equals(x.getSimpleName())) {
-                                if (y.method.getParameters().size() == x.getParameters().size()) {
-                                    // If there are generics, assume a match for now
-                                    // TODO: Properly handle generics
-                                    if (x.getParameters().stream().anyMatch(p ->
-                                        p.asType().getKind() == TypeKind.TYPEVAR)) {
-                                        return true;
-                                    } else {
-                                        // Otherwise the method name will match
-                                        return x.toString().equals(y.method.toString());
-                                    }
+                            if (y.method.getSimpleName().equals(x.getSimpleName())
+                                    && y.method.getParameters().size() == x.getParameters().size()) {
+                                // If there are generics, assume a match for now
+                                // TODO: Properly handle generics
+                                if (x.getParameters().stream().anyMatch(p ->
+                                    p.asType().getKind() == TypeKind.TYPEVAR)) {
+                                    return true;
+                                } else {
+                                    // Otherwise the method name will match
+                                    return x.toString().equals(y.method.toString());
                                 }
                             }
                             return false;

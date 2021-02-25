@@ -385,12 +385,10 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                 // If this is part of an outer transaction abort and remove from context.
                 // Re-throw exception to client.
                 log.warn("TXExecute[{}] Abort with exception {}", this, e);
-                if (e.getAbortCause() == AbortCause.NETWORK) {
-                    if (TransactionalContext.getCurrentContext() != null) {
-                        TransactionalContext.getCurrentContext().abortTransaction(e);
-                        TransactionalContext.removeContext();
-                        throw e;
-                    }
+                if (e.getAbortCause() == AbortCause.NETWORK && TransactionalContext.getCurrentContext() != null) {
+                    TransactionalContext.getCurrentContext().abortTransaction(e);
+                    TransactionalContext.removeContext();
+                    throw e;
                 }
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);
