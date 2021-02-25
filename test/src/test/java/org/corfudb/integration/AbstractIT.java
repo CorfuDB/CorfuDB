@@ -225,41 +225,37 @@ public class AbstractIT extends AbstractCorfuTest {
      *
      * @param pid parent process identifier
      * @return list of children process identifiers
-     *
-     * @throws IOException
+     * @throws IOException {@inheritDoc}
+     * @throws InterruptedException {@inheritDoc}
      */
-    private static List<Long> getChildPIDs (long pid) {
+    private static List<Long> getChildPIDs (long pid) throws IOException, InterruptedException {
         List<Long> childPIDs = new ArrayList<>();
-        try {
-            // Get child pid(s)
-            ProcessBuilder builder = new ProcessBuilder();
-            builder.command("sh", "-c", "pgrep -P " + pid);
-            Process p = builder.start();
-            p.waitFor();
+        // Get child pid(s)
+        ProcessBuilder builder = new ProcessBuilder();
+        builder.command("sh", "-c", "pgrep -P " + pid);
+        Process p = builder.start();
+        p.waitFor();
 
-            // Read output
-            BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-            String line = null;
-            String previous = null;
-            while ((line = br.readLine()) != null) {
-                if (!line.equals(previous)) {
-                    previous = line;
-                    long childPID = Long.parseLong(line);
-                    childPIDs.add(childPID);
-                }
+        // Read output
+        BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
+        String line = null;
+        String previous = null;
+        while ((line = br.readLine()) != null) {
+            if (!line.equals(previous)) {
+                previous = line;
+                long childPID = Long.parseLong(line);
+                childPIDs.add(childPID);
             }
-
-            // Recursive lookup of children pids
-            for (Long childPID : childPIDs) {
-                List<Long> pidRecursive = getChildPIDs(childPID.longValue());
-                childPIDs.addAll(pidRecursive);
-            }
-
-        } catch (IOException e) {
-            throw e;
-        } finally {
-            return childPIDs;
         }
+
+        // Recursive lookup of children PIDs
+        int currLength = childPIDs.size();
+        for (int i = 0; i < currLength; i++) {
+            List<Long> pidRecursive = getChildPIDs(childPIDs.get(i));
+            childPIDs.addAll(pidRecursive);
+        }
+
+        return childPIDs;
     }
 
 
