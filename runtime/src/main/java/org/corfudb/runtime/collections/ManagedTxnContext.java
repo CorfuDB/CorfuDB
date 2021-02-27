@@ -236,13 +236,18 @@ public class ManagedTxnContext implements AutoCloseable {
      * @param tableName fullyQualified name of the table.
      * @param indexName Index name. In case of protobuf-defined secondary index it is the field name.
      * @param indexKey  Key to query.
+     *                  For non-primitive keys, 'null' will return all those instances
+     *                  for which the secondary key was not explicitly set (when its parent was set).
+     *                  For primitive keys, 'null' has no meaning, instead, specifying the primitive's
+     *                  default value (as defined in Proto3, e.g., 0 for scalar or "" for strings)
+     *                  will return all instances for which the secondary key field was unset (when its parent was set).
      * @return Result of the query.
      */
     @Nonnull
     public <K extends Message, V extends Message, M extends Message, I>
     List<CorfuStoreEntry<K, V, M>> getByIndex(@Nonnull String tableName,
                                               @Nonnull String indexName,
-                                              @Nonnull I indexKey) {
+                                              I indexKey) {
         return this.txnContext.getByIndex(tableName, indexName, indexKey);
     }
 

@@ -12,8 +12,11 @@ import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
+import org.corfudb.runtime.exceptions.StreamSubscriptionException;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.SampleTableBMsg;
+import org.corfudb.test.SampleSchema.SampleTableCMsg;
+import org.corfudb.test.SampleSchema.SampleTableDMsg;
 import org.corfudb.test.SampleSchema.Uuid;
 import org.junit.Before;
 import org.junit.Test;
@@ -28,6 +31,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 /**
@@ -255,6 +260,87 @@ public class StreamingIT extends AbstractIT {
         assertThat(entry).hasSize(1);
         assertThat(entry.get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.CLEAR);
         assertThat(entry.get(0).getKey()).isNull();
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Verify that empty string tags are not supported for subscribers.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testStreamingSingleTableEmptyTag() throws Exception {
+        // Run a corfu server.
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime.
+        runtime = createRuntime(singleNodeEndpoint);
+        runtime.setTransactionLogging(true);
+
+        CorfuStore store = new CorfuStore(runtime);
+
+        // Record the initial timestamp.
+        Timestamp ts1 = store.getTimestamp();
+        final String tableName = "tableNoTags";
+
+        // Create a table.
+        Table<Uuid, SampleTableCMsg, Uuid> tableNoTags = store.openTable(
+                "test_namespace", tableName,
+                Uuid.class, SampleTableCMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Make some updates to the table, more than the buffer size.
+        final int bufferSize = 5;
+        final int numUpdates = bufferSize * 2 + 1;
+        for (int i = 0; i < numUpdates; i++) {
+            Uuid uuid = Uuid.newBuilder().setMsb(i).setLsb(i).build();
+            SampleTableCMsg msg = SampleTableCMsg.newBuilder().setPayload(String.valueOf(i)).build();
+            TxnContext tx = store.txn("test_namespace");
+            tx.putRecord(tableNoTags, uuid, msg, uuid);
+            tx.commit();
+        }
+
+        // Subscribe to streaming updates from the table using customized buffer size.
+        StreamListenerImpl listener1 = new StreamListenerImpl("stream_listener_1");
+        assertThrows(IllegalArgumentException.class, () -> store.subscribeListener(listener1, "test_namespace",
+                "", Collections.singletonList(tableName), ts1, bufferSize));
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /** Verify the same listener cannot be used across different subscribers
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testStreamingMultiTableSameListener() throws Exception {
+        // Run a corfu server and start runtime
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        // Create two tables.
+        store.openTable("test_namespace", "tableA",
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build());
+
+        store.openTable("test_namespace", "tableB",
+                Uuid.class, SampleTableDMsg.class, Uuid.class,
+                TableOptions.builder().build());
+
+        // Record the initial timestamp.
+        Timestamp ts1 = store.getTimestamp();
+
+        // Subscribe to streaming updates from tableA using listenerCommon
+        StreamListenerImpl listenerCommon = new StreamListenerImpl("stream_listener_common");
+        store.subscribeListener(listenerCommon, "test_namespace", "sample_streamer_1",
+                Collections.singletonList("tableA"), ts1);
+
+        // Attempt to subscribe to streaming updates from tableB using same listener
+        assertThrows(StreamSubscriptionException.class, () -> store.subscribeListener(listenerCommon, "test_namespace", "sample_streamer_4",
+                Collections.singletonList("tableB"), ts1));
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
@@ -490,6 +576,9 @@ public class StreamingIT extends AbstractIT {
 
         // Wait for a while, so we are sure the subscriber poller has run
         TimeUnit.SECONDS.sleep(2);
+
+        assertThatThrownBy(() -> store.subscribeListener(listener1, namespace, "sample_streamer_1",
+                Collections.singletonList(tableName), ts1)).isExactlyInstanceOf(StreamSubscriptionException.class);
 
         // Make some updates to the table
         final int numUpdates = 5;
