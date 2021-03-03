@@ -441,6 +441,15 @@ public class LogReplicationClientRouter implements IClientRouter {
         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ERROR, t));
     }
 
+    /**
+     * Cluster Change Callback.
+     *
+     * @param clusterDescriptor remote cluster descriptor
+     */
+    public synchronized void onClusterChange(ClusterDescriptor clusterDescriptor) {
+        channelAdapter.clusterChangeNotification(clusterDescriptor);
+    }
+
     public Optional<String> getRemoteLeaderNodeId() {
         return runtimeFSM.getRemoteLeaderNodeId();
     }
