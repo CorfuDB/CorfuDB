@@ -459,7 +459,8 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
         // Write this message out on the channel
         channel.writeAndFlush(request, channel.voidPromise());
         if (log.isTraceEnabled()) {
-            log.trace("Sent request message: {}", TextFormat.shortDebugString(request.getHeader()));
+            log.trace("Sent request message {}: {}", request.getPayload().getPayloadCase(),
+                    TextFormat.shortDebugString(request.getHeader()));
         }
 
         // Generate a timeout future, which will complete exceptionally
@@ -514,7 +515,10 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
 
         // Write this message out on the channel
         channel.writeAndFlush(request, channel.voidPromise());
-        log.trace("Sent one-way request message: {}", TextFormat.shortDebugString(request.getHeader()));
+        if (log.isTraceEnabled()) {
+            log.trace("Sent one-way request message {}: {}", request.getPayload().getPayloadCase(),
+                    TextFormat.shortDebugString(request.getHeader()));
+        }
     }
 
     /**

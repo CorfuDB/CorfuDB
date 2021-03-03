@@ -182,18 +182,18 @@ public class ServerContext implements AutoCloseable {
     }
 
     int getBaseServerThreadCount() {
-        int threadCount = Integer.parseInt(getServerConfig(String.class, "--base-server-threads"));
-        return threadCount == 0 ? 1 : threadCount;
+        Optional<String> threadCount = getServerConfig("--base-server-threads");
+        return threadCount.map(Integer::parseInt).orElse(1);
     }
 
-    public int getLogunitThreadCount() {
-        int threadCount = Integer.parseInt(getServerConfig(String.class, "--logunit-threads"));
-        return threadCount == 0 ? Runtime.getRuntime().availableProcessors() * 2 : threadCount;
+    public int getLogUnitThreadCount() {
+        Optional<String> threadCount = getServerConfig("--logunit-threads");
+        return threadCount.map(Integer::parseInt).orElse(Runtime.getRuntime().availableProcessors() * 2);
     }
 
     public int getManagementServerThreadCount() {
-        int threadCount = Integer.parseInt(getServerConfig(String.class, "--management-server-threads"));
-        return threadCount == 0 ? 4 : threadCount;
+        Optional<String> threadCount = getServerConfig("--management-server-threads");
+        return threadCount.map(Integer::parseInt).orElse(4);
     }
 
     public String getPluginConfigFilePath() {
@@ -375,6 +375,17 @@ public class ServerContext implements AutoCloseable {
         return (T) getServerConfig().get(optionName);
     }
 
+    /**
+     * Get a field from the server configuration map.
+     *
+     * @param optionName    The name of the option to retrieve.
+     * @param <T>           The type of the field to return.
+     * @return              The field with the give option name.
+     */
+    @SuppressWarnings("unchecked")
+    public <T> Optional<T> getServerConfig(String optionName) {
+        return Optional.ofNullable((T) getServerConfig().get(optionName));
+    }
 
     /**
      * Install a single node layout if and only if no layout is currently installed.
