@@ -1,11 +1,9 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.ByteString;
 import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
-import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -47,8 +45,6 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.getLrEnt
  */
 public class StreamsLogEntryReader implements LogEntryReader {
 
-    private CorfuRuntime rt;
-
     private final LogReplicationEntryType MSG_TYPE = LogReplicationEntryType.LOG_ENTRY_MESSAGE;
 
     // Set of UUIDs for the corresponding streams
@@ -85,8 +81,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
     private StreamIteratorMetadata currentProcessedEntryMetadata;
 
     public StreamsLogEntryReader(CorfuRuntime runtime, LogReplicationConfig config) {
-        this.rt = runtime;
-        this.rt.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
+        runtime.parseConfigurationString(runtime.getLayoutServers().get(0)).connect();
         this.maxDataSizePerMsg = config.getMaxDataSizePerMsg();
         this.currentProcessedEntryMetadata = new StreamIteratorMetadata(Address.NON_ADDRESS, false);
         this.messageSizeDistributionSummary = configureMessageSizeDistributionSummary();
@@ -103,7 +98,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         log.debug("Streams to replicate total={}, stream_names={}, stream_ids={}", streamUUIDs.size(), streams, streamUUIDs);
 
         //create an opaque stream for transaction stream
-        txOpaqueStream = new TxOpaqueStream(rt);
+        txOpaqueStream = new TxOpaqueStream(runtime);
     }
 
     private LogReplicationEntryMsg generateMessageWithOpaqueEntryList(
@@ -313,7 +308,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         public TxOpaqueStream(CorfuRuntime rt) {
             //create an opaque stream for transaction stream
             this.rt = rt;
-            txStream = new OpaqueStream(rt, rt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID));
+            txStream = new OpaqueStream(rt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID));
             streamUpTo();
         }
 

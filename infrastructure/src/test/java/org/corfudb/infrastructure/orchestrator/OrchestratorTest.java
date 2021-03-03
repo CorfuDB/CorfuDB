@@ -71,7 +71,6 @@ public class OrchestratorTest {
     private Orchestrator orchestrator;
 
     // Additional objects that need to be mocked or spied on.
-    private ServerContext mockServerContext;
     private IServerRouter mockServerRouter;
     private ChannelHandlerContext mockChannelHandlerContext;
     private Orchestrator.WorkflowFactory workflowFactory;
@@ -148,7 +147,7 @@ public class OrchestratorTest {
      */
     @Before
     public void setup() {
-        mockServerContext = mock(ServerContext.class);
+        ServerContext mockServerContext = mock(ServerContext.class);
         mockServerRouter = mock(IServerRouter.class);
         mockChannelHandlerContext = mock(ChannelHandlerContext.class);
         workflowFactory = spy(new Orchestrator.WorkflowFactory());

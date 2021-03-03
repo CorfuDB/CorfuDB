@@ -64,9 +64,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     private static UUID snapshotSyncId = UUID.randomUUID();
 
-    private Process server1;
-    private Process server2;
-
     // Connect with server1 to generate data
     private CorfuRuntime srcDataRuntime = null;
 
@@ -100,13 +97,13 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     private void setupEnv() throws IOException {
         // Start node one and populate it with data
-        server1 = new CorfuServerRunner()
+        new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(DEFAULT_PORT)
                 .setSingle(true)
                 .runServer();
 
-        server2 = new CorfuServerRunner()
+        new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(WRITER_PORT)
                 .setSingle(true)

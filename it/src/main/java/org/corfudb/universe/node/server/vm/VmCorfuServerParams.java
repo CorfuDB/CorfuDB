@@ -5,40 +5,20 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
+import lombok.experimental.SuperBuilder;
 import org.corfudb.universe.node.server.CorfuServerParams;
-import org.slf4j.event.Level;
-
-import java.nio.file.Path;
-import java.time.Duration;
-import java.util.Optional;
-
-import static org.corfudb.universe.node.server.CorfuServer.Mode;
-import static org.corfudb.universe.node.server.CorfuServer.Persistence;
 
 
 /**
  * Represents the parameters for constructing a {@link VmCorfuServer}.
  */
+@SuperBuilder
 @Getter
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
 public class VmCorfuServerParams extends CorfuServerParams {
     @NonNull
     private final VmName vmName;
-
-    @Builder
-    public VmCorfuServerParams(
-            VmName vmName, int port, Mode mode, Persistence persistence,
-            Level logLevel, String clusterName, Duration stopTimeout, String serverVersion,
-            Path universeDirectory, String dockerImage, double logSizeQuotaPercentage) {
-
-        super(
-                port, mode, persistence, logLevel, clusterName, stopTimeout,
-                Optional.empty(), serverVersion, universeDirectory, dockerImage,
-                logSizeQuotaPercentage
-        );
-        this.vmName = vmName;
-    }
 
     @Builder
     @EqualsAndHashCode
