@@ -1,3 +1,3 @@
 #!/bin/sh
 
-java -cp *.jar org.corfudb.generator.LongevityRun "$@"
+java -cp ./*.jar org.corfudb.generator.LongevityRun "$@"
