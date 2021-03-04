@@ -1,4 +1,4 @@
-package org.corfudb.generator;
+package org.corfudb.generator.util;
 
 import org.corfudb.runtime.collections.Index;
 

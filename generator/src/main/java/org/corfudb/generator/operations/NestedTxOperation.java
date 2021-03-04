@@ -16,8 +16,7 @@ public class NestedTxOperation extends Operation {
     private static final int MAX_NEST = 20;
 
     public NestedTxOperation(State state) {
-        super(state);
-        shortName = "TxNest";
+        super(state, "TxNest");
     }
 
     @Override
@@ -25,22 +24,23 @@ public class NestedTxOperation extends Operation {
         Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_START);
         state.startOptimisticTx();
 
-        int numNested = state.getOperationCount().sample(1).get(0);
+        int numNested = state.getOperationCount().sample();
         int nestedTxToStop = numNested;
-        for (int i = 0; i < numNested && i < MAX_NEST; i++) {
-            try{
-            state.startOptimisticTx();
-            int numOperations = state.getOperationCount().sample(1).get(0);
-            List<Operation> operations = state.getOperations().sample(numOperations);
 
-            for (int x = 0; x < operations.size(); x++) {
-                if (operations.get(x) instanceof OptimisticTxOperation ||
-                        operations.get(x) instanceof SnapshotTxOperation
-            || operations.get(x) instanceof NestedTxOperation) {
-                    continue;
+        for (int i = 0; i < numNested && i < MAX_NEST; i++) {
+            try {
+                state.startOptimisticTx();
+                int numOperations = state.getOperationCount().sample();
+                List<Operation> operations = state.getOperations().sample(numOperations);
+
+                for (Operation operation : operations) {
+                    if (operation instanceof OptimisticTxOperation ||
+                            operation instanceof SnapshotTxOperation
+                            || operation instanceof NestedTxOperation) {
+                        continue;
+                    }
+                    operation.execute();
                 }
-                operations.get(x).execute();
-            }
             } catch (TransactionAbortedException tae) {
                 log.warn("Transaction Aborted", tae);
                 nestedTxToStop--;

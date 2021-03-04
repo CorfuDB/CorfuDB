@@ -5,7 +5,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.slf4j.LoggerFactory;
 
 /**
- * Created by rmichoud on 10/9/17.
+ * Correctness recorder
  */
 public class Correctness {
 
@@ -15,6 +15,7 @@ public class Correctness {
 
     private static final String TX_PATTERN = "%s, %s";
     private static final String TX_PATTERN_VERSION = "%s, %s, %s";
+
     public static final String TX_START = "start";
     public static final String TX_END = "end";
     public static final String TX_ABORTED = "aborted";
@@ -23,9 +24,8 @@ public class Correctness {
 
     public static void recordOperation(String operation, boolean transactionPrefix) {
         if (transactionPrefix) {
-            String txOperation = "Tx" + operation;
-            correctnessLogger.info("{}, {}", txOperation,
-                    TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence());
+            long sequence = TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence();
+            correctnessLogger.info("Tx{}, {}", operation, sequence);
         } else {
             correctnessLogger.info(operation);
         }
@@ -34,9 +34,8 @@ public class Correctness {
     /**
      * Record a transaction marker operation
      *
-     *
      * @param version if we have a version to report
-     * @param fields fields to report
+     * @param fields  fields to report
      */
     public static void recordTransactionMarkers(boolean version, String... fields) {
         if (version) {
