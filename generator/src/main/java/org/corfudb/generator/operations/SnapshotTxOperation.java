@@ -14,8 +14,6 @@ import java.util.Random;
  */
 @Slf4j
 public class SnapshotTxOperation extends Operation {
-    private static final Random RANDOM = new Random();
-
     public SnapshotTxOperation(State state) {
         super(state, "TxSnap");
     }

@@ -7,7 +7,6 @@ import org.corfudb.runtime.MultiCheckpointWriter;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.view.AddressSpaceView;
 
-import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 /**
