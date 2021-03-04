@@ -458,6 +458,70 @@ public class StreamingIT extends AbstractIT {
     }
 
     /**
+     * Test the case where a table is empty at the time of subscription, and that it is able
+     * to receive deltas once updates to the table happen.
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void testSubscriberOnEmptyTables() throws Exception {
+        // Run a corfu server.
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime.
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        // Record the initial timestamp.
+        Timestamp ts1 = store.getTimestamp();
+        final String namespace = "test_namespace";
+        final String tableName = "table_test";
+
+        // Create 2 tables.
+        Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
+                namespace, tableName,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Subscribe to streaming updates, while table has not been yet updated
+        StreamListenerImpl listener1 = new StreamListenerImpl("stream_listener_1");
+        store.subscribeListener(listener1, namespace, "sample_streamer_1",
+                Collections.singletonList(tableName), ts1);
+
+        // Wait for a while, so we are sure the subscriber poller has run
+        TimeUnit.SECONDS.sleep(2);
+
+        // Make some updates to the table
+        final int numUpdates = 5;
+        for (int index = 0; index < numUpdates; index++) {
+            try (TxnContext tx = store.txn(namespace)) {
+                Uuid uuid = Uuid.newBuilder().setMsb(index).setLsb(index).build();
+                SampleTableAMsg msgA = SampleTableAMsg.newBuilder().setPayload(String.valueOf(index)).build();
+                tx.putRecord(tableA, uuid, msgA, uuid);
+                tx.commit();
+            }
+        }
+
+        // Wait for a while, so we are sure the subscriber poller has run
+        TimeUnit.SECONDS.sleep(2);
+
+        // Verify updates
+        LinkedList<CorfuStreamEntries> updates1 = listener1.getUpdates();
+        assertThat(updates1).hasSize(numUpdates);
+
+        for (int index = 0; index < numUpdates; index++) {
+            assertThat(updates1.get(index).getEntries()).hasSize(1);
+            List<CorfuStreamEntry> entries = updates1.get(index).getEntries().values().stream().findFirst().get();
+            assertThat(entries).hasSize(1);
+            assertThat(((Uuid)entries.get(0).getKey()).getMsb()).isEqualTo(index);
+            assertThat(((SampleTableAMsg)entries.get(0).getPayload()).getPayload()).isEqualTo(String.valueOf(index));
+            assertThat(((Uuid)entries.get(0).getMetadata()).getMsb()).isEqualTo(index);
+        }
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
      * Backward compatibility test.
      * <p>
      * Streaming Test with 2 different tables and a single streamer

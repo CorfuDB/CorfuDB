@@ -828,6 +828,7 @@ public class SequencerServer extends AbstractServer {
             } else {
                 log.warn("getStreamsAddressesMap: address space map is not present for stream {}." +
                         " Verify this is a valid stream.", streamId);
+                requestedAddressSpaces.put(streamId, new StreamAddressSpace(Address.NON_EXIST, Collections.EMPTY_SET));
             }
         }
 
