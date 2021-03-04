@@ -11,24 +11,24 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
  */
 @Slf4j
 public class RemoveOperation extends Operation {
+
     public RemoveOperation(State state) {
-        super(state);
-        shortName = "Rm";
+        super(state, "Rm");
     }
 
     @Override
     public void execute() {
         // Hack for Transaction writes only
         if (TransactionalContext.isInTransaction()) {
-            String streamId = (String) state.getStreams().sample(1).get(0);
-            String key = (String) state.getKeys().sample(1).get(0);
+            String streamId = state.getStreams().sample();
+            String key = state.getKeys().sample();
             state.getMap(CorfuRuntime.getStreamID(streamId)).remove(key);
 
             String correctnessRecord = String.format("%s, %s:%s", shortName, streamId, key);
             Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
 
             if (!TransactionalContext.isInTransaction()) {
-                state.setLastSuccessfulWriteOperationTimestamp(System.currentTimeMillis());
+                state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
             }
         }
     }

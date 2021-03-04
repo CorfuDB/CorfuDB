@@ -17,7 +17,7 @@ jobs:
     - name: Cache local Maven repository
       uses: actions/cache@v2
       with:
-        path: ~/.m2
+        path: ~/.m2/repository
         key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
           ${{ runner.os }}-maven-
@@ -28,7 +28,7 @@ jobs:
         java-version: 1.8
 
     - name: run unit tests
-      run: ./mvnw clean test -pl \!samples -am -T 1C
+      run: ./mvnw clean test -pl \!samples -am -Dmaven.javadoc.skip=true -T 1C
 
   integration_test:
       # https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
@@ -45,7 +45,7 @@ jobs:
       - name: Cache local Maven repository
         uses: actions/cache@v2
         with:
-          path: ~/.m2
+          path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
@@ -76,7 +76,7 @@ jobs:
       - name: Cache local Maven repository
         uses: actions/cache@v2
         with:
-          path: ~/.m2
+          path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
@@ -89,11 +89,8 @@ jobs:
       - uses: satackey/action-docker-layer-caching@v0.0.8
         continue-on-error: true
 
-      - name: Build corfu
-        run: ./mvnw install -DskipTests=true -Dmaven.javadoc.skip=true -B -V -T 1C -q
-
       - name: Prepare docker image
-        run: ./mvnw -pl infrastructure -DskipTests -Pdocker clean package
+        run: ./mvnw clean install -DskipTests -Pdocker -Dmaven.javadoc.skip=true -T 1C
 
       - name: Run universe tests
-        run: ./mvnw -pl :universe clean verify -Pit
+        run: ./mvnw -pl :universe verify -Puniverse -DskipTests -Dmaven.javadoc.skip=true
