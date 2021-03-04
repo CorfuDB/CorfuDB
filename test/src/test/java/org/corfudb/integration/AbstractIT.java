@@ -26,8 +26,6 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -136,17 +134,10 @@ public class AbstractIT extends AbstractCorfuTest {
     public static boolean shutdownCorfuServer(Process corfuServerProcess) throws IOException, InterruptedException {
         int retries = SHUTDOWN_RETRIES;
         while (true) {
-            long parentPid = getPid(corfuServerProcess);
-            // Get Children PIDs
-            List<Long> pidList = getChildPIDs(parentPid);
-            pidList.add(parentPid);
-
             ProcessBuilder builder = new ProcessBuilder();
-            for (Long pid : pidList) {
-                builder.command("sh", "-c", KILL_COMMAND + pid.longValue());
-                Process p = builder.start();
-                p.waitFor();
-            }
+            builder.command("sh", "-c", KILL_COMMAND + getPid(corfuServerProcess));
+            Process p = builder.start();
+            p.waitFor();
 
             if (retries == 0) {
                 return false;
@@ -219,45 +210,6 @@ public class AbstractIT extends AbstractCorfuTest {
             TimeUnit.MILLISECONDS.sleep(PARAMETERS.TIMEOUT_VERY_SHORT.toMillis());
         }
     }
-
-    /**
-     * Get list of children (descendant) process identifiers (recursive)
-     *
-     * @param pid parent process identifier
-     * @return list of children process identifiers
-     * @throws IOException {@inheritDoc}
-     * @throws InterruptedException {@inheritDoc}
-     */
-    private static List<Long> getChildPIDs (long pid) throws IOException, InterruptedException {
-        List<Long> childPIDs = new ArrayList<>();
-        // Get child pid(s)
-        ProcessBuilder builder = new ProcessBuilder();
-        builder.command("sh", "-c", "pgrep -P " + pid);
-        Process p = builder.start();
-        p.waitFor();
-
-        // Read output
-        BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
-        String line = null;
-        String previous = null;
-        while ((line = br.readLine()) != null) {
-            if (!line.equals(previous)) {
-                previous = line;
-                long childPID = Long.parseLong(line);
-                childPIDs.add(childPID);
-            }
-        }
-
-        // Recursive lookup of children PIDs
-        int currLength = childPIDs.size();
-        for (int i = 0; i < currLength; i++) {
-            List<Long> pidRecursive = getChildPIDs(childPIDs.get(i));
-            childPIDs.addAll(pidRecursive);
-        }
-
-        return childPIDs;
-    }
-
 
     public static long getPid(Process p) {
         long pid = -1;
