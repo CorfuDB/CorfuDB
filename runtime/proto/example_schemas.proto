@@ -107,8 +107,11 @@ message Adult {
                        // Default Index Name will be 'age'
                        (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.age"},
                        // Explicit (custom) Index Name
-                       (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.children.child.age" index_name: "kidsAge" }];
-    Company work = 2;
+                       (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.children.child.age" index_name: "kidsAge" },
+                       // Index on a non-primitive type (which won't always be set)
+                       (org.corfudb.runtime.schema).nested_secondary_key = { index_path: "person.children.child"}];
+    Company work = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "work.company_id" }];
+    repeated Address addresses = 3 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "addresses.unique_address_id" index_name: "address"}];
 }
 
 message Children {
@@ -126,11 +129,13 @@ message PhoneNumber {
 }
 
 message Office {
-    repeated Department departments = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "departments.members.phoneNumbers"}];
+    string office_nickname = 1;
+    repeated Department departments = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "departments.members.phoneNumbers"}];
 }
 
 message Company {
-    repeated Office office = 1 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "office.departments"}];
+    Uuid company_id = 1;
+    repeated Office office = 2 [(org.corfudb.runtime.schema).nested_secondary_key = { index_path: "office.departments"}];
 }
 
 message Department {
@@ -208,8 +213,9 @@ message Photo {
 }
 
 message Address {
-    fixed64 number = 1;
-    string city = 2;
-    string street = 3;
-    string unit = 4;
+    Uuid unique_address_id = 1;
+    fixed64 number = 2;
+    string city = 3;
+    string street = 4;
+    string unit = 5;
 }
