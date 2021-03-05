@@ -77,7 +77,7 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
             lastNestedField = (i == (nestedFields.length - 1));
 
             if (nestedFieldDescriptor == null) {
-                throw new IllegalArgumentException(String.format("Secondary key %s, invalid field %s", indexPath, nestedFields[i]));
+                return Collections.EMPTY_LIST;
             }
 
             OneofDescriptor oneOfDescriptor = inspectDescriptorForOneOfFields(nestedFieldDescriptor, oneOfFieldNameToDescriptor);
@@ -89,6 +89,12 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
                 upperLevelRepeatedField = true;
                 subMessage = processRepeatedField(subMessage, indexPath, nestedFields[i], lastNestedField,
                         repeatedMessages, repeatedValues);
+
+                if (repeatedMessages.isEmpty() && repeatedValues.isEmpty()) {
+                    // If no repeated messages or values where found while parsing the repeated field, no point in continuing
+                    // parsing the message as the secondary index will not be found.
+                    return processNonPrimitive(lastNestedField);
+                }
             } else if (upperLevelRepeatedField) {
                 // Case where an upper field was marked as a 'repeated', requires further iteration over
                 // each repeated message
@@ -99,22 +105,23 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
                 // Case: Non-Primitive type (message)
                 if (nestedFieldDescriptor.getType().equals(FieldDescriptor.Type.MESSAGE)) {
                     if (isValidField(oneOfDescriptor, subMessage, nestedFields[i])) {
+                        // If next level descriptor is not set for the given message, no point in continuing parsing
+                        // the message as the secondary index will not be found.
+                        if (!subMessage.hasField(nestedFieldDescriptor)) {
+                            return processNonPrimitive(lastNestedField);
+                        }
                         subMessage = (Message) subMessage.getField(nestedFieldDescriptor);
                     }
                 } else {
                     // Case: Primitive Type
-                    if (i != (nestedFields.length - 1)) {
-                        // If its the last level it can be a primitive type, but if there are remaining
+                    if (!lastNestedField) {
+                        // Only if its the last level, it can be a primitive. If there are remaining
                         // levels in the secondary key, it is malformed
                         throw new IllegalArgumentException(String.format("Malformed secondary key=%s, " +
                                 "field <%s> of type PRIMITIVE.", indexPath, nestedFields[i]));
                     }
 
-                    if (isValidField(oneOfDescriptor, subMessage, nestedFields[i])) {
-                        return Arrays.asList((T) ClassUtils.cast(subMessage.getField(nestedFieldDescriptor)));
-                    } else {
-                        return Collections.emptyList();
-                    }
+                    return processPrimitive(subMessage, oneOfDescriptor, nestedFieldDescriptor, nestedFields[i]);
                 }
             }
         }
@@ -124,6 +131,25 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
         } else {
             return Arrays.asList((T)ClassUtils.cast(subMessage));
         }
+    }
+
+    private <T> Iterable<T> processPrimitive(Message subMessage, OneofDescriptor oneOfDescriptor,
+                                             FieldDescriptor fieldDescriptor, String nestedField) {
+        if (isValidField(oneOfDescriptor, subMessage, nestedField)) {
+            return Arrays.asList((T) ClassUtils.cast(subMessage.getField(fieldDescriptor)));
+        }
+        return Collections.emptyList();
+    }
+
+    private <T> Iterable<T> processNonPrimitive(boolean lastNestedField) {
+        if (lastNestedField) {
+            // If this is the last nested field, it means it is the secondary index which is unset
+            // Index as null (unset)
+            List<T> index = new ArrayList<>();
+            index.add(null);
+            return index;
+        }
+        return Collections.EMPTY_LIST;
     }
 
     /**
@@ -165,6 +191,13 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
             if (descriptor.getType().equals(FieldDescriptor.Type.MESSAGE)) {
                 // Non-Primitive type
                 if (isValidField(oneOfDescriptor, repeatedMessage, fieldName)) {
+                    if (!repeatedMessage.hasField(descriptor) && lastNestedField) {
+                        // If the repeated message does not contain the next level descriptor of the secondary index
+                        // and this is the last level (the secondary index field), index as 'null' as it is unset.
+                        repeatedValues.add(null);
+                        continue;
+                    }
+
                     lastProcessedMessage = (Message) repeatedMessage.getField(descriptor);
 
                     if (lastNestedField) {
@@ -189,6 +222,12 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
         return lastProcessedMessage;
     }
 
+    /**
+     * Process ProtoBuf repeated fields. A 'repeated' field is one that can be repeated any number of times
+     * (including zero) in a well-formed message.
+     *
+     * @return
+     */
     private <T> Message processRepeatedField(Message subMessage, String indexPath,
                                              String nestedIndexName, boolean lastNestedField,
                                              List<Message> repeatedMessages, List<T> repeatedValues) {
@@ -207,12 +246,12 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
         for (Message msg : messages) {
             FieldDescriptor descriptor = msg.getDescriptorForType().findFieldByName(nestedIndexName);
             int repeatedFieldCount = msg.getRepeatedFieldCount(descriptor);
+
             for (int index = 0; index < repeatedFieldCount; index++) {
                 if (descriptor.getType().equals(FieldDescriptor.Type.MESSAGE)) {
                     // Special case, repeated MESSAGE field, get all elements in the repeated field
                     // Over which indexed values will be extracted
                     repeatedMessage = (Message) msg.getRepeatedField(descriptor, index);
-
                     if (lastNestedField) {
                         repeatedValues.add(ClassUtils.cast(repeatedMessage));
                     } else {
@@ -315,14 +354,6 @@ public class ProtobufIndexer implements Index.Registry<Message, CorfuRecord<Mess
         } else {
             throw new IllegalArgumentException("Empty nested secondary key path");
         }
-    }
-
-    /**
-     * Validate the secondary key full specified path exists
-     */
-    private void validateSecondaryKey(String indexPath, String indexName, FieldDescriptor fieldDescriptor) {
-
-
     }
 
     @Override
