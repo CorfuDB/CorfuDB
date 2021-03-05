@@ -8,27 +8,27 @@ import java.util.Set;
 /**
  * This class implements the distribution of keys that can be inserted
  * into a map.
- *
+ * <p>
  * Created by maithem on 7/14/17.
  */
-public class Keys implements DataSet {
-    final Set<String> mapkeys;
-    final int numKeys;
+public class Keys implements DataSet<String> {
+    private final Set<String> mapKeys;
+    private final int numKeys;
 
     public Keys(int num) {
-        mapkeys = new HashSet<>();
+        mapKeys = new HashSet<>();
         numKeys = num;
     }
 
     @Override
     public void populate() {
-        for(int x = 0; x < numKeys; x++) {
-            mapkeys.add("key_" + Integer.toString(x));
+        for (int key = 0; key < numKeys; key++) {
+            mapKeys.add("key_" + key);
         }
     }
 
     @Override
     public List<String> getDataSet() {
-        return new ArrayList<>(mapkeys);
+        return new ArrayList<>(mapKeys);
     }
 }

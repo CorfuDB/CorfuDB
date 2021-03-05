@@ -1,5 +1,6 @@
 package org.corfudb.runtime.clients;
 
+import com.google.protobuf.TextFormat;
 import io.netty.channel.ChannelHandlerContext;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -77,6 +78,11 @@ public class ClientResponseHandler {
         final long requestId = response.getHeader().getRequestId();
         PayloadCase payloadCase = response.getPayload().getPayloadCase();
 
+        if (log.isTraceEnabled()) {
+            log.trace("Received response from the server - {}",
+                    TextFormat.shortDebugString(response));
+        }
+
         if (payloadCase == PayloadCase.SERVER_ERROR) {
             ErrorCase errorCase = response.getPayload().getServerError().getErrorCase();
             if (errorHandlerMap.containsKey(errorCase)) {
@@ -84,6 +90,9 @@ public class ClientResponseHandler {
                     // For errors, we always want to completeExceptionally
                     errorHandlerMap.get(errorCase).handle(response, ctx, router);
                 } catch (Throwable e) {
+                    log.warn("Server threw exception for {} with request_id: {}",
+                            response.getPayload().getPayloadCase(),
+                            response.getHeader().getRequestId());
                     router.completeExceptionally(requestId, e);
                 }
             }

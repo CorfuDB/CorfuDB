@@ -16,38 +16,33 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Created by rmichoud on 7/25/17.
- */
-
-/**
  * This Longevity app will stress test corfu using the Load
  * generator during a given duration.
- *
+ * <p>
  * I use a blocking queue in order to limit the number of operation
  * created at any time. Operations as created and consumed as we go.
- *
  */
 @Slf4j
 public class LongevityApp {
     private final long durationMs;
     private final boolean checkPoint;
-    final BlockingQueue<Operation> operationQueue;
-    final CorfuRuntime rt;
-    final State state;
+    private  final BlockingQueue<Operation> operationQueue;
+    private final CorfuRuntime rt;
+    private final State state;
 
-    final ExecutorService taskProducer;
-    final ScheduledExecutorService checkpointer;
-    final ExecutorService workers;
+    private final ExecutorService taskProducer;
+    private final ScheduledExecutorService checkpointer;
+    private final ExecutorService workers;
 
     // How much time we live the application hangs once the duration is finished
     // and the application is hanged
-    static final int APPLICATION_TIMEOUT_IN_MS = 10000;
-    static final long TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT = 60000;
+    public static final int APPLICATION_TIMEOUT_IN_MS = 10000;
+    public static final long TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT = 60000;
 
-    static final int QUEUE_CAPACITY = 1000;
+    private static final int QUEUE_CAPACITY = 1000;
 
-    long startTime;
-    final int numberThreads;
+    private long startTime;
+    private final int numberThreads;
 
 
     public LongevityApp(long durationMs, int numberThreads, String configurationString, boolean checkPoint) {
@@ -75,36 +70,12 @@ public class LongevityApp {
     }
 
     /**
-     * Assess liveness of the application
-     *
-     * If the client was not able to do any operation during the last APPLICATION_TIMEOUT_IN_MS,
-     * we declare liveness of the client as failed. Also, if the client was not able to finish
-     * in time, it is marked as liveness failure.
-     *
-     * @param finishedInTime
-     * @return
-     */
-    private boolean livenessSuccess(boolean finishedInTime) {
-        if (!finishedInTime) {
-            return false;
-        }
-
-        long timeSinceSuccessfulReadOperation = System.currentTimeMillis()
-                - state.getLastSuccessfulReadOperationTimestamp();
-        long timeSinceSuccessfulWriteOperation = System.currentTimeMillis()
-                - state.getLastSuccessfulWriteOperationTimestamp();
-
-        return (timeSinceSuccessfulReadOperation < APPLICATION_TIMEOUT_IN_MS
-                && timeSinceSuccessfulWriteOperation < APPLICATION_TIMEOUT_IN_MS);
-    }
-
-    /**
      * Give a chance to the workers to finish naturally (thanks to the timer) and then kill
      * the producer and the checkpointer.
-     *
+     * <p>
      * At the end of the duration, we give some margin for the workers to finish their task before shutting
      * down the thread pool.
-     *
+     * <p>
      * If the application is hung (which can happen when something goes wrong) we do a hard exit. If any thread
      * is not playing nice with Interrupted exceptions (which can be a bug as well), this is the only way to
      * be sure we terminate.
@@ -115,7 +86,7 @@ public class LongevityApp {
             boolean finishedInTime = workers.
                     awaitTermination(durationMs + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
 
-            String livenessState = livenessSuccess(finishedInTime) ? "Success" : "Fail";
+            String livenessState = state.getCtx().livenessSuccess(finishedInTime) ? "Success" : "Fail";
 
             Correctness.recordOperation("Liveness, " + livenessState, false);
             if (!finishedInTime) {
@@ -153,7 +124,7 @@ public class LongevityApp {
      * A thread is tasked to indefinitely create operation. Operations are then
      * put into a blocking queue. The blocking queue serves as a regulator for how
      * many operations exist at the same time. It allows us to regulate the memory footprint.
-     *
+     * <p>
      * The only way to terminate the producer is to call explicitly a shutdownNow() on
      * the executorService.
      */
@@ -211,12 +182,12 @@ public class LongevityApp {
      * Try to connect the runtime and throws a SystemUnavailableError if cannot connect
      * within the timeout.
      *
-     * @param timeoutInMs
-     * @throws SystemUnavailableError
+     * @param timeoutInMs timeout
+     * @throws SystemUnavailableError error
      */
-    private void tryToConnectTimeout (long timeoutInMs) throws SystemUnavailableError {
+    private void tryToConnectTimeout(long timeoutInMs) throws SystemUnavailableError {
         try {
-            CompletableFuture.supplyAsync(() -> rt.connect()).get(timeoutInMs, TimeUnit.MILLISECONDS);
+            CompletableFuture.supplyAsync(rt::connect).get(timeoutInMs, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             Correctness.recordOperation("Liveness, " + false, false);
             throw new SystemUnavailableError(e.getMessage());
