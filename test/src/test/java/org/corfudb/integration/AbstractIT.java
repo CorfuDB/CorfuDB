@@ -54,8 +54,8 @@ public class AbstractIT extends AbstractCorfuTest {
     private static final String KILL_COMMAND = "pkill -9 -P ";
     private static final String FORCE_KILL_ALL_CORFU_COMMAND = "jps | grep -e CorfuServer -e CorfuInterClusterReplicationServer|awk '{print $1}'| xargs kill -9";
 
-    private static final int SHUTDOWN_RETRIES = 10;
-    private static final long SHUTDOWN_RETRY_WAIT = 500;
+    private static final int SHUTDOWN_RETRIES = 20;
+    private static final long SHUTDOWN_RETRY_WAIT = 1000;
 
     // Config the msg size for log replication data
     // sent from active cluster to the standby cluster.
