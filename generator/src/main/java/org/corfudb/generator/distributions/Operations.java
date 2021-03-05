@@ -15,13 +15,13 @@ import java.util.List;
 /**
  * This class implements a distribution of all possible operations that the generator
  * can execute.
- *
+ * <p>
  * Created by maithem on 7/14/17.
  */
-public class Operations implements DataSet {
+public class Operations implements DataSet<Operation> {
 
     private final State state;
-    final List<Operation> allOperations;
+    private final List<Operation> allOperations;
 
     public Operations(State state) {
         allOperations = ImmutableList.of(
@@ -30,9 +30,8 @@ public class Operations implements DataSet {
                 new OptimisticTxOperation(state),
                 new SnapshotTxOperation(state),
                 new SleepOperation(state),
-                new RemoveOperation(state));
-//              TODO: Fix nestedTx path to enable it
-//              new NestedTxOperation(state));
+                new RemoveOperation(state)
+        );
         this.state = state;
     }
 

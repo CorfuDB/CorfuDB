@@ -58,8 +58,7 @@ import java.util.stream.Stream;
  */
 @Slf4j
 @CorfuObject
-public class CorfuTable<K, V> implements
-        ICorfuTable<K, V>, ICorfuSMR<CorfuTable<K, V>> {
+public class CorfuTable<K, V> implements ICorfuTable<K, V>, ICorfuSMR<CorfuTable<K, V>> {
 
     // Accessor/Mutator threads can interleave in a way that create a deadlock because they can create a
     // circular dependency between the VersionLockedObject(VLO) lock and the common forkjoin thread pool. In order
@@ -175,7 +174,7 @@ public class CorfuTable<K, V> implements
      * @param <V>                   Value type
      * @return                      A type token to pass to the builder.
      */
-    static <K, V> TypeToken<CorfuTable<K, V>> getTableType() {
+    public static <K, V> TypeToken<CorfuTable<K, V>> getTableType() {
         return new TypeToken<CorfuTable<K, V>>() {};
     }
 

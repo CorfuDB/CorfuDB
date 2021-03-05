@@ -1,12 +1,8 @@
 package org.corfudb.generator;
 
-import java.time.Duration;
-
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import lombok.extern.slf4j.Slf4j;
-
-
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -16,9 +12,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.slf4j.LoggerFactory;
 
-/**
- * Created by rmichoud on 7/27/17.
- */
+import java.time.Duration;
 
 /**
  * This longevity test launcher will set the duration of the test
@@ -30,7 +24,6 @@ public class LongevityRun {
     private static final String TIME_AMOUNT = "time_amount";
     private static final String CORFU_ENDPOINT = "corfu_endpoint";
     private static final String CHECKPOINT = "checkpoint";
-
 
 
     public static void main(String[] args) {
@@ -56,7 +49,6 @@ public class LongevityRun {
         options.addOption(checkPointFlag);
 
 
-
         CommandLineParser parser = new DefaultParser();
         HelpFormatter formatter = new HelpFormatter();
         CommandLine cmd;
@@ -66,7 +58,7 @@ public class LongevityRun {
             String timeUnitValue = cmd.getOptionValue(TIME_UNIT);
             if (!timeUnitValue.equals("m") &&
                     !timeUnitValue.equals("s") &&
-                    !timeUnitValue.equals("h")){
+                    !timeUnitValue.equals("h")) {
                 throw new ParseException("Time unit should be {s,m,h}");
             }
         } catch (ParseException e) {
@@ -83,8 +75,7 @@ public class LongevityRun {
         String configurationString = cmd.hasOption(CORFU_ENDPOINT) ?
                 cmd.getOptionValue(CORFU_ENDPOINT) : "localhost:9000";
 
-        boolean checkPoint = cmd.hasOption(CHECKPOINT) ?
-                true : false;
+        boolean checkPoint = cmd.hasOption(CHECKPOINT);
 
         switch (timeUnitValue) {
             case "s":
