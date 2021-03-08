@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.infrastructure.LogReplicationRuntimeParameters;
+import org.corfudb.infrastructure.logreplication.infrastructure.ClusterDescriptor;
 import org.corfudb.infrastructure.logreplication.infrastructure.TopologyDescriptor;
 import org.corfudb.infrastructure.logreplication.replication.LogReplicationSourceManager;
 import org.corfudb.infrastructure.logreplication.replication.receive.LogReplicationMetadataManager;
@@ -32,7 +33,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Runtime to connect to a remote Corfu Log Replication Cluster.
- *
+ * <p>
  * This class represents the Log Replication Runtime Finite State Machine, which defines
  * all states in which the leader node on the active cluster can be.
  *
@@ -105,7 +106,6 @@ import java.util.concurrent.TimeUnit;
  * - STOPPED                    :: stop log replication server (fatal state)
  *
  * @author amartinezman
- *
  */
 @Slf4j
 public class CorfuLogReplicationRuntime {
@@ -161,7 +161,7 @@ public class CorfuLogReplicationRuntime {
         this.router = new LogReplicationClientRouter(parameters, this);
         this.router.addClient(new LogReplicationHandler());
         this.sourceManager = new LogReplicationSourceManager(parameters, new LogReplicationClient(router, remoteClusterId),
-            metadataManager);
+                metadataManager);
         this.connectedNodes = new HashSet<>();
         ThreadFactory threadFactory = new ThreadFactoryBuilder().setNameFormat("runtime-fsm-worker").build();
         this.communicationFSMWorkers = new ThreadPoolExecutor(1, 1, 0L,
@@ -203,7 +203,7 @@ public class CorfuLogReplicationRuntime {
 
     /**
      * Input function of the FSM.
-     *
+     * <p>
      * This method enqueues runtime events for further processing.
      *
      * @param event LogReplicationRuntimeEvent to process.
@@ -222,7 +222,7 @@ public class CorfuLogReplicationRuntime {
 
     /**
      * Consumer of the eventQueue.
-     *
+     * <p>
      * This method consumes the log replication events and does the state transition.
      */
     private void consume() {
@@ -284,7 +284,8 @@ public class CorfuLogReplicationRuntime {
 
     public synchronized void resetRemoteLeaderNodeId() {
         log.debug("Reset remote leader node id");
-        leaderNodeId = Optional.empty(); }
+        leaderNodeId = Optional.empty();
+    }
 
     public synchronized Optional<String> getRemoteLeaderNodeId() {
         log.trace("Retrieve remote leader node id {}", leaderNodeId);
@@ -293,6 +294,11 @@ public class CorfuLogReplicationRuntime {
 
     public synchronized Set<String> getConnectedNodes() {
         return connectedNodes;
+    }
+
+    public synchronized void updateRouterClusterDescriptor(ClusterDescriptor clusterDescriptor) {
+        log.warn("update router's cluster descriptor {}", clusterDescriptor);
+        router.onClusterChange(clusterDescriptor);
     }
 
     /**

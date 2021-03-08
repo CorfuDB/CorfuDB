@@ -26,7 +26,7 @@ public class CorfuReplicationManager {
 
     // Keep map of remote cluster ID and the associated log replication runtime (an abstract
     // client to that cluster)
-    private Map<String, CorfuLogReplicationRuntime> runtimeToRemoteCluster = new HashMap<>();
+    private final Map<String, CorfuLogReplicationRuntime> runtimeToRemoteCluster = new HashMap<>();
 
     @Setter
     @Getter
@@ -189,19 +189,27 @@ public class CorfuReplicationManager {
         Set<String> standbysToRemove = new HashSet<>(currentStandbys);
         standbysToRemove.removeAll(intersection);
 
-        //Remove standbys that are not in the new config
+        // Remove standbys that are not in the new config
         for (String clusterId : standbysToRemove) {
             stopLogReplicationRuntime(clusterId);
             topology.removeStandbyCluster(clusterId);
         }
 
-        //Start the standbys that are in the new config but not in the current config
+        // Start the standbys that are in the new config but not in the current config
         for (String clusterId : newStandbys) {
             if (!runtimeToRemoteCluster.containsKey(clusterId)) {
                 ClusterDescriptor clusterInfo = newConfig.getStandbyClusters().get(clusterId);
                 topology.addStandbyCluster(clusterInfo);
                 startLogReplicationRuntime(clusterInfo);
             }
+        }
+
+        // The connection id or other transportation plugin's info could've changed for
+        // existing standby cluster's, updating the routers will re-establish the connection
+        // to the correct endpoints/nodes
+        for (String clusterId : intersection) {
+            ClusterDescriptor clusterInfo = newConfig.getStandbyClusters().get(clusterId);
+            runtimeToRemoteCluster.get(clusterId).updateRouterClusterDescriptor(clusterInfo);
         }
     }
 

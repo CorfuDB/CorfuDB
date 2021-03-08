@@ -153,9 +153,9 @@ public class LogReplicationClientRouter implements IClientRouter {
         // Iterate through all types of CorfuMsgType, registering the handler
         try {
             client.getHandledCases().forEach(x -> {
-                        handlerMap.put(x, client);
-                        log.info("Registered client to handle messages of type {}", x);
-                    });
+                handlerMap.put(x, client);
+                log.info("Registered client to handle messages of type {}", x);
+            });
         } catch (UnsupportedOperationException ex) {
             log.trace("No registered CorfuMsg handler for client {}", client, ex);
         }
@@ -174,7 +174,7 @@ public class LogReplicationClientRouter implements IClientRouter {
      * or a timeout in the case there is no response.
      */
     @Override
-    public  <T> CompletableFuture<T> sendRequestAndGetCompletable(
+    public <T> CompletableFuture<T> sendRequestAndGetCompletable(
             @Nonnull RequestPayloadMsg payload,
             @Nonnull String nodeId) {
 
@@ -276,9 +276,9 @@ public class LogReplicationClientRouter implements IClientRouter {
      * or a timeout in the case there is no response.
      */
     @Override
-    public  <T> CompletableFuture<T> sendRequestAndGetCompletable(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
-                                                                  org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
-                                                                  ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
+    public <T> CompletableFuture<T> sendRequestAndGetCompletable(RequestPayloadMsg payload, long epoch, RpcCommon.UuidMsg clusterId,
+                                                                 org.corfudb.runtime.proto.service.CorfuMessage.PriorityLevel priority,
+                                                                 ClusterIdCheck ignoreClusterId, EpochCheck ignoreEpoch) {
         // This is an empty stub. This method is not being used anywhere in the LR framework.
         return null;
     }
@@ -372,11 +372,11 @@ public class LogReplicationClientRouter implements IClientRouter {
     public void receive(CorfuMessage.ResponseMsg msg) {
         try {
             requestSample.flatMap(sample -> MeterRegistryProvider.getInstance()
-                            .map(registry -> {
-                                Timer timer = registry
-                                        .timer("logreplication.rtt.seconds");
-                                return sample.stop(timer);
-                            }));
+                    .map(registry -> {
+                        Timer timer = registry
+                                .timer("logreplication.rtt.seconds");
+                        return sample.stop(timer);
+                    }));
 
             // If it is a Leadership Loss Message re-trigger leadership discovery
             if (msg.getPayload().getPayloadCase() == PayloadCase.LR_LEADERSHIP_LOSS) {
@@ -478,6 +478,15 @@ public class LogReplicationClientRouter implements IClientRouter {
      */
     public synchronized void onError(Throwable t) {
         runtimeFSM.input(new LogReplicationRuntimeEvent(LogReplicationRuntimeEventType.ERROR, t));
+    }
+
+    /**
+     * Cluster Change Callback.
+     *
+     * @param clusterDescriptor remote cluster descriptor
+     */
+    public synchronized void onClusterChange(ClusterDescriptor clusterDescriptor) {
+        channelAdapter.clusterChangeNotification(clusterDescriptor);
     }
 
     public Optional<String> getRemoteLeaderNodeId() {
