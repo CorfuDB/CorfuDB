@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.exceptions.StreamSubscriptionException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
@@ -272,7 +273,11 @@ public class StreamManager {
                                     ).collect(Collectors.toList())));
 
                     if (!entries.isEmpty()) {
-                        CorfuStreamEntries callbackResult = new CorfuStreamEntries(entries);
+                        Timestamp timestamp = Timestamp.newBuilder()
+                                .setSequence(logData.getGlobalAddress())
+                                .setEpoch(epoch)
+                                .build();
+                        CorfuStreamEntries callbackResult = new CorfuStreamEntries(entries, timestamp);
                         log.trace("{}::onNext with {} updates", listener.toString(), entries.size());
                         long onNextStart = System.nanoTime();
                         listener.onNext(callbackResult);
