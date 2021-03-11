@@ -1,6 +1,7 @@
 package org.corfudb.runtime.view;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -21,6 +22,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
@@ -50,7 +52,7 @@ public class StreamsView extends AbstractView {
     }
 
     /**
-     * Creates and returns a new StreamView on a stream. 
+     * Creates and returns a new StreamView on a stream.
      *
      * @param stream The UUID of the stream to get a view on.
      * @return A view
@@ -89,7 +91,8 @@ public class StreamsView extends AbstractView {
 
     /**
      * Create and return a stream that won't be automatically garbage collected.
-     * @param stream stream id
+     *
+     * @param stream  stream id
      * @param options open options
      */
     public IStreamView getUnsafe(UUID stream, StreamOptions options) {
@@ -141,13 +144,19 @@ public class StreamsView extends AbstractView {
         final boolean serializeMetadata = false;
         final LogData ld = new LogData(DataType.DATA, object, runtime.getParameters().getCodecType());
         TokenResponse tokenResponse = null;
-
+        Optional<Timer> serializationTimer = runtime.getRegistry()
+                .map(registry ->
+                        Timer.builder("streams.view.serialization")
+                                .tags("streams", Arrays.toString(streamIDs))
+                                .publishPercentiles(0.5, 0.95, 0.99)
+                                .publishPercentileHistogram(true)
+                                .register(registry));
         // Opening serialization handle before acquiring token, this way we prevent the
         // readers to wait for the possibly long serialization time in writer.
         // The serialization here only serializes the payload because the token is not
         // acquired yet, thus metadata is incomplete. Once a token is acquired, the
         // writer will append the serialized metadata to the buffer.
-        try (ILogData.SerializationHandle sh = ld.getSerializedForm(serializeMetadata)) {
+        try (ILogData.SerializationHandle sh = ld.getSerializedForm(serializeMetadata, serializationTimer)) {
             int payloadSize = ld.checkMaxWriteSize(runtime.getParameters().getMaxWriteSize());
 
             for (int retry = 0; retry < runtime.getParameters().getWriteRetry(); retry++) {
