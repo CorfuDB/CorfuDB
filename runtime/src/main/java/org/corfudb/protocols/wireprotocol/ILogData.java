@@ -1,8 +1,10 @@
 package org.corfudb.protocols.wireprotocol;
 
+import io.micrometer.core.instrument.Timer;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -58,11 +60,33 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
         }
 
         /**
+         * Create a new serialized handle with a reference
+         * to the log data and record the serialization.
+         *
+         * @param data               the log data to manage
+         * @param serializationTimer the configured serialization timer
+         * @param metadata           whether metadata needs to be serialized
+         */
+        public SerializationHandle(ILogData data, boolean metadata, Optional<Timer> serializationTimer) {
+            Runnable acquireBufferRunnable = () -> data.acquireBuffer(metadata);
+            this.data = data;
+            recordRunnable(acquireBufferRunnable, serializationTimer);
+        }
+
+        /**
          * {@inheritDoc}
          */
         @Override
         public void close() {
             data.releaseBuffer();
+        }
+
+        private void recordRunnable(Runnable runnable, Optional<Timer> timer) {
+            if (timer.isPresent()) {
+                timer.get().record(runnable);
+            } else {
+                runnable.run();
+            }
         }
     }
 
@@ -75,6 +99,19 @@ public interface ILogData extends IMetadata, Comparable<ILogData> {
      */
     default SerializationHandle getSerializedForm(boolean metadata) {
         return new SerializationHandle(this, metadata);
+    }
+
+    /**
+     * Get the serialization handle of this entry that manages
+     * the lifetime of the serialized copy, and record the serialization.
+     *
+     * @param metadata           whether metadata needs to be serialized
+     * @param serializationTimer configured serialization timer
+     * @return a serialization handle of this entry
+     */
+    default SerializationHandle getSerializedForm(boolean metadata,
+                                                  Optional<Timer> serializationTimer) {
+        return new SerializationHandle(this, metadata, serializationTimer);
     }
 
     /**
