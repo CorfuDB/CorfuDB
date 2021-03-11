@@ -158,7 +158,8 @@ public class CheckpointWriter<T extends StreamingMap> {
         try (Stream<Map.Entry> entries = this.map.entryStream()) {
             // A checkpoint writer will do two accesses one to obtain the object
             // vlo version and to get a shallow copy of the entry set
-            // The vloVersion which will determine the checkpoint START_LOG_ADDRESS (last observed update for this
+            // The vloVersion which
+            // will determine the checkpoint START_LOG_ADDRESS (last observed update for this
             // stream by the time of checkpointing) is defined by the stream's tail instead of the stream's version,
             // as the latter discards holes for resolution, hence if last address is a hole it would diverge
             // from the stream address space maintained by the sequencer.
@@ -288,6 +289,8 @@ public class CheckpointWriter<T extends StreamingMap> {
                             inputBuffer.readerIndex(), inputBuffer.writerIndex()));
 
             numBytesPerCheckpointEntry += compressedBuffer.limit();
+
+
 
             /* CheckpointEntry has some metadata and make the total size larger than the actual size
              * of SMR entries. Its a safeguard against the smr entries amounting to the actual

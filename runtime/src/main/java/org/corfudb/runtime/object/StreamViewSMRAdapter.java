@@ -1,5 +1,6 @@
 package org.corfudb.runtime.object;
 
+import io.micrometer.core.instrument.Timer;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -12,8 +13,10 @@ import org.corfudb.runtime.view.stream.IStreamView;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -42,10 +45,28 @@ public class StreamViewSMRAdapter implements ISMRStream {
      */
     final CorfuRuntime runtime;
 
+    private final Optional<Timer> streamUpToDeserializationTimer;
+
+    private final Optional<Timer> remainingUpToDeserializationTimer;
+
     public StreamViewSMRAdapter(CorfuRuntime runtime,
                                 IStreamView streamView) {
         this.runtime = runtime;
         this.streamView = streamView;
+        this.streamUpToDeserializationTimer = runtime.getRegistry().map(registry ->
+                Timer.builder("streams.view.deserialization")
+                        .tags("type", "streamUpTo")
+                        .tags("streams", getID().toString())
+                        .publishPercentileHistogram(true)
+                        .publishPercentiles(0.5, 0.95, 0.99)
+                        .register(registry));
+        this.remainingUpToDeserializationTimer = runtime.getRegistry().map(registry ->
+                Timer.builder("streams.view.deserialization")
+                        .tags("type", "remainingUpTo")
+                        .tags("streams", getID().toString())
+                        .publishPercentileHistogram(true)
+                        .publishPercentiles(0.5, 0.95, 0.99)
+                        .register(registry));
     }
 
     private List<SMREntry> dataAndCheckpointMapper(ILogData logData) {
@@ -81,8 +102,13 @@ public class StreamViewSMRAdapter implements ISMRStream {
     public List<SMREntry> remainingUpTo(long maxGlobal) {
         return streamView.remainingUpTo(maxGlobal).stream()
                 .filter(m -> m.getType() == DataType.DATA)
-                .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable
-                        || m.hasCheckpointMetadata())
+                .filter(m -> {
+                    Supplier<Object> getPayload = () -> m.getPayload(runtime);
+                    Object object = remainingUpToDeserializationTimer.map(timer -> timer.record(getPayload))
+                            .orElseGet(getPayload);
+                    return object instanceof ISMRConsumable
+                            || m.hasCheckpointMetadata();
+                })
                 .map(this::dataAndCheckpointMapper)
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
@@ -110,7 +136,7 @@ public class StreamViewSMRAdapter implements ISMRStream {
      * Returns the list of SMREntries positioned at the previous log position of this stream.
      *
      * @return Returns the list of SMREntries positioned at the previous log position of this
-     *     stream.
+     * stream.
      */
     public List<SMREntry> previous() {
         ILogData data = streamView.previous();
@@ -149,8 +175,13 @@ public class StreamViewSMRAdapter implements ISMRStream {
     public Stream<SMREntry> streamUpTo(long maxGlobal) {
         return streamView.streamUpTo(maxGlobal)
                 .filter(m -> m.getType() == DataType.DATA)
-                .filter(m -> m.getPayload(runtime) instanceof ISMRConsumable
-                        || m.hasCheckpointMetadata())
+                .filter(m -> {
+                    Supplier<Object> getPayload = () -> m.getPayload(runtime);
+                    Object object = streamUpToDeserializationTimer.map(timer -> timer.record(getPayload))
+                            .orElseGet(getPayload);
+                    return object instanceof ISMRConsumable
+                            || m.hasCheckpointMetadata();
+                })
                 .map(this::dataAndCheckpointMapper)
                 .flatMap(List::stream);
     }

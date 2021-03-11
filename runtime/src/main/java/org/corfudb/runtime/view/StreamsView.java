@@ -39,6 +39,8 @@ public class StreamsView extends AbstractView {
      */
     public static final String CHECKPOINT_SUFFIX = "_cp";
 
+    private final Optional<Timer> serializationTimer;
+
     /**
      * This list should have references to all opened streams. The ViewsGarbageCollector
      * will use this list to clear trimmed addresses from streams. Since new streams
@@ -49,6 +51,12 @@ public class StreamsView extends AbstractView {
 
     public StreamsView(final CorfuRuntime runtime) {
         super(runtime);
+        this.serializationTimer = runtime.getRegistry()
+                .map(registry ->
+                        Timer.builder("streams.view.serialization")
+                                .publishPercentiles(0.5, 0.95, 0.99)
+                                .publishPercentileHistogram(true)
+                                .register(registry));
     }
 
     /**
@@ -144,13 +152,6 @@ public class StreamsView extends AbstractView {
         final boolean serializeMetadata = false;
         final LogData ld = new LogData(DataType.DATA, object, runtime.getParameters().getCodecType());
         TokenResponse tokenResponse = null;
-        Optional<Timer> serializationTimer = runtime.getRegistry()
-                .map(registry ->
-                        Timer.builder("streams.view.serialization")
-                                .tags("streams", Arrays.toString(streamIDs))
-                                .publishPercentiles(0.5, 0.95, 0.99)
-                                .publishPercentileHistogram(true)
-                                .register(registry));
         // Opening serialization handle before acquiring token, this way we prevent the
         // readers to wait for the possibly long serialization time in writer.
         // The serialization here only serializes the payload because the token is not
