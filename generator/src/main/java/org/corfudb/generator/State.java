@@ -16,9 +16,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
-import java.util.UUID;
 
 import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT_IN_MS;
+import static org.corfudb.generator.distributions.Streams.*;
 
 /**
  * This object keeps state information of the different data distributions and runtime client.
@@ -42,7 +42,7 @@ public class State {
     @Getter
     private final CorfuRuntime runtime;
 
-    private final Map<UUID, CorfuTable<String, String>> maps;
+    private final Map<StreamName, CorfuTable<String, String>> maps;
 
     @Getter
     private final StateContext ctx = new StateContext();
@@ -75,25 +75,24 @@ public class State {
     }
 
     private void openObjects() {
-        for (String id : streams.getDataSet()) {
-            UUID uuid = CorfuRuntime.getStreamID(id);
+        for (StreamName id : streams.getDataSet()) {
             CorfuTable<String, String> map = runtime.getObjectsView()
                     .build()
-                    .setStreamID(uuid)
+                    .setStreamID(id.getStreamId())
                     .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                     .setArguments(new StringIndexer())
                     .open();
 
-            maps.put(uuid, map);
+            maps.put(id, map);
         }
     }
 
-    public CorfuTable<String, String> getMap(UUID uuid) {
-        CorfuTable<String, String> map = maps.get(uuid);
+    public CorfuTable<String, String> getMap(StreamName streamName) {
+        CorfuTable<String, String> map = maps.get(streamName);
         if (map == null) {
             throw new IllegalStateException("Map doesn't exist");
         }
-        return maps.get(uuid);
+        return map;
     }
 
     public Collection<CorfuTable<String, String>> getMaps() {

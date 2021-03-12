@@ -1,5 +1,8 @@
 package org.corfudb.generator.distributions;
 
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -11,8 +14,8 @@ import java.util.Set;
  * <p>
  * Created by maithem on 7/14/17.
  */
-public class Keys implements DataSet<String> {
-    private final Set<String> mapKeys;
+public class Keys implements DataSet<Keys.KeyId> {
+    private final Set<KeyId> mapKeys;
     private final int numKeys;
 
     public Keys(int num) {
@@ -23,12 +26,22 @@ public class Keys implements DataSet<String> {
     @Override
     public void populate() {
         for (int key = 0; key < numKeys; key++) {
-            mapKeys.add("key_" + key);
+            mapKeys.add(new KeyId(key));
         }
     }
 
     @Override
-    public List<String> getDataSet() {
+    public List<KeyId> getDataSet() {
         return new ArrayList<>(mapKeys);
+    }
+
+    @EqualsAndHashCode
+    @AllArgsConstructor
+    public static class KeyId {
+        private final int key;
+
+        public String getKey(){
+            return "key_" + key;
+        }
     }
 }

@@ -17,4 +17,6 @@ public abstract class Operation {
     }
 
     public abstract void execute();
+
+    public abstract void verify();
 }
