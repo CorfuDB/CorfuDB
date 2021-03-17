@@ -4,7 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.exceptions.StreamSubscriptionException;
+import org.corfudb.runtime.exceptions.StreamingException;
 
 import javax.annotation.Nonnull;
 import java.util.HashMap;
@@ -93,7 +93,7 @@ public class StreamingManager {
         if (subscriptions.containsKey(streamListener)) {
             // Multiple subscribers subscribing to same namespace and table is allowed
             // as long as the hashcode() and equals() method of the listeners are different.
-            throw new StreamSubscriptionException(
+            throw new StreamingException(
                     "StreamingManager::subscribe: listener already registered " + streamListener);
         }
 

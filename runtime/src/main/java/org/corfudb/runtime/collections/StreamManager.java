@@ -10,7 +10,7 @@ import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.exceptions.StreamSubscriptionException;
+import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.runtime.view.StreamOptions;
@@ -42,7 +42,7 @@ import java.util.stream.Collectors;
 public class StreamManager {
 
     private static final int DEFAULT_NUM_SUBSCRIBERS = 6; // Max number of threads.
-    private static final int MAX_SUBSCRIBERS = 32; // Arbitrary sanity check value.
+    public static final int MAX_SUBSCRIBERS = 32; // Arbitrary sanity check value.
     private static final int DEFAULT_SLEEP_MILLIS = 50; // Default time to sleep
     public static final int DEFAULT_LONG_RUNNING_TIME_SECS = 1; // When to log long running onNext()
     /**
@@ -105,14 +105,14 @@ public class StreamManager {
             // If caller wants to allow 2 subscriptions on the same namespace+table,
             // then hashcode and equals can just reflect the subscriber's name or other distinguishing fields.
             // Basically we are saying, "hey you decide if this is a re-subscription or a new subscription"
-            throw new StreamSubscriptionException(
+            throw new StreamingException(
                     "StreamManager:subscriber already registered "
                             + streamListener + ". Maybe call unregister first?");
         }
         if (subscriptions.size() >= MAX_SUBSCRIBERS) {
             log.error("StreamManager::subscribe {} has too many {} subscribers",
                     streamListener, MAX_SUBSCRIBERS);
-            throw new StreamSubscriptionException(
+            throw new IllegalStateException(
                     "StreamManager: too many (" + MAX_SUBSCRIBERS + ") subscriptions");
         }
         tablesOfInterest.forEach(t -> {

@@ -396,7 +396,8 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
 
         long size = streamAddressSpace.size();
         if (size == 0L) {
-            return Address.NON_ADDRESS;
+            // The trim mark will allow to detect trimmed exceptions if the seeked address falls behind it
+            return streamAddressSpace.getTrimMark();
         }
 
         if (size <= maxEntries) {
