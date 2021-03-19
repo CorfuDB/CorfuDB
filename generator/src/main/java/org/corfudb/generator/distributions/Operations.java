@@ -1,7 +1,7 @@
 package org.corfudb.generator.distributions;
 
 import com.google.common.collect.ImmutableList;
-import org.corfudb.generator.State;
+import org.corfudb.generator.state.State;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.operations.OptimisticTxOperation;
 import org.corfudb.generator.operations.ReadOperation;

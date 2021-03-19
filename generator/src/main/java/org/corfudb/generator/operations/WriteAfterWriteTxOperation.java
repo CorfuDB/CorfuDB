@@ -1,7 +1,7 @@
 package org.corfudb.generator.operations;
 
 import org.corfudb.generator.Correctness;
-import org.corfudb.generator.State;
+import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
 import java.util.List;

@@ -1,7 +1,7 @@
 package org.corfudb.generator.operations;
 
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.generator.State;
+import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
 import java.util.Random;

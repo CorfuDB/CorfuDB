@@ -3,6 +3,7 @@ package org.corfudb.generator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
+import org.corfudb.generator.state.State;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -61,7 +62,7 @@ public class LongevityApp {
         }
 
 
-        state = new State(50, 100, rt);
+        state = new State(50, 50, rt);
 
         taskProducer = Executors.newSingleThreadExecutor();
 

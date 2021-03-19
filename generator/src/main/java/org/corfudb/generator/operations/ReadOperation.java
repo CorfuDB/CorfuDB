@@ -2,15 +2,10 @@ package org.corfudb.generator.operations;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
-import org.corfudb.generator.State;
-import org.corfudb.generator.distributions.Keys;
-import org.corfudb.generator.distributions.Streams;
+import org.corfudb.generator.state.State;
 import org.corfudb.generator.util.StringIndexer;
-import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
-
-import java.util.UUID;
 
 import static org.corfudb.generator.distributions.Keys.*;
 import static org.corfudb.generator.distributions.Streams.*;
@@ -21,7 +16,7 @@ import static org.corfudb.generator.distributions.Streams.*;
 @Slf4j
 public class ReadOperation extends Operation {
 
-    private final StreamName streamId;
+    private final StreamId streamId;
     private final KeyId key;
     private final String val;
 
@@ -30,7 +25,7 @@ public class ReadOperation extends Operation {
 
         streamId = state.getStreams().sample();
         key = state.getKeys().sample();
-        val = state.getMap(streamId).get(key);
+        val = state.getMap(streamId).get(key.getKey());
     }
 
     @Override
@@ -52,7 +47,7 @@ public class ReadOperation extends Operation {
     @Override
     public void verify() {
         /**
-         * key_state = state.get(self.map_id, self.key_id)
+         *          key_state = state.get(self.map_id, self.key_id)
          *         key_at_version: int = key_state.get_at_version(self.version)
          *
          *         try:
@@ -62,6 +57,6 @@ public class ReadOperation extends Operation {
          *             inconsistency = ReadInconsistency(self, key_at_version, False, state, False)
          *             inconsistency.log_report()
          */
-        state.getMap(streamId)
+        state.getKeys()
     }
 }

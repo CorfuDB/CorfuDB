@@ -2,12 +2,10 @@ package org.corfudb.generator.operations;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
-import org.corfudb.generator.State;
-import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
 import java.util.List;
-import java.util.Random;
 
 /**
  * Created by box on 7/15/17.

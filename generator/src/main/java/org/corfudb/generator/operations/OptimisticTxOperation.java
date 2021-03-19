@@ -2,7 +2,7 @@ package org.corfudb.generator.operations;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
-import org.corfudb.generator.State;
+import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;

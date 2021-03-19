@@ -18,9 +18,9 @@ import static org.corfudb.generator.distributions.Streams.*;
  * <p>
  * Created by maithem on 7/14/17.
  */
-public class Streams implements DataSet<StreamName> {
+public class Streams implements DataSet<StreamId> {
 
-    private final Set<StreamName> streamIds;
+    private final Set<StreamId> streamIds;
     private final int numStreams;
 
     public Streams(int num) {
@@ -31,22 +31,22 @@ public class Streams implements DataSet<StreamName> {
     @Override
     public void populate() {
         for (int tableId = 0; tableId < numStreams; tableId++) {
-            streamIds.add(new StreamName(tableId));
+            streamIds.add(new StreamId(tableId));
         }
     }
 
     @Override
-    public List<StreamName> getDataSet() {
+    public List<StreamId> getDataSet() {
         return new ArrayList<>(streamIds);
     }
 
     @EqualsAndHashCode
     @AllArgsConstructor
-    public static final class StreamName {
+    public static final class StreamId {
         private final int streamId;
 
         private String getTableName(){
-            return "table_" + streamId;
+            return String.valueOf(streamId);
         }
 
         public UUID getStreamId() {

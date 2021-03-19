@@ -1,4 +1,4 @@
-package org.corfudb.generator;
+package org.corfudb.generator.state;
 
 import com.google.common.reflect.TypeToken;
 import lombok.Getter;
@@ -42,7 +42,7 @@ public class State {
     @Getter
     private final CorfuRuntime runtime;
 
-    private final Map<StreamName, CorfuTable<String, String>> maps;
+    private final Map<StreamId, CorfuTable<String, String>> maps;
 
     @Getter
     private final StateContext ctx = new StateContext();
@@ -53,15 +53,19 @@ public class State {
         rand = new Random();
 
         streams = new Streams(numStreams);
+
         keys = new Keys(numKeys);
+        maps = new HashMap<>();
+
         operationCount = new OperationCount();
 
         this.runtime = rt;
-        maps = new HashMap<>();
+
         operations = new Operations(this);
 
         streams.populate();
         keys.populate();
+
         operationCount.populate();
         operations.populate();
 
@@ -75,20 +79,20 @@ public class State {
     }
 
     private void openObjects() {
-        for (StreamName id : streams.getDataSet()) {
+        for (StreamId streamId : streams.getDataSet()) {
             CorfuTable<String, String> map = runtime.getObjectsView()
                     .build()
-                    .setStreamID(id.getStreamId())
+                    .setStreamID(streamId.getStreamId())
                     .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
                     .setArguments(new StringIndexer())
                     .open();
 
-            maps.put(id, map);
+            maps.put(streamId, map);
         }
     }
 
-    public CorfuTable<String, String> getMap(StreamName streamName) {
-        CorfuTable<String, String> map = maps.get(streamName);
+    public CorfuTable<String, String> getMap(StreamId streamId) {
+        CorfuTable<String, String> map = maps.get(streamId);
         if (map == null) {
             throw new IllegalStateException("Map doesn't exist");
         }

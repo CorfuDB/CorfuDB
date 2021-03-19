@@ -1,6 +1,6 @@
 package org.corfudb.generator.operations;
 
-import org.corfudb.generator.State;
+import org.corfudb.generator.state.State;
 
 /**
  * A definition of a generic operation that the generator can execute.
