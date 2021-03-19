@@ -5,6 +5,6 @@ WORKDIR /app
 
 RUN apk add --update iptables sudo
 
-ADD target/${CORFU_JAR} /app/corfu.jar
+COPY target/${CORFU_JAR} /app/corfu.jar
 
 CMD java -cp *.jar org.corfudb.infrastructure.CorfuServer

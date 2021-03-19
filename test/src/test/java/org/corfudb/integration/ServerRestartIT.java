@@ -285,7 +285,7 @@ public class ServerRestartIT extends AbstractIT {
 
                 if (!txState) {
                     return false;
-                };
+                }
             }
 
             return true;

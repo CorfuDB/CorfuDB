@@ -998,14 +998,16 @@ public class StateTransferTest extends AbstractViewTest {
                        Set<Long> noWriteHoles, Set<Long> partialWriteHoles) throws Exception {
         for (long i = 0; i < numIter; i++) {
             TokenResponse token = runtime.getSequencerView().next();
-            if (noWriteHoles.contains(i)) {
-                // Write nothing to create a hole on all log units.
-            } else if (partialWriteHoles.contains(i)) {
-                // Write to head log unit to create a partial write hole.
-                runtime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0)
-                        .write(getLogData(token, "partial write".getBytes())).get();
-            } else {
-                runtime.getAddressSpaceView().write(token, "Test Payload".getBytes());
+            // If noWriteHoles contains i, no need to write anything so that a hole is created on all log units.
+            // Otherwise,
+            if (!noWriteHoles.contains(i)) {
+                if (partialWriteHoles.contains(i)) {
+                    // Write to head log unit to create a partial write hole.
+                    runtime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0)
+                            .write(getLogData(token, "partial write".getBytes())).get();
+                } else {
+                    runtime.getAddressSpaceView().write(token, "Test Payload".getBytes());
+                }
             }
         }
     }
