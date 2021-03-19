@@ -4,6 +4,8 @@ import static com.google.common.base.Preconditions.checkState;
 
 
 import io.netty.buffer.ByteBuf;
+
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -13,6 +15,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
@@ -120,7 +124,7 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
         SMRMethod = new String(methodBytes);
         byte serializerId = b.readByte();
         byte numArguments = b.readByte();
-        Object[] arguments = new Object[numArguments];
+        List<Object> arguments = new ArrayList<>();
 
         if (!opaque) {
             serializerType = Serializers.getSerializer(serializerId);
@@ -128,19 +132,25 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
             this.serializerId = serializerId;
         }
 
+        List<Pair<ByteBuf, Integer>> objBufPairs= new ArrayList<>();
         for (byte arg = 0; arg < numArguments; arg++) {
             int len = b.readInt();
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
-            if (opaque) {
-                byte[] argBytes = new byte[len];
-                objBuf.readBytes(argBytes);
-                arguments[arg] = argBytes;
-            } else {
-                arguments[arg] = serializerType.deserialize(objBuf, rt);
-            }
+            objBufPairs.add(new ImmutablePair<>(objBuf, len));
             b.skipBytes(len);
         }
-        SMRArguments = arguments;
+
+        objBufPairs.parallelStream().forEachOrdered(objBufPair -> {
+            if (opaque) {
+                byte[] argBytes = new byte[objBufPair.getRight()];
+                objBufPair.getLeft().readBytes(argBytes);
+                arguments.add(argBytes);
+            } else {
+                arguments.add(serializerType.deserialize(objBufPair.getLeft(), rt));
+            }
+        });
+
+        SMRArguments = arguments.toArray();
         serializedSize = b.readerIndex() - readIndex + 1;
     }
 

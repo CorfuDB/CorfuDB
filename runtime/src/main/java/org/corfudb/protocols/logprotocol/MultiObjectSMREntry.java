@@ -41,7 +41,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
     private static final String STREAM_ID = "streamId";
 
     // map from stream-ID to a list of updates encapsulated as MultiSMREntry
-    private Map<UUID, MultiSMREntry> streamUpdates = new ConcurrentHashMap<>();
+    private final Map<UUID, MultiSMREntry> streamUpdates = new ConcurrentHashMap<>();
 
     /**
      * A container to store streams and their payloads (i.e. serialized SMR updates).
