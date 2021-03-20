@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -152,7 +153,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         this.upcallResults = new ConcurrentHashMap<>();
         lock = new StampedLock();
 
-        Optional<MeterRegistry> metricsRegistry = smrStream.runtime.getRegistry();
+        Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
         Tag streamIdTag = Tag.of("streamId", getID().toString());
         noRollBackExceptionCounter = metricsRegistry
                 .map(registry ->

@@ -10,6 +10,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import lombok.Getter;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
@@ -61,7 +62,7 @@ public class CorfuStore {
     public CorfuStore(@Nonnull final CorfuRuntime runtime, boolean enableTxLogging) {
         runtime.setTransactionLogging(enableTxLogging);
         this.runtime = runtime;
-        openTableCounter = runtime.getRegistry()
+        openTableCounter = MeterRegistryProvider.getInstance()
                 .map(registry ->
                         registry.gauge("open_tables.count", new AtomicLong(0L)));
     }

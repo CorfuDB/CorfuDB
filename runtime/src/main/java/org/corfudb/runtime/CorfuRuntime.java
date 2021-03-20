@@ -2,11 +2,9 @@ package org.corfudb.runtime;
 
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.Getter;
 import lombok.ToString;
@@ -14,6 +12,8 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.common.compression.Codec;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.protocols.wireprotocol.MsgHandlingFilter;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.PriorityLevel;
@@ -47,6 +47,8 @@ import org.corfudb.util.Sleep;
 import org.corfudb.util.UuidUtils;
 import org.corfudb.util.Version;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nonnull;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -103,13 +105,6 @@ public class CorfuRuntime {
 
         public static CorfuRuntimeParametersBuilder builder() {
             return new CorfuRuntimeParametersBuilder();
-        }
-
-        @AllArgsConstructor
-        public static class MicroMeterRuntimeConfig {
-            private final boolean metricsEnabled;
-            private final String configuredLoggerName;
-            private final Duration loggingInterval;
         }
 
         /*
@@ -267,12 +262,9 @@ public class CorfuRuntime {
         private Codec.Type codecType = Codec.Type.ZSTD;
 
         /**
-         * Application specified registry to hook up Corfu metrics into an existing
-         * scraping/reporting mechanism.
+         * Enable runtime metrics.
          */
-        private MetricRegistry metricRegistry;
-
-        private MicroMeterRuntimeConfig microMeterRuntimeConfig;
+        private boolean metricsEnabled = true;
 
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
             int maxWriteSize = Integer.MAX_VALUE;
@@ -300,16 +292,7 @@ public class CorfuRuntime {
             int invalidateRetry = 5;
             private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
             private Codec.Type codecType = Codec.Type.ZSTD;
-            private MetricRegistry metricRegistry = null;
-            private MicroMeterRuntimeConfig microMeterRuntimeConfig =
-                    new MicroMeterRuntimeConfig(true,
-                    "org.corfudb.client.metricsdata", Duration.ofMinutes(1));
-
-            public CorfuRuntimeParametersBuilder configureMicroMeterMetrics(
-                    MicroMeterRuntimeConfig microMeterRuntimeConfig) {
-                this.microMeterRuntimeConfig = microMeterRuntimeConfig;
-                return this;
-            }
+            private boolean metricsEnabled = true;
 
             public CorfuRuntimeParametersBuilder tlsEnabled(boolean tlsEnabled) {
                 super.tlsEnabled(tlsEnabled);
@@ -566,6 +549,11 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder metricsEnabled(boolean enabled) {
+                this.metricsEnabled = enabled;
+                return this;
+            }
+
             public CorfuRuntimeParameters build() {
                 CorfuRuntimeParameters corfuRuntimeParameters = new CorfuRuntimeParameters();
                 corfuRuntimeParameters.setTlsEnabled(tlsEnabled);
@@ -619,8 +607,7 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setInvalidateRetry(invalidateRetry);
                 corfuRuntimeParameters.setPriorityLevel(priorityLevel);
                 corfuRuntimeParameters.setCodecType(codecType);
-                corfuRuntimeParameters.setMicroMeterRuntimeConfig(microMeterRuntimeConfig);
-                corfuRuntimeParameters.setMetricRegistry(metricRegistry);
+                corfuRuntimeParameters.setMetricsEnabled(metricsEnabled);
                 return corfuRuntimeParameters;
             }
         }
@@ -679,9 +666,6 @@ public class CorfuRuntime {
      * CorfuStore's table registry cache for Table lifecycle management.
      */
     private final AtomicReference<TableRegistry> tableRegistry = new AtomicReference<>(null);
-
-    @Getter
-    private Optional<MeterRegistry> registry;
 
     /**
      * List of initial set of layout servers, i.e., servers specified in
@@ -742,6 +726,7 @@ public class CorfuRuntime {
     private static final MetricRegistry defaultMetrics = new MetricRegistry();
 
     private final Optional<Timer> fetchLayoutTimer;
+
     /**
      * Register SystemDownHandler.
      * Please use CorfuRuntimeParameters builder to register this.
@@ -856,29 +841,21 @@ public class CorfuRuntime {
         // Initializing the node router pool.
         nodeRouterPool = new NodeRouterPool(getRouterFunction);
 
-        // Try to expose metrics via Dropwizard CsvReporter JmxReporter and Slf4jReporter.
-        MetricsUtils.metricsReportingSetup(defaultMetrics);
-        if (parameters.getPrometheusMetricsPort() != MetricsUtils.NO_METRICS_PORT) {
-            // Try to expose metrics via Prometheus.
-            MetricsUtils.metricsReportingSetup(
-                    defaultMetrics, parameters.getPrometheusMetricsPort());
-        }
-        CorfuRuntimeParameters.MicroMeterRuntimeConfig microMeterRuntimeConfig =
-                this.parameters.getMicroMeterRuntimeConfig();
-
-        if (microMeterRuntimeConfig.metricsEnabled) {
-            registry = Optional.ofNullable(LoggerFactory.getILoggerFactory().getLogger(microMeterRuntimeConfig.configuredLoggerName))
-                    .map(logger -> MeterRegistryProvider.MeterRegistryInitializer.newInstance(logger,
-                            microMeterRuntimeConfig.loggingInterval, parameters.clientId));
-            if (!registry.isPresent()) {
-                log.warn("Logger was not found to enable metrics.");
+        if (parameters.metricsEnabled) {
+            Logger logger = LoggerFactory.getLogger("org.corfudb.client.metricsdata");
+            if (logger.isDebugEnabled()) {
+                MeterRegistryInitializer.init(logger,
+                        Duration.ofMinutes(1),
+                        parameters.clientId.toString());
+            } else {
+                log.warn("No registered metrics logger provided.");
             }
-        }
-        else {
-            registry = Optional.empty();
+
+        } else {
+            log.warn("Runtime metrics are disabled.");
         }
 
-        fetchLayoutTimer = registry.map(r -> Timer.builder("runtime.fetch_layout.timer")
+        fetchLayoutTimer = MeterRegistryProvider.getInstance().map(r -> Timer.builder("runtime.fetch_layout.timer")
                 .publishPercentileHistogram(true).publishPercentiles(0.50, 0.95, 0.99).register(r));
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
@@ -1135,7 +1112,7 @@ public class CorfuRuntime {
             parameters.getBeforeRpcHandler().run();
             int systemDownTriggerCounter = 0;
             Optional<Timer.Sample> fetchSample =
-                    getRegistry().map(Timer::start);
+                    MeterRegistryProvider.getInstance().map(Timer::start);
             while (true) {
 
                 Collections.shuffle(layoutServersCopy);

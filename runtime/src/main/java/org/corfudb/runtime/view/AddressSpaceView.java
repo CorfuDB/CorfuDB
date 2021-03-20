@@ -14,6 +14,7 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.binder.cache.GuavaCacheMetrics;
 import io.netty.handler.timeout.TimeoutException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -124,7 +125,7 @@ public class AddressSpaceView extends AbstractView {
                 .recordStats()
                 .build();
 
-        Optional<MeterRegistry> metricsRegistry = runtime.getRegistry();
+        Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
 
         missRatio = metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.miss_ratio",
                 readCache,
