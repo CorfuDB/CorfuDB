@@ -1,22 +1,12 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
-
-import java.lang.reflect.InvocationTargetException;
-import java.util.Collection;
-import java.util.List;
-
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
-
 import lombok.Getter;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
-import org.corfudb.runtime.Queue;
-import org.corfudb.runtime.view.TableRegistry;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;

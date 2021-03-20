@@ -18,6 +18,7 @@ import io.micrometer.core.instrument.binder.cache.GuavaCacheMetrics;
 import io.netty.handler.timeout.TimeoutException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;

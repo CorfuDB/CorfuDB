@@ -1,6 +1,7 @@
 package org.corfudb.runtime.object;
 
 import io.micrometer.core.instrument.Timer;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.ISMRConsumable;
 import org.corfudb.protocols.logprotocol.SMREntry;
@@ -53,14 +54,14 @@ public class StreamViewSMRAdapter implements ISMRStream {
                                 IStreamView streamView) {
         this.runtime = runtime;
         this.streamView = streamView;
-        this.streamUpToDeserializationTimer = runtime.getRegistry().map(registry ->
+        this.streamUpToDeserializationTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("streams.view.deserialization")
                         .tags("type", "streamUpTo")
                         .tags("streams", getID().toString())
                         .publishPercentileHistogram(true)
                         .publishPercentiles(0.5, 0.95, 0.99)
                         .register(registry));
-        this.remainingUpToDeserializationTimer = runtime.getRegistry().map(registry ->
+        this.remainingUpToDeserializationTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("streams.view.deserialization")
                         .tags("type", "remainingUpTo")
                         .tags("streams", getID().toString())

@@ -1,8 +1,6 @@
 package org.corfudb.protocols.logprotocol;
 
-import com.codahale.metrics.Histogram;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
@@ -12,7 +10,6 @@ import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.util.MetricsUtils;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.Serializers;
 

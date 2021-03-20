@@ -10,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
 import org.corfudb.runtime.CorfuRuntime;
@@ -19,6 +18,7 @@ import org.corfudb.runtime.view.Address;
 import org.corfudb.util.serializer.Serializers;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.EnumMap;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;

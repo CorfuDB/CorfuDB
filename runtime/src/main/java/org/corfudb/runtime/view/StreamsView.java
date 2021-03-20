@@ -3,6 +3,7 @@ package org.corfudb.runtime.view;
 import com.google.common.annotations.VisibleForTesting;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -51,7 +52,7 @@ public class StreamsView extends AbstractView {
 
     public StreamsView(final CorfuRuntime runtime) {
         super(runtime);
-        this.serializationTimer = runtime.getRegistry()
+        this.serializationTimer = MeterRegistryProvider.getInstance()
                 .map(registry ->
                         Timer.builder("streams.view.serialization")
                                 .publishPercentiles(0.5, 0.95, 0.99)
