@@ -3,8 +3,8 @@ package org.corfudb.runtime.view;
 import com.google.common.collect.Lists;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
-import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
 import org.corfudb.runtime.CorfuRuntime;
@@ -43,8 +43,8 @@ public class SequencerView extends AbstractView {
      * Set up timers for different sequencer request from the client perspective
      */
     private void setupTimers() {
-        Optional<MeterRegistry> metricsRegistry = runtime.getRegistry();
-        double [] percentiles = new double[] {0.50, 0.95, 0.99};
+        Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
+        double[] percentiles = new double[]{0.50, 0.95, 0.99};
         queryRateTimer = metricsRegistry
                 .map(registry ->
                         Timer.builder("sequencer.query")

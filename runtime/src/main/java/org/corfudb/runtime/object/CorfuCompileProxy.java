@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -146,19 +147,19 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         String streamIdValue = getStreamID().toString();
 
         double [] percentiles = new double [] {0.50, 0.95, 0.99};
-        readTimer = rt.getRegistry().map(registry ->
+        readTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("vlo.read.timer")
                         .tag(streamIdKey, streamIdValue)
                         .publishPercentileHistogram(true)
                         .publishPercentiles(percentiles)
                         .register(registry));
-        writeTimer = rt.getRegistry().map(registry ->
+        writeTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("vlo.write.timer")
                         .tag(streamIdKey, streamIdValue)
                         .publishPercentileHistogram(true)
                         .publishPercentiles(percentiles)
                         .register(registry));
-        txTimer = rt.getRegistry().map(registry ->
+        txTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("vlo.tx.timer")
                         .tag(streamIdKey, streamIdValue)
                         .publishPercentileHistogram(true)
