@@ -11,7 +11,6 @@ import org.slf4j.Logger;
 
 import java.time.Duration;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.function.Supplier;
 
 /**
@@ -20,7 +19,8 @@ import java.util.function.Supplier;
 @Slf4j
 public class MeterRegistryProvider {
     private static Optional<MeterRegistry> meterRegistry = Optional.empty();
-    private static Optional<String> endpoint = Optional.empty();
+    private static Optional<String> id = Optional.empty();
+
     private MeterRegistryProvider() {
 
     }
@@ -31,37 +31,21 @@ public class MeterRegistryProvider {
     public static class MeterRegistryInitializer extends MeterRegistryProvider {
 
         /**
-         * Create a new instance of MeterRegistry with the given logger, loggingInterval
-         * and clientId.
-         * @param logger A configured logger.
-         * @param loggingInterval A duration between log appends for every metric.
-         * @param clientId An id of a client for this metric.
-         * @return A new meter registry.
-         */
-        public static MeterRegistry newInstance(Logger logger, Duration loggingInterval,
-                                                UUID clientId) {
-            LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
-            LoggingMeterRegistryWithHistogramSupport registry =
-                    new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
-            registry.config().commonTags("clientId", clientId.toString());
-            return registry;
-        }
-
-        /**
          * Configure the meter registry of type LoggingMeterRegistry. All the metrics registered
          * with this meter registry will be exported via provided logging sink with
          * the provided loggingInterval frequency.
+         *
          * @param logger          An instance of the logger to print metrics.
          * @param loggingInterval A duration between log appends for every metric.
-         * @param localEndpoint A local endpoint to tag every metric with.
+         * @param identifier      A global identifier to tag every metric with.
          */
-        public static synchronized void init(Logger logger, Duration loggingInterval, String localEndpoint) {
+        public static synchronized void init(Logger logger, Duration loggingInterval, String identifier) {
             Supplier<Optional<MeterRegistry>> supplier = () -> {
                 LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
                 LoggingMeterRegistryWithHistogramSupport registry =
                         new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
-                registry.config().commonTags("endpoint", localEndpoint);
-                endpoint = Optional.of(localEndpoint);
+                registry.config().commonTags("id", identifier);
+                id = Optional.of(identifier);
                 Optional<MeterRegistry> ret = Optional.of(registry);
                 JVMMetrics.register(ret);
                 return ret;
@@ -80,6 +64,7 @@ public class MeterRegistryProvider {
 
     /**
      * Register timer if needed.
+     *
      * @param name Name of a timer.
      * @param tags Tags for a timer.
      */
@@ -90,6 +75,7 @@ public class MeterRegistryProvider {
     /**
      * Get the previously configured meter registry.
      * If the registry has not been previously configured, return an empty option.
+     *
      * @return An optional configured meter registry.
      */
     public static synchronized Optional<MeterRegistry> getInstance() {
@@ -98,6 +84,7 @@ public class MeterRegistryProvider {
 
     /**
      * Remove the meter by id.
+     *
      * @param name Name of a meter.
      * @param tags Tags.
      * @param type Type of a meter.
@@ -106,11 +93,11 @@ public class MeterRegistryProvider {
         if (!meterRegistry.isPresent()) {
             return;
         }
-        if (!endpoint.isPresent()) {
-            throw new IllegalStateException("Endpoint must be present to deregister meters.");
+        if (!id.isPresent()) {
+            throw new IllegalStateException("Id must be present to deregister meters.");
         }
-        String server = endpoint.get();
-        Tags tagsToLookFor = tags.and(Tag.of("endpoint", server));
+        String server = id.get();
+        Tags tagsToLookFor = tags.and(Tag.of("id", server));
         Meter.Id id = new Meter.Id(name, tagsToLookFor, null, null, type);
         meterRegistry.ifPresent(registry -> registry.remove(id));
     }
