@@ -15,8 +15,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
 import lombok.ToString;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;
 import org.corfudb.util.serializer.ISerializer;
@@ -132,21 +130,22 @@ public class SMREntry extends LogEntry implements ISMRConsumable {
             this.serializerId = serializerId;
         }
 
-        List<Pair<ByteBuf, Integer>> objBufPairs= new ArrayList<>();
+        List<ByteBuf> objBufPairs= new ArrayList<>();
         for (byte arg = 0; arg < numArguments; arg++) {
             int len = b.readInt();
             ByteBuf objBuf = b.slice(b.readerIndex(), len);
-            objBufPairs.add(new ImmutablePair<>(objBuf, len));
+            objBufPairs.add(objBuf);
             b.skipBytes(len);
         }
 
-        objBufPairs.parallelStream().forEachOrdered(objBufPair -> {
+        objBufPairs.parallelStream().forEachOrdered(objBuf -> {
             if (opaque) {
-                byte[] argBytes = new byte[objBufPair.getRight()];
-                objBufPair.getLeft().readBytes(argBytes);
+                int len = objBuf.readableBytes();
+                byte[] argBytes = new byte[len];
+                objBuf.readBytes(argBytes);
                 arguments.add(argBytes);
             } else {
-                arguments.add(serializerType.deserialize(objBufPair.getLeft(), rt));
+                arguments.add(serializerType.deserialize(objBuf, rt));
             }
         });
 
