@@ -172,9 +172,20 @@ public class StreamViewSMRAdapter implements ISMRStream {
         return streamUpTo(Address.MAX);
     }
 
+    /**
+     * Returns stream of all entries upto the specified the global address specified.
+     *
+     * Note: The consumer of this stream should use a terminal action like 'forEachOrdered'
+     * to maintain the order. Filter and map actions might benefit from parallel execution.
+     * https://stackoverflow.com/questions/29216588/how-to-ensure-order-of-processing-in-java8-streams/29218074
+     *
+     * @param maxGlobal Max Global up to which SMR Entries are required.
+     * @return Returns a stream of SMR Entries upto the maxGlobal.
+     */
     @Override
     public Stream<SMREntry> streamUpTo(long maxGlobal) {
         return streamView.streamUpTo(maxGlobal)
+                .parallel()
                 .filter(m -> m.getType() == DataType.DATA)
                 .filter(m -> {
                     Supplier<Object> getPayload = () -> m.getPayload(runtime);
