@@ -2,7 +2,6 @@ package org.corfudb.runtime.view.stream;
 
 import java.util.Comparator;
 import java.util.Spliterator;
-import java.util.Spliterators;
 import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
@@ -24,7 +23,7 @@ import org.corfudb.runtime.view.Address;
  * <p>Created by mwei on 4/24/17.
  */
 @Slf4j
-public class StreamSpliterator extends Spliterators.AbstractSpliterator<ILogData> {
+public class StreamSpliterator extends FixedBatchSpliterator<ILogData> {
 
     /** The stream view which backs the spliterator. */
     final IStreamView streamView;
