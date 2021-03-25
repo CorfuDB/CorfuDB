@@ -234,6 +234,12 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
             }
 
             // The stream exists and it needs to be deserialized
+            Optional<DistributionSummary> streamDistributionSummary = MeterRegistryProvider.getInstance().map(registry ->
+                    DistributionSummary.builder(METRIC_PREFIX + "." + "deserialize.stream.updates")
+                            .tags(STREAM_ID, id.toString())
+                            .publishPercentiles(TRACKED_PERCENTILES)
+                            .publishPercentileHistogram(true)
+                            .register(registry));
             Optional<Timer> deserializeStreamTimer = MeterRegistryProvider.getInstance()
                     .map(registry -> Timer.builder(METRIC_PREFIX + "." + "deserialize.stream.lazy")
                             .tags(STREAM_ID, id.toString())
@@ -248,6 +254,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
                 byte magicByte = buf.readByte(); //
                 checkState(magicByte == CorfuSerializer.corfuPayloadMagic, "Not a ICorfuSerializable object");// strip magic
                 MultiSMREntry multiSMREntry = (MultiSMREntry) MultiSMREntry.deserialize(buf, null, isOpaque());
+                streamDistributionSummary.ifPresent(x -> x.record(multiSMREntry.getUpdates().size()));
                 multiSMREntry.setGlobalAddress(getGlobalAddress());
                 streamBuffers.remove(id);
                 return multiSMREntry;
