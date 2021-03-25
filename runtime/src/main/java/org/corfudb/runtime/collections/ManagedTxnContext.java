@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Descriptors;
+import com.google.protobuf.Int64Value;
 import com.google.protobuf.Message;
 import lombok.Getter;
 import org.corfudb.runtime.exceptions.StaleRevisionUpdateException;
@@ -575,14 +576,21 @@ public class ManagedTxnContext implements AutoCloseable {
                 switch (fieldDescriptor.getName()) {
                     case "revision":
                         if (oldRecord == null || oldRecord.getMetadata() == null) {
-                            builder.setField(fieldDescriptor, 0L);
+                            builder.setField(fieldDescriptor, Int64Value.newBuilder().setValue(0L).build());
                         } else {
-                            Long prevRevision = (Long) oldRecord.getMetadata().getField(fieldDescriptor);
-                            Long givenRevision = (Long) deltaMetadata.getField(fieldDescriptor);
-                            if (givenRevision == 0 || // Do not validate revision if field isn't set
-                                    (givenRevision > 0 && // Validate revision only if set
-                                            prevRevision.longValue() == givenRevision.longValue())) {
-                                builder.setField(fieldDescriptor, prevRevision + 1);
+                            // Revision field should be of type Int64Value (message/wrapper) instead of an int64 primitive.
+                            // This will allow to differentiate an unset revision field from an explicitly revision
+                            // field set to '0'(proto default value for unset primitives)
+                            Long prevRevision = ((Int64Value) oldRecord.getMetadata().getField(fieldDescriptor)).getValue();
+                            Long givenRevision = null;
+                            if (deltaMetadata.hasField(fieldDescriptor)) {
+                                givenRevision = ((Int64Value) deltaMetadata.getField(fieldDescriptor)).getValue();
+                            }
+                            if (givenRevision == null || // Do not validate revision if field isn't set
+                                    // Validate revision only if set
+                                    prevRevision.longValue() == givenRevision.longValue()) {
+                                Int64Value bumpedRevision = Int64Value.newBuilder().setValue(prevRevision + 1).build();
+                                builder.setField(fieldDescriptor, bumpedRevision);
                             } else {
                                 throw new StaleRevisionUpdateException(prevRevision, givenRevision);
                             }
@@ -675,17 +683,19 @@ public class ManagedTxnContext implements AutoCloseable {
                 throw new IllegalArgumentException("Non-null payload sent for delete validation");
             }
 
-            final Message.Builder builder = deltaMetadata.toBuilder();
             for (Descriptors.FieldDescriptor fieldDescriptor : deltaMetadata.getDescriptorForType().getFields()) {
                 if ("revision".equals(fieldDescriptor.getName())) {
                     if (oldRecord == null || oldRecord.getMetadata() == null) {
                         return null;
                     } else {
-                        Long prevRevision = (Long) oldRecord.getMetadata().getField(fieldDescriptor);
-                        Long givenRevision = (Long) deltaMetadata.getField(fieldDescriptor);
-                        if (givenRevision == 0 || // Do not validate revision if field isn't set
-                                (givenRevision > 0 && // Validate revision only if set
-                                prevRevision.longValue() == givenRevision.longValue())) {
+                        Long prevRevision = ((Int64Value) oldRecord.getMetadata().getField(fieldDescriptor)).getValue();
+                        Long givenRevision = null;
+                        if (deltaMetadata.hasField(fieldDescriptor)) {
+                            givenRevision = ((Int64Value) deltaMetadata.getField(fieldDescriptor)).getValue();
+                        }
+                        if (givenRevision == null || // Do not validate revision if field isn't set
+                                // Validate revision only if set
+                                prevRevision.longValue() == givenRevision.longValue()) {
                             return null;
                         } else {
                             throw new StaleRevisionUpdateException(prevRevision, givenRevision);

@@ -363,7 +363,7 @@ public class Layout {
             }
 
             @Override
-            public IStreamView  getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
+            public IStreamView getStreamView(CorfuRuntime r, UUID streamId, StreamOptions options) {
                 return new ThreadSafeStreamView(r, streamId, options);
             }
 

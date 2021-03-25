@@ -180,9 +180,6 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
                         // TableOptions includes option to choose - Memory/Disk based corfu table.
                         TableOptions.builder().build());
 
-        UuidMsg key = UuidMsg.newBuilder().setLsb(0L).setMsb(0L).build();
-        ExampleSchemas.ManagedMetadata value = ExampleSchemas.ManagedMetadata.newBuilder().setCreateUser("simpleValue").build();
-
         Table<Queue.CorfuGuidMsg, ExampleSchemas.ExampleValue, Queue.CorfuQueueMetadataMsg> corfuQueue =
                 shimStore.openQueue(someNamespace, "testQueue",
                         ExampleSchemas.ExampleValue.class,
@@ -222,9 +219,7 @@ public class CorfuQueueTxTest extends AbstractTransactionsTest {
         // After all concurrent transactions are complete, validate that number of Queue entries
         // are the same as the number of successful transactions.
         List<Table.CorfuQueueRecord> records;
-        try (ManagedTxnContext query = shimStore.txn(someNamespace)) {
-            records = corfuQueue.entryList();
-        }
+        records = corfuQueue.entryList();
         assertThat(validator.size()).isEqualTo(records.size());
 
         // Also validate that the order of the queue matches that of the commit order.

@@ -215,7 +215,7 @@ public class CorfuStore {
     }
 
     /**
-     * Return the address of the latest updated made in this table.
+     * Return the address of the latest update made in this table.
      *
      * @param namespace - namespace that this table belongs to.
      * @param tableName - table name of this table without the namespace prefixed in.

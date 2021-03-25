@@ -4,6 +4,7 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Message;
+import com.google.protobuf.WrappersProto;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuOptions;
 import org.corfudb.runtime.CorfuRuntime;
@@ -490,23 +491,27 @@ public class CorfuStoreTest extends AbstractViewTest {
         FileDescriptor firewallFileDescriptor = FirewallRule.getDescriptor().getFile();
         FileDescriptor schemaMetadataFileDescriptor = CorfuOptions.getDescriptor();
         FileDescriptor googleDescriptor = DescriptorProto.getDescriptor().getFile();
+        FileDescriptor wrapperDescriptor = WrappersProto.getDescriptor().getFile();
 
         byte[] data = message.toByteArray();
         byte[] applianceSchemaBytes = applianceFileDescriptor.toProto().toByteArray();
         byte[] firewallSchemaBytes = firewallFileDescriptor.toProto().toByteArray();
         byte[] metadataSchemaBytes = schemaMetadataFileDescriptor.toProto().toByteArray();
         byte[] googleSchemaBytes = googleDescriptor.toProto().toByteArray();
+        byte[] wrapperSchemaBytes = wrapperDescriptor.toProto().toByteArray();
 
         FileDescriptorProto applianceSchemaProto = FileDescriptorProto.parseFrom(applianceSchemaBytes);
         FileDescriptorProto firewallSchemaProto = FileDescriptorProto.parseFrom(firewallSchemaBytes);
         FileDescriptorProto metadataSchemaProto = FileDescriptorProto.parseFrom(metadataSchemaBytes);
         FileDescriptorProto googleDescriptorProto = FileDescriptorProto.parseFrom(googleSchemaBytes);
+        FileDescriptorProto wrapperDescriptorProto = FileDescriptorProto.parseFrom(wrapperSchemaBytes);
 
         FileDescriptorSet fileDescriptorSet = FileDescriptorSet.newBuilder()
                 .addFile(applianceSchemaProto)
                 .addFile(firewallSchemaProto)
                 .addFile(metadataSchemaProto)
                 .addFile(googleDescriptorProto)
+                .addFile(wrapperDescriptorProto)
                 .build();
 
         Map<String, FileDescriptorProto> fileDescriptorProtoMap = new HashMap<>();

@@ -5,6 +5,7 @@ option java_package = "org.corfudb.test";
 
 import "corfu_options.proto";
 import "google/protobuf/descriptor.proto";
+import "google/protobuf/wrappers.proto";
 import "sample_appliance.proto";
 
 message FirewallRule {
@@ -28,7 +29,7 @@ message ManagedResources {
 }
 
 message ManagedMetadata {
-    optional int64 revision = 1;
+    optional .google.protobuf.Int64Value revision = 1;
     optional int64 create_time = 2;
     optional string create_user = 3;
     optional int64 last_modified_time = 4;

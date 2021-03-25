@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import com.google.common.reflect.TypeToken;
+import com.google.protobuf.Int64Value;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -180,21 +181,21 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             entry = queryTxn.getRecord(table, key1);
         }
         assertNotNull(entry);
-        assertThat(entry.getMetadata().getRevision()).isEqualTo(0L);
+        assertThat(entry.getMetadata().getRevision().getValue()).isEqualTo(0L);
         assertThat(entry.getMetadata().getCreateTime()).isLessThan(System.currentTimeMillis());
 
         // Ensure that if metadata's revision field is set, it is validated and exception thrown if stale
         final ManagedTxnContext txn1 = shimStore.tx(someNamespace);
         txn1.putRecord(tableName, key1,
                 ManagedMetadata.newBuilder().setCreateUser("abc").build(),
-                ManagedMetadata.newBuilder().setRevision(1L).build());
+                ManagedMetadata.newBuilder().setRevision(Int64Value.newBuilder().setValue(1L).build()).build());
         assertThatThrownBy(txn1::commit).isExactlyInstanceOf(StaleRevisionUpdateException.class);
 
         // Correct revision field set should NOT throw an exception
         try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
             txn.putRecord(tableName, key1,
                     ManagedMetadata.newBuilder().setCreateUser("xyz").build(),
-                    ManagedMetadata.newBuilder().setRevision(0L).build());
+                    ManagedMetadata.newBuilder().setRevision(Int64Value.newBuilder().setValue(0L).build()).build());
             txn.commit();
         }
 
@@ -209,10 +210,19 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         try (ManagedTxnContext queryTxn = shimStore.tx(someNamespace)) {
             entry = queryTxn.getRecord(table, key1);
         }
-        assertThat(entry.getMetadata().getRevision()).isEqualTo(2L);
+        assertThat(entry.getMetadata().getRevision().getValue()).isEqualTo(2L);
         assertThat(entry.getMetadata().getCreateUser()).isEqualTo("user_1");
         assertThat(entry.getMetadata().getLastModifiedTime()).isLessThan(System.currentTimeMillis() + 1);
         assertThat(entry.getMetadata().getCreateTime()).isLessThan(entry.getMetadata().getLastModifiedTime());
+
+        // Set revision to proto3 default unset value for primitive types (this should fail as it is a stale
+        // revision)
+        try (ManagedTxnContext txn = shimStore.tx(someNamespace)) {
+            txn.putRecord(tableName, key1,
+                    ManagedMetadata.newBuilder().setCreateUser("abc").build(),
+                    ManagedMetadata.newBuilder().setRevision(Int64Value.newBuilder().setValue(0L).build()).build());
+            assertThatThrownBy(txn::commit).isExactlyInstanceOf(StaleRevisionUpdateException.class);
+        }
     }
 
     /**
@@ -269,7 +279,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         txn.putRecord(tableName,
                 key1,
                 ManagedMetadata.newBuilder().setCreateUser("bcd").build(),
-                ManagedMetadata.newBuilder().setCreateUser("testUser").setRevision(1L).build());
+                ManagedMetadata.newBuilder().setCreateUser("testUser").setRevision(Int64Value.newBuilder().setValue(1L).build()).build());
         txn.commit();
         assertThat(shimStore.getTable(someNamespace, tableName).get(key1).getMetadata())
                 .isNotNull();
@@ -316,7 +326,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
 
         UuidMsg key = UuidMsg.newBuilder().setLsb(0L).setMsb(0L).build();
         ManagedMetadata value = ManagedMetadata.newBuilder().setCreateUser("simpleValue").build();
-        final String something = "double_nested_metadata_field";
         final int one = 1; // Frankly stupid but i could not figure out how to selectively disable checkstyle
         final long twelve = 12L; // please help figure out how to disable checkstyle selectively
 
@@ -337,7 +346,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                             .build());
             txn.commit();
         }
-        CorfuStoreEntry<UuidMsg, ManagedMetadata, LogReplicationEntryMetadataMsg> entry = null;
+        CorfuStoreEntry<UuidMsg, ManagedMetadata, LogReplicationEntryMetadataMsg> entry;
         try (ManagedTxnContext queryTxn = shimStore.tx(someNamespace)) {
             entry = queryTxn.getRecord(table, key);
         }
@@ -396,7 +405,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         try (ManagedTxnContext query = shimStore.tx(someNamespace)) {
             entry = query.getRecord(tableName, key);
         }
-        assertThat(entry.getMetadata().getRevision()).isEqualTo(0);
+        assertThat(entry.getMetadata().getRevision().getValue()).isEqualTo(0L);
         assertThat(entry.getMetadata().getCreateTime()).isGreaterThan(0);
         assertThat(entry.getMetadata().getCreateTime()).isEqualTo(entry.getMetadata().getLastModifiedTime());
 
@@ -406,14 +415,14 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                 assertThat(mutations.get(table.getFullyQualifiedTableName()).size()).isEqualTo(1);
                 // This one way to selectively extract the metadata out
                 ManagedMetadata metadata = (ManagedMetadata) mutations.get(table.getFullyQualifiedTableName()).get(0).getMetadata();
-                assertThat(metadata.getRevision()).isGreaterThan(0);
+                assertThat(metadata.getRevision().getValue()).isGreaterThan(0);
 
                 // This is another way to extract the metadata out..
                 mutations.forEach((tblName, entries) -> {
                     entries.forEach(mutation -> {
                         // This is how we can extract the metadata out
                         ManagedMetadata metaData = (ManagedMetadata) mutations.get(tblName).get(0).getMetadata();
-                        assertThat(metaData.getRevision()).isGreaterThan(0);
+                        assertThat(metaData.getRevision().getValue()).isGreaterThan(0);
                     });
                 });
             }
@@ -500,7 +509,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                     rwTxn.commit();
                 }
                 assertThat(TransactionalContext.isInTransaction()).isTrue();
-                assertThat(entry.getMetadata().getRevision()).isEqualTo(0);
+                assertThat(entry.getMetadata().getRevision().getValue()).isEqualTo(0L);
                 assertThat(entry.getMetadata().getCreateTime()).isGreaterThan(0);
                 assertThat(entry.getMetadata().getCreateTime()).isEqualTo(entry.getMetadata().getLastModifiedTime());
             }
@@ -533,7 +542,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             entry = nestedTxn.getRecord(tableName, key);
             nestedTxn.commit(); // should not commit the parent transaction!
         }
-        assertThat(entry.getMetadata().getRevision()).isGreaterThan(0);
+        assertThat(entry.getMetadata().getRevision().getValue()).isGreaterThan(0);
 
         assertThat(TransactionalContext.isInTransaction()).isTrue();
         long commitAddress = corfuRuntime.getObjectsView().TXEnd();
