@@ -3,6 +3,7 @@ package org.corfudb.generator;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
+import org.corfudb.generator.operations.UpdateVersionHandler;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
@@ -198,6 +199,8 @@ public class LongevityApp {
 
     public void runLongevityTest() {
         startTime = System.currentTimeMillis();
+
+        new UpdateVersionHandler().handle(state);
 
         if (checkPoint) {
             runCpTrimTask();

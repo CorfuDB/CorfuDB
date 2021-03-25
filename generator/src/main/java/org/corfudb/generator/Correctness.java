@@ -1,8 +1,12 @@
 package org.corfudb.generator;
 
-import ch.qos.logback.classic.Logger;
+import org.corfudb.generator.distributions.Keys;Z
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Optional;
 
 /**
  * Correctness recorder
@@ -20,15 +24,30 @@ public class Correctness {
     public static final String TX_END = "end";
     public static final String TX_ABORTED = "aborted";
 
-    private static final Logger correctnessLogger = (Logger) LoggerFactory.getLogger("correctness");
+    private static final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
+    /**
+     * The format of the operation:
+     * 2021-02-02_23:44:57.853, [pool-6-thread-7], TxRead, table_36:key_69=3a1f57b1-35a4-4a7f-aee0-99e00d7e1cf2, 136
+     *
+     * @param operation log message
+     * @param transactionPrefix tx prefix
+     */
     public static void recordOperation(String operation, boolean transactionPrefix) {
         if (transactionPrefix) {
-            long sequence = TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence();
-            correctnessLogger.info("Tx{}, {}", operation, sequence);
+            long version = TransactionalContext.getCurrentContext().getSnapshotTimestamp().getSequence();
+            correctnessLogger.info("Tx{}, {}", operation, version);
         } else {
             correctnessLogger.info(operation);
         }
+    }
+
+    public static Keys.Version getVersion() {
+        long ver = Optional.ofNullable(TransactionalContext.getCurrentContext())
+                .map(ctx-> ctx.getSnapshotTimestamp().getSequence())
+                .orElse(Address.NON_ADDRESS);
+
+        return new Keys.Version(ver);
     }
 
     /**

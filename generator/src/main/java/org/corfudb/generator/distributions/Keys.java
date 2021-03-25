@@ -1,16 +1,18 @@
 package org.corfudb.generator.distributions;
 
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import org.corfudb.generator.distributions.Streams.StreamId;
-import org.corfudb.generator.state.KeysState;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.function.Function;
 
 /**
  * This class implements the distribution of keys that can be inserted
@@ -21,12 +23,10 @@ import java.util.Set;
 public class Keys implements DataSet<Keys.KeyId> {
     private final Set<KeyId> mapKeys;
     private final int numKeys;
-    private final Map<KeyId, KeysState> keysState;
 
     public Keys(int num) {
         mapKeys = new HashSet<>();
         numKeys = num;
-        keysState = new HashMap<>();
     }
 
     @Override
@@ -55,20 +55,29 @@ public class Keys implements DataSet<Keys.KeyId> {
         }
     }
 
+    @Builder
+    @EqualsAndHashCode
     @AllArgsConstructor
     public static class FullyQualifiedKey {
         private final KeyId keyId;
         private final StreamId tableId;
     }
 
-    @AllArgsConstructor
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     @EqualsAndHashCode
     public static class Version implements Comparable<Version> {
-        private final int version;
+        private static final ConcurrentMap<Long, Version> REGISTRY = new ConcurrentHashMap<>();
+        private static final Function<Long, Version> FACTORY = Version::new;
+
+        private final long ver;
+
+        public static Version build(long version){
+            return REGISTRY.computeIfAbsent(version, FACTORY);
+        }
 
         @Override
         public int compareTo(Version other) {
-            return Integer.compare(version, other.version);
+            return Long.compare(ver, other.ver);
         }
     }
 }

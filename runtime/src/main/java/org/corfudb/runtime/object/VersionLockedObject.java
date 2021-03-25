@@ -118,11 +118,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      */
     private final Supplier<T> newObjectFn;
 
-    /**
-     * Correctness Logging
-     */
-    private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
-
     private final Optional<AtomicLong> noRollBackExceptionCounter;
     private final Optional<Timer> syncStreamTimer;
     private final Optional<Counter> versionApplyCounter;
@@ -136,8 +131,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
      * @param newObjectFn A function passed to instantiate a new instance of this object.
      * @param smrStream   Stream View backing this object.
      */
-    public VersionLockedObject(Supplier<T> newObjectFn,
-                               StreamViewSMRAdapter smrStream,
+    public VersionLockedObject(Supplier<T> newObjectFn, StreamViewSMRAdapter smrStream,
                                ICorfuSMR<T> wrapperObject) {
         this.smrStream = smrStream;
         this.upcallTargetMap = wrapperObject.getCorfuSMRUpcallMap();
@@ -252,7 +246,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
 
                     long versionForCorrectness = getVersionUnsafe();
                     if (lock.validate(ts)) {
-                        correctnessLogger.trace("Version, {}", versionForCorrectness);
+                        VloVersioningListener.submit(versionForCorrectness);
                         optimisticReadCounter.ifPresent(Counter::count);
                         return ret;
                     }
@@ -285,12 +279,12 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             if (directAccessCheckFunction.apply(this)) {
                 log.trace("Access [{}] Direct (writelock) access at {}", this, getVersionUnsafe());
                 R ret = accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
-                correctnessLogger.trace("Version, {}", getVersionUnsafe());
+                VloVersioningListener.submit(getVersionUnsafe());
                 return ret;
             }
             // If not, perform the update operations
             updateFunction.accept(this);
-            correctnessLogger.trace("Version, {}", getVersionUnsafe());
+            VloVersioningListener.submit(getVersionUnsafe());
             log.trace("Access [{}] Updated (writelock) access at {}", this, getVersionUnsafe());
             return accessFunction.apply(object.getContext(ICorfuExecutionContext.DEFAULT));
             // And perform the access

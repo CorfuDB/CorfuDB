@@ -35,6 +35,7 @@ public class CorfuCompileWrapperBuilder {
                                                          UUID streamID, Object[] args,
                                                          ISerializer serializer,
                                                          Set<UUID> streamTags) throws Exception {
+
         // Do we have a compiled wrapper for this type?
         Class<ICorfuSMR<T>> wrapperClass = (Class<ICorfuSMR<T>>)
                 Class.forName(type.getName() + ICorfuSMR.CORFUSMR_SUFFIX);
@@ -45,8 +46,11 @@ public class CorfuCompileWrapperBuilder {
 
         // Now we create the proxy, which actually manages
         // instances of this object. The wrapper delegates calls to the proxy.
-        wrapperObject.setCorfuSMRProxy(new CorfuCompileProxy<>(rt, streamID,
-                type, args, serializer, streamTags, wrapperObject));
+        CorfuCompileProxy<T> proxy = new CorfuCompileProxy<>(
+                rt, streamID, type, args, serializer, streamTags, wrapperObject
+        );
+
+        wrapperObject.setCorfuSMRProxy(proxy);
 
         if (wrapperObject instanceof ICorfuSMRProxyWrapper) {
             ((ICorfuSMRProxyWrapper) wrapperObject)

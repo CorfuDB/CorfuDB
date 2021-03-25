@@ -29,6 +29,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -110,10 +111,6 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     private final Optional<Timer> readTimer;
     private final Optional<Timer> writeTimer;
     private final Optional<Timer> txTimer;
-    /**
-     * Correctness Logging
-     */
-    private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
     /**
      * Creates a CorfuCompileProxy object on a particular stream.
@@ -138,9 +135,8 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
         // Since the VLO is thread safe we don't need to use a thread safe stream implementation
         // because the VLO will control access to the stream
-        underlyingObject = new VersionLockedObject<T>(this::getNewInstance,
-                new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID)),
-                wrapperObject);
+        StreamViewSMRAdapter smrStream = new StreamViewSMRAdapter(rt, rt.getStreamsView().getUnsafe(streamID));
+        underlyingObject = new VersionLockedObject<>(this::getNewInstance, smrStream, wrapperObject);
 
         String streamIdKey = "streamId";
         String streamIdValue = getStreamID().toString();
@@ -180,12 +176,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public <R> R access(ICorfuSMRAccess<R, T> accessMethod,
                         Object[] conflictObject) {
-        if (readTimer.isPresent()) {
-            return readTimer.get().record(() -> accessInner(accessMethod, conflictObject));
-        }
-        else {
-            return accessInner(accessMethod, conflictObject);
-        }
+        return readTimer
+                .map(timer -> timer.record(() -> accessInner(accessMethod, conflictObject)))
+                .orElseGet(() -> accessInner(accessMethod, conflictObject));
     }
 
     private <R> R accessInner(ICorfuSMRAccess<R, T> accessMethod,
@@ -205,30 +198,32 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
 
         log.debug("Access[{}] conflictObj={} version={}", this, conflictObject, timestamp);
 
+        Function<VersionLockedObject<T>, Boolean> accessChecker = vlo ->
+                vlo.getVersionUnsafe() >= timestamp.get() && !vlo.isOptimisticallyModifiedUnsafe();
+
         // Perform underlying access
-        return underlyingObject.access(o -> o.getVersionUnsafe() >= timestamp.get()
-                        && !o.isOptimisticallyModifiedUnsafe(),
-                o -> {
-                    for (int x = 0; x < rt.getParameters().getTrimRetry(); x++) {
-                        try {
-                            o.syncObjectUnsafe(timestamp.get());
-                            break;
-                        } catch (TrimmedException te) {
-                            log.info("accessInner: Encountered trimmed address space " +
-                                            "while accessing version {} of stream {} on attempt {}",
-                                    timestamp.get(), getStreamID(), x);
+        Consumer<VersionLockedObject<T>> updateFunction = vlo -> {
+            for (int retry = 0; retry < rt.getParameters().getTrimRetry(); retry++) {
+                try {
+                    vlo.syncObjectUnsafe(timestamp.get());
+                    break;
+                } catch (TrimmedException te) {
+                    String errMsg = "accessInner: Encountered trimmed address space " +
+                            "while accessing version {} of stream {} on attempt {}";
+                    log.info(errMsg, timestamp.get(), getStreamID(), retry);
 
-                            o.resetUnsafe();
+                    vlo.resetUnsafe();
 
-                            if (x == (rt.getParameters().getTrimRetry() - 1)) {
-                                throw te;
-                            }
-
-                            timestamp.set(rt.getSequencerView().query(getStreamID()));
-                        }
+                    if (retry == rt.getParameters().getTrimRetry() - 1) {
+                        throw te;
                     }
-                },
-                o -> accessMethod.access(o));
+
+                    timestamp.set(rt.getSequencerView().query(getStreamID()));
+                }
+            }
+        };
+
+        return underlyingObject.access(accessChecker, updateFunction, accessMethod::access);
     }
 
     /**
@@ -237,12 +232,9 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     @Override
     public long logUpdate(String smrUpdateFunction, final boolean keepUpcallResult,
                           Object[] conflictObject, Object... args) {
-        if (writeTimer.isPresent()) {
-            return writeTimer.get().record(() -> logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args));
-        }
-        else {
-            return logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args);
-        }
+        return writeTimer
+                .map(timer -> timer.record(() -> logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args)))
+                .orElseGet(() -> logUpdateInner(smrUpdateFunction, keepUpcallResult, conflictObject, args));
     }
 
     private long logUpdateInner(String smrUpdateFunction, final boolean keepUpcallResult,
@@ -267,7 +259,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         long address = underlyingObject.logUpdate(smrEntry, keepUpcallResult);
         log.trace("Update[{}] {}@{} ({}) conflictObj={}",
                 this, smrUpdateFunction, address, args, conflictObject);
-        correctnessLogger.trace("Version, {}", address);
+        VloVersioningListener.submit(address);
         return address;
     }
 

@@ -18,7 +18,9 @@ import java.util.Map;
 import java.util.Random;
 
 import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT_IN_MS;
-import static org.corfudb.generator.distributions.Streams.*;
+import static org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
+import static org.corfudb.generator.distributions.Streams.StreamId;
+import static org.corfudb.generator.state.KeysState.VersionedKey;
 
 /**
  * This object keeps state information of the different data distributions and runtime client.
@@ -32,6 +34,9 @@ public class State {
 
     @Getter
     private final Keys keys;
+
+    @Getter
+    private final KeysState keysState;
 
     @Getter
     private final OperationCount operationCount;
@@ -56,6 +61,7 @@ public class State {
 
         keys = new Keys(numKeys);
         maps = new HashMap<>();
+        keysState = new KeysState();
 
         operationCount = new OperationCount();
 
@@ -72,6 +78,11 @@ public class State {
         openObjects();
     }
 
+    public VersionedKey getKey(FullyQualifiedKey fqKey) {
+        return keysState.get(fqKey);
+    }
+
+
     public void updateTrimMark(Token newTrimMark) {
         if (newTrimMark.compareTo(ctx.trimMark) > 0) {
             ctx.trimMark = newTrimMark;
@@ -83,7 +94,8 @@ public class State {
             CorfuTable<String, String> map = runtime.getObjectsView()
                     .build()
                     .setStreamID(streamId.getStreamId())
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {})
+                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                    })
                     .setArguments(new StringIndexer())
                     .open();
 
@@ -137,7 +149,7 @@ public class State {
         @Getter
         private volatile Token trimMark = Token.UNINITIALIZED;
 
-        public void updateLastSuccessfulReadOperationTimestamp(){
+        public void updateLastSuccessfulReadOperationTimestamp() {
             lastSuccessfulReadOperationTimestamp = System.currentTimeMillis();
         }
 

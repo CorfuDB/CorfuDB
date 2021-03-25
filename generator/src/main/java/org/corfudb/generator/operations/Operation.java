@@ -18,5 +18,7 @@ public abstract class Operation {
 
     public abstract void execute();
 
-    public abstract void verify();
+    public abstract boolean verify();
+
+    public abstract void addToHistory();
 }

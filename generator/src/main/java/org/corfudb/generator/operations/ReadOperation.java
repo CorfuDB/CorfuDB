@@ -2,6 +2,9 @@ package org.corfudb.generator.operations;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.state.KeysState;
+import org.corfudb.generator.state.KeysState.VersionedKey;
 import org.corfudb.generator.state.State;
 import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.runtime.collections.CorfuTable;
@@ -19,6 +22,7 @@ public class ReadOperation extends Operation {
     private final StreamId streamId;
     private final KeyId key;
     private final String val;
+    private Keys.Version version;
 
     public ReadOperation(State state) {
         super(state, "Read");
@@ -39,24 +43,24 @@ public class ReadOperation extends Operation {
         corfuMap.getByIndex(StringIndexer.BY_FIRST_CHAR, "a");
         corfuMap.getByIndex(StringIndexer.BY_VALUE, val);
 
+        version = Correctness.getVersion();
+
         if (!TransactionalContext.isInTransaction()) {
             state.getCtx().updateLastSuccessfulReadOperationTimestamp();
         }
     }
 
     @Override
-    public void verify() {
-        /**
-         *          key_state = state.get(self.map_id, self.key_id)
-         *         key_at_version: int = key_state.get_at_version(self.version)
-         *
-         *         try:
-         *             assert self.value == key_at_version
-         *         except AssertionError:
-         *             state.incorrect_read += 1
-         *             inconsistency = ReadInconsistency(self, key_at_version, False, state, False)
-         *             inconsistency.log_report()
-         */
-        state.getKeys()
+    public boolean verify() {
+        FullyQualifiedKey fqKey = FullyQualifiedKey.builder().keyId(key).tableId(streamId).build();
+        VersionedKey keyState = state.getKey(fqKey);
+
+        return val.equals(keyState.get(version).getValue());
+    }
+
+    @Override
+    public void addToHistory() {
+        KeysState.ThreadName currThreadName = KeysState.ThreadName.buildFromCurrentThread();
+        version = state.getKeysState().getThreadLatestVersion(currThreadName);
     }
 }
