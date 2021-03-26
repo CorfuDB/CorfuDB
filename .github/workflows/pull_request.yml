@@ -93,4 +93,4 @@ jobs:
         run: ./mvnw clean install -DskipTests -Pdocker -Dmaven.javadoc.skip=true -T 1C
 
       - name: Run universe tests
-        run: ./mvnw -pl :universe verify -Puniverse -DskipTests -Dmaven.javadoc.skip=true
+        run: ./mvnw -pl :universe verify -Puniverse -Dmaven.javadoc.skip=true
