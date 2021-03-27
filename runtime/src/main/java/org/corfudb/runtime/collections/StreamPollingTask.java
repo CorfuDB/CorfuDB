@@ -2,6 +2,8 @@ package org.corfudb.runtime.collections;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.exceptions.StreamingException;
+import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import java.time.Duration;
@@ -54,13 +56,24 @@ class StreamPollingTask implements Runnable {
     public void run() {
         try {
             pollTxnStream();
+        } catch (TrimmedException te) {
+            processException(new StreamingException(te));
         } catch (Throwable throwable) {
-            StreamListener listener = subscription.getListener();
-            log.error("Encountered exception {} during txn stream polling, listener: {}, " +
-                    "namespace: {}", throwable, listener, subscription.getNamespace());
-            streamingManager.unsubscribe(listener, false);
-            listener.onError(throwable);
+            processException(throwable);
         }
+    }
+
+    /**
+     * Unsubscribe listener and notify with error.
+     *
+     * @param throwable
+     */
+    private void processException(Throwable throwable) {
+        StreamListener listener = subscription.getListener();
+        log.error("Encountered exception {} during txn stream polling, listener: {}, " +
+                "namespace: {}", throwable, listener, subscription.getNamespace());
+        streamingManager.unsubscribe(listener, false);
+        listener.onError(throwable);
     }
 
     /**

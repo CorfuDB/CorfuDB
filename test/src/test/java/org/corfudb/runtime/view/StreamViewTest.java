@@ -1,5 +1,6 @@
 package org.corfudb.runtime.view;
 
+import com.google.common.collect.Iterables;
 import com.google.common.reflect.TypeToken;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -16,6 +17,7 @@ import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -558,7 +560,6 @@ public class StreamViewTest extends AbstractViewTest {
         IStreamView svProducer = producer.getStreamsView().get(id1);
         IStreamView svConsumer = consumer.getStreamsView().get(id1);
 
-
         for (int x = 0; x < numWrites; x++) {
             svProducer.append(testPayload);
         }
@@ -585,6 +586,116 @@ public class StreamViewTest extends AbstractViewTest {
                 assertThat(data.getPayload(consumer)).isEqualTo(testPayload);
             }
         }
+    }
 
+    /**
+     * Test IStreamView remainingAtMost when the number of updates to the stream
+     * is greater than the max number of entries requested.
+     */
+    @Test
+    public void testRemainingAtMostUpdatesGreaterThanBatchSize() {
+        final int NUM_UPDATES = 50;
+        final int BATCH_SIZE = 10;
+        assertThat(testRemainingAtMost(NUM_UPDATES, BATCH_SIZE)).isTrue();
+    }
+
+    /**
+     * Test IStreamView remainingAtMost when the number of updates to the stream
+     * is lesser than the max number of entries requested.
+     */
+    @Test
+    public void testRemainingAtMostUpdatesLesserThanBatchSize() {
+        final int NUM_UPDATES = 5;
+        final int BATCH_SIZE = 10;
+        assertThat(testRemainingAtMost(NUM_UPDATES, BATCH_SIZE)).isTrue();
+    }
+
+    /**
+     * Test IStreamView remainingAtMost when the non-checkpointable stream has been fully trimmed.
+     */
+    @Test
+    public void testRemainingAtMostWithFullTrim() {
+        assertThat(testRemainingAtMostWithTrim(false)).isTrue();
+    }
+
+    /**
+     * Test IStreamView remainingAtMost when the non-checkpointable stream has been partially trimmed,
+     * i.e., some updates are still present in the log.
+     */
+    @Test
+    public void testRemainingAtMostWithPartialTrim() {
+        assertThat(testRemainingAtMostWithTrim(true)).isTrue();
+    }
+
+    private boolean testRemainingAtMost(int numUpdates, int batchSize) {
+        final String streamName = "stream-test";
+
+        try {
+            createStreamAndInsertUpdates(streamName, numUpdates);
+
+            // Get StreamView for current stream
+            IStreamView sv =  r.getStreamsView().get(CorfuRuntime.getStreamID(streamName));
+
+            final Iterable<List<Integer>> batches = Iterables.partition(Collections.nCopies(numUpdates, 1), batchSize);
+            assertThat(sv.getCurrentGlobalPosition()).isEqualTo(Address.NON_ADDRESS);
+            List<ILogData> logData;
+            for (List<Integer> batch : batches) {
+                logData = sv.remainingAtMost(batchSize);
+                assertThat(logData.size()).isEqualTo(batch.size());
+            }
+            assertThat(sv.getCurrentGlobalPosition()).isEqualTo(numUpdates - 1);
+
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private StreamingMap<String, String> createStreamAndInsertUpdates(String streamName, int numUpdates) {
+        StreamingMap<String, String> map = r.getObjectsView()
+                .build()
+                .setStreamName(streamName)
+                .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                })
+                .open();
+
+        // Insert NUM_UPDATES to stream
+        for (int i = 0; i < numUpdates; i++) {
+            map.put("k" + i, "v" + i);
+        }
+
+        return map;
+    }
+
+    private boolean testRemainingAtMostWithTrim(boolean partialTrim) {
+        try {
+            final String streamName = "stream-test";
+            final int NUM_UPDATES = 20;
+            final int BATCH_SIZE = 5;
+            final int OFFSET = 4;
+
+            createStreamAndInsertUpdates(streamName, NUM_UPDATES);
+
+            // Trim address space (no checkpoint, as this test assumes stream is not checkpoint capable)
+            long trimAddress = partialTrim ? NUM_UPDATES - OFFSET : NUM_UPDATES;
+            Token token = Token.of(0, trimAddress);
+            r.getAddressSpaceView().prefixTrim(token);
+            r.getAddressSpaceView().gc();
+            r.getObjectsView().getObjectCache().clear();
+
+            // Get StreamView for current stream
+            StreamOptions options = StreamOptions
+                    .builder()
+                    .cacheEntries(false)
+                    .isCheckpointCapable(false)
+                    .build();
+
+            IStreamView sv =  r.getStreamsView().get(CorfuRuntime.getStreamID(streamName), options);
+            assertThatThrownBy(() -> sv.remainingAtMost(BATCH_SIZE)).isInstanceOf(TrimmedException.class);
+
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
