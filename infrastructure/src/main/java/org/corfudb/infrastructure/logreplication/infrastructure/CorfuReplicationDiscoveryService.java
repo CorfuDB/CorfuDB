@@ -564,8 +564,9 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
      */
     public void processLockRelease() {
         log.debug("Lock released");
-        isLeader.set(false);
+        // Unset isLeader flag after stopping log replication
         stopLogReplication();
+        isLeader.set(false);
         // Signal Log Replication Server/Sink to stop receiving messages, leadership loss
         interClusterReplicationService.getLogReplicationServer().setLeadership(false);
         recordLockRelease();

@@ -82,7 +82,7 @@ public class LockClient {
     //TODO need to determine if the application should provide a clientId or should it be internally generated.
     public LockClient(UUID clientId, CorfuRuntime corfuRuntime) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
 
-        this.taskScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        this.taskScheduler = Executors.newScheduledThreadPool(1, r ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(r);
             t.setName("LockTaskThread");
@@ -90,7 +90,7 @@ public class LockClient {
             return t;
         });
 
-        this.leaseMonitorScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        this.leaseMonitorScheduler = Executors.newScheduledThreadPool(1, r ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(r);
             t.setName("LeaseMonitorThread");
@@ -98,7 +98,7 @@ public class LockClient {
             return t;
         });
 
-        this.lockListenerExecutor = Executors.newFixedThreadPool(1, (r) ->
+        this.lockListenerExecutor = Executors.newFixedThreadPool(1, r ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(r);
             t.setName("LockListenerThread");
@@ -106,7 +106,7 @@ public class LockClient {
             return t;
         });
 
-        this.lockMonitorScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        this.lockMonitorScheduler = Executors.newScheduledThreadPool(1, r ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(r);
             t.setName("LockMonitorThread");
@@ -138,7 +138,7 @@ public class LockClient {
 
         Lock lock = locks.computeIfAbsent(
                 lockId,
-                (key) -> new Lock(lockId, lockListener, clientContext));
+                key -> new Lock(lockId, lockListener, clientContext));
 
         // Initialize the lease
         lock.input(LockEvent.LEASE_REVOKED);
