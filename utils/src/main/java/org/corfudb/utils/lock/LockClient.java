@@ -37,6 +37,8 @@ import java.util.concurrent.*;
 @Slf4j
 public class LockClient {
 
+    private static final int SINGLE_THREAD = 1;
+
     // all the locks that the applications are interested in.
     @VisibleForTesting
     @Getter
@@ -54,13 +56,13 @@ public class LockClient {
 
     // duration between monitoring runs
     @Setter
-    private static int DurationBetweenLockMonitorRuns = 10;
+    private static int durationBetweenLockMonitorRuns = 10;
 
     // The context contains objects that are shared across the locks in this client.
     private final ClientContext clientContext;
 
     @Getter
-    private UUID clientId;
+    private final UUID clientId;
 
     /**
      * Constructor
@@ -74,9 +76,9 @@ public class LockClient {
     //TODO need to determine if the application should provide a clientId or should it be internally generated.
     public LockClient(UUID clientId, CorfuRuntime corfuRuntime) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
 
-        this.taskScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        this.taskScheduler = Executors.newScheduledThreadPool(SINGLE_THREAD, runnable ->
         {
-            Thread t = Executors.defaultThreadFactory().newThread(r);
+            Thread t = Executors.defaultThreadFactory().newThread(runnable);
             t.setName("LockTaskThread");
             t.setDaemon(true);
             return t;
@@ -85,25 +87,25 @@ public class LockClient {
         // Single threaded scheduler to monitor the acquired locks (lease)
         // A dedicated scheduler is required in case the task scheduler is stuck in some database operation
         // and the previous lock owner can effectively expire the lock.
-        ScheduledExecutorService leaseMonitorScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        ScheduledExecutorService leaseMonitorScheduler = Executors.newScheduledThreadPool(SINGLE_THREAD, runnable ->
         {
-            Thread t = Executors.defaultThreadFactory().newThread(r);
+            Thread t = Executors.defaultThreadFactory().newThread(runnable);
             t.setName("LeaseMonitorThread");
             t.setDaemon(true);
             return t;
         });
 
-        this.lockListenerExecutor = Executors.newFixedThreadPool(1, (r) ->
+        this.lockListenerExecutor = Executors.newFixedThreadPool(SINGLE_THREAD, runnable ->
         {
-            Thread t = Executors.defaultThreadFactory().newThread(r);
+            Thread t = Executors.defaultThreadFactory().newThread(runnable);
             t.setName("LockListenerThread");
             t.setDaemon(true);
             return t;
         });
 
-        this.lockMonitorScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        this.lockMonitorScheduler = Executors.newScheduledThreadPool(SINGLE_THREAD, runnable ->
         {
-            Thread t = Executors.defaultThreadFactory().newThread(r);
+            Thread t = Executors.defaultThreadFactory().newThread(runnable);
             t.setName("LockMonitorThread");
             t.setDaemon(true);
             return t;
@@ -133,7 +135,7 @@ public class LockClient {
 
         Lock lock = locks.computeIfAbsent(
                 lockId,
-                (key) -> new Lock(lockId, lockListener, clientContext));
+                key -> new Lock(lockId, lockListener, clientContext));
 
         // Initialize the lease
         lock.input(LockEvent.LEASE_REVOKED);
@@ -160,8 +162,8 @@ public class LockClient {
                         log.error("Caught exception while monitoring locks.", ex);
                     }
                 },
-                DurationBetweenLockMonitorRuns,
-                DurationBetweenLockMonitorRuns,
+                durationBetweenLockMonitorRuns,
+                durationBetweenLockMonitorRuns,
                 TimeUnit.SECONDS
 
         );
@@ -179,7 +181,7 @@ public class LockClient {
      * the Lock functionality.
      */
     @Data
-    public class ClientContext {
+    public static class ClientContext {
 
         private final UUID clientUuid;
         private final LockStore lockStore;

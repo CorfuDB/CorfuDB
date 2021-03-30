@@ -103,6 +103,7 @@ public class HasLeaseState extends LockState {
      */
     @Override
     public void onEntry(LockState from) {
+        log.debug("Lock Transition from {} to HasLeaseState. Start lease renewal and monitor!", from.getType());
         notify(() -> lock.getLockListener().lockAcquired(lock.getLockId()), "Lock Acquired");
         // Record the lease time
         leaseTime = Optional.of(Instant.now());
@@ -124,6 +125,7 @@ public class HasLeaseState extends LockState {
      */
     @Override
     public void onExit(LockState to) {
+        log.debug("Lock Transition to {} from HasLeaseState. Stop lease renewal and monitor!", to.getType());
         notify(() -> lock.getLockListener().lockRevoked(lock.getLockId()), "Lock Revoked");
         //Clear leaseTime.
         leaseTime = Optional.empty();
@@ -171,7 +173,8 @@ public class HasLeaseState extends LockState {
                                     lock.input(LockEvent.LEASE_RENEWED);
                                     leaseTime = Optional.of(Instant.now());
                                 } else {
-                                    log.info("Lease revoked for lock {}:{}", lock.getLockId().getLockGroup(),
+                                    log.info("Lease was revoked for lock {}:{}, could not renew!",
+                                            lock.getLockId().getLockGroup(),
                                             lock.getLockId().getLockName());
                                     lock.input(LockEvent.LEASE_REVOKED);
                                 }
@@ -198,7 +201,7 @@ public class HasLeaseState extends LockState {
                 leaseMonitorFuture = Optional.of(leaseMonitorScheduler.scheduleWithFixedDelay(
                         () -> {
                             if (leaseTime.isPresent() && leaseTime.get().isBefore(Instant.now().minusSeconds(Lock.leaseDuration))) {
-                                log.info("Lock: {} lease expired for lock {}", lock.getLockId());
+                                log.info("Lock: {} observed lease expired!!!", lock.getLockId());
                                 lock.input(LockEvent.LEASE_EXPIRED);
                             }
 
@@ -219,7 +222,7 @@ public class HasLeaseState extends LockState {
             if (leaseRenewalFuture.isPresent() && !leaseRenewalFuture.get().isDone()) {
                 boolean cancelled = leaseRenewalFuture.get().cancel(false);
                 if (!cancelled) {
-                    log.error("Lock: Could not cancel the future for lease renewal!!!", lock.getLockId());
+                    log.error("Lock: {} Could not cancel the future for lease renewal!!!", lock.getLockId());
                 }
             }
         }
