@@ -74,8 +74,10 @@ public class ReadWaitHoleFillPolicy implements IHoleFillPolicy {
                 }
 
                 // Otherwise try again.
-                log.debug("peekUntilHoleFillRequired: Attempted read at address {}, "
-                        + "but data absent. Retrying.", address);
+                if (log.isTraceEnabled()) {
+                    log.trace("peekUntilHoleFillRequired: Attempted read at address {}, "
+                            + "but data absent. Retrying.", address);
+                }
                 throw new RetryNeededException();
             }).setOptions(x -> x.setMaxRetryThreshold(retryWaitThreshold)).run();
         } catch (InterruptedException ie) {
