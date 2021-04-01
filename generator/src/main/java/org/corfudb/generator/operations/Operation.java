@@ -4,8 +4,6 @@ import org.corfudb.generator.state.State;
 
 /**
  * A definition of a generic operation that the generator can execute.
- * <p>
- * Created by maithem on 7/14/17.
  */
 public abstract class Operation {
     protected final State state;

@@ -25,6 +25,10 @@ public class KeysState {
         return keys.get(key);
     }
 
+    public void put(FullyQualifiedKey key, KeyEntry entry){
+        keys.get(key).put(entry);
+    }
+
     public void updateThreadLatestVersion(ThreadName thread, Version version) {
         versionsByThread.put(thread, version);
     }
@@ -51,9 +55,9 @@ public class KeysState {
     public static class KeyEntry {
         private final Version version;
         @Getter
-        private final String value;
+        private final Optional<String> value;
 
-        private final String threadId;
+        private final ThreadName threadId;
         private final String clientId;
 
         private final Optional<TxMetaInfo> txInfo;

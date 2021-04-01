@@ -2,8 +2,13 @@ package org.corfudb.generator.operations;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
+import org.corfudb.generator.state.KeysState;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
+
+import java.util.Optional;
 
 import static org.corfudb.generator.distributions.Keys.KeyId;
 import static org.corfudb.generator.distributions.Streams.StreamId;
@@ -13,6 +18,9 @@ import static org.corfudb.generator.distributions.Streams.StreamId;
  */
 @Slf4j
 public class RemoveOperation extends Operation {
+    private StreamId streamId;
+    private KeyId key;
+    private Keys.Version version;
 
     public RemoveOperation(State state) {
         super(state, "Rm");
@@ -22,8 +30,8 @@ public class RemoveOperation extends Operation {
     public void execute() {
         // Hack for Transaction writes only
         if (TransactionalContext.isInTransaction()) {
-            StreamId streamId = state.getStreams().sample();
-            KeyId key = state.getKeys().sample();
+            streamId = state.getStreams().sample();
+            key = state.getKeys().sample();
             state.getMap(streamId).remove(key.getKey());
 
             String correctnessRecord = String.format("%s, %s:%s", shortName, streamId, key);
@@ -36,7 +44,17 @@ public class RemoveOperation extends Operation {
     }
 
     @Override
-    public void verify() {
-        ???
+    public boolean verify() {
+        throw new IllegalStateException("Not applicable");
+    }
+
+    @Override
+    public void addToHistory() {
+        FullyQualifiedKey fqKey = FullyQualifiedKey.builder().keyId(key).tableId(streamId).build();
+        KeysState.KeyEntry entry = new KeysState.KeyEntry(
+                version, Optional.empty(),
+                KeysState.ThreadName.buildFromCurrentThread(), "client", Optional.empty()
+        );
+        state.getKeysState().put(fqKey, entry);
     }
 }
