@@ -32,7 +32,8 @@ import static org.corfudb.protocols.service.CorfuProtocolLogReplication.override
 import static org.corfudb.protocols.service.CorfuProtocolLogReplication.overrideTopologyConfigId;
 
 /**
- * Sender Buffer Manager to store outstanding message that hasn't got an ACK yet.
+ * Sender Buffer Manager is a class responsible of storing outstanding messages
+ * that have not yet been acknowledged by the receiver.
  */
 @Slf4j
 public abstract class SenderBufferManager {
@@ -185,12 +186,11 @@ public abstract class SenderBufferManager {
         return cf;
     }
 
-    public CompletableFuture<LogReplicationEntryMsg> sendWithBuffering(LogReplicationEntryMsg message,
-                                                                    String metricName,
-                                                                    Tag replicationTag) {
+    public CompletableFuture<LogReplicationEntryMsg> sendWithBuffering(LogReplicationEntryMsg message, String metricName, Tag replicationTag) {
         LogReplicationEntryMetadataMsg metadata = overrideSyncSeqNum(
                 message.getMetadata(), snapshotSyncSequenceNumber++);
         LogReplicationEntryMsg newMessage = overrideMetadata(message, metadata);
+        pendingMessages.append(newMessage);
         Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
         CompletableFuture<LogReplicationEntryMsg> future = dataSender.send(newMessage);
         CompletableFuture<LogReplicationEntryMsg> cf = sample

@@ -103,12 +103,12 @@ public class LogEntrySender {
              */
             try {
                 message = logEntryReader.read(logEntrySyncEventId);
+
                 if (message != null) {
                     if (MeterRegistryProvider.getInstance().isPresent()) {
                         dataSenderBufferManager.sendWithBuffering(message, "logreplication.sender.duration.seconds",
                                 Tag.of("replication.type", "logentry"));
-                    }
-                    else {
+                    } else {
                         dataSenderBufferManager.sendWithBuffering(message);
                     }
 

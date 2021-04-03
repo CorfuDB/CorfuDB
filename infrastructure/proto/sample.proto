@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+import "corfu_options.proto";
 package org.corfudb.infrastructure.logreplication.proto;
 
 message StringKey {
@@ -7,6 +8,11 @@ message StringKey {
 }
 
 message IntValue {
+    int32 value = 2;
+}
+
+message IntValueTag {
+    option (org.corfudb.runtime.table_schema).stream_tag = "test";
     int32 value = 2;
 }
 
