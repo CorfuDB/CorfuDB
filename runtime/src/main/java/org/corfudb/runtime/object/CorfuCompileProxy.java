@@ -112,6 +112,10 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
     private final Optional<Timer> readTimer;
     private final Optional<Timer> writeTimer;
     private final Optional<Timer> txTimer;
+    /**
+     * Correctness Logging
+     */
+    private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
     /**
      * Creates a CorfuCompileProxy object on a particular stream.
@@ -260,6 +264,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         long address = underlyingObject.logUpdate(smrEntry, keepUpcallResult);
         log.trace("Update[{}] {}@{} ({}) conflictObj={}",
                 this, smrUpdateFunction, address, args, conflictObject);
+        correctnessLogger.trace("Version, {}", address);
         VloVersioningListener.submit(address);
         return address;
     }

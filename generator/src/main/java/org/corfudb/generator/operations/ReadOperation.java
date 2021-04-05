@@ -11,6 +11,8 @@ import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 
+import java.util.Optional;
+
 /**
  * Created by maithem on 7/14/17.
  */
@@ -25,7 +27,7 @@ public class ReadOperation extends Operation {
         this.context = Context.builder()
                 .streamId(streamId)
                 .key(key)
-                .val(state.getMap(streamId).get(key.getKey()))
+                .val(Optional.ofNullable(state.getMap(streamId).get(key.getKey())))
                 .build();
     }
 

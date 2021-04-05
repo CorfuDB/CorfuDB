@@ -4,6 +4,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import org.corfudb.generator.distributions.Streams.StreamId;
 
 import java.util.ArrayList;
@@ -47,6 +48,7 @@ public class Keys implements DataSet<Keys.KeyId> {
 
     @EqualsAndHashCode
     @AllArgsConstructor
+    @ToString
     public static class KeyId {
         private final int key;
 
@@ -58,6 +60,7 @@ public class Keys implements DataSet<Keys.KeyId> {
     @Builder
     @EqualsAndHashCode
     @AllArgsConstructor
+    @ToString
     public static class FullyQualifiedKey {
         private final KeyId keyId;
         private final StreamId tableId;
@@ -65,6 +68,7 @@ public class Keys implements DataSet<Keys.KeyId> {
 
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     @EqualsAndHashCode
+    @ToString
     public static class Version implements Comparable<Version> {
         private static final ConcurrentMap<Long, Version> REGISTRY = new ConcurrentHashMap<>();
         private static final Function<Long, Version> FACTORY = Version::new;

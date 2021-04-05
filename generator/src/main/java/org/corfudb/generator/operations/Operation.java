@@ -2,6 +2,7 @@ package org.corfudb.generator.operations;
 
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.Setter;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
@@ -28,15 +29,20 @@ public abstract class Operation {
     @Builder
     @Getter
     public static class Context {
+        @NonNull
         private final StreamId streamId;
+        @NonNull
         private final KeyId key;
-        private final Optional<String> val;
+        @NonNull
+        @Builder.Default
+        private final Optional<String> val = Optional.empty();
 
         @Setter
         private Keys.Version version;
 
         public String getCorrectnessRecord(String operationName) {
-            return String.format("%s, %s:%s=%s", operationName, streamId, key, val.get());
+            String value = val.orElseThrow(()-> new IllegalStateException("Empty value for: " + getFqKey()));
+            return String.format("%s, %s:%s=%s", operationName, streamId, key, value);
         }
 
         public FullyQualifiedKey getFqKey() {
