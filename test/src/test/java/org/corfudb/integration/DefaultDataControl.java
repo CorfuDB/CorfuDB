@@ -36,11 +36,12 @@ public class DefaultDataControl implements DataControl {
         controlCallsCount++;
         controlCalls.setValue(controlCallsCount);
 
-        if (sourceManager != null && config.dropSnapshotSyncRequestMessage && config.dropCount >= controlCallsCount) {
-            // Drop Snapshot Sync Request Message, because the request is not satisfied,
-            // this should be periodically re-triggered
-            // System.out.println("----- Drop snapshot sync request: " + controlCallsCount);
-        } else if (sourceManager != null) {
+        // if sourceManager != null && config.dropSnapshotSyncRequestMessage && config.dropCount >= controlCallsCount
+        // Drop Snapshot Sync Request Message, because the request is not satisfied,
+        // this should be periodically re-triggered
+        // Otherwise,
+        if (sourceManager != null &&
+                (!config.dropSnapshotSyncRequestMessage || config.dropCount < controlCallsCount) ) {
             // Request/Start Snapshot Sync on Source
             log.debug("----- Start Snapshot Sync on Source: " + controlCallsCount);
             sourceManager.startSnapshotSync();

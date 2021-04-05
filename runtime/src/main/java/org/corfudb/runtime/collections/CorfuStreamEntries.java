@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import lombok.Getter;
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 
 import java.util.List;
 import java.util.Map;
@@ -14,10 +15,20 @@ import java.util.Map;
  * created by hisundar on 2019-10-22
  */
 public class CorfuStreamEntries {
+
     @Getter
     private final Map<TableSchema, List<CorfuStreamEntry>> entries;
 
-    public CorfuStreamEntries(Map<TableSchema, List<CorfuStreamEntry>> entries) {
+    /*
+     Represents the timestamp for the retrieved entries. In the event of failures,
+     clients can re-subscribe starting from this timestamp, in order to avoid data loss or
+     the need to re-sync all the data.
+     */
+    @Getter
+    private final Timestamp timestamp;
+
+    public CorfuStreamEntries(Map<TableSchema, List<CorfuStreamEntry>> entries, Timestamp timestamp) {
         this.entries = entries;
+        this.timestamp = timestamp;
     }
 }

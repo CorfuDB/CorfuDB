@@ -310,7 +310,7 @@ public class UniverseManager {
         }
 
         private void checkMode(UniverseMode expected) {
-            if (universeMode != expected) {
+            if (!universeMode.equals(expected)) {
                 String err = "Invalid mode: " + universeMode + ". Expected mode: " + expected;
                 throw new IllegalStateException(err);
             }

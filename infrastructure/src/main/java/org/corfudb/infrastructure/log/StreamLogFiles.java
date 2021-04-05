@@ -557,7 +557,7 @@ public class StreamLogFiles implements StreamLog {
     private Metadata parseMetadata(FileChannel fileChannel, String segmentFile) throws IOException {
         long actualMetaDataSize = fileChannel.size() - fileChannel.position();
         if (actualMetaDataSize < METADATA_SIZE) {
-            log.error("Meta data has wrong size. Actual size: {}, expected: {}",
+            log.error("Metadata has wrong size. Actual size: {}, expected: {}",
                     actualMetaDataSize, METADATA_SIZE
             );
             return null;

@@ -5,7 +5,6 @@ import javax.net.ssl.SSLException;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class TlsUtilsTest {
@@ -28,7 +27,6 @@ public class TlsUtilsTest {
     public void testBadPasswordFile() throws Exception {
         try {
             TlsUtils.getKeyStorePassword("definitely fake location");
-            assertFalse(true);
         } catch (SSLException e) {
             assertTrue(e.getMessage().startsWith("Unable to read password file"));
         }

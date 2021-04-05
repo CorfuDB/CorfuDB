@@ -120,30 +120,37 @@ public class Orchestrator {
             case QUERY:
                 handleQuery(req, ctx, r);
                 break;
+
             case ADD_NODE:
                 workflow = workflowFactory.getAddNode(getAddNodeRequest(msg.getAddNode()));
                 dispatch(workflow, req, ctx, r, msg.getAddNode().getEndpoint());
                 break;
+
             case REMOVE_NODE:
                 workflow = workflowFactory.getRemoveNode(getRemoveNodeRequest(msg.getRemoveNode()));
                 dispatch(workflow, req, ctx, r, msg.getRemoveNode().getEndpoint());
                 break;
+
             case FORCE_REMOVE_NODE:
                 workflow = workflowFactory.getForceRemove(getForceRemoveNodeRequest(msg.getForceRemoveNode()));
                 dispatch(workflow, req, ctx, r, msg.getForceRemoveNode().getEndpoint());
                 break;
+
             case HEAL_NODE:
                 workflow = workflowFactory.getHealNode(getHealNodeRequest(msg.getHealNode()));
                 dispatch(workflow, req, ctx, r, msg.getHealNode().getEndpoint());
                 break;
+
             case RESTORE_REDUNDANCY_MERGE_SEGMENTS:
                 workflow = workflowFactory.getRestoreRedundancy(
                         getRestoreRedundancyMergeSegmentsRequest(msg.getRestoreRedundancyMergeSegments()));
                 dispatch(workflow, req, ctx, r, msg.getRestoreRedundancyMergeSegments().getEndpoint());
                 break;
+
             default:
                 log.error("handle[{}]: Unknown orchestrator request type {}",
                         req.getHeader().getRequestId(), msg.getPayloadCase());
+                break;
         }
     }
 

@@ -3,6 +3,7 @@ package org.corfudb.runtime.object;
 import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
@@ -142,19 +143,19 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         String streamIdValue = getStreamID().toString();
 
         double [] percentiles = new double [] {0.50, 0.95, 0.99};
-        readTimer = rt.getRegistry().map(registry ->
+        readTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("vlo.read.timer")
                         .tag(streamIdKey, streamIdValue)
                         .publishPercentileHistogram(true)
                         .publishPercentiles(percentiles)
                         .register(registry));
-        writeTimer = rt.getRegistry().map(registry ->
+        writeTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("vlo.write.timer")
                         .tag(streamIdKey, streamIdValue)
                         .publishPercentileHistogram(true)
                         .publishPercentiles(percentiles)
                         .register(registry));
-        txTimer = rt.getRegistry().map(registry ->
+        txTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("vlo.tx.timer")
                         .tag(streamIdKey, streamIdValue)
                         .publishPercentileHistogram(true)
@@ -377,12 +378,10 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
                 // If this is part of an outer transaction abort and remove from context.
                 // Re-throw exception to client.
                 log.warn("TXExecute[{}] Abort with exception {}", this, e);
-                if (e.getAbortCause() == AbortCause.NETWORK) {
-                    if (TransactionalContext.getCurrentContext() != null) {
-                        TransactionalContext.getCurrentContext().abortTransaction(e);
-                        TransactionalContext.removeContext();
-                        throw e;
-                    }
+                if (e.getAbortCause() == AbortCause.NETWORK && TransactionalContext.getCurrentContext() != null) {
+                    TransactionalContext.getCurrentContext().abortTransaction(e);
+                    TransactionalContext.removeContext();
+                    throw e;
                 }
                 log.debug("Transactional function aborted due to {}, retrying after {} msec",
                         e, sleepTime);

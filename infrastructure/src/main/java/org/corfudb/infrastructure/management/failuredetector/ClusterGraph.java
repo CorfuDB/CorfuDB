@@ -113,13 +113,11 @@ public class ClusterGraph {
                     .forEach(adjNodeName -> {
                         NodeConnectivity adjNode = graph.get(adjNodeName);
 
-                        //If current node is not the local node and another node is unavailable we don't change
+                        // If current node is not the local node and another node is unavailable we don't change
                         // the adjacent node connectivity matrix, we leave it as is
-                        if (adjNode.getType() == NodeConnectivityType.UNAVAILABLE) {
-                            if (!isLocalNode(node)) {
-                                newConnectivity.put(adjNodeName, node.getConnectionStatus(adjNodeName));
-                                return;
-                            }
+                        if (adjNode.getType() == NodeConnectivityType.UNAVAILABLE && !isLocalNode(node)) {
+                            newConnectivity.put(adjNodeName, node.getConnectionStatus(adjNodeName));
+                            return;
                         }
 
                         //Get connection status for current node

@@ -600,18 +600,19 @@ public class SequencerServer extends AbstractServer {
         switch (tokenRequest.getRequestType()) {
             case TK_QUERY:
                 handleTokenQuery(req, ctx, r);
-                return;
+                break;
 
             case TK_RAW:
                 handleRawToken(req, ctx, r);
-                return;
+                break;
 
             case TK_TX:
                 handleTxToken(req, ctx, r);
-                return;
+                break;
 
             default:
                 handleAllocation(req, ctx, r);
+                break;
         }
     }
 
