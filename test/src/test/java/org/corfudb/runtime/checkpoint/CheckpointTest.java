@@ -529,7 +529,7 @@ public class CheckpointTest extends AbstractObjectTest {
             }
 
             try {
-                if (trimExceptionFlag.get() == false) {
+                if (!trimExceptionFlag.get()) {
                     assertThat(localm2A.size())
                             .isEqualTo(snapshotPosition);
 

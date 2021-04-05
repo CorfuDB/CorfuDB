@@ -3,13 +3,9 @@ package org.corfudb.browser;
 import java.util.Map;
 import java.util.Optional;
 
-import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuDynamicKey;
-import org.corfudb.runtime.collections.CorfuDynamicRecord;
-import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.util.GitRepositoryState;
 import org.docopt.Docopt;
 
@@ -27,7 +23,11 @@ public class CorfuStoreBrowserMain {
         infoTable,
         showTable,
         listenOnTable,
-        dropTable
+        dropTable,
+        listTags,
+        listTablesForTag,
+        listTagsForTable,
+        listTagsMap
     }
 
     private static final String USAGE = "Usage: corfu-browser --host=<host> " +
@@ -43,9 +43,10 @@ public class CorfuStoreBrowserMain {
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable|listenOnTable> Operation\n"
+        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable|listenOnTable|listTags|listTagsMap|listTablesForTag|listTagsForTable> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
+        + "--tag=<tag>  Stream tag of interest\n"
         + "--keystore=<keystore_file> KeyStore File\n"
         + "--ks_password=<keystore_password> KeyStore Password\n"
         + "--truststore=<truststore_file> TrustStore File\n"
@@ -145,6 +146,26 @@ public class CorfuStoreBrowserMain {
                         numItems = Integer.parseInt(opts.get("--numItems").toString());
                     }
                     browser.listenOnTable(namespace, tableName, numItems);
+                    break;
+                case listTags:
+                    browser.listStreamTags();
+                    break;
+                case listTablesForTag:
+                    if (opts.get("--tag") != null) {
+                        String streamTag = opts.get("--tag").toString();
+                        browser.listTablesForTag(streamTag);
+                    } else {
+                        log.warn("The '--tag' flag was not specified. Displaying all streams tags and their tables.");
+                        browser.listTagToTableMap();
+                    }
+                    break;
+                case listTagsForTable:
+                    browser.listTagsForTable(namespace, tableName);
+                    break;
+                case listTagsMap:
+                    browser.listTagToTableMap();
+                    break;
+                default:
                     break;
             }
         } catch (Throwable t) {

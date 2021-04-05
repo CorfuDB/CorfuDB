@@ -3,6 +3,7 @@ package org.corfudb.runtime.view.replication;
 import com.google.common.collect.Iterables;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -35,6 +36,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
     public ChainReplicationProtocol(IHoleFillPolicy holeFillPolicy) {
         super(holeFillPolicy);
     }
+
     private final ConcurrentHashMap<String, Timer> perNodeWriteTimer =
             new ConcurrentHashMap<>();
 
@@ -42,9 +44,9 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      * {@inheritDoc}
      */
 
-    private void registerTimerPerNode(RuntimeLayout runtimeLayout){
-        double [] percentiles = new double [] {0.50, 0.95, 0.99};
-        runtimeLayout.getRuntime().getRegistry().ifPresent(registry -> {
+    private void registerTimerPerNode(RuntimeLayout runtimeLayout) {
+        double[] percentiles = new double[]{0.50, 0.95, 0.99};
+        MeterRegistryProvider.getInstance().ifPresent(registry -> {
             for (String server : runtimeLayout.getLayout().getAllLogServers()) {
                 perNodeWriteTimer.putIfAbsent(server,
                         Timer.builder("chain_replication.write")
@@ -60,8 +62,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         String server = runtimeLayout.getLayout().getStripe(address).getLogServers().get(index);
         if (perNodeWriteTimer.containsKey(server)) {
             perNodeWriteTimer.get(server).record(writeRunnable);
-        }
-        else {
+        } else {
             writeRunnable.run();
         }
     }

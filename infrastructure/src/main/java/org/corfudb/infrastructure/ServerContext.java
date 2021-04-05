@@ -498,12 +498,11 @@ public class ServerContext implements AutoCloseable {
             dataStore.put(SERVER_EPOCH_RECORD, serverEpoch);
             r.setServerEpoch(serverEpoch);
             getServers().forEach(s -> s.sealServerWithEpoch(serverEpoch));
-        } else if (serverEpoch == lastEpoch) {
-            // Setting to the same epoch, don't need to do anything.
-        } else {
+        } else if (lastEpoch > serverEpoch){
             // Regressing, throw an exception.
             throw new WrongEpochException(lastEpoch);
         }
+        // If both epochs are same then no need to do anything.
     }
 
     public void setLayoutInHistory(Layout layout) {

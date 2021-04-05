@@ -686,10 +686,8 @@ public class CorfuReplicationDiscoveryService implements Runnable, CorfuReplicat
         log.debug("Standby Cluster has been added or removed from topology={}", discoveredTopology);
 
         // We only need to process new standby's if your role is of an ACTIVE cluster
-        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE) {
-            if (replicationManager != null && isLeader.get()) {
-                replicationManager.processStandbyChange(discoveredTopology);
-            }
+        if (localClusterDescriptor.getRole() == ClusterRole.ACTIVE && replicationManager != null && isLeader.get()) {
+            replicationManager.processStandbyChange(discoveredTopology);
         }
 
         updateLocalTopology(discoveredTopology);

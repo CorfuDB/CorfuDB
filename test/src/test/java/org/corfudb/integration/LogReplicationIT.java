@@ -1297,10 +1297,8 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
     private void verifyExpectedValue(long expectedValue, long currentValue) {
         // If expected value, release semaphore / unblock the wait
-        if (expectedValue == currentValue) {
-            if (expectedAckMsgType != null) {
-                blockUntilExpectedValueReached.release();
-            }
+        if (expectedValue == currentValue && expectedAckMsgType != null) {
+            blockUntilExpectedValueReached.release();
         }
     }
 

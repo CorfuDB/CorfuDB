@@ -120,29 +120,28 @@ public class LogMetadata {
             // 2. Update stream trim mark
             // This is only required on initialization as on all other paths trim mark will be set by
             // explicit trimming.
-            if (initialize) {
-                // The trim mark is part of the address space information and is also required
-                // so clients can observe updates to streams that have been completely checkpointed.
-                // For instance, an empty address space with a stream trim mark != -6, requires data to be
-                // loaded from a checkpoint (vs. no data ever written to this stream).
 
-                // If we hit a checkpoint END record we can use this info to compute the stream trim mark,
-                // i.e., last observed update to the stream that has already been checkpointed, hence
-                // can be safely trimmed from the log.
-                if (entry.getCheckpointType() == CheckpointEntry.CheckpointEntryType.END) {
-                    streamsAddressSpaceMap.compute(streamId, (id, addressSpace) -> {
-                        if (addressSpace == null) {
-                            // If this entry still does not exist, means no updates have been observed for
-                            // this stream yet. We can initialize the trim mark to the last observed update by the
-                            // checkpoint. If further entries are observed they will be added to the address space.
-                            return new StreamAddressSpace(lastUpdateToStream, Collections.EMPTY_SET);
-                        }
-                        // We will hold the maximum of these observed updates as the stream trim mark (highest
-                        // checkpointed address), as this guarantees data is available in a checkpoint (safe trim mark).
-                        addressSpace.setTrimMark(Long.max(addressSpace.getTrimMark(), lastUpdateToStream));
-                        return addressSpace;
-                    });
-                }
+            // The trim mark is part of the address space information and is also required
+            // so clients can observe updates to streams that have been completely checkpointed.
+            // For instance, an empty address space with a stream trim mark != -6, requires data to be
+            // loaded from a checkpoint (vs. no data ever written to this stream).
+
+            // If we hit a checkpoint END record we can use this info to compute the stream trim mark,
+            // i.e., last observed update to the stream that has already been checkpointed, hence
+            // can be safely trimmed from the log.
+            if (initialize && entry.getCheckpointType() == CheckpointEntry.CheckpointEntryType.END) {
+                streamsAddressSpaceMap.compute(streamId, (id, addressSpace) -> {
+                    if (addressSpace == null) {
+                        // If this entry still does not exist, means no updates have been observed for
+                        // this stream yet. We can initialize the trim mark to the last observed update by the
+                        // checkpoint. If further entries are observed they will be added to the address space.
+                        return new StreamAddressSpace(lastUpdateToStream, Collections.EMPTY_SET);
+                    }
+                    // We will hold the maximum of these observed updates as the stream trim mark (highest
+                    // checkpointed address), as this guarantees data is available in a checkpoint (safe trim mark).
+                    addressSpace.setTrimMark(Long.max(addressSpace.getTrimMark(), lastUpdateToStream));
+                    return addressSpace;
+                });
             }
         }
     }

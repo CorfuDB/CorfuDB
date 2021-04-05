@@ -6,6 +6,7 @@ import lombok.Getter;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.view.StreamOptions;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.runtime.view.stream.IStreamView;
@@ -137,7 +138,12 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
             return true;
         }
 
-        return streamBuffer.offer(new CorfuStreamEntries(streamEntries), maxBlockTime, TimeUnit.NANOSECONDS);
+        Timestamp timestamp = Timestamp.newBuilder()
+                .setSequence(logData.getGlobalAddress())
+                .setEpoch(epoch)
+                .build();
+
+        return streamBuffer.offer(new CorfuStreamEntries(streamEntries, timestamp), maxBlockTime, TimeUnit.NANOSECONDS);
     }
 
     /**

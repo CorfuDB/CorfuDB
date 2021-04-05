@@ -178,11 +178,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
 
         // If it exceeds the maximum size of this message, skip appending this entry,
         // it will be processed with the next message;
-        if (currentEntrySize + currentMsgSize > maxDataSizePerMsg) {
-            return false;
-        }
-
-        return true;
+        return currentEntrySize + currentMsgSize <= maxDataSizePerMsg;
     }
 
     public void setGlobalBaseSnapshot(long snapshot, long ackTimestamp) {
