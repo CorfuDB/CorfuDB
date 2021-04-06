@@ -140,8 +140,6 @@ public class ReconfigurationEventHandler {
                                               @Nonnull Layout layout,
                                               @Nonnull Duration retryQueryTimeout) {
 
-        log.info("Handling split segments");
-
         try {
             Duration workflowTimeout = getStateTransferTimeoutEstimate(runtime);
             log.info("handleMergeSegments: Workflow to merge segments for layout {} timeout set to {} ms",

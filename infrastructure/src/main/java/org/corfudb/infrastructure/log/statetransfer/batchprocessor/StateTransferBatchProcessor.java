@@ -160,13 +160,12 @@ public interface StateTransferBatchProcessor {
                 }
                 return tryWrite(readBatch, logUnitClient, addressesToTransfer);
             } catch (OverwriteException | TimeoutException | NetworkException e) {
-                log.warn("writeRecords: tryWrite failed. Retrying {}/{}.", i,
-                        writeRetriesAllowed, e);
+                log.warn("writeRecords: tryWrite failed. Retrying {}/{}.", i, writeRetriesAllowed);
                 lastException = Optional.of(e);
                 Sleep.sleepUninterruptibly(writeSleepDuration);
             } catch (RuntimeException e) {
                 lastException = Optional.of(e);
-                log.error("writeRecords: failed. Stop retrying.", e);
+                log.error("writeRecords: failed. Stop retrying.");
                 break;
             }
         }
