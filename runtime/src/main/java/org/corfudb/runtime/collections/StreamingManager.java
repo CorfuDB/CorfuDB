@@ -1,6 +1,5 @@
 package org.corfudb.runtime.collections;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
@@ -25,12 +24,6 @@ import java.util.concurrent.ScheduledExecutorService;
 @Slf4j
 public class StreamingManager {
 
-    // Number of thread in polling and notification pool.
-    private static final int NUM_THREAD_PER_POOL = 4;
-
-    // Default buffer size for each subscription.
-    private static final int DEFAULT_BUFFER_SIZE = 50;
-
     // Corfu runtime to interact with corfu streams.
     private final CorfuRuntime runtime;
 
@@ -52,9 +45,9 @@ public class StreamingManager {
         this.runtime = runtime;
         this.subscriptions = new HashMap<>();
 
-        this.pollingExecutor = Executors.newScheduledThreadPool(NUM_THREAD_PER_POOL,
+        this.pollingExecutor = Executors.newScheduledThreadPool(runtime.getParameters().getStreamingPollingThreadPoolSize(),
                 new ThreadFactoryBuilder().setNameFormat("streaming-poller-%d").build());
-        this.notificationExecutor = Executors.newFixedThreadPool(NUM_THREAD_PER_POOL,
+        this.notificationExecutor = Executors.newFixedThreadPool(runtime.getParameters().getStreamingNotificationThreadPoolSize(),
                 new ThreadFactoryBuilder().setNameFormat("streaming-notifier-%d").build());
     }
 
@@ -70,7 +63,7 @@ public class StreamingManager {
     synchronized void subscribe(@Nonnull StreamListener streamListener, @Nonnull String namespace,
                                 @Nonnull String streamTag, @Nonnull List<String> tablesOfInterest,
                                 long lastAddress) {
-        subscribe(streamListener, namespace, streamTag, tablesOfInterest, lastAddress, DEFAULT_BUFFER_SIZE);
+        subscribe(streamListener, namespace, streamTag, tablesOfInterest, lastAddress, runtime.getParameters().getStreamingQueueSize());
     }
 
     /**
@@ -97,14 +90,14 @@ public class StreamingManager {
                     "StreamingManager::subscribe: listener already registered " + streamListener);
         }
 
-        StreamSubscriptionMetrics metrics = new StreamSubscriptionMetrics(
-                runtime, streamListener, namespace, streamTag);
+        StreamSubscriptionMetrics metrics = new StreamSubscriptionMetrics(runtime, streamListener, namespace, streamTag);
         StreamSubscription subscription = new StreamSubscription(
                 runtime, streamListener, namespace, streamTag, tablesOfInterest, bufferSize, metrics);
         subscriptions.put(streamListener, subscription);
 
-        pollingExecutor.submit(new StreamPollingTask(this, lastAddress, subscription, pollingExecutor));
-        notificationExecutor.submit(new StreamNotificationTask(this, subscription, notificationExecutor));
+        pollingExecutor.submit(new StreamPollingTask(this, lastAddress, subscription, pollingExecutor,
+                runtime.getParameters()));
+        notificationExecutor.submit(new StreamNotificationTask(this, subscription, notificationExecutor, runtime.getParameters()));
 
         log.info("Subscribed stream listener {}, numSubscribers: {}, streamTag: {}, lastAddress: {}, " +
                 "namespace {}, tables {}", streamListener, subscriptions.size(), streamTag, lastAddress,
@@ -148,10 +141,5 @@ public class StreamingManager {
         log.info("Shutting down StreamingManager.");
         notificationExecutor.shutdown();
         pollingExecutor.shutdown();
-    }
-
-    @VisibleForTesting
-    public static int getNumThreadPerPool() {
-        return NUM_THREAD_PER_POOL;
     }
 }

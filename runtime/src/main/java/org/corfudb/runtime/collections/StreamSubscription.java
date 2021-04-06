@@ -48,7 +48,7 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
     private final Map<UUID, TableSchema<K, V, M>> tableSchemas;
 
     // The buffer of polled transaction data changes.
-    private final BlockingQueue<CorfuStreamEntries> streamBuffer;
+    private final BlockingQueue<CorfuStreamQueueEntry> streamBuffer;
 
     // The size of the stream buffer.
     @Getter
@@ -137,7 +137,8 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
             return true;
         }
 
-        return streamBuffer.offer(new CorfuStreamEntries(streamEntries), maxBlockTime, TimeUnit.NANOSECONDS);
+        CorfuStreamEntries entries = new CorfuStreamEntries(streamEntries);
+        return streamBuffer.offer(new CorfuStreamQueueEntry(entries, System.nanoTime()), maxBlockTime, TimeUnit.NANOSECONDS);
     }
 
     /**
@@ -145,11 +146,11 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
      * queue is not empty or the specified waiting time elapses.
      *
      * @param maxBlockTime maximum time waiting if buffer is empty
-     * @return true if successfully dequeue the first update, false otherwise
+     * @return entry if successfully dequeue the first update, null otherwise
      * @throws InterruptedException if interrupted while waiting
      */
     @Nullable
-    CorfuStreamEntries dequeueStreamEntry(long maxBlockTime) throws InterruptedException {
+    CorfuStreamQueueEntry dequeueStreamEntry(long maxBlockTime) throws InterruptedException {
         return streamBuffer.poll(maxBlockTime, TimeUnit.NANOSECONDS);
     }
 
