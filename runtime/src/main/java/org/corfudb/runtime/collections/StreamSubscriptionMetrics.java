@@ -1,9 +1,11 @@
 package org.corfudb.runtime.collections;
 
 import io.micrometer.core.instrument.Timer;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
@@ -23,6 +25,8 @@ public class StreamSubscriptionMetrics {
 
     private final Optional<Timer> deliveryTimer;
 
+    private final Optional<Timer> queueDurationTimer;
+
     StreamSubscriptionMetrics(CorfuRuntime runtime, StreamListener listener, String namespace, String streamTag) {
         this.listenerId = String.format("listener_%s_%s_%s", listener, namespace, streamTag);
         this.percentiles = new double[]{0.5, 0.95, 0.99};
@@ -34,6 +38,12 @@ public class StreamSubscriptionMetrics {
                         .register(registry));
         this.pollingTimer = runtime.getRegistry()
                 .map(registry -> Timer.builder("stream_sub.polling.timer")
+                        .tags("listenerId", listenerId)
+                        .publishPercentiles(percentiles)
+                        .publishPercentileHistogram(true)
+                        .register(registry));
+        this.queueDurationTimer = MeterRegistryProvider.getInstance()
+                .map(registry -> Timer.builder("stream_sub.queueDuration.timer")
                         .tags("listenerId", listenerId)
                         .publishPercentiles(percentiles)
                         .publishPercentileHistogram(true)
@@ -53,6 +63,12 @@ public class StreamSubscriptionMetrics {
             return pollingTimer.get().recordCallable(callable);
         } else {
             return callable.call();
+        }
+    }
+
+    public void recordQueueEntryDuration(Duration duration) {
+        if (queueDurationTimer.isPresent()) {
+            queueDurationTimer.get().record(duration);
         }
     }
 }

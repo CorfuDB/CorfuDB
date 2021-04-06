@@ -244,29 +244,65 @@ public class CorfuRuntime {
 
         private MicroMeterRuntimeConfig microMeterRuntimeConfig;
 
+        /*
+         * Enable runtime metrics.
+         */
+        private boolean metricsEnabled = true;
+
+        /*
+         * Total time in milliseconds for polling task to block until buffer space is available.
+         */
+        private long streamingPollingBlockingTimeMs = 5;
+
+        /*
+         * Capacity of queue shared by by streaming polling and notification tasks.
+         */
+        private int streamingQueueSize = 100;
+
+        /*
+         * Total number of threads in Polling Executor Pool (shared across all listeners)
+         */
+        private int streamingPollingThreadPoolSize = 2;
+
+        /*
+         * Total number of threads in Notification Executor Pool (shared across all listeners)
+         */
+        private int streamingNotificationThreadPoolSize = 4;
+
+        /*
+         * Total time in milliseconds to block for new updates to appear in the queue, if empty.
+         */
+        private long streamingNotificationBlockingTimeMs = 5;
+
+        /*
+         * Notification batch size (should be lower or equal to streamingQueueSize)
+         */
+        private int streamingNotificationBatchSize = 50;
+        // TODO: make it a function of the streaming Queue Size
+
         public static class CorfuRuntimeParametersBuilder extends RuntimeParametersBuilder {
-            int maxWriteSize = Integer.MAX_VALUE;
-            int bulkReadSize = 10;
-            Duration fastLoaderTimeout = Duration.ofMinutes(30);
-            int holeFillRetry = 10;
-            Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
-            Duration holeFillTimeout = Duration.ofSeconds(10);
-            boolean cacheDisabled = false;
-            long maxCacheEntries;
-            long maxCacheWeight;
-            int cacheConcurrencyLevel = 0;
-            long cacheExpiryTime = Long.MAX_VALUE;
-            boolean holeFillingDisabled = false;
-            int writeRetry = 5;
-            int trimRetry = 2;
-            int checkpointRetries = 5;
-            int streamBatchSize = 10;
-            int checkpointReadBatchSize = 5;
-            Duration runtimeGCPeriod = Duration.ofMinutes(20);
-            UUID clusterId = null;
-            int systemDownHandlerTriggerLimit = 20;
-            List<NodeLocator> layoutServers = new ArrayList<>();
-            int invalidateRetry = 5;
+            private int maxWriteSize = Integer.MAX_VALUE;
+            private int bulkReadSize = 10;
+            private Duration fastLoaderTimeout = Duration.ofMinutes(30);
+            private int holeFillRetry = 10;
+            private Duration holeFillRetryThreshold = Duration.ofSeconds(1L);
+            private Duration holeFillTimeout = Duration.ofSeconds(10);
+            private boolean cacheDisabled = false;
+            private long maxCacheEntries;
+            private long maxCacheWeight;
+            private int cacheConcurrencyLevel = 0;
+            private long cacheExpiryTime = Long.MAX_VALUE;
+            private boolean holeFillingDisabled = false;
+            private int writeRetry = 5;
+            private int trimRetry = 2;
+            private int checkpointRetries = 5;
+            private int streamBatchSize = 10;
+            private int checkpointReadBatchSize = 5;
+            private Duration runtimeGCPeriod = Duration.ofMinutes(20);
+            private UUID clusterId = null;
+            private int systemDownHandlerTriggerLimit = 20;
+            private List<NodeLocator> layoutServers = new ArrayList<>();
+            private int invalidateRetry = 5;
             private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
             private Codec.Type codecType = Codec.Type.ZSTD;
             private MicroMeterRuntimeConfig microMeterRuntimeConfig =
@@ -278,6 +314,14 @@ public class CorfuRuntime {
                 this.microMeterRuntimeConfig = microMeterRuntimeConfig;
                 return this;
             }
+
+            private boolean metricsEnabled = true;
+            private long streamingPollingBlockingTimeMs = 200;
+            private int streamingQueueSize = 60;
+            private int streamingPollingThreadPoolSize = 4;
+            private int streamingNotificationThreadPoolSize = 4;
+            private long streamingNotificationBlockingTimeMs = 200;
+            private int streamingNotificationBatchSize = 20;
 
             public CorfuRuntimeParametersBuilder tlsEnabled(boolean tlsEnabled) {
                 super.tlsEnabled(tlsEnabled);
@@ -519,6 +563,41 @@ public class CorfuRuntime {
                 return this;
             }
 
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder metricsEnabled(boolean enabled) {
+                this.metricsEnabled = enabled;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingBlockingTimeMs(long streamingPollingBlockingTimeMs) {
+                this.streamingPollingBlockingTimeMs = streamingPollingBlockingTimeMs;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingQueueSize(int streamingQueueSize) {
+                this.streamingQueueSize = streamingQueueSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingPollingThreadPoolSize(int streamingPollingThreadPoolSize) {
+                this.streamingPollingThreadPoolSize = streamingPollingThreadPoolSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationThreadPoolSize(int streamingNotificationThreadPoolSize) {
+                this.streamingNotificationThreadPoolSize = streamingNotificationThreadPoolSize;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationBlockingTimeMs(long streamingNotificationBlockingTimeMs) {
+                this.streamingNotificationBlockingTimeMs = streamingNotificationBlockingTimeMs;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder streamingNotificationBatchSize(int streamingNotificationBatchSize) {
+                this.streamingNotificationBatchSize = streamingNotificationBatchSize;
+                return this;
+            }
+
             public CorfuRuntimeParameters build() {
                 CorfuRuntimeParameters corfuRuntimeParameters = new CorfuRuntimeParameters();
                 corfuRuntimeParameters.setTlsEnabled(tlsEnabled);
@@ -570,6 +649,14 @@ public class CorfuRuntime {
                 corfuRuntimeParameters.setPriorityLevel(priorityLevel);
                 corfuRuntimeParameters.setCodecType(codecType);
                 corfuRuntimeParameters.setMicroMeterRuntimeConfig(microMeterRuntimeConfig);
+                corfuRuntimeParameters.setMetricsEnabled(metricsEnabled);
+                corfuRuntimeParameters.setStreamingPollingBlockingTimeMs(streamingPollingBlockingTimeMs);
+                corfuRuntimeParameters.setStreamingQueueSize(streamingQueueSize);
+                corfuRuntimeParameters.setStreamingPollingThreadPoolSize(streamingPollingThreadPoolSize);
+                corfuRuntimeParameters.setStreamingNotificationThreadPoolSize(streamingNotificationThreadPoolSize);
+                corfuRuntimeParameters.setStreamingNotificationBlockingTimeMs(streamingNotificationBlockingTimeMs);
+                corfuRuntimeParameters.setStreamingNotificationBatchSize(streamingNotificationBatchSize);
+
                 return corfuRuntimeParameters;
             }
         }
