@@ -37,24 +37,21 @@ public class RemoveOperation extends Operation {
             String correctnessRecord = String.format("%s, %s:%s", shortName, streamId, key);
             Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
 
+            addToHistory();
+
             if (!TransactionalContext.isInTransaction()) {
                 state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
             }
         }
     }
 
-    @Override
-    public boolean verify() {
-        throw new IllegalStateException("Not applicable");
-    }
-
-    @Override
-    public void addToHistory() {
-        FullyQualifiedKey fqKey = FullyQualifiedKey.builder().keyId(key).tableId(streamId).build();
+    private void addToHistory() {
         KeysState.KeyEntry entry = new KeysState.KeyEntry(
                 version, Optional.empty(),
                 KeysState.ThreadName.buildFromCurrentThread(), "client", Optional.empty()
         );
+
+        FullyQualifiedKey fqKey = FullyQualifiedKey.builder().keyId(key).tableId(streamId).build();
         state.getKeysState().put(fqKey, entry);
     }
 }

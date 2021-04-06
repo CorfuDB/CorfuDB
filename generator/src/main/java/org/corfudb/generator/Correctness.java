@@ -1,6 +1,6 @@
 package org.corfudb.generator;
 
-import org.corfudb.generator.distributions.Keys;Z
+import org.corfudb.generator.distributions.Keys;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.corfudb.runtime.view.Address;
 import org.slf4j.Logger;
@@ -47,7 +47,7 @@ public class Correctness {
                 .map(ctx-> ctx.getSnapshotTimestamp().getSequence())
                 .orElse(Address.NON_ADDRESS);
 
-        return new Keys.Version(ver);
+        return Keys.Version.build(ver);
     }
 
     /**
