@@ -7,12 +7,12 @@ import org.corfudb.generator.state.State;
 
 import java.util.Optional;
 
-public class ReadVerification implements Verification {
+public class ReadOperationVerification implements Verification {
 
     private final State state;
     private final Operation.Context context;
 
-    public ReadVerification(State state, Operation.Context context) {
+    public ReadOperationVerification(State state, Operation.Context context) {
         this.state = state;
         this.context = context;
     }

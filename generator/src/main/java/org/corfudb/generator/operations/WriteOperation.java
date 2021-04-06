@@ -38,9 +38,4 @@ public class WriteOperation extends Operation {
             }
         }
     }
-
-    @Override
-    public void verify() {
-        ???
-    }
 }
