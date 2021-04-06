@@ -1,15 +1,58 @@
 package org.corfudb.common.metrics.micrometer;
 
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 public class MicroMeterUtils {
 
     private MicroMeterUtils() {
 
+    }
+
+    private static final double[] PERCENTILES = new double[]{0.5, 0.99};
+    private static final boolean PUBLISH_HISTOGRAM = true;
+
+    private static Optional<Timer> createOrGetTimer(String name, String... tags) {
+        return MeterRegistryProvider.getInstance().map(registry ->
+                Timer.builder(name)
+                        .tags(tags)
+                        .publishPercentileHistogram(PUBLISH_HISTOGRAM)
+                        .publishPercentiles(PERCENTILES)
+                        .register(registry));
+    }
+
+    private static Optional<DistributionSummary> createOrGetDistSummary(String name, String... tags) {
+        return MeterRegistryProvider.getInstance().map(registry ->
+                DistributionSummary.builder(name)
+                        .tags(tags)
+                        .publishPercentileHistogram(PUBLISH_HISTOGRAM)
+                        .publishPercentiles(PERCENTILES)
+                        .register(registry));
+    }
+
+    public static void time(Runnable runnable, String name, String... tags) {
+        Optional<Timer> timer = createOrGetTimer(name, tags);
+        timer.ifPresent(t -> t.record(runnable));
+    }
+
+    public static <T> T time(Supplier<T> supplier, String name, String... tags) {
+        Optional<Timer> timer = createOrGetTimer(name, tags);
+        return timer.map(value -> value.record(supplier)).orElseGet(supplier);
+    }
+
+    public static void time(Optional<Timer.Sample> maybeSample, String name, String... tags) {
+        Optional<Timer> timer = createOrGetTimer(name, tags);
+        timer.ifPresent(t -> maybeSample.ifPresent(s -> s.stop(t)));
+    }
+
+    public static void measure(double measuredValue, String name, String... tags) {
+        Optional<DistributionSummary> summary = createOrGetDistSummary(name, tags);
+        summary.ifPresent(s -> s.record(measuredValue));
     }
 
     public static <T> CompletableFuture<T> timeWhenCompletes(CompletableFuture<T> future,
