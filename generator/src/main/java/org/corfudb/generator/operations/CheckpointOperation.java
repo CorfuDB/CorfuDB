@@ -24,7 +24,7 @@ public class CheckpointOperation extends Operation {
         try {
             MultiCheckpointWriter<CorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
             mcw.addAllMaps(state.getMaps());
-            Token trimAddress = mcw.appendCheckpoints(state.getRuntime(), "Maithem");
+            Token trimAddress = mcw.appendCheckpoints(state.getRuntime(), "generator");
             state.updateTrimMark(trimAddress);
             TimeUnit.SECONDS.sleep(30);
 

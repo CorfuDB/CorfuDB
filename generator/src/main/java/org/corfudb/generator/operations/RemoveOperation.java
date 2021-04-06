@@ -2,8 +2,6 @@ package org.corfudb.generator.operations;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
-import org.corfudb.generator.distributions.Keys;
-import org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
 import org.corfudb.generator.state.KeysState;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -18,23 +16,30 @@ import static org.corfudb.generator.distributions.Streams.StreamId;
  */
 @Slf4j
 public class RemoveOperation extends Operation {
-    private StreamId streamId;
-    private KeyId key;
-    private Keys.Version version;
+
+    private final Operation.Context context;
 
     public RemoveOperation(State state) {
         super(state, "Rm");
+
+        StreamId streamId = state.getStreams().sample();
+        KeyId key = state.getKeys().sample();
+        this.context = Context.builder()
+                .streamId(streamId)
+                .key(key)
+                .build();
     }
 
     @Override
     public void execute() {
         // Hack for Transaction writes only
         if (TransactionalContext.isInTransaction()) {
-            streamId = state.getStreams().sample();
-            key = state.getKeys().sample();
-            state.getMap(streamId).remove(key.getKey());
+            state.getMap(context.getStreamId()).remove(context.getKey().getKey());
 
-            String correctnessRecord = String.format("%s, %s:%s", shortName, streamId, key);
+            String correctnessRecord = String.format(
+                    "%s, %s:%s",
+                    shortName, context.getStreamId(), context.getKey().getKey()
+            );
             Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
 
             addToHistory();
@@ -47,11 +52,10 @@ public class RemoveOperation extends Operation {
 
     private void addToHistory() {
         KeysState.KeyEntry entry = new KeysState.KeyEntry(
-                version, Optional.empty(),
+                context.getVersion(), Optional.empty(),
                 KeysState.ThreadName.buildFromCurrentThread(), "client", Optional.empty()
         );
 
-        FullyQualifiedKey fqKey = FullyQualifiedKey.builder().keyId(key).tableId(streamId).build();
-        state.getKeysState().put(fqKey, entry);
+        state.getKeysState().put(context.getFqKey(), entry);
     }
 }
