@@ -4,6 +4,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.ToString;
 import org.corfudb.generator.distributions.Keys;
 
 import java.util.Optional;
@@ -52,6 +53,7 @@ public class KeysState {
 
     @AllArgsConstructor
     @EqualsAndHashCode
+    @ToString
     public static class KeyEntry {
         private final Version version;
         @Getter
@@ -64,6 +66,7 @@ public class KeysState {
     }
 
     @AllArgsConstructor
+    @ToString
     public static class TxMetaInfo {
         private final int id;
         private final int start;
@@ -72,6 +75,7 @@ public class KeysState {
 
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     @EqualsAndHashCode
+    @ToString
     public static class ThreadName {
         private static final ConcurrentMap<String, ThreadName> REGISTRY = new ConcurrentHashMap<>();
         private static final Function<String, ThreadName> FACTORY = ThreadName::new;
