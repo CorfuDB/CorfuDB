@@ -2,14 +2,13 @@ package org.corfudb.protocols.wireprotocol;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Supplier;
-import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.logprotocol.LogEntry;
@@ -20,7 +19,6 @@ import org.corfudb.util.serializer.Serializers;
 
 import java.nio.ByteBuffer;
 import java.util.EnumMap;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -44,18 +42,6 @@ public class LogData implements IMetadata, ILogData {
     private final transient AtomicReference<Object> payload = new AtomicReference<>();
 
     private final EnumMap<LogUnitMetadataType, Object> metadataMap;
-
-    private final Optional<Timer> decompressTimer = MeterRegistryProvider.getInstance()
-            .map(registry -> Timer.builder("logdata.decompress")
-                    .publishPercentileHistogram(true)
-                    .publishPercentiles(0.5, 0.95, 0.99)
-                    .register(registry));
-
-    private final Optional<Timer> compressTimer = MeterRegistryProvider.getInstance()
-            .map(registry -> Timer.builder("logdata.compress")
-                    .publishPercentileHistogram(true)
-                    .publishPercentiles(0.5, 0.95, 0.99)
-                    .register(registry));
 
     @RequiredArgsConstructor
     private static class SerializedCache {
@@ -118,8 +104,8 @@ public class LogData implements IMetadata, ILogData {
                             compressedBuf.readBytes(compressedArrayBuf);
                             Supplier<ByteBuf> bufSupplier = () -> Unpooled.wrappedBuffer(getPayloadCodecType()
                                     .getInstance().decompress(ByteBuffer.wrap(compressedArrayBuf)));
-                            serializedBuf = decompressTimer.map(timer -> timer.record(bufSupplier))
-                                    .orElseGet(bufSupplier);
+                            serializedBuf = MicroMeterUtils.time(bufSupplier,
+                                    "logdata.decompress");
                         }
 
                         final Object actualValue;
@@ -356,8 +342,7 @@ public class LogData implements IMetadata, ILogData {
     private void doCompressInternal(ByteBuf bufData, ByteBuf buf) {
         ByteBuffer wrappedByteBuf = ByteBuffer.wrap(bufData.array(), 0, bufData.readableBytes());
         Supplier<ByteBuffer> compressSupplier = () -> getPayloadCodecType().getInstance().compress(wrappedByteBuf);
-        ByteBuffer compressedBuf = compressTimer.map(timer -> timer.record(compressSupplier))
-                .orElseGet(compressSupplier);
+        ByteBuffer compressedBuf = MicroMeterUtils.time(compressSupplier, "logdata.compress");
         CorfuProtocolCommon.serialize(buf, Unpooled.wrappedBuffer(compressedBuf));
     }
 

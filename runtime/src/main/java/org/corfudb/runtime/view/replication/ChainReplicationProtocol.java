@@ -4,6 +4,7 @@ import com.google.common.collect.Iterables;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
 import org.corfudb.protocols.wireprotocol.LogData;
@@ -37,42 +38,19 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
         super(holeFillPolicy);
     }
 
-    private final ConcurrentHashMap<String, Timer> perNodeWriteTimer =
-            new ConcurrentHashMap<>();
-
     /**
      * {@inheritDoc}
      */
 
-    private void registerTimerPerNode(RuntimeLayout runtimeLayout) {
-        double[] percentiles = new double[]{0.50, 0.95, 0.99};
-        MeterRegistryProvider.getInstance().ifPresent(registry -> {
-            for (String server : runtimeLayout.getLayout().getAllLogServers()) {
-                perNodeWriteTimer.putIfAbsent(server,
-                        Timer.builder("chain_replication.write")
-                                .tag("node", server)
-                                .publishPercentiles(percentiles)
-                                .publishPercentileHistogram(true)
-                                .register(registry));
-            }
-        });
-    }
-
     private void doWrite(RuntimeLayout runtimeLayout, long address, int index, Runnable writeRunnable) {
         String server = runtimeLayout.getLayout().getStripe(address).getLogServers().get(index);
-        if (perNodeWriteTimer.containsKey(server)) {
-            perNodeWriteTimer.get(server).record(writeRunnable);
-        } else {
-            writeRunnable.run();
-        }
+        MicroMeterUtils.time(writeRunnable, "chain_replication.write", "node", server);
     }
 
     @Override
     public void write(RuntimeLayout runtimeLayout, ILogData data) throws OverwriteException {
         final long globalAddress = data.getGlobalAddress();
         int numUnits = runtimeLayout.getLayout().getSegmentLength(globalAddress);
-
-        registerTimerPerNode(runtimeLayout);
         // To reduce the overhead of serialization, we serialize only the
         // first time we write, saving when we go down the chain.
         try (ILogData.SerializationHandle sh = data.getSerializedForm(true)) {

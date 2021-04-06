@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.protocols.wireprotocol.TxResolutionInfo;
@@ -26,53 +27,8 @@ import java.util.function.Supplier;
 
 public class SequencerView extends AbstractView {
 
-    // Timers used for measuring sequencer operations
-    private Optional<Timer> queryRateTimer;
-    private Optional<Timer> nextRateTimer;
-    private Optional<Timer> resolutionRateTimer;
-    private Optional<Timer> streamAddressRangeTimer;
-
     public SequencerView(CorfuRuntime runtime) {
         super(runtime);
-
-        // Setup timers
-        setupTimers();
-    }
-
-    /**
-     * Set up timers for different sequencer request from the client perspective
-     */
-    private void setupTimers() {
-        Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
-        double[] percentiles = new double[]{0.50, 0.95, 0.99};
-        queryRateTimer = metricsRegistry
-                .map(registry ->
-                        Timer.builder("sequencer.query")
-                                .publishPercentiles(percentiles)
-                                .publishPercentileHistogram(true)
-                                .register(registry)
-                );
-
-        nextRateTimer = metricsRegistry
-                .map(registry ->
-                        Timer.builder("sequencer.next")
-                                .publishPercentiles(percentiles)
-                                .publishPercentileHistogram(true)
-                                .register(registry)
-                );
-
-        resolutionRateTimer = metricsRegistry
-                .map(registry -> Timer.builder("sequencer.tx_resolution")
-                        .publishPercentiles(percentiles)
-                        .publishPercentileHistogram(true)
-                        .register(registry)
-                );
-
-        streamAddressRangeTimer = metricsRegistry.map(registry ->
-                Timer.builder("sequencer.stream_address_range")
-                        .publishPercentiles(percentiles)
-                        .publishPercentileHistogram(true)
-                        .register(registry));
     }
 
     /**
@@ -92,7 +48,7 @@ public class SequencerView extends AbstractView {
                         .nextToken(Arrays.asList(streamIds), 0)));
             }
         };
-        return queryRateTimer.map(timer -> timer.record(querySupplier)).orElseGet(() -> querySupplier.get());
+        return MicroMeterUtils.time(querySupplier, "sequencer.query");
 
     }
 
@@ -106,8 +62,7 @@ public class SequencerView extends AbstractView {
         Supplier<Long> tailSupplier = () ->
                 layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                         .nextToken(Arrays.asList(streamId), 0))).getStreamTail(streamId);
-
-        return queryRateTimer.map(timer -> timer.record(tailSupplier)).orElseGet(() -> tailSupplier.get());
+        return MicroMeterUtils.time(tailSupplier, "sequencer.query");
     }
 
     /**
@@ -120,7 +75,7 @@ public class SequencerView extends AbstractView {
         Supplier<TokenResponse> tokenSupplier = () ->
                 layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                         .nextToken(Arrays.asList(streamIds), 1)));
-        return nextRateTimer.map(timer -> timer.record(tokenSupplier)).orElseGet(() -> tokenSupplier.get());
+        return MicroMeterUtils.time(tokenSupplier, "sequencer.next");
     }
 
     /**
@@ -145,8 +100,7 @@ public class SequencerView extends AbstractView {
                         CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                                 .getStreamsAddressSpace(streamsAddressesRange)).getAddressMap());
 
-        return streamAddressRangeTimer.map(timer -> timer.record(streamsAddressResponseSupplier))
-                .orElseGet(() -> streamsAddressResponseSupplier.get());
+        return MicroMeterUtils.time(streamsAddressResponseSupplier, "sequencer.stream_address_range");
     }
 
     /**
@@ -160,7 +114,7 @@ public class SequencerView extends AbstractView {
         Supplier<TokenResponse> tokenSupplier = () ->
                 layoutHelper(e -> CFUtils.getUninterruptibly(e.getPrimarySequencerClient()
                         .nextToken(Arrays.asList(streamIds), 1, conflictInfo)));
-        return resolutionRateTimer.map(timer -> timer.record(tokenSupplier)).orElseGet(() -> tokenSupplier.get());
+        return MicroMeterUtils.time(tokenSupplier, "sequencer.tx_resolution");
     }
 
     /**

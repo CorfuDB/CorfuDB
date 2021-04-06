@@ -19,6 +19,7 @@ import io.netty.handler.timeout.TimeoutException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.DataType;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.IToken;
@@ -72,10 +73,6 @@ public class AddressSpaceView extends AbstractView {
      * A cache for read results.
      */
     private final Cache<Long, ILogData> readCache;
-    private final Optional<Timer> multiReadTimer;
-    private final Optional<Timer> singleReadTimer;
-    private final Optional<Timer> writeTimer;
-    private final Optional<DistributionSummary> logSizeDist;
     private final ReadOptions defaultReadOptions = ReadOptions.builder()
             .ignoreTrim(false)
             .waitForHole(true)
@@ -128,36 +125,6 @@ public class AddressSpaceView extends AbstractView {
                 .register(registry));
 
         metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
-
-        double[] percentiles = new double[]{0.50, 0.95, 0.99};
-
-        multiReadTimer = metricsRegistry
-                .map(registry -> Timer.builder("address_space.read.latency")
-                        .tag("type", "multi")
-                        .publishPercentiles(percentiles)
-                        .publishPercentileHistogram(true)
-                        .register(registry));
-
-        singleReadTimer = metricsRegistry
-                .map(registry -> Timer.builder("address_space.read.latency")
-                        .tag("type", "single")
-                        .publishPercentiles(percentiles)
-                        .publishPercentileHistogram(true)
-                        .register(registry));
-
-        writeTimer = metricsRegistry
-                .map(registry -> Timer.builder("address_space.write.latency")
-                        .publishPercentiles(percentiles)
-                        .publishPercentileHistogram(true)
-                        .register(registry));
-
-        logSizeDist = metricsRegistry
-                .map(registry -> DistributionSummary.builder("address_space.log_data.size.bytes")
-                        .publishPercentiles(percentiles)
-                        .publishPercentileHistogram(true)
-                        .baseUnit("bytes")
-                        .register(registry));
-
     }
 
     private void handleEviction(RemovalNotification<Long, ILogData> notification) {
@@ -166,6 +133,10 @@ public class AddressSpaceView extends AbstractView {
         }
     }
 
+
+    private void recordLogSizeDist(double logSize) {
+        MicroMeterUtils.measure(logSize, "address_space.log_data.size.bytes");
+    }
     /**
      * Remove all log entries that are less than the trim mark
      */
@@ -231,8 +202,7 @@ public class AddressSpaceView extends AbstractView {
             } else {
                 ld = new LogData(DataType.DATA, data, runtime.getParameters().getCodecType());
             }
-
-            logSizeDist.ifPresent(dist -> dist.record(ld.getSizeEstimate()));
+            recordLogSizeDist(ld.getSizeEstimate());
             layoutHelper(e -> {
                 Layout l = e.getLayout();
                 // Check if the token issued is in the same
@@ -280,12 +250,7 @@ public class AddressSpaceView extends AbstractView {
             }
         };
 
-        if (writeTimer.isPresent()) {
-            Timer timer = writeTimer.get();
-            timer.record(writeRunnable);
-        } else {
-            writeRunnable.run();
-        }
+        MicroMeterUtils.time(writeRunnable, "address_space.write.latency");
     }
 
     /**
@@ -360,12 +325,10 @@ public class AddressSpaceView extends AbstractView {
                 final ILogData loadedVal = fetch(address);
                 return cacheLoadAndGet(readCache, address, loadedVal, options);
             }
-            logSizeDist.ifPresent(dist -> dist.record(data.getSizeEstimate()));
+            recordLogSizeDist(data.getSizeEstimate());
             return data;
         };
-
-        return singleReadTimer.map(timer -> timer.record(logDataSupplier)).orElseGet(() -> logDataSupplier.get());
-
+        return MicroMeterUtils.time(logDataSupplier, "address_space.read.latency", "type", "single");
     }
 
     /**
@@ -392,7 +355,7 @@ public class AddressSpaceView extends AbstractView {
                 data = mapAddresses.get(nextRead);
             }
             final ILogData finalData = data;
-            logSizeDist.ifPresent(dist -> dist.record(finalData.getSizeEstimate()));
+            recordLogSizeDist(finalData.getSizeEstimate());
             return data;
         }
 
@@ -490,13 +453,10 @@ public class AddressSpaceView extends AbstractView {
                 // During streaming this message can flood logs, so modify log level with care.
                 log.debug("read: ignoring trimmed addresses {}", trimmedAddresses);
             }
-            logSizeDist.ifPresent(dist ->
-                    result.values().forEach(value -> dist.record(value.getSizeEstimate())));
-
+            result.values().forEach(value -> recordLogSizeDist(value.getSizeEstimate()));
             return result;
         };
-
-        return multiReadTimer.map(timer -> timer.record(readSupplier)).orElseGet(() -> readSupplier.get());
+        return MicroMeterUtils.time(readSupplier, "address_space.read.latency", "type", "multi");
     }
 
     /**

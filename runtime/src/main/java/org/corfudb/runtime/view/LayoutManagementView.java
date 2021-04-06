@@ -20,6 +20,7 @@ import io.micrometer.core.instrument.Timer;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
@@ -38,15 +39,10 @@ import org.corfudb.util.Utils;
 public class LayoutManagementView extends AbstractView {
 
     public LayoutManagementView(@NonNull CorfuRuntime runtime) {
-
         super(runtime);
-        this.consensusTimer = MeterRegistryProvider.getInstance().map(registry ->
-                registry.timer("layout-management-view.consensus"));
     }
 
     private volatile long prepareRank = 1L;
-
-    private final Optional<Timer> consensusTimer;
 
     private final ReentrantLock recoverSequencerLock = new ReentrantLock();
 
@@ -369,12 +365,7 @@ public class LayoutManagementView extends AbstractView {
         // Attempts to update all the layout servers with the modified layout.
         try {
             Runnable consensusRunnable = () -> runtime.getLayoutView().updateLayout(layout, prepareRank);
-            if (consensusTimer.isPresent()) {
-                consensusTimer.get().record(consensusRunnable);
-            }
-            else {
-                consensusRunnable.run();
-            }
+            MicroMeterUtils.time(consensusRunnable, "layout-management-view.consensus");
             prepareRank = 1L;
         } catch (OutrankedException oe) {
             // Update rank since outranked.

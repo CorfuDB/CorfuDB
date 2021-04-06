@@ -37,7 +37,12 @@ public class MicroMeterUtils {
 
     public static void time(Runnable runnable, String name, String... tags) {
         Optional<Timer> timer = createOrGetTimer(name, tags);
-        timer.ifPresent(t -> t.record(runnable));
+        if (timer.isPresent()) {
+            timer.get().record(runnable);
+        }
+        else{
+            runnable.run();
+        }
     }
 
     public static <T> T time(Supplier<T> supplier, String name, String... tags) {
@@ -48,6 +53,10 @@ public class MicroMeterUtils {
     public static void time(Optional<Timer.Sample> maybeSample, String name, String... tags) {
         Optional<Timer> timer = createOrGetTimer(name, tags);
         timer.ifPresent(t -> maybeSample.ifPresent(s -> s.stop(t)));
+    }
+
+    public static Optional<Timer.Sample> startTimer() {
+        return MeterRegistryProvider.getInstance().map(Timer::start);
     }
 
     public static void measure(double measuredValue, String name, String... tags) {
