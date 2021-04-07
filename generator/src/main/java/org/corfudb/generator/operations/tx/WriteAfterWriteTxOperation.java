@@ -1,6 +1,10 @@
-package org.corfudb.generator.operations;
+package org.corfudb.generator.operations.tx;
 
 import org.corfudb.generator.Correctness;
+import org.corfudb.generator.operations.Operation;
+import org.corfudb.generator.operations.tx.NestedTxOperation;
+import org.corfudb.generator.operations.tx.OptimisticTxOperation;
+import org.corfudb.generator.operations.tx.SnapshotTxOperation;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 

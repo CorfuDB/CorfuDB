@@ -1,27 +1,31 @@
-package org.corfudb.generator.operations;
+package org.corfudb.generator.operations.tx;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
+import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
+import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.view.Address;
 
 import java.util.List;
 
 /**
- * Created by box on 7/15/17.
+ * Created by maithem on 7/14/17.
  */
 @Slf4j
-public class SnapshotTxOperation extends Operation {
-    public SnapshotTxOperation(State state) {
-        super(state, "TxSnap");
+public class OptimisticTxOperation extends Operation {
+
+    public OptimisticTxOperation(State state) {
+        super(state, "TxOpt");
     }
 
     @Override
     public void execute() {
         try {
-            // Safety Hack for not having snapshot in the future
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_START);
-            state.startSnapshotTx();
+            long timestamp;
+            state.startOptimisticTx();
 
             int numOperations = state.getOperationCount().sample();
             List<Operation> operations = state.getOperations().sample(numOperations);
@@ -29,8 +33,6 @@ public class SnapshotTxOperation extends Operation {
             for (Operation operation : operations) {
                 if (operation instanceof OptimisticTxOperation
                         || operation instanceof SnapshotTxOperation
-                        || operation instanceof RemoveOperation
-                        || operation instanceof WriteOperation
                         || operation instanceof NestedTxOperation) {
                     continue;
                 }
@@ -38,13 +40,22 @@ public class SnapshotTxOperation extends Operation {
                 operation.execute();
             }
 
-            state.stopTx();
-            Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_END);
-            state.getCtx().updateLastSuccessfulReadOperationTimestamp();
+            timestamp = state.stopTx();
+
+            Correctness.recordTransactionMarkers(true, shortName, Correctness.TX_END,
+                    Long.toString(timestamp));
+
+            if (Address.isAddress(timestamp)) {
+                state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
+            }
+
         } catch (TransactionAbortedException tae) {
+            // TX aborted because of conflict is a successful operation regarding
+            // Liveness status.
+            if (tae.getAbortCause() == AbortCause.CONFLICT) {
+                state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
+            }
             Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
         }
-
-
     }
 }
