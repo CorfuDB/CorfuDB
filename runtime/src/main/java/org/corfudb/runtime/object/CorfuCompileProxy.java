@@ -1,9 +1,7 @@
 package org.corfudb.runtime.object;
 
-import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -27,7 +25,6 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;

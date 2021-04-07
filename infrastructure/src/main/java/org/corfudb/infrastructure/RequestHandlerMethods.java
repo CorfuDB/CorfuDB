@@ -1,7 +1,17 @@
 package org.corfudb.infrastructure;
 
-import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
+
+import javax.annotation.Nonnull;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -11,20 +21,7 @@ import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import javax.annotation.Nonnull;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
-import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
-import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getUnknownErrorMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;

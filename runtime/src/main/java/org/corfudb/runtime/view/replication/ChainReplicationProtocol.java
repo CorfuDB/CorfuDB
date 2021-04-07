@@ -1,9 +1,7 @@
 package org.corfudb.runtime.view.replication;
 
 import com.google.common.collect.Iterables;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.InspectAddressesResponse;
@@ -25,7 +23,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**

@@ -2,10 +2,8 @@ package org.corfudb.infrastructure;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.TextFormat;
-import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.BatchWriterOperation.Type;
 import org.corfudb.infrastructure.log.StreamLog;

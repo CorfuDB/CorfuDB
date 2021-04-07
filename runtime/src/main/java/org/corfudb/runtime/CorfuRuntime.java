@@ -11,7 +11,6 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.VersionInfo;

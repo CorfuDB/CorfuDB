@@ -1,13 +1,11 @@
 package org.corfudb.protocols.logprotocol;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Timer;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.util.serializer.CorfuSerializer;

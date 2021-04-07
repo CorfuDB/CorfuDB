@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure;
 
-import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Gauge;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;

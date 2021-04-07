@@ -1,25 +1,8 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getLogTail;
-
-
 import com.google.common.collect.Sets;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Predicate;
-import javax.annotation.Nonnull;
-
-import io.micrometer.core.instrument.Timer;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.runtime.CorfuRuntime;
@@ -29,6 +12,19 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
+
+import javax.annotation.Nonnull;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
+
+import static org.corfudb.util.Utils.getLogTail;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.

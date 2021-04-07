@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
