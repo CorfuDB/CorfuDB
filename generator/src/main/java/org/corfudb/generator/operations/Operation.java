@@ -26,6 +26,10 @@ public abstract class Operation {
 
     public abstract void execute();
 
+    /**
+     * Operation context keeps an operation state and data, and can be used by other parts of the application
+     * without the "operation" itself to verify that the corfu database or table is in consistent state.
+     */
     @Builder
     @Getter
     public static class Context {

@@ -14,7 +14,7 @@ import org.corfudb.runtime.object.transactions.TransactionalContext;
 import java.util.Optional;
 
 /**
- * Created by maithem on 7/14/17.
+ * Reads data from corfu table and saves the current state in the operation context
  */
 @Slf4j
 public class ReadOperation extends Operation {

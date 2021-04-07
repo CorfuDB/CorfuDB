@@ -5,33 +5,35 @@ import org.corfudb.generator.Correctness;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 
+import java.util.Optional;
 import java.util.UUID;
 
-import static org.corfudb.generator.distributions.Keys.KeyId;
-import static org.corfudb.generator.distributions.Streams.StreamId;
-
 /**
- * Created by maithem on 7/14/17.
+ * Writes a new value to the corfu table
  */
 @Slf4j
 public class WriteOperation extends Operation {
+    private final Context context;
 
     public WriteOperation(State state) {
         super(state, "Write");
+        this.context = Context.builder()
+                .streamId(state.getStreams().sample())
+                .key(state.getKeys().sample())
+                .val(Optional.of(UUID.randomUUID().toString()))
+                .build();
     }
 
     @Override
     public void execute() {
         // Hack for Transaction writes only
         if (TransactionalContext.isInTransaction()) {
-            StreamId streamId = state.getStreams().sample();
-            KeyId key = state.getKeys().sample();
-            String val = UUID.randomUUID().toString();
+            state.getMap(context.getStreamId()).put(context.getKey().getKey(), context.getVal().get());
 
-            state.getMap(streamId).put(key.getKey(), val);
-
-            String correctnessRecord = String.format("%s, %s:%s=%s", shortName, streamId, key, val);
-            Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
+            Correctness.recordOperation(
+                    context.getCorrectnessRecord(shortName),
+                    TransactionalContext.isInTransaction()
+            );
 
             if (!TransactionalContext.isInTransaction()) {
                 state.getCtx().updateLastSuccessfulWriteOperationTimestamp();

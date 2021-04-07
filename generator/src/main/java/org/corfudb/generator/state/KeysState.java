@@ -2,8 +2,10 @@ package org.corfudb.generator.state;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.ToString;
 import org.corfudb.generator.distributions.Keys;
 
@@ -51,18 +53,23 @@ public class KeysState {
         }
     }
 
-    @AllArgsConstructor
+    @Builder
     @EqualsAndHashCode
     @ToString
     public static class KeyEntry {
+        @NonNull
         private final Version version;
+        @NonNull
         @Getter
         private final Optional<String> value;
 
+        @NonNull
         private final ThreadName threadId;
+        @NonNull
         private final String clientId;
 
-        private final Optional<TxMetaInfo> txInfo;
+        @Builder.Default
+        private final Optional<TxMetaInfo> txInfo = Optional.empty();
     }
 
     @AllArgsConstructor

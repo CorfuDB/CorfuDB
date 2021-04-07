@@ -12,7 +12,7 @@ import static org.corfudb.generator.distributions.Keys.KeyId;
 import static org.corfudb.generator.distributions.Streams.StreamId;
 
 /**
- * Created by maithem on 7/14/17.
+ * Removes the value from a corfu table
  */
 @Slf4j
 public class RemoveOperation extends Operation {
@@ -51,10 +51,12 @@ public class RemoveOperation extends Operation {
     }
 
     private void addToHistory() {
-        KeysState.KeyEntry entry = new KeysState.KeyEntry(
-                context.getVersion(), Optional.empty(),
-                KeysState.ThreadName.buildFromCurrentThread(), "client", Optional.empty()
-        );
+        KeysState.KeyEntry entry = KeysState.KeyEntry.builder()
+                .version(context.getVersion())
+                .value(Optional.empty())
+                .threadId(KeysState.ThreadName.buildFromCurrentThread())
+                .clientId("client")
+                .build();
 
         state.getKeysState().put(context.getFqKey(), entry);
     }

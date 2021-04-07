@@ -5,6 +5,7 @@ import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.CorfuRuntime;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,6 +25,7 @@ import static java.util.concurrent.Executors.newWorkStealingPool;
  * Created by maithem on 7/14/17.
  */
 public class Generator {
+
     public static void main(String[] args) {
         String endPoint = args[0];
         int numStreams = Integer.parseInt(args[1]);
@@ -41,7 +43,7 @@ public class Generator {
             op.execute();
         };
 
-        final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
         scheduler.scheduleAtFixedRate(cpTrimTask, 30, cpPeriod, TimeUnit.SECONDS);
 
         ExecutorService appWorkers = newWorkStealingPool(numThreads);
@@ -57,15 +59,15 @@ public class Generator {
             }
         };
 
-        Future[] appsFutures = new Future[numThreads];
+        List<Future<?>> appsFutures = new ArrayList<>(numThreads);
 
-        for (int x = 0; x < numThreads; x++) {
-            appsFutures[x] = appWorkers.submit(app);
+        for (int i = 0; i < numThreads; i++) {
+            appsFutures.add(appWorkers.submit(app));
         }
 
-        for (int x = 0; x < numThreads; x++) {
+        for (Future<?> future : appsFutures) {
             try {
-                appsFutures[x].get();
+                future.get();
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

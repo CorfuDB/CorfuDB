@@ -8,7 +8,7 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Created by maithem on 7/14/17.
+ * Empty operation that delays execution for a timeout
  */
 @Slf4j
 public class SleepOperation extends Operation {
