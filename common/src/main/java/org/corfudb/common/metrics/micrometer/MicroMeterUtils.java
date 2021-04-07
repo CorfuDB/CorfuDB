@@ -10,12 +10,12 @@ import java.util.function.Supplier;
 
 public class MicroMeterUtils {
 
+    private static final double[] PERCENTILES = new double[]{0.5, 0.99};
+    private static final boolean PUBLISH_HISTOGRAM = true;
+
     private MicroMeterUtils() {
 
     }
-
-    private static final double[] PERCENTILES = new double[]{0.5, 0.99};
-    private static final boolean PUBLISH_HISTOGRAM = true;
 
     private static Optional<Timer> createOrGetTimer(String name, String... tags) {
         return MeterRegistryProvider.getInstance().map(registry ->
