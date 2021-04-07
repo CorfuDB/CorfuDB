@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
@@ -84,7 +85,11 @@ class StreamNotificationTask implements Runnable {
 
             // Send notification to client with the pre-registered callback.
             startTime = endTime;
-            subscription.getStreamingMetrics().recordDeliveryDuration(() -> listener.onNext(nextUpdate));
+            String listenerId = subscription.getListenerId();
+            MicroMeterUtils.time(() -> listener.onNext(nextUpdate),
+                    "stream.notify.duration",
+                    "listener",
+                    listenerId);
             endTime = System.nanoTime();
 
             Duration onNextElapse = Duration.ofNanos(endTime - startTime);

@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
@@ -88,9 +89,10 @@ class StreamPollingTask implements Runnable {
 
         // Seek to next address and poll transaction updates.
         txnStream.seek(lastReadAddress + 1L);
-        List<ILogData> updates = subscription.getStreamingMetrics().recordPollingDuration(
-                () -> txnStream.remainingAtMost(subscription.getStreamBufferSize()));
-
+        String listenerId = subscription.getListenerId();
+        List<ILogData> updates =  MicroMeterUtils
+                .time(() -> txnStream.remainingAtMost(subscription.getStreamBufferSize()),
+                        "stream.poll.duration", "listener", listenerId);
         // No new updates, take a short break and poll again.
         if (updates.isEmpty()) {
             pollingExecutor.schedule(this, IDLE_WAIT_TIME_MS, TimeUnit.MILLISECONDS);

@@ -280,7 +280,7 @@ public class FailureDetector implements IDetector {
         Map<String, CompletableFuture<NodeState>> clusterState = new HashMap<>();
         allServers.forEach(s -> {
             try {
-                Optional<Timer.Sample> sample = MeterRegistryProvider.getInstance().map(Timer::start);
+                Optional<Timer.Sample> sample = MicroMeterUtils.startTimer();
                 CompletableFuture<NodeState> nodeStateFuture =
                         MicroMeterUtils.timeWhenCompletes(new ManagementClient(clientRouters.get(s), epoch, clusterId)
                                         .sendNodeStateRequest(), sample,

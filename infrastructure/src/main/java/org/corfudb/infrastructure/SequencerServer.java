@@ -13,6 +13,7 @@ import lombok.Builder.Default;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.infrastructure.SequencerServerCache.ConflictTxStream;
 import org.corfudb.protocols.CorfuProtocolCommon;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
@@ -127,12 +128,6 @@ public class SequencerServer extends AbstractServer {
 
     private final SequencerServerInitializer sequencerFactoryHelper;
 
-
-    /**
-     * The percentiles to compute and publish for {@link this#streamsPerTx}.
-     */
-    private final double[] percentiles = {0.50, 0.95, 0.99};
-
     /**
      * RequestHandlerMethods for the Sequencer server
      */
@@ -163,10 +158,6 @@ public class SequencerServer extends AbstractServer {
      */
     @Getter
     private long globalLogTail;
-
-    private final Optional<Timer> txResolutionTimer;
-
-    private final Optional<DistributionSummary> streamsPerTx;
 
     /**
      * Note: This setter method is only used for testing, since we want to
@@ -209,14 +200,6 @@ public class SequencerServer extends AbstractServer {
         );
         streamsAddressMap = sequencerFactoryHelper.getStreamAddressSpaceMap();
         streamTailToGlobalTailMap = sequencerFactoryHelper.getStreamTailToGlobalTailMap();
-
-        txResolutionTimer = MeterRegistryProvider.getInstance().map(registry ->
-                registry.timer("sequencer.tx-resolution.timer"));
-        streamsPerTx = MeterRegistryProvider.getInstance().map(registry ->
-                DistributionSummary.builder("sequencer.tx-resolution.num_streams")
-                        .baseUnit("stream")
-                        .publishPercentiles(percentiles)
-                        .register(registry));
     }
 
     @Override
@@ -295,7 +278,7 @@ public class SequencerServer extends AbstractServer {
                     txInfo, txSnapshotTimestamp, trimMark);
             return new TxResolutionResponse(TokenType.TX_ABORT_SEQ_TRIM);
         }
-        streamsPerTx.ifPresent(dist -> dist.record(txInfo.getConflictSet().size()));
+        MicroMeterUtils.measure(txInfo.getConflictSet().size(), "sequencer.tx-resolution.num_streams");
         for (Map.Entry<UUID, Set<byte[]>> conflictStream : txInfo.getConflictSet().entrySet()) {
 
             // if conflict-parameters are present, check for conflict based on conflict-parameter
@@ -661,8 +644,7 @@ public class SequencerServer extends AbstractServer {
         Supplier<TxResolutionResponse> txResponseSupplier =
                 () -> txnCanCommit(getTxResolutionInfo(tokenRequest.getTxnResolution()));
         TxResolutionResponse txResolutionResponse =
-                txResolutionTimer.map(timer -> timer.record(txResponseSupplier))
-                        .orElseGet(txResponseSupplier);
+                MicroMeterUtils.time(txResponseSupplier, "sequencer.tx-resolution.timer");
 
         if (txResolutionResponse.getTokenType() != TokenType.NORMAL) {
             // If the txn aborts, then DO NOT hand out a token.
