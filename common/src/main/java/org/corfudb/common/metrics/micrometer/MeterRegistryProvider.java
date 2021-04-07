@@ -56,8 +56,7 @@ public class MeterRegistryProvider {
 
         private static void init(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
             if (meterRegistry.isPresent()) {
-                log.warn("Registry has already been initialized.");
-                return;
+               log.warn("Registry has already been initialized.");
             }
             meterRegistry = meterRegistrySupplier.get();
         }
