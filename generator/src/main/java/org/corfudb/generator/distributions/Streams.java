@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.corfudb.generator.distributions.Streams.*;
+import static org.corfudb.generator.distributions.Streams.StreamId;
 
 /**
  * This class implements a distribution over the possible streams that

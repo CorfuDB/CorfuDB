@@ -2,19 +2,16 @@ package org.corfudb.generator.operations.tx;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
-import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
 
-import java.util.List;
-
 /**
  * Created by maithem on 7/14/17.
  */
 @Slf4j
-public class OptimisticTxOperation extends Operation {
+public class OptimisticTxOperation extends AbstractTxOperation {
 
     public OptimisticTxOperation(State state) {
         super(state, "TxOpt");
@@ -27,18 +24,7 @@ public class OptimisticTxOperation extends Operation {
             long timestamp;
             state.startOptimisticTx();
 
-            int numOperations = state.getOperationCount().sample();
-            List<Operation> operations = state.getOperations().sample(numOperations);
-
-            for (Operation operation : operations) {
-                if (operation instanceof OptimisticTxOperation
-                        || operation instanceof SnapshotTxOperation
-                        || operation instanceof NestedTxOperation) {
-                    continue;
-                }
-
-                operation.execute();
-            }
+            executeOperations();
 
             timestamp = state.stopTx();
 

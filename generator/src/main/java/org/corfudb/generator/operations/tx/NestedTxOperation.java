@@ -2,17 +2,14 @@ package org.corfudb.generator.operations.tx;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
-import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
-
-import java.util.List;
 
 /**
  * Created by rmichoud on 7/26/17.
  */
 @Slf4j
-public class NestedTxOperation extends Operation {
+public class NestedTxOperation extends AbstractTxOperation {
 
     private static final int MAX_NEST = 20;
 
@@ -31,17 +28,7 @@ public class NestedTxOperation extends Operation {
         for (int i = 0; i < numNested && i < MAX_NEST; i++) {
             try {
                 state.startOptimisticTx();
-                int numOperations = state.getOperationCount().sample();
-                List<Operation> operations = state.getOperations().sample(numOperations);
-
-                for (Operation operation : operations) {
-                    if (operation instanceof OptimisticTxOperation ||
-                            operation instanceof SnapshotTxOperation
-                            || operation instanceof NestedTxOperation) {
-                        continue;
-                    }
-                    operation.execute();
-                }
+                executeOperations();
             } catch (TransactionAbortedException tae) {
                 log.warn("Transaction Aborted", tae);
                 nestedTxToStop--;
