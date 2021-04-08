@@ -9,6 +9,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 
+import java.time.Duration;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -26,7 +27,7 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class LongevityApp {
-    private final long durationMs;
+
     private final boolean checkPoint;
     private  final BlockingQueue<Operation> operationQueue;
     private final CorfuRuntime rt;
@@ -44,11 +45,12 @@ public class LongevityApp {
     private static final int QUEUE_CAPACITY = 1000;
 
     private long startTime;
+    private final Duration duration;
+
     private final int numberThreads;
 
-
-    public LongevityApp(long durationMs, int numberThreads, String configurationString, boolean checkPoint) {
-        this.durationMs = durationMs;
+    public LongevityApp(Duration duration, int numberThreads, String configurationString, boolean checkPoint) {
+        this.duration = duration;
         this.checkPoint = checkPoint;
         this.numberThreads = numberThreads;
 
@@ -85,8 +87,8 @@ public class LongevityApp {
     private void waitForAppToFinish() {
         workers.shutdown();
         try {
-            boolean finishedInTime = workers.
-                    awaitTermination(durationMs + APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
+            long timeout = duration.plusMillis(APPLICATION_TIMEOUT_IN_MS).toMillis();
+            boolean finishedInTime = workers.awaitTermination(timeout, TimeUnit.MILLISECONDS);
 
             String livenessState = state.getCtx().livenessSuccess(finishedInTime) ? "Success" : "Fail";
 
@@ -105,7 +107,7 @@ public class LongevityApp {
             try {
                 checkpointHasFinished = checkpointer.awaitTermination(APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
-                throw new UnrecoverableCorfuInterruptedError(e);
+                //ignore
             }
 
             exitStatus = checkpointHasFinished ? 0 : 1;
@@ -119,7 +121,7 @@ public class LongevityApp {
      * @return If we are still within the duration limit
      */
     private boolean withinDurationLimit() {
-        return System.currentTimeMillis() - startTime < durationMs;
+        return System.currentTimeMillis() - startTime < duration.toMillis();
     }
 
     /**

@@ -30,8 +30,6 @@ public class LongevityRun {
         Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         root.setLevel(Level.INFO);
 
-        long longevity;
-
         Options options = new Options();
 
         Option amountTime = new Option("t", TIME_AMOUNT, true, "time amount");
@@ -76,22 +74,23 @@ public class LongevityRun {
                 cmd.getOptionValue(CORFU_ENDPOINT) : "localhost:9000";
 
         boolean checkPoint = cmd.hasOption(CHECKPOINT);
+        Duration longevity;
 
         switch (timeUnitValue) {
             case "s":
-                longevity = Duration.ofSeconds(amountTimeValue).toMillis();
+                longevity = Duration.ofSeconds(amountTimeValue);
                 break;
 
             case "m":
-                longevity = Duration.ofMinutes(amountTimeValue).toMillis();
+                longevity = Duration.ofMinutes(amountTimeValue);
                 break;
 
             case "h":
-                longevity = Duration.ofHours(amountTimeValue).toMillis();
+                longevity = Duration.ofHours(amountTimeValue);
                 break;
 
             default:
-                longevity = Duration.ofHours(1).toMillis();
+                longevity = Duration.ofHours(1);
                 break;
         }
 
