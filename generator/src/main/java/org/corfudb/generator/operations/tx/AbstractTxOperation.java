@@ -10,8 +10,8 @@ import java.util.List;
  */
 public abstract class AbstractTxOperation extends Operation {
 
-    public AbstractTxOperation(State state, String shortName) {
-        super(state, shortName);
+    public AbstractTxOperation(State state, Operation.Type operationType) {
+        super(state, operationType);
     }
 
     protected void executeOperations() {
@@ -19,9 +19,8 @@ public abstract class AbstractTxOperation extends Operation {
         List<Operation> operations = state.getOperations().sample(numOperations);
 
         for (Operation operation : operations) {
-            if (operation instanceof OptimisticTxOperation
-                    || operation instanceof SnapshotTxOperation
-                    || operation instanceof NestedTxOperation) {
+            Type opType = operation.getOpType();
+            if (opType == Type.TX_OPTIMISTIC || opType == Type.TX_SNAPSHOT || opType == Type.TX_NESTED) {
                 continue;
             }
 

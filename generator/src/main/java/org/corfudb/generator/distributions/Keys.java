@@ -79,6 +79,10 @@ public class Keys implements DataSet<Keys.KeyId> {
             return REGISTRY.computeIfAbsent(version, FACTORY);
         }
 
+        public static Version noVersion() {
+            return build(-1);
+        }
+
         @Override
         public int compareTo(Version other) {
             return Long.compare(ver, other.ver);

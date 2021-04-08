@@ -20,7 +20,7 @@ public class RemoveOperation extends Operation {
     private final Operation.Context context;
 
     public RemoveOperation(State state) {
-        super(state, "Rm");
+        super(state, Type.REMOVE);
 
         StreamId streamId = state.getStreams().sample();
         KeyId key = state.getKeys().sample();
@@ -38,7 +38,7 @@ public class RemoveOperation extends Operation {
 
             String correctnessRecord = String.format(
                     "%s, %s:%s",
-                    shortName, context.getStreamId(), context.getKey().getKey()
+                    operationType.getOpType(), context.getStreamId(), context.getKey().getKey()
             );
             Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
 

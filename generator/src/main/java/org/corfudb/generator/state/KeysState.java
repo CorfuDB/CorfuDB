@@ -67,17 +67,6 @@ public class KeysState {
         private final ThreadName threadId;
         @NonNull
         private final String clientId;
-
-        @Builder.Default
-        private final Optional<TxMetaInfo> txInfo = Optional.empty();
-    }
-
-    @AllArgsConstructor
-    @ToString
-    public static class TxMetaInfo {
-        private final int id;
-        private final int start;
-        private final int end;
     }
 
     @AllArgsConstructor(access = AccessLevel.PRIVATE)

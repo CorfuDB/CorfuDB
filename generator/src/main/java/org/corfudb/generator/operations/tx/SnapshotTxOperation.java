@@ -8,6 +8,7 @@ import org.corfudb.generator.operations.WriteOperation;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
+import java.util.EnumSet;
 import java.util.List;
 
 /**
@@ -16,25 +17,25 @@ import java.util.List;
 @Slf4j
 public class SnapshotTxOperation extends Operation {
     public SnapshotTxOperation(State state) {
-        super(state, "TxSnap");
+        super(state, Operation.Type.TX_SNAPSHOT);
     }
 
     @Override
     public void execute() {
         try {
             // Safety Hack for not having snapshot in the future
-            Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_START);
+            Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_START);
             state.startSnapshotTx();
 
             int numOperations = state.getOperationCount().sample();
             List<Operation> operations = state.getOperations().sample(numOperations);
 
+            EnumSet<Operation.Type> excludedOps = EnumSet.of(
+                    Type.TX_OPTIMISTIC, Type.TX_SNAPSHOT, Type.REMOVE, Type.WRITE, Type.TX_NESTED
+            );
+
             for (Operation operation : operations) {
-                if (operation instanceof OptimisticTxOperation
-                        || operation instanceof SnapshotTxOperation
-                        || operation instanceof RemoveOperation
-                        || operation instanceof WriteOperation
-                        || operation instanceof NestedTxOperation) {
+                if (excludedOps.contains(operation.getOpType())) {
                     continue;
                 }
 
@@ -42,10 +43,10 @@ public class SnapshotTxOperation extends Operation {
             }
 
             state.stopTx();
-            Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_END);
+            Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_END);
             state.getCtx().updateLastSuccessfulReadOperationTimestamp();
         } catch (TransactionAbortedException tae) {
-            Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
+            Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_ABORTED);
         }
 
 

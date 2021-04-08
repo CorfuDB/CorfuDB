@@ -16,7 +16,7 @@ public class WriteOperation extends Operation {
     private final Context context;
 
     public WriteOperation(State state) {
-        super(state, "Write");
+        super(state, Operation.Type.WRITE);
         this.context = Context.builder()
                 .streamId(state.getStreams().sample())
                 .key(state.getKeys().sample())
@@ -31,7 +31,7 @@ public class WriteOperation extends Operation {
             state.getMap(context.getStreamId()).put(context.getKey().getKey(), context.getVal().get());
 
             Correctness.recordOperation(
-                    context.getCorrectnessRecord(shortName),
+                    context.getCorrectnessRecord(operationType.getOpType()),
                     TransactionalContext.isInTransaction()
             );
 

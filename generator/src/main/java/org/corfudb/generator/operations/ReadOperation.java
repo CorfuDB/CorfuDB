@@ -21,7 +21,7 @@ public class ReadOperation extends Operation {
     private final Context context;
 
     public ReadOperation(State state) {
-        super(state, "Read");
+        super(state, Type.READ);
         StreamId streamId = state.getStreams().sample();
         KeyId key = state.getKeys().sample();
         this.context = Context.builder()
@@ -34,7 +34,7 @@ public class ReadOperation extends Operation {
     @Override
     public void execute() {
         Correctness.recordOperation(
-                context.getCorrectnessRecord(shortName),
+                context.getCorrectnessRecord(operationType.getOpType()),
                 TransactionalContext.isInTransaction()
         );
 

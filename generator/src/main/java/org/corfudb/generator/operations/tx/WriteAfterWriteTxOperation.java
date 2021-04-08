@@ -1,6 +1,7 @@
 package org.corfudb.generator.operations.tx;
 
 import org.corfudb.generator.Correctness;
+import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
@@ -10,22 +11,22 @@ import org.corfudb.runtime.exceptions.TransactionAbortedException;
 public class WriteAfterWriteTxOperation extends AbstractTxOperation {
 
     public WriteAfterWriteTxOperation(State state) {
-        super(state, "TxWaw");
+        super(state, Operation.Type.TX_WAW);
     }
 
     @Override
     public void execute() {
-        Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_START);
+        Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_START);
         long timestamp;
         state.startWriteAfterWriteTx();
 
         executeOperations();
         try {
             timestamp = state.stopTx();
-            Correctness.recordTransactionMarkers(true, shortName, Correctness.TX_END,
+            Correctness.recordTransactionMarkers(true, opType.getOpType(), Correctness.TX_END,
                     Long.toString(timestamp));
         } catch (TransactionAbortedException tae) {
-            Correctness.recordTransactionMarkers(false, shortName, Correctness.TX_ABORTED);
+            Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_ABORTED);
         }
 
     }

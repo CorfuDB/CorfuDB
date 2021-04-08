@@ -15,7 +15,7 @@ public class SleepOperation extends Operation {
     private static final Random RANDOM = new Random();
 
     public SleepOperation(State state) {
-        super(state, "Sleep");
+        super(state, Operation.Type.SLEEP);
     }
 
     @Override

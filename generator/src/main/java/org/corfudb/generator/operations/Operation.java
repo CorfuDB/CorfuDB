@@ -1,5 +1,6 @@
 package org.corfudb.generator.operations;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -17,11 +18,12 @@ import java.util.Optional;
  */
 public abstract class Operation {
     protected final State state;
-    protected final String shortName;
+    @Getter
+    protected final Operation.Type opType;
 
-    public Operation(State state, String shortName) {
+    public Operation(State state, Operation.Type operationType) {
         this.state = state;
-        this.shortName = shortName;
+        this.opType = operationType;
     }
 
     public abstract void execute();
@@ -52,5 +54,14 @@ public abstract class Operation {
         public FullyQualifiedKey getFqKey() {
             return  FullyQualifiedKey.builder().keyId(key).tableId(streamId).build();
         }
+    }
+
+    @AllArgsConstructor
+    public enum Type {
+        READ("Read"), REMOVE("Rm"), SLEEP("Sleep"), WRITE("Write"), 
+        TX_NESTED("TxNest"), TX_OPTIMISTIC("TxOpt"), TX_SNAPSHOT("TxSnap"), TX_WAW("TxWaw");
+
+        @Getter
+        private final String opType;
     }
 }
