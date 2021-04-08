@@ -23,9 +23,8 @@ import static org.corfudb.generator.distributions.Streams.StreamId;
 import static org.corfudb.generator.state.KeysState.VersionedKey;
 
 /**
- * This object keeps state information of the different data distributions and runtime client.
- * <p>
- * Created by maithem on 7/14/17.
+ * This object keeps the entire state of the generator app and provides relevant information about
+ * current state of corfu tables and transactions.
  */
 public class State {
 
@@ -37,6 +36,9 @@ public class State {
 
     @Getter
     private final KeysState keysState;
+
+    @Getter
+    private final TxState transactions;
 
     @Getter
     private final OperationCount operationCount;
@@ -52,16 +54,14 @@ public class State {
     @Getter
     private final StateContext ctx = new StateContext();
 
-    public final Random rand;
-
     public State(int numStreams, int numKeys, CorfuRuntime rt) {
-        rand = new Random();
 
         streams = new Streams(numStreams);
 
         keys = new Keys(numKeys);
         maps = new HashMap<>();
         keysState = new KeysState();
+        transactions = TxState.builder().build();
 
         operationCount = new OperationCount();
 

@@ -20,7 +20,6 @@ import java.util.List;
  */
 public class Operations implements DataSet<Operation> {
 
-    private final State state;
     private final List<Operation> allOperations;
 
     public Operations(State state) {
@@ -32,7 +31,6 @@ public class Operations implements DataSet<Operation> {
                 new SleepOperation(state),
                 new RemoveOperation(state)
         );
-        this.state = state;
     }
 
     public void populate() {
@@ -40,7 +38,7 @@ public class Operations implements DataSet<Operation> {
     }
 
     public Operation getRandomOperation() {
-        return allOperations.get(state.rand.nextInt(allOperations.size()));
+        return allOperations.get(RANDOM.nextInt(allOperations.size()));
     }
 
     public List<Operation> getDataSet() {

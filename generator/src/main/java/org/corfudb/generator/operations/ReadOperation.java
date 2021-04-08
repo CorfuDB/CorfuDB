@@ -7,6 +7,7 @@ import org.corfudb.generator.distributions.Keys.KeyId;
 import org.corfudb.generator.distributions.Streams.StreamId;
 import org.corfudb.generator.state.KeysState.ThreadName;
 import org.corfudb.generator.state.State;
+import org.corfudb.generator.state.TxState;
 import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
@@ -65,6 +66,13 @@ public class ReadOperation extends Operation {
     }
 
     private void addToHistoryTransactional() {
-        throw new UnsupportedOperationException("Not implemented yet");
+        TxState.TxContext txContext = state.getTransactions().get(ThreadName.buildFromCurrentThread());
+        txContext.setVersion(context.getVersion());
+
+        boolean txVal = txContext.contains(context.getFqKey());
+
+        if (!context.getVersion().equals(txContext.getVersion())){
+            throw new IllegalStateException("Inconsistent state");
+        }
     }
 }
