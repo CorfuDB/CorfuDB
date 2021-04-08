@@ -33,10 +33,15 @@ public class ReadOperation extends Operation {
 
     @Override
     public void execute() {
-        Correctness.recordOperation(
-                context.getCorrectnessRecord(operationType.getOpType()),
-                TransactionalContext.isInTransaction()
-        );
+        String logMessage = context.getCorrectnessRecord(opType.getOpType());
+        Correctness.recordOperation(logMessage, TransactionalContext.isInTransaction());
+
+        if (TransactionalContext.isInTransaction()) {
+            //transactional read
+            addToHistoryTransactional();
+        } else {
+
+        }
 
         // Accessing secondary objects
         CorfuTable<String, String> corfuMap = state.getMap(context.getStreamId());
@@ -57,5 +62,9 @@ public class ReadOperation extends Operation {
         ThreadName currThreadName = ThreadName.buildFromCurrentThread();
         Keys.Version version = state.getKeysState().getThreadLatestVersion(currThreadName);
         context.setVersion(version);
+    }
+
+    private void addToHistoryTransactional() {
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 }

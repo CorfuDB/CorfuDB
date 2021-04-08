@@ -15,8 +15,8 @@ public class TxState {
     @Builder
     @ToString
     public static class TxContext {
-        private final int id;
-        private final int clientId;
+        private final KeysState.ThreadName id;
+        private final String clientId;
         @NonNull
         private final Operation.Type opType;
         @NonNull
