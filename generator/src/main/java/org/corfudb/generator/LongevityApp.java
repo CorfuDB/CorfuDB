@@ -7,6 +7,7 @@ import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.operations.UpdateVersionHandler;
 import org.corfudb.generator.state.State;
+import org.corfudb.generator.verification.VerificationManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -31,7 +32,10 @@ import java.util.concurrent.TimeUnit;
 public class LongevityApp {
 
     private final boolean checkPoint;
+
     private final BlockingQueue<Operation> operationQueue;
+    private final BlockingQueue<Operation> completedOperations;
+
     private final CorfuRuntime rt;
     private final State state;
 
@@ -57,6 +61,7 @@ public class LongevityApp {
         this.numberThreads = numberThreads;
 
         operationQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
+        completedOperations = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
 
         rt = new CorfuRuntime(configurationString);
 
@@ -89,8 +94,19 @@ public class LongevityApp {
 
         ExitStatus exitStatus = waitForAppToFinish();
 
-        return exitStatus;
+        if (exitStatus == ExitStatus.ERROR) {
+            return exitStatus;
+        }
+
+        boolean verificationResult = VerificationManager.builder()
+                .completedOperations(completedOperations)
+                .build()
+                .verify();
+
+        return ExitStatus.fromBool(verificationResult);
     }
+
+
 
     /**
      * Give a chance to the workers to finish naturally (thanks to the timer) and then kill
@@ -185,6 +201,8 @@ public class LongevityApp {
                     try {
                         Operation op = operationQueue.take();
                         op.execute();
+
+                        completedOperations.put(op);
                     } catch (Exception e) {
                         log.error("Operation failed with", e);
                     }

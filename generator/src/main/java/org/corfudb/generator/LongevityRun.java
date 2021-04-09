@@ -66,15 +66,24 @@ public class LongevityRun {
             return;
         }
 
-        long amountTimeValue = Long.parseLong(cmd.getOptionValue(TIME_AMOUNT));
-        String timeUnitValue = cmd.getOptionValue(TIME_UNIT);
-
         String configurationString = cmd.hasOption(CORFU_ENDPOINT) ?
                 cmd.getOptionValue(CORFU_ENDPOINT) : "localhost:9000";
 
         boolean checkPoint = cmd.hasOption(CHECKPOINT);
+
+        Duration longevity = parseLongevity(cmd);
+
+        LongevityApp la = new LongevityApp(longevity, 10, configurationString, checkPoint);
+        LongevityApp.ExitStatus exitStatus = la.runLongevityTest();
+
+        System.exit(exitStatus.getCode());
+    }
+
+    private static Duration parseLongevity(CommandLine cmd) {
         Duration longevity;
 
+        long amountTimeValue = Long.parseLong(cmd.getOptionValue(TIME_AMOUNT));
+        String timeUnitValue = cmd.getOptionValue(TIME_UNIT);
         switch (timeUnitValue) {
             case "s":
                 longevity = Duration.ofSeconds(amountTimeValue);
@@ -92,10 +101,6 @@ public class LongevityRun {
                 longevity = Duration.ofHours(1);
                 break;
         }
-
-        LongevityApp la = new LongevityApp(longevity, 10, configurationString, checkPoint);
-        LongevityApp.ExitStatus exitStatus = la.runLongevityTest();
-
-        System.exit(exitStatus.getCode());
+        return longevity;
     }
 }
