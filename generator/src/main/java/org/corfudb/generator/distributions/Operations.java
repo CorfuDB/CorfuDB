@@ -20,16 +20,15 @@ import java.util.List;
  */
 public class Operations implements DataSet<Operation> {
 
-    private final List<Operation> allOperations;
+    private final List<Operation.Type> allOperations;
+    private final State state;
 
     public Operations(State state) {
+        this.state = state;
+
         allOperations = ImmutableList.of(
-                new WriteOperation(state),
-                new ReadOperation(state),
-                new OptimisticTxOperation(state),
-                new SnapshotTxOperation(state),
-                new SleepOperation(state),
-                new RemoveOperation(state)
+                Operation.Type.WRITE, Operation.Type.READ, Operation.Type.TX_OPTIMISTIC,
+                Operation.Type.TX_SNAPSHOT, Operation.Type.SLEEP, Operation.Type.REMOVE
         );
     }
 

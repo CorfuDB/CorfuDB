@@ -1,5 +1,7 @@
 package org.corfudb.generator;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
@@ -29,7 +31,7 @@ import java.util.concurrent.TimeUnit;
 public class LongevityApp {
 
     private final boolean checkPoint;
-    private  final BlockingQueue<Operation> operationQueue;
+    private final BlockingQueue<Operation> operationQueue;
     private final CorfuRuntime rt;
     private final State state;
 
@@ -39,8 +41,8 @@ public class LongevityApp {
 
     // How much time we live the application hangs once the duration is finished
     // and the application is hanged
-    public static final int APPLICATION_TIMEOUT_IN_MS = 10000;
-    public static final long TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT = 60000;
+    public static final Duration APPLICATION_TIMEOUT = Duration.ofSeconds(10);
+    public static final Duration TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT = Duration.ofMinutes(1);
 
     private static final int QUEUE_CAPACITY = 1000;
 
@@ -61,7 +63,7 @@ public class LongevityApp {
         try {
             tryToConnectTimeout(TIME_TO_WAIT_FOR_RUNTIME_TO_CONNECT);
         } catch (SystemUnavailableError e) {
-            System.exit(1);
+            System.exit(ExitStatus.ERROR.getCode());
         }
 
 
@@ -71,6 +73,23 @@ public class LongevityApp {
 
         workers = Executors.newFixedThreadPool(numberThreads);
         checkpointer = Executors.newScheduledThreadPool(1);
+    }
+
+    public ExitStatus runLongevityTest() {
+        startTime = System.currentTimeMillis();
+
+        new UpdateVersionHandler().handle(state);
+
+        if (checkPoint) {
+            runCpTrimTask();
+        }
+
+        runTaskProducer();
+        runTaskConsumers();
+
+        ExitStatus exitStatus = waitForAppToFinish();
+
+        return exitStatus;
     }
 
     /**
@@ -84,35 +103,39 @@ public class LongevityApp {
      * is not playing nice with Interrupted exceptions (which can be a bug as well), this is the only way to
      * be sure we terminate.
      */
-    private void waitForAppToFinish() {
+    private ExitStatus waitForAppToFinish() {
+        ExitStatus exitStatus;
+
         workers.shutdown();
+
         try {
-            long timeout = duration.plusMillis(APPLICATION_TIMEOUT_IN_MS).toMillis();
+            long timeout = duration.plus(APPLICATION_TIMEOUT).toMillis();
             boolean finishedInTime = workers.awaitTermination(timeout, TimeUnit.MILLISECONDS);
-
-            String livenessState = state.getCtx().livenessSuccess(finishedInTime) ? "Success" : "Fail";
-
-            Correctness.recordOperation("Liveness, " + livenessState, false);
-            if (!finishedInTime) {
-                System.exit(1);
-            }
-        } catch (InterruptedException e) {
-            throw new UnrecoverableCorfuInterruptedError(e);
-        } finally {
-            taskProducer.shutdownNow();
-            checkpointer.shutdownNow();
-
-            boolean checkpointHasFinished = false;
-            int exitStatus;
-            try {
-                checkpointHasFinished = checkpointer.awaitTermination(APPLICATION_TIMEOUT_IN_MS, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                //ignore
-            }
-
-            exitStatus = checkpointHasFinished ? 0 : 1;
-            System.exit(exitStatus);
+            exitStatus = ExitStatus.fromBool(finishedInTime);
+        } catch (Exception e) {
+            exitStatus = ExitStatus.ERROR;
         }
+
+        String livenessState = state.getCtx().livenessSuccess(exitStatus.toBool()) ? "Success" : "Fail";
+
+        Correctness.recordOperation("Liveness, " + livenessState, false);
+
+        taskProducer.shutdownNow();
+        checkpointer.shutdownNow();
+
+        if (exitStatus == ExitStatus.ERROR) {
+            return ExitStatus.ERROR;
+        }
+
+        try {
+            long timeout = APPLICATION_TIMEOUT.toMillis();
+            boolean checkpointHasFinished = checkpointer.awaitTermination(timeout, TimeUnit.MILLISECONDS);
+            exitStatus = ExitStatus.fromBool(checkpointHasFinished);
+        } catch (Exception e) {
+            exitStatus = ExitStatus.ERROR;
+        }
+
+        return exitStatus;
     }
 
     /**
@@ -186,31 +209,35 @@ public class LongevityApp {
      * Try to connect the runtime and throws a SystemUnavailableError if cannot connect
      * within the timeout.
      *
-     * @param timeoutInMs timeout
+     * @param timeout timeout
      * @throws SystemUnavailableError error
      */
-    private void tryToConnectTimeout(long timeoutInMs) throws SystemUnavailableError {
+    private void tryToConnectTimeout(Duration timeout) throws SystemUnavailableError {
         try {
-            CompletableFuture.supplyAsync(rt::connect).get(timeoutInMs, TimeUnit.MILLISECONDS);
+            CompletableFuture.supplyAsync(rt::connect).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (Exception e) {
             Correctness.recordOperation("Liveness, " + false, false);
             throw new SystemUnavailableError(e.getMessage());
         }
     }
 
+    @AllArgsConstructor
+    public enum ExitStatus {
+        OK(0), ERROR(1);
 
-    public void runLongevityTest() {
-        startTime = System.currentTimeMillis();
+        @Getter
+        private final int code;
 
-        new UpdateVersionHandler().handle(state);
-
-        if (checkPoint) {
-            runCpTrimTask();
+        public static ExitStatus fromBool(boolean boolStatus) {
+            if (boolStatus) {
+                return ExitStatus.OK;
+            } else {
+                return ExitStatus.ERROR;
+            }
         }
 
-        runTaskProducer();
-        runTaskConsumers();
-
-        waitForAppToFinish();
+        public boolean toBool() {
+            return this == OK;
+        }
     }
 }

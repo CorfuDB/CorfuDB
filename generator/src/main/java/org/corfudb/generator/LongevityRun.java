@@ -46,7 +46,6 @@ public class LongevityRun {
         options.addOption(corfuEndpoint);
         options.addOption(checkPointFlag);
 
-
         CommandLineParser parser = new DefaultParser();
         HelpFormatter formatter = new HelpFormatter();
         CommandLine cmd;
@@ -63,7 +62,7 @@ public class LongevityRun {
             log.info(e.getMessage());
             formatter.printHelp("longevity", options);
 
-            System.exit(1);
+            System.exit(LongevityApp.ExitStatus.ERROR.getCode());
             return;
         }
 
@@ -95,6 +94,8 @@ public class LongevityRun {
         }
 
         LongevityApp la = new LongevityApp(longevity, 10, configurationString, checkPoint);
-        la.runLongevityTest();
+        LongevityApp.ExitStatus exitStatus = la.runLongevityTest();
+
+        System.exit(exitStatus.getCode());
     }
 }

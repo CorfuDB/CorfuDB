@@ -20,9 +20,11 @@ import java.util.Optional;
 @Slf4j
 public class ReadOperation extends Operation {
     private final Context context;
+    private boolean keyFromTx;
 
     public ReadOperation(State state) {
         super(state, Type.READ);
+
         StreamId streamId = state.getStreams().sample();
         KeyId key = state.getKeys().sample();
         this.context = Context.builder()
@@ -37,13 +39,6 @@ public class ReadOperation extends Operation {
         String logMessage = context.getCorrectnessRecord(opType.getOpType());
         Correctness.recordOperation(logMessage, TransactionalContext.isInTransaction());
 
-        if (TransactionalContext.isInTransaction()) {
-            //transactional read
-            addToHistoryTransactional();
-        } else {
-
-        }
-
         // Accessing secondary objects
         CorfuTable<String, String> corfuMap = state.getMap(context.getStreamId());
 
@@ -52,10 +47,15 @@ public class ReadOperation extends Operation {
 
         context.setVersion(Correctness.getVersion());
 
-        addToHistory();
-
         if (!TransactionalContext.isInTransaction()) {
             state.getCtx().updateLastSuccessfulReadOperationTimestamp();
+        }
+
+        if (TransactionalContext.isInTransaction()) {
+            //transactional read
+            addToHistoryTransactional();
+        } else {
+            addToHistory();
         }
     }
 
@@ -69,7 +69,7 @@ public class ReadOperation extends Operation {
         TxState.TxContext txContext = state.getTransactions().get(ThreadName.buildFromCurrentThread());
         txContext.setVersion(context.getVersion());
 
-        boolean txVal = txContext.contains(context.getFqKey());
+        keyFromTx = txContext.contains(context.getFqKey());
 
         if (!context.getVersion().equals(txContext.getVersion())){
             throw new IllegalStateException("Inconsistent state");

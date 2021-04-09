@@ -12,12 +12,14 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionType;
 
+import java.time.Duration;
+import java.time.Period;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 
-import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT_IN_MS;
+import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT;
 import static org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
 import static org.corfudb.generator.distributions.Streams.StreamId;
 import static org.corfudb.generator.state.KeysState.VersionedKey;
@@ -172,13 +174,14 @@ public class State {
                 return false;
             }
 
-            long timeSinceSuccessfulReadOperation = System.currentTimeMillis()
-                    - lastSuccessfulReadOperationTimestamp;
-            long timeSinceSuccessfulWriteOperation = System.currentTimeMillis()
-                    - lastSuccessfulWriteOperationTimestamp;
+            long currentTime = System.currentTimeMillis();
 
-            return (timeSinceSuccessfulReadOperation < APPLICATION_TIMEOUT_IN_MS
-                    && timeSinceSuccessfulWriteOperation < APPLICATION_TIMEOUT_IN_MS);
+            Duration readOpDuration = Duration.ofMillis(currentTime - lastSuccessfulReadOperationTimestamp);
+            Duration writeOpDuration = Duration.ofMillis(currentTime - lastSuccessfulWriteOperationTimestamp);
+
+            long appTimeout = APPLICATION_TIMEOUT.toMillis();
+
+            return readOpDuration.toMillis() < appTimeout && writeOpDuration.toMillis() < appTimeout;
         }
     }
 
