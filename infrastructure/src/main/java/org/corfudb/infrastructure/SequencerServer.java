@@ -380,7 +380,7 @@ public class SequencerServer extends AbstractServer {
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
         ResponseMsg response = getResponseMsg(
-                req.getHeader(),
+                getHeaderMsg(req.getHeader()),
                 getTokenResponseMsg(TokenType.NORMAL,
                         TokenResponse.NO_CONFLICT_KEY,
                         TokenResponse.NO_CONFLICT_STREAM,
@@ -458,7 +458,7 @@ public class SequencerServer extends AbstractServer {
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases.
-            r.sendResponse(getResponseMsg(req.getHeader(),
+            r.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
                     getBootstrapSequencerResponseMsg(false)), ctx);
             return;
         }
@@ -472,7 +472,7 @@ public class SequencerServer extends AbstractServer {
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases.
-            r.sendResponse(getResponseMsg(req.getHeader(),
+            r.sendResponse(getResponseMsg(getHeaderMsg(req.getHeader()),
                     getBootstrapSequencerResponseMsg(false)), ctx);
             return;
         }
@@ -558,7 +558,7 @@ public class SequencerServer extends AbstractServer {
         // sequencer is in a ready state.
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        ResponseMsg response = getResponseMsg(req.getHeader(),
+        ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()),
                 getSequencerMetricsResponseMsg(new SequencerMetrics(SequencerStatus.READY)));
 
         r.sendResponse(response, ctx);
@@ -614,7 +614,7 @@ public class SequencerServer extends AbstractServer {
 
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
-        ResponseMsg response = getResponseMsg(req.getHeader(),
+        ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()),
                 getTokenResponseMsg(token, Collections.emptyMap()));
         r.sendResponse(response, ctx);
     }
@@ -649,7 +649,7 @@ public class SequencerServer extends AbstractServer {
 
             // Note: we reuse the request header as the ignore_cluster_id and
             // ignore_epoch fields are the same in both cases.
-            ResponseMsg response = getResponseMsg(req.getHeader(), getTokenResponseMsg(
+            ResponseMsg response = getResponseMsg(getHeaderMsg(req.getHeader()), getTokenResponseMsg(
                     txResolutionResponse.getTokenType(),
                     txResolutionResponse.getConflictingKey(),
                     txResolutionResponse.getConflictingStream(),
@@ -735,7 +735,7 @@ public class SequencerServer extends AbstractServer {
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
         ResponseMsg response = getResponseMsg(
-                req.getHeader(), getTokenResponseMsg(newToken, backPointerMap.build()));
+                getHeaderMsg(req.getHeader()), getTokenResponseMsg(newToken, backPointerMap.build()));
         r.sendResponse(response, ctx);
     }
 
@@ -777,7 +777,7 @@ public class SequencerServer extends AbstractServer {
         // Note: we reuse the request header as the ignore_cluster_id and
         // ignore_epoch fields are the same in both cases.
         ResponseMsg response = getResponseMsg(
-                req.getHeader(),
+                getHeaderMsg(req.getHeader()),
                 getStreamsAddressResponseMsg(
                         streamsAddressResponse.getLogTail(),
                         streamsAddressResponse.getEpoch(),

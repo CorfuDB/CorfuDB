@@ -1,13 +1,11 @@
 package org.corfudb.runtime.clients;
 
 import io.netty.channel.ChannelHandlerContext;
-import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
 import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.exceptions.AlreadyBootstrappedException;
 import org.corfudb.runtime.exceptions.NoBootstrapException;
 import org.corfudb.runtime.exceptions.ServerNotReadyException;
@@ -34,7 +32,6 @@ import static org.corfudb.protocols.service.CorfuProtocolBase.getPingResponseMsg
 import static org.corfudb.protocols.service.CorfuProtocolBase.getResetResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getRestartResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolBase.getSealResponseMsg;
-import static org.corfudb.protocols.service.CorfuProtocolBase.getVersionResponseMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getResponseMsg;
 import static org.junit.Assert.assertEquals;
@@ -153,29 +150,6 @@ public class BaseHandlerTest {
         // and that we did not complete exceptionally.
         verify(mockClientRouter, never()).completeExceptionally(anyLong(), any(Throwable.class));
         verify(mockClientRouter).completeRequest(response.getHeader().getRequestId(), true);
-    }
-
-    /**
-     * Test that the BaseHandler correctly handles a VERSION_RESPONSE.
-     */
-    @Test
-    public void testHandleVersionResponse() {
-        ResponseMsg response = getResponseMsg(
-                getBasicHeader(ClusterIdCheck.CHECK, EpochCheck.IGNORE),
-                getVersionResponseMsg(new VersionInfo(Collections.singletonMap("--address", "localhost"), "localhost"))
-        );
-
-        ArgumentCaptor<VersionInfo> versionInfoCaptor = ArgumentCaptor.forClass(VersionInfo.class);
-        baseHandler.handleMessage(response, mockChannelHandlerContext);
-
-        // Verify that the correct request was completed (once) with the appropriate value,
-        // and that we did not complete exceptionally.
-        verify(mockClientRouter, never()).completeExceptionally(anyLong(), any(Throwable.class));
-        verify(mockClientRouter).completeRequest(eq(response.getHeader().getRequestId()), versionInfoCaptor.capture());
-
-        assertEquals("localhost", versionInfoCaptor.getValue().getNodeId());
-        assertEquals(1, versionInfoCaptor.getValue().getOptionsMap().size());
-        assertEquals("localhost", versionInfoCaptor.getValue().getOptionsMap().get("--address"));
     }
 
     /**
