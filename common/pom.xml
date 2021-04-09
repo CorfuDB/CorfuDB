@@ -28,8 +28,8 @@
         </dependency>
         <dependency>
             <groupId>io.micrometer</groupId>
-            <artifactId>micrometer-registry-prometheus</artifactId>
-            <version>1.5.5</version>
+            <artifactId>micrometer-registry-wavefront</artifactId>
+            <version>1.6.5</version>
         </dependency>
         <dependency>
             <groupId>net.jpountz.lz4</groupId>

@@ -1,10 +1,13 @@
 package org.corfudb.common.metrics.micrometer;
 
+import io.micrometer.core.instrument.Clock;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.logging.LoggingRegistryConfig;
+import io.micrometer.wavefront.WavefrontConfig;
+import io.micrometer.wavefront.WavefrontMeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.registries.LoggingMeterRegistryWithHistogramSupport;
 import org.slf4j.Logger;
@@ -39,26 +42,63 @@ public class MeterRegistryProvider {
          * @param loggingInterval A duration between log appends for every metric.
          * @param identifier      A global identifier to tag every metric with.
          */
-        public static synchronized void init(Logger logger, Duration loggingInterval, String identifier) {
+        public static synchronized void initLoggingRegistry(Logger logger, Duration loggingInterval,
+                                                            String identifier) {
             Supplier<Optional<MeterRegistry>> supplier = () -> {
                 LoggingRegistryConfig config = new IntervalLoggingConfig(loggingInterval);
                 LoggingMeterRegistryWithHistogramSupport registry =
                         new LoggingMeterRegistryWithHistogramSupport(config, logger::debug);
-                registry.config().commonTags("id", identifier);
-                id = Optional.of(identifier);
-                Optional<MeterRegistry> ret = Optional.of(registry);
-                JVMMetrics.register(ret);
-                return ret;
+                return Optional.of(registry);
             };
 
-            init(supplier);
+            init(supplier, identifier);
         }
 
-        private static void init(Supplier<Optional<MeterRegistry>> meterRegistrySupplier) {
+        /**
+         * Configure the meter registry of type WavefrontMeterRegistry. All the metrics registered
+         * with this meter registry will be exported to the configured Wavefront proxy.
+         *
+         * @param config          A config for Wavefront proxy.
+         * @param identifier      A global identifier to tag every metric with.
+         */
+        public static synchronized void initWavefrontRegistry(WavefrontProxyConfig config,
+                                                              String identifier) {
+            Supplier<WavefrontConfig> wavefrontConfigSupplier = () -> new WavefrontConfig() {
+                @Override
+                public String uri() {
+                    return String.format("proxy://%s:%s", config.getHost(), config.getPort());
+                }
+
+                @Override
+                public String get(String key) {
+                    return null;
+                }
+
+                @Override
+                public String apiToken() {
+                    return config.getApiToken();
+                }
+            };
+            Supplier<Optional<MeterRegistry>> supplier = () -> {
+                MeterRegistry registry =
+                        new WavefrontMeterRegistry(wavefrontConfigSupplier.get(), Clock.SYSTEM);
+                return Optional.of(registry);
+            };
+
+            init(supplier, identifier);
+        }
+
+        private static void init(Supplier<Optional<MeterRegistry>> meterRegistrySupplier,
+                                 String identifier) {
             if (meterRegistry.isPresent()) {
-               log.warn("Registry has already been initialized.");
+                log.warn("Registry has already been initialized.");
             }
-            meterRegistry = meterRegistrySupplier.get();
+            else {
+                meterRegistry = meterRegistrySupplier.get();
+                meterRegistry.ifPresent(registry -> registry.config().commonTags("id", identifier));
+                JVMMetrics.register(meterRegistry);
+                id = Optional.of(identifier);
+            }
         }
     }
 
