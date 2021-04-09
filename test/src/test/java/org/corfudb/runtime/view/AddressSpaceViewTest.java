@@ -11,17 +11,19 @@ import com.google.common.collect.Range;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.common.util.Memory;
 import org.corfudb.infrastructure.LogUnitServerAssertions;
 import org.corfudb.infrastructure.TestLayoutBuilder;
+import org.corfudb.protocols.logprotocol.CheckpointEntry;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.runtime.view.stream.IStreamView;
 import org.junit.Test;
 
 /**
@@ -70,6 +72,46 @@ public class AddressSpaceViewTest extends AbstractViewTest {
 
         assertThatThrownBy(() -> rt.getAddressSpaceView())
                 .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
+    public void checkpointEntryNotCached() {
+        setupNodes();
+        final int oneMb = 1_000_000;
+
+        CorfuRuntime.CorfuRuntimeParameters params = CorfuRuntime.CorfuRuntimeParameters
+                .builder()
+                .maxCacheEntries(oneMb)
+                .build();
+
+        CorfuRuntime rt = CorfuRuntime.fromParameters(params)
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        CorfuRuntime checkpointRt = CorfuRuntime.fromParameters(params)
+                .parseConfigurationString(getDefaultConfigurationString())
+                .connect();
+
+        AddressSpaceView addressSpaceView = rt.getAddressSpaceView();
+
+        // write a checkpoint entry by checkpoint runtime
+        String streamName = "test-stream";
+        UUID streamId = CorfuRuntime.getStreamID(streamName);
+        UUID checkpointId = UUID.randomUUID();
+        IStreamView sv = checkpointRt.getStreamsView().get(streamId);
+        long address = checkpointRt.getSequencerView().query(streamId);
+        Map<CheckpointEntry.CheckpointDictKey, String> mdKV = new HashMap<>();
+        mdKV.put(CheckpointEntry.CheckpointDictKey.START_TIME, "The perfect time");
+        mdKV.put(CheckpointEntry.CheckpointDictKey.START_LOG_ADDRESS, Long.toString(address + 1));
+        CheckpointEntry cp1 = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
+                "checkpointAuthor", checkpointId, streamId, mdKV, null);
+        long cpAddress = sv.append(cp1, null, null);
+
+        // read the cp entry
+        ILogData ldRead = addressSpaceView.read(cpAddress);
+        assertThat(ldRead).isNotNull();
+        ILogData ldCache = addressSpaceView.getReadCache().getIfPresent(cpAddress);
+        assertThat(ldCache).isNull();
     }
 
     @Test
