@@ -17,6 +17,7 @@ import java.util.Optional;
  * A definition of a generic operation that the generator can execute.
  */
 public abstract class Operation {
+    @Getter
     protected final State state;
     @Getter
     protected final Operation.Type opType;
@@ -27,6 +28,8 @@ public abstract class Operation {
     }
 
     public abstract void execute();
+
+    public abstract Operation.Context getContext();
 
     /**
      * Operation context keeps an operation state and data, and can be used by other parts of the application
@@ -59,7 +62,8 @@ public abstract class Operation {
     @AllArgsConstructor
     public enum Type {
         READ("Read"), REMOVE("Rm"), SLEEP("Sleep"), WRITE("Write"), 
-        TX_NESTED("TxNest"), TX_OPTIMISTIC("TxOpt"), TX_SNAPSHOT("TxSnap"), TX_WAW("TxWaw");
+        TX_NESTED("TxNest"), TX_OPTIMISTIC("TxOpt"), TX_SNAPSHOT("TxSnap"), TX_WAW("TxWaw"),
+        CHECKPOINT("Checkpoint");
 
         @Getter
         private final String opType;

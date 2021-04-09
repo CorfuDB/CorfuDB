@@ -21,14 +21,14 @@ public class NestedTxOperation extends AbstractTxOperation {
     @Override
     public void execute() {
         Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_START);
-        state.startOptimisticTx();
+        startOptimisticTx();
 
         int numNested = state.getOperationCount().sample();
         int nestedTxToStop = numNested;
 
         for (int i = 0; i < numNested && i < MAX_NEST; i++) {
             try {
-                state.startOptimisticTx();
+                startOptimisticTx();
                 executeOperations();
             } catch (TransactionAbortedException tae) {
                 log.warn("Transaction Aborted", tae);
@@ -37,11 +37,11 @@ public class NestedTxOperation extends AbstractTxOperation {
         }
 
         for (int i = 0; i < nestedTxToStop; i++) {
-            state.stopTx();
+            stopTx();
         }
         long timestamp;
         try {
-            timestamp = state.stopTx();
+            timestamp = stopTx();
             Correctness.recordTransactionMarkers(true, opType.getOpType(), Correctness.TX_END,
                     Long.toString(timestamp));
         } catch (TransactionAbortedException tae) {

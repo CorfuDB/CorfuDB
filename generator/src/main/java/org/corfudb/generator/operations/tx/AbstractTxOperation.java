@@ -27,4 +27,12 @@ public abstract class AbstractTxOperation extends Operation {
             operation.execute();
         }
     }
+
+    protected long stopTx() {
+        return state.getRuntime().getObjectsView().TXEnd();
+    }
+
+    protected void startOptimisticTx() {
+        state.getRuntime().getObjectsView().TXBegin();
+    }
 }

@@ -23,11 +23,11 @@ public class OptimisticTxOperation extends AbstractTxOperation {
         try {
             Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_START);
             long timestamp;
-            state.startOptimisticTx();
+            startOptimisticTx();
 
             executeOperations();
 
-            timestamp = state.stopTx();
+            timestamp = stopTx();
 
             Correctness.recordTransactionMarkers(true, opType.getOpType(), Correctness.TX_END,
                     Long.toString(timestamp));

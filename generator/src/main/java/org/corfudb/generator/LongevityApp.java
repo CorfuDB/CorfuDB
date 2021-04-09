@@ -3,6 +3,9 @@ package org.corfudb.generator;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.distributions.Operations;
+import org.corfudb.generator.distributions.Streams;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.operations.UpdateVersionHandler;
@@ -38,6 +41,8 @@ public class LongevityApp {
 
     private final CorfuRuntime rt;
     private final State state;
+    private final State.CorfuTablesGenerator tablesManager;
+    private final Operations operations;
 
     private final ExecutorService taskProducer;
     private final ScheduledExecutorService checkpointer;
@@ -71,8 +76,15 @@ public class LongevityApp {
             System.exit(ExitStatus.ERROR.getCode());
         }
 
+        Streams streams = new Streams(50);
+        Keys keys = new Keys(50);
+        streams.populate();
+        keys.populate();
 
-        state = new State(50, 50, rt);
+        tablesManager = new State.CorfuTablesGenerator(rt, streams);
+        state = new State(streams, keys);
+        operations = new Operations(state);
+        operations.populate();
 
         taskProducer = Executors.newSingleThreadExecutor();
 
@@ -174,7 +186,7 @@ public class LongevityApp {
     private void runTaskProducer() {
         taskProducer.execute(() -> {
             while (true) {
-                Operation current = state.getOperations().getRandomOperation();
+                Operation current = operations.getRandomOperation();
                 try {
                     operationQueue.put(current);
                 } catch (InterruptedException e) {

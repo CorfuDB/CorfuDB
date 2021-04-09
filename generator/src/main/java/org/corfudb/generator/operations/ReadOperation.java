@@ -20,17 +20,19 @@ import java.util.Optional;
 @Slf4j
 public class ReadOperation extends Operation {
     private final Context context;
+    private final State.CorfuTablesGenerator tableManager;
     private boolean keyFromTx;
 
-    public ReadOperation(State state) {
+    public ReadOperation(State state, State.CorfuTablesGenerator tableManager) {
         super(state, Type.READ);
+        this.tableManager = tableManager;
 
         StreamId streamId = state.getStreams().sample();
         KeyId key = state.getKeys().sample();
         this.context = Context.builder()
                 .streamId(streamId)
                 .key(key)
-                .val(Optional.ofNullable(state.getMap(streamId).get(key.getKey())))
+                .val(Optional.ofNullable(tableManager.getMap(streamId).get(key.getKey())))
                 .build();
     }
 
@@ -40,7 +42,7 @@ public class ReadOperation extends Operation {
         Correctness.recordOperation(logMessage, TransactionalContext.isInTransaction());
 
         // Accessing secondary objects
-        CorfuTable<String, String> corfuMap = state.getMap(context.getStreamId());
+        CorfuTable<String, String> corfuMap = tableManager.getMap(context.getStreamId());
 
         corfuMap.getByIndex(StringIndexer.BY_FIRST_CHAR, "a");
         corfuMap.getByIndex(StringIndexer.BY_VALUE, context.getVal());

@@ -10,14 +10,11 @@ import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.object.transactions.TransactionType;
 
 import java.time.Duration;
-import java.time.Period;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Random;
 
 import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT;
 import static org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
@@ -46,99 +43,65 @@ public class State {
     private final OperationCount operationCount;
 
     @Getter
-    private final Operations operations;
-
-    @Getter
-    private final CorfuRuntime runtime;
-
-    private final Map<StreamId, CorfuTable<String, String>> maps;
-
-    @Getter
     private final StateContext ctx = new StateContext();
 
-    public State(int numStreams, int numKeys, CorfuRuntime rt) {
+    public State(Streams streams, Keys keys) {
 
-        streams = new Streams(numStreams);
+        this.streams = streams;
+        this.keys = keys;
 
-        keys = new Keys(numKeys);
-        maps = new HashMap<>();
         keysState = new KeysState();
         transactions = TxState.builder().build();
 
         operationCount = new OperationCount();
 
-        this.runtime = rt;
-
-        operations = new Operations(this);
-
-        streams.populate();
-        keys.populate();
-
         operationCount.populate();
-        operations.populate();
-
-        openObjects();
     }
 
     public VersionedKey getKey(FullyQualifiedKey fqKey) {
         return keysState.get(fqKey);
     }
 
+    public static class CorfuTablesGenerator {
 
-    public void updateTrimMark(Token newTrimMark) {
-        if (newTrimMark.compareTo(ctx.trimMark) > 0) {
-            ctx.trimMark = newTrimMark;
+        private final Map<StreamId, CorfuTable<String, String>> maps;
+        private final Streams streams;
+        @Getter
+        private final CorfuRuntime runtime;
+
+        public CorfuTablesGenerator(CorfuRuntime rt, Streams streams){
+            this.maps = new HashMap<>();
+            this.runtime = rt;
+            this.streams = streams;
+
+            openObjects();
         }
-    }
 
-    private void openObjects() {
-        for (StreamId streamId : streams.getDataSet()) {
-            CorfuTable<String, String> map = runtime.getObjectsView()
-                    .build()
-                    .setStreamID(streamId.getStreamId())
-                    .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                    })
-                    .setArguments(new StringIndexer())
-                    .open();
+        private void openObjects() {
+            for (StreamId streamId : streams.getDataSet()) {
+                CorfuTable<String, String> map = runtime.getObjectsView()
+                        .build()
+                        .setStreamID(streamId.getStreamId())
+                        .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
+                        })
+                        .setArguments(new StringIndexer())
+                        .open();
 
-            maps.put(streamId, map);
+                maps.put(streamId, map);
+            }
         }
-    }
 
-    public CorfuTable<String, String> getMap(StreamId streamId) {
-        CorfuTable<String, String> map = maps.get(streamId);
-        if (map == null) {
-            throw new IllegalStateException("Map doesn't exist");
+        public CorfuTable<String, String> getMap(StreamId streamId) {
+            CorfuTable<String, String> map = maps.get(streamId);
+            if (map == null) {
+                throw new IllegalStateException("Map doesn't exist");
+            }
+            return map;
         }
-        return map;
-    }
 
-    public Collection<CorfuTable<String, String>> getMaps() {
-        return maps.values();
-    }
-
-    public void startOptimisticTx() {
-        runtime.getObjectsView().TXBegin();
-    }
-
-    public long stopTx() {
-        return runtime.getObjectsView().TXEnd();
-    }
-
-    public void startSnapshotTx() {
-        runtime.getObjectsView()
-                .TXBuild()
-                .type(TransactionType.SNAPSHOT)
-                .build()
-                .begin();
-    }
-
-    public void startWriteAfterWriteTx() {
-        runtime.getObjectsView()
-                .TXBuild()
-                .type(TransactionType.WRITE_AFTER_WRITE)
-                .build()
-                .begin();
+        public Collection<CorfuTable<String, String>> getMaps() {
+            return maps.values();
+        }
     }
 
     public static class StateContext {
@@ -147,9 +110,6 @@ public class State {
 
         @Getter
         private volatile long lastSuccessfulWriteOperationTimestamp = -1;
-
-        @Getter
-        private volatile Token trimMark = Token.UNINITIALIZED;
 
         public void updateLastSuccessfulReadOperationTimestamp() {
             lastSuccessfulReadOperationTimestamp = System.currentTimeMillis();

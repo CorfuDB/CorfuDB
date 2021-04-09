@@ -1,5 +1,6 @@
 package org.corfudb.generator.operations;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.state.State;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -16,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 public class CheckpointOperation extends Operation {
 
     public CheckpointOperation(State state) {
-        super(state, "Checkpoint");
+        super(state, Operation.Type.CHECKPOINT);
     }
 
     @Override
@@ -25,7 +26,7 @@ public class CheckpointOperation extends Operation {
             MultiCheckpointWriter<CorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();
             mcw.addAllMaps(state.getMaps());
             Token trimAddress = mcw.appendCheckpoints(state.getRuntime(), "generator");
-            state.updateTrimMark(trimAddress);
+
             TimeUnit.SECONDS.sleep(30);
 
             AddressSpaceView addressSpaceView = state.getRuntime().getAddressSpaceView();

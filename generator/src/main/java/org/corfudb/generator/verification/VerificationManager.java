@@ -15,6 +15,25 @@ public class VerificationManager {
         while (!completedOperations.isEmpty()) {
             Operation op = completedOperations.poll();
 
+            switch (op.getOpType()) {
+                case READ:
+                    new ReadOperationVerification(op.getState(), op.getContext()).verify();
+                    break;
+                case REMOVE:
+                    break;
+                case SLEEP:
+                    break;
+                case WRITE:
+                    break;
+                case TX_NESTED:
+                    break;
+                case TX_OPTIMISTIC:
+                    break;
+                case TX_SNAPSHOT:
+                    break;
+                case TX_WAW:
+                    break;
+            }
         }
 
         return true;

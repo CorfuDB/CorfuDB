@@ -1,5 +1,6 @@
 package org.corfudb.generator.operations;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
 import org.corfudb.generator.state.State;
@@ -13,10 +14,14 @@ import java.util.UUID;
  */
 @Slf4j
 public class WriteOperation extends Operation {
+    @Getter
     private final Context context;
+    private final State.CorfuTablesGenerator tableManager;
 
-    public WriteOperation(State state) {
+    public WriteOperation(State state, State.CorfuTablesGenerator tableManager) {
         super(state, Operation.Type.WRITE);
+        this.tableManager = tableManager;
+
         this.context = Context.builder()
                 .streamId(state.getStreams().sample())
                 .key(state.getKeys().sample())
@@ -28,10 +33,10 @@ public class WriteOperation extends Operation {
     public void execute() {
         // Hack for Transaction writes only
         if (TransactionalContext.isInTransaction()) {
-            state.getMap(context.getStreamId()).put(context.getKey().getKey(), context.getVal().get());
+            tableManager.getMap(context.getStreamId()).put(context.getKey().getKey(), context.getVal().get());
 
             Correctness.recordOperation(
-                    context.getCorrectnessRecord(operationType.getOpType()),
+                    context.getCorrectnessRecord(opType.getOpType()),
                     TransactionalContext.isInTransaction()
             );
 

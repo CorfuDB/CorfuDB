@@ -28,4 +28,9 @@ public class SleepOperation extends Operation {
             throw new UnrecoverableCorfuInterruptedError(e);
         }
     }
+
+    @Override
+    public Context getContext() {
+        throw new UnsupportedOperationException("Sleep operation doesn't have context");
+    }
 }

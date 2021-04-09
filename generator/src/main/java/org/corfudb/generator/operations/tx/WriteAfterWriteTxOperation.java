@@ -4,9 +4,10 @@ import org.corfudb.generator.Correctness;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
+import org.corfudb.runtime.object.transactions.TransactionType;
 
 /**
- * Created by rmichoud on 10/6/17.
+ * Write after write transaction operation
  */
 public class WriteAfterWriteTxOperation extends AbstractTxOperation {
 
@@ -18,16 +19,23 @@ public class WriteAfterWriteTxOperation extends AbstractTxOperation {
     public void execute() {
         Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_START);
         long timestamp;
-        state.startWriteAfterWriteTx();
+        startWriteAfterWriteTx();
 
         executeOperations();
         try {
-            timestamp = state.stopTx();
+            timestamp = stopTx();
             Correctness.recordTransactionMarkers(true, opType.getOpType(), Correctness.TX_END,
                     Long.toString(timestamp));
         } catch (TransactionAbortedException tae) {
             Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_ABORTED);
         }
+    }
 
+    public void startWriteAfterWriteTx() {
+        state.getRuntime().getObjectsView()
+                .TXBuild()
+                .type(TransactionType.WRITE_AFTER_WRITE)
+                .build()
+                .begin();
     }
 }

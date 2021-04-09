@@ -1,5 +1,6 @@
 package org.corfudb.generator.operations;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
 import org.corfudb.generator.state.KeysState;
@@ -17,10 +18,13 @@ import static org.corfudb.generator.distributions.Streams.StreamId;
 @Slf4j
 public class RemoveOperation extends Operation {
 
+    @Getter
     private final Operation.Context context;
+    private final State.CorfuTablesGenerator tableManager;
 
-    public RemoveOperation(State state) {
+    public RemoveOperation(State state, State.CorfuTablesGenerator tableManager) {
         super(state, Type.REMOVE);
+        this.tableManager = tableManager;
 
         StreamId streamId = state.getStreams().sample();
         KeyId key = state.getKeys().sample();
@@ -34,11 +38,11 @@ public class RemoveOperation extends Operation {
     public void execute() {
         // Hack for Transaction writes only
         if (TransactionalContext.isInTransaction()) {
-            state.getMap(context.getStreamId()).remove(context.getKey().getKey());
+            tableManager.getMap(context.getStreamId()).remove(context.getKey().getKey());
 
             String correctnessRecord = String.format(
                     "%s, %s:%s",
-                    operationType.getOpType(), context.getStreamId(), context.getKey().getKey()
+                    opType.getOpType(), context.getStreamId(), context.getKey().getKey()
             );
             Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
 
