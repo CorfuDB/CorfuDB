@@ -53,4 +53,5 @@
     <logger additivity="false" level="debug" name="org.corfudb.metricsdata">
         <appender-ref ref="async_metrics_file"/>
     </logger>
+    <logger name="org.corfudb.client.metricsdata" level="off" />
 </configuration>
