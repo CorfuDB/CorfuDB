@@ -2,8 +2,10 @@ package org.corfudb.generator.operations.tx;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
+import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
+import org.corfudb.generator.state.State.CorfuTablesGenerator;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
@@ -14,8 +16,8 @@ import org.corfudb.runtime.view.Address;
 @Slf4j
 public class OptimisticTxOperation extends AbstractTxOperation {
 
-    public OptimisticTxOperation(State state) {
-        super(state, Operation.Type.TX_OPTIMISTIC);
+    public OptimisticTxOperation(State state, Operations operations, CorfuTablesGenerator tablesManager) {
+        super(state, Operation.Type.TX_OPTIMISTIC, operations, tablesManager);
     }
 
     @Override
@@ -44,5 +46,10 @@ public class OptimisticTxOperation extends AbstractTxOperation {
             }
             Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_ABORTED);
         }
+    }
+
+    @Override
+    public Context getContext() {
+        throw new UnsupportedOperationException("No context data");
     }
 }

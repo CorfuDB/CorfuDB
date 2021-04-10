@@ -1,7 +1,9 @@
 package org.corfudb.generator.operations.tx;
 
+import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
+import org.corfudb.generator.state.State.CorfuTablesGenerator;
 
 import java.util.List;
 
@@ -10,29 +12,35 @@ import java.util.List;
  */
 public abstract class AbstractTxOperation extends Operation {
 
-    public AbstractTxOperation(State state, Operation.Type operationType) {
+    protected final Operations operations;
+    protected final CorfuTablesGenerator tablesManager;
+
+    public AbstractTxOperation(State state, Operation.Type operationType, Operations operations,
+                               CorfuTablesGenerator tablesManager) {
         super(state, operationType);
+        this.operations = operations;
+        this.tablesManager = tablesManager;
     }
 
     protected void executeOperations() {
         int numOperations = state.getOperationCount().sample();
-        List<Operation> operations = state.getOperations().sample(numOperations);
+        List<Operation.Type> operationTypes = operations.sample(numOperations);
 
-        for (Operation operation : operations) {
-            Type opType = operation.getOpType();
+        for (Operation.Type opType : operationTypes) {
             if (opType == Type.TX_OPTIMISTIC || opType == Type.TX_SNAPSHOT || opType == Type.TX_NESTED) {
                 continue;
             }
 
+            Operation operation = operations.create(opType);
             operation.execute();
         }
     }
 
     protected long stopTx() {
-        return state.getRuntime().getObjectsView().TXEnd();
+        return tablesManager.getRuntime().getObjectsView().TXEnd();
     }
 
     protected void startOptimisticTx() {
-        state.getRuntime().getObjectsView().TXBegin();
+        tablesManager.getRuntime().getObjectsView().TXBegin();
     }
 }

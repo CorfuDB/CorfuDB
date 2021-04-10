@@ -2,10 +2,12 @@ package org.corfudb.generator.operations.tx;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
+import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.operations.RemoveOperation;
 import org.corfudb.generator.operations.WriteOperation;
 import org.corfudb.generator.state.State;
+import org.corfudb.generator.state.State.CorfuTablesGenerator;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 
@@ -17,8 +19,8 @@ import java.util.List;
  */
 @Slf4j
 public class SnapshotTxOperation extends AbstractTxOperation {
-    public SnapshotTxOperation(State state) {
-        super(state, Operation.Type.TX_SNAPSHOT);
+    public SnapshotTxOperation(State state, Operations operations, CorfuTablesGenerator tablesManager) {
+        super(state, Operation.Type.TX_SNAPSHOT, operations, tablesManager);
     }
 
     @Override
@@ -29,18 +31,18 @@ public class SnapshotTxOperation extends AbstractTxOperation {
             startSnapshotTx();
 
             int numOperations = state.getOperationCount().sample();
-            List<Operation> operations = state.getOperations().sample(numOperations);
+            List<Operation.Type> operationTypes = this.operations.sample(numOperations);
 
             EnumSet<Operation.Type> excludedOps = EnumSet.of(
                     Type.TX_OPTIMISTIC, Type.TX_SNAPSHOT, Type.REMOVE, Type.WRITE, Type.TX_NESTED
             );
 
-            for (Operation operation : operations) {
-                if (excludedOps.contains(operation.getOpType())) {
+            for (Operation.Type operationType : operationTypes) {
+                if (excludedOps.contains(operationType)) {
                     continue;
                 }
 
-                operation.execute();
+                operations.create(operationType).execute();
             }
 
             stopTx();
@@ -51,8 +53,13 @@ public class SnapshotTxOperation extends AbstractTxOperation {
         }
     }
 
+    @Override
+    public Context getContext() {
+        throw new UnsupportedOperationException("No context data");
+    }
+
     private void startSnapshotTx() {
-        state.getRuntime().getObjectsView()
+        tablesManager.getRuntime().getObjectsView()
                 .TXBuild()
                 .type(TransactionType.SNAPSHOT)
                 .build()

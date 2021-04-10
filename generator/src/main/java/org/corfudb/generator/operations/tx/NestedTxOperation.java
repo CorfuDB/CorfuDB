@@ -2,8 +2,10 @@ package org.corfudb.generator.operations.tx;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
+import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
+import org.corfudb.generator.state.State.CorfuTablesGenerator;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 
 /**
@@ -14,8 +16,8 @@ public class NestedTxOperation extends AbstractTxOperation {
 
     private static final int MAX_NEST = 20;
 
-    public NestedTxOperation(State state) {
-        super(state, Operation.Type.TX_NESTED);
+    public NestedTxOperation(State state, Operations operations, CorfuTablesGenerator tablesManager) {
+        super(state, Operation.Type.TX_NESTED, operations, tablesManager);
     }
 
     @Override
@@ -47,5 +49,10 @@ public class NestedTxOperation extends AbstractTxOperation {
         } catch (TransactionAbortedException tae) {
             Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_ABORTED);
         }
+    }
+
+    @Override
+    public Context getContext() {
+        throw new UnsupportedOperationException("NestedTx doesn't have operation context");
     }
 }

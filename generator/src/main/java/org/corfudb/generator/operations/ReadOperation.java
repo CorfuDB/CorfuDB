@@ -1,5 +1,6 @@
 package org.corfudb.generator.operations;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
 import org.corfudb.generator.distributions.Keys;
@@ -19,6 +20,7 @@ import java.util.Optional;
  */
 @Slf4j
 public class ReadOperation extends Operation {
+    @Getter
     private final Context context;
     private final State.CorfuTablesGenerator tableManager;
     private boolean keyFromTx;

@@ -1,8 +1,12 @@
 package org.corfudb.generator;
 
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.distributions.Operations;
+import org.corfudb.generator.distributions.Streams;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
+import org.corfudb.generator.state.State.CorfuTablesGenerator;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.ArrayList;
@@ -36,10 +40,18 @@ public class Generator {
 
         CorfuRuntime rt = new CorfuRuntime(endPoint).connect();
 
-        State state = new State(numStreams, numKeys, rt);
+        Streams streams = new Streams(numStreams);
+        Keys keys = new Keys(numKeys);
+        streams.populate();
+        keys.populate();
+
+        CorfuTablesGenerator tablesManager = new CorfuTablesGenerator(rt, streams);
+        State state = new State(streams, keys);
+        Operations operations = new Operations(state, tablesManager);
+        operations.populate();
 
         Runnable cpTrimTask = () -> {
-            Operation op = new CheckpointOperation(state);
+            Operation op = new CheckpointOperation(state, tablesManager);
             op.execute();
         };
 
@@ -49,9 +61,10 @@ public class Generator {
         ExecutorService appWorkers = newWorkStealingPool(numThreads);
 
         Runnable app = () -> {
-            List<Operation> operations = state.getOperations().sample(numOperations);
-            for (Operation operation : operations) {
+            List<Operation.Type> ops = operations.sample(numOperations);
+            for (Operation.Type opType : ops) {
                 try {
+                    Operation operation = operations.create(opType);
                     operation.execute();
                 } catch (Exception ex) {
                     throw new RuntimeException(ex);

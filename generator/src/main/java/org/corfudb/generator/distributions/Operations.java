@@ -43,6 +43,14 @@ public class Operations implements DataSet<Operation.Type> {
 
     public Operation getRandomOperation() {
         Operation.Type opType = allOperations.get(RANDOM.nextInt(allOperations.size()));
+        return create(opType);
+    }
+
+    public List<Operation.Type> getDataSet() {
+        return allOperations;
+    }
+
+    public Operation create(Operation.Type opType) {
         switch (opType) {
             case READ:
                 return new ReadOperation(state, tablesManager);
@@ -51,23 +59,19 @@ public class Operations implements DataSet<Operation.Type> {
             case SLEEP:
                 return new SleepOperation(state);
             case WRITE:
-                return new WriteOperation(state);
+                return new WriteOperation(state, tablesManager);
             case TX_NESTED:
-                return new NestedTxOperation(state);
+                return new NestedTxOperation(state, this, tablesManager);
             case TX_OPTIMISTIC:
-                return new OptimisticTxOperation(state);
+                return new OptimisticTxOperation(state, this, tablesManager);
             case TX_SNAPSHOT:
-                return new SnapshotTxOperation(state);
+                return new SnapshotTxOperation(state, this, tablesManager);
             case TX_WAW:
-                return new WriteAfterWriteTxOperation(state);
+                return new WriteAfterWriteTxOperation(state, this, tablesManager);
             case CHECKPOINT:
-                return new CheckpointOperation(state);
+                return new CheckpointOperation(state, tablesManager);
             default:
                 throw new IllegalStateException("Unexpected type of operation: " + opType);
         }
-    }
-
-    public List<Operation.Type> getDataSet() {
-        return allOperations;
     }
 }

@@ -83,7 +83,7 @@ public class LongevityApp {
 
         tablesManager = new State.CorfuTablesGenerator(rt, streams);
         state = new State(streams, keys);
-        operations = new Operations(state);
+        operations = new Operations(state, tablesManager);
         operations.populate();
 
         taskProducer = Executors.newSingleThreadExecutor();
@@ -229,7 +229,7 @@ public class LongevityApp {
      */
     private void runCpTrimTask() {
         Runnable cpTrimTask = () -> {
-            Operation op = new CheckpointOperation(state);
+            Operation op = new CheckpointOperation(state, tablesManager);
             op.execute();
         };
         checkpointer.scheduleAtFixedRate(cpTrimTask, 30, 20, TimeUnit.SECONDS);
