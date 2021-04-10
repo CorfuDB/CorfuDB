@@ -82,6 +82,8 @@ public class LongevityApp {
         keys.populate();
 
         tablesManager = new State.CorfuTablesGenerator(rt, streams);
+        tablesManager.openObjects();
+
         state = new State(streams, keys);
         operations = new Operations(state, tablesManager);
         operations.populate();

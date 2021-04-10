@@ -2,6 +2,7 @@ package org.corfudb.generator.distributions;
 
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.ArrayList;
@@ -42,6 +43,7 @@ public class Streams implements DataSet<StreamId> {
 
     @EqualsAndHashCode
     @AllArgsConstructor
+    @ToString
     public static final class StreamId {
         private final int streamId;
 

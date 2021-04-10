@@ -73,11 +73,9 @@ public class State {
             this.maps = new HashMap<>();
             this.runtime = rt;
             this.streams = streams;
-
-            openObjects();
         }
 
-        private void openObjects() {
+        public void openObjects() {
             for (StreamId streamId : streams.getDataSet()) {
                 CorfuTable<String, String> map = runtime.getObjectsView()
                         .build()
@@ -94,7 +92,7 @@ public class State {
         public CorfuTable<String, String> getMap(StreamId streamId) {
             CorfuTable<String, String> map = maps.get(streamId);
             if (map == null) {
-                throw new IllegalStateException("Map doesn't exist");
+                throw new IllegalStateException("Map doesn't exist: " + streamId);
             }
             return map;
         }

@@ -9,6 +9,7 @@ import org.corfudb.runtime.CorfuRuntime;
 import org.junit.jupiter.api.Test;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 
 class VerificationTest {
 
@@ -26,7 +27,9 @@ class VerificationTest {
         State state = new State(streams, keys);
         CorfuRuntime rt = mock(CorfuRuntime.class);
         CorfuTablesGenerator tablesManager = new CorfuTablesGenerator(rt, streams);
-        ReadOperation read = new ReadOperation(state, tablesManager);
+        CorfuTablesGenerator tablesManagerMock = spy(tablesManager);
+
+        ReadOperation read = new ReadOperation(state, tablesManagerMock);
         ReadOperationVerification verification = new ReadOperationVerification(state, read.getContext());
 
         verification.verify();

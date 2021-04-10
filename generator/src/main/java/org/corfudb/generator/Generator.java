@@ -46,6 +46,8 @@ public class Generator {
         keys.populate();
 
         CorfuTablesGenerator tablesManager = new CorfuTablesGenerator(rt, streams);
+        tablesManager.openObjects();
+
         State state = new State(streams, keys);
         Operations operations = new Operations(state, tablesManager);
         operations.populate();
