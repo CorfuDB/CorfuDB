@@ -15,7 +15,6 @@ import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.StreamListener;
 import org.corfudb.runtime.collections.StreamManager;
-import org.corfudb.runtime.collections.StreamingManager;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
@@ -589,7 +588,7 @@ public class StreamingIT extends AbstractIT {
                 TableOptions.builder().build()
         );
 
-        final int numThread = StreamingManager.getNumThreadPerPool();
+        final int numThread = runtime.getParameters().getStreamingPollingThreadPoolSize();
         final int numListener = numThread + 2;
         final int bufferSize = 3;
         final int numUpdates = bufferSize + 1;

@@ -2,12 +2,14 @@ package org.corfudb.runtime.collections;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.runtime.CorfuRuntime.CorfuRuntimeParameters;
 import org.corfudb.runtime.exceptions.StreamingException;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.view.stream.IStreamView;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -21,12 +23,6 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 class StreamPollingTask implements Runnable {
-
-    // A period of time in ms to sleep before next cycle when poller gets no new data changes.
-    private static final long IDLE_WAIT_TIME_MS = 50;
-
-    // Total amount of time to wait for putting the polled data changes into buffer if it is full.
-    private static final Duration QUEUE_FULL_BLOCK_TIME_MS = Duration.ofMillis(1_000);
 
     // The streaming manager that is in charge of listener subscriptions.
     private final StreamingManager streamingManager;
@@ -43,13 +39,24 @@ class StreamPollingTask implements Runnable {
     // Last address of the data successfully processed by the buffer.
     private long lastReadAddress;
 
+    // Total time in milliseconds for polling task to block until buffer space is available.
+    private final long pollingBlockingTime;
+
+    // A period of time in ms to sleep before next cycle when poller gets no new data changes.
+    private final int pollingIdleWaitTime;
+
+    private final Random randomGenerator;
+
     StreamPollingTask(StreamingManager streamingManager, long lastAddress,
-                      StreamSubscription subscription, ScheduledExecutorService executor) {
+                      StreamSubscription subscription, ScheduledExecutorService executor, CorfuRuntimeParameters params) {
         this.streamingManager = streamingManager;
         this.subscription = subscription;
         this.pollingExecutor = executor;
         this.lastReadAddress = lastAddress;
         this.txnStream = subscription.getTxnStream();
+        this.pollingBlockingTime = params.getStreamingPollingBlockingTimeMs();
+        this.pollingIdleWaitTime = params.getStreamingPollingIdleWaitTimeMs();
+        this.randomGenerator = new Random();
     }
 
     @Override
@@ -93,13 +100,16 @@ class StreamPollingTask implements Runnable {
 
         // No new updates, take a short break and poll again.
         if (updates.isEmpty()) {
-            pollingExecutor.schedule(this, IDLE_WAIT_TIME_MS, TimeUnit.MILLISECONDS);
+            log.trace("pollTxStream :: no updates for {} from {}, listenerId={}", txnStream.getId(),
+                    lastReadAddress + 1L, subscription.getListener().getClass().getSimpleName());
+            pollingExecutor.schedule(this, randomGenerator.nextInt(pollingIdleWaitTime), TimeUnit.MILLISECONDS);
             return;
         }
 
         // Insert polled updates to the subscription buffer, with a shared
         // fixed amount of time waiting for buffer being not full.
-        long remainingBlockTime = QUEUE_FULL_BLOCK_TIME_MS.toNanos();
+        long remainingBlockTime = Duration.ofMillis(pollingBlockingTime).toNanos();
+
         for (ILogData update : updates) {
             if (subscription.isStopped()) {
                 return;
@@ -108,6 +118,7 @@ class StreamPollingTask implements Runnable {
             // Buffer is full after max waiting time elapses, break and re-schedule.
             long startTime = System.nanoTime();
             if (!subscription.enqueueStreamEntry(update, remainingBlockTime)) {
+                log.trace("pollTxStream :: unable to queue updates, no space in queue, listenerId={}", subscription.getListener().getClass().getSimpleName());
                 break;
             }
             remainingBlockTime -= System.nanoTime() - startTime;
@@ -119,6 +130,7 @@ class StreamPollingTask implements Runnable {
                         "lastReadAddress regressing from %d to %d", lastReadAddress, updateAddress));
             }
             lastReadAddress = updateAddress;
+            log.trace("pollTxStream :: enqueued update {}, listenerId={}", lastReadAddress, subscription.getListener().getClass().getSimpleName());
         }
 
         // Re-submit itself to the executor so polling will start again.
