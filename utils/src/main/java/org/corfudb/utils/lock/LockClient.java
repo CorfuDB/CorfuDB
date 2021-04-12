@@ -50,11 +50,6 @@ public class LockClient {
 
     private final ScheduledExecutorService taskScheduler;
 
-    // Single threaded scheduler to monitor the acquired locks (lease)
-    // A dedicated scheduler is required in case the task scheduler is stuck in some database operation
-    // and the previous lock owner can effectively expire the lock.
-    private final ScheduledExecutorService leaseMonitorScheduler;
-
     private final ExecutorService lockListenerExecutor;
 
     // duration between monitoring runs
@@ -63,9 +58,6 @@ public class LockClient {
 
     // The context contains objects that are shared across the locks in this client.
     private final ClientContext clientContext;
-
-    // Handle for the periodic lock monitoring task
-    private Optional<ScheduledFuture<?>> lockMonitorFuture = Optional.empty();
 
     @Getter
     private UUID clientId;
@@ -90,7 +82,10 @@ public class LockClient {
             return t;
         });
 
-        this.leaseMonitorScheduler = Executors.newScheduledThreadPool(1, (r) ->
+        // Single threaded scheduler to monitor the acquired locks (lease)
+        // A dedicated scheduler is required in case the task scheduler is stuck in some database operation
+        // and the previous lock owner can effectively expire the lock.
+        ScheduledExecutorService leaseMonitorScheduler = Executors.newScheduledThreadPool(1, (r) ->
         {
             Thread t = Executors.defaultThreadFactory().newThread(r);
             t.setName("LeaseMonitorThread");
@@ -152,11 +147,12 @@ public class LockClient {
      **/
     private void monitorLocks() {
         // find the expired leases.
-        lockMonitorFuture = Optional.of(lockMonitorScheduler.scheduleWithFixedDelay(
+        // Handle for the periodic lock monitoring task
+        lockMonitorScheduler.scheduleWithFixedDelay(
                 () -> {
                     try {
                         Collection<LockId> locksWithExpiredLeases = lockStore.filterLocksWithExpiredLeases(locks.keySet());
-                        for(LockId lockId : locksWithExpiredLeases) {
+                        for (LockId lockId : locksWithExpiredLeases) {
                             log.debug("LockClient: lease revoked for lock {}", lockId.getLockName());
                             locks.get(lockId).input(LockEvent.LEASE_REVOKED);
                         }
@@ -168,7 +164,7 @@ public class LockClient {
                 DurationBetweenLockMonitorRuns,
                 TimeUnit.SECONDS
 
-        ));
+        );
     }
 
     public void shutdown() {

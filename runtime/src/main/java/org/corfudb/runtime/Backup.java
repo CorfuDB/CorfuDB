@@ -166,7 +166,7 @@ public class Backup {
                     .ignoreTrimmed(false)
                     .cacheEntries(false)
                     .build();
-            Stream<OpaqueEntry> stream = (new OpaqueStream(runtime, runtime.getStreamsView().get(uuid, options))).streamUpTo(timestamp);
+            Stream<OpaqueEntry> stream = (new OpaqueStream(runtime.getStreamsView().get(uuid, options))).streamUpTo(timestamp);
 
             writeTableToFile(fileOutput, stream, uuid);
         } catch (IOException e) {

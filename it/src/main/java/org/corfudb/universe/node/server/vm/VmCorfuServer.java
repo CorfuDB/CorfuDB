@@ -11,7 +11,6 @@ import org.corfudb.universe.node.server.AbstractCorfuServer;
 import org.corfudb.universe.node.server.CorfuServer;
 import org.corfudb.universe.node.server.process.CorfuProcessManager;
 import org.corfudb.universe.node.server.process.CorfuServerPath;
-import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 import org.corfudb.universe.util.IpAddress;
@@ -40,9 +39,6 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     private final RemoteOperationHelper remoteOperationHelper;
 
     @NonNull
-    private final VmStress stress;
-
-    @NonNull
     private final CorfuProcessManager processManager;
 
     @NonNull
@@ -51,11 +47,10 @@ public class VmCorfuServer extends AbstractCorfuServer<VmCorfuServerParams, VmUn
     @Builder
     public VmCorfuServer(
             VmCorfuServerParams params, VmManager vmManager, VmUniverseParams universeParams,
-            VmStress stress, RemoteOperationHelper remoteOperationHelper, LoggingParams loggingParams) {
+            RemoteOperationHelper remoteOperationHelper, LoggingParams loggingParams) {
         super(params, universeParams, loggingParams);
         this.vmManager = vmManager;
         this.ipAddress = getIpAddress();
-        this.stress = stress;
         this.remoteOperationHelper = remoteOperationHelper;
         this.serverPath = new CorfuServerPath(params);
         this.processManager = new CorfuProcessManager(serverPath, params);

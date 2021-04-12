@@ -83,7 +83,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private CorfuRuntime runtime;
     private DataSender dataSender;
     private SnapshotReader snapshotReader;
-    private LogEntryReader logEntryReader;
     private LogReplicationAckReader ackReader;
 
     @Before
@@ -466,7 +465,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     private void initLogReplicationFSM(ReaderImplementation readerImpl) {
 
-        logEntryReader = new TestLogEntryReader();
+        LogEntryReader logEntryReader = new TestLogEntryReader();
 
         switch(readerImpl) {
             case EMPTY:

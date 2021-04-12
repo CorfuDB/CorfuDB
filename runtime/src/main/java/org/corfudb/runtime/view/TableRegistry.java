@@ -21,6 +21,7 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TableParameters;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
@@ -384,12 +385,15 @@ public class TableRegistry {
                 .collect(Collectors.toSet());
 
         // Open and return table instance.
-        Table<K, V, M> table = new Table<>(namespace, fullyQualifiedTableName,
-                kClass,
-                vClass,
-                mClass,
-                defaultValueMessage,
-                defaultMetadataMessage,
+        Table<K, V, M> table = new Table<>(
+                TableParameters.<K, V, M>builder()
+                        .namespace(namespace)
+                        .fullyQualifiedTableName(fullyQualifiedTableName)
+                        .kClass(kClass)
+                        .vClass(vClass)
+                        .mClass(mClass)
+                        .valueSchema(defaultValueMessage)
+                        .metadataSchema(defaultMetadataMessage).build(),
                 this.runtime,
                 this.protobufSerializer,
                 mapSupplier,

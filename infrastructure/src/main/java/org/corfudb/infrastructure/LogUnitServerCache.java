@@ -9,8 +9,6 @@ import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
-import java.util.Optional;
-import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.util.Memory;
@@ -18,6 +16,9 @@ import org.corfudb.infrastructure.LogUnitServer.LogUnitServerConfig;
 import org.corfudb.infrastructure.log.StreamLog;
 import org.corfudb.protocols.wireprotocol.ILogData;
 import org.corfudb.protocols.wireprotocol.LogData;
+
+import java.util.Optional;
+import java.util.function.Supplier;
 
 import static java.lang.Math.toIntExact;
 
@@ -42,12 +43,9 @@ public class LogUnitServerCache {
     private final int MAX_STREAM_THRESHOLD = 20;
 
     private final Optional<Timer> readTimer;
-    private final Optional<Gauge> loadTime;
-    String loadTimeName = "logunit.cache.load_time";
-    private final Optional<Gauge> hitRatio;
-    String hitRatioName = "logunit.cache.hit_ratio";
-    private final Optional<Gauge> weight;
-    String weightName = "logunit.cache.weight";
+    private final String loadTimeName = "logunit.cache.load_time";
+    private final String hitRatioName = "logunit.cache.hit_ratio";
+    private final String weightName = "logunit.cache.weight";
 
     public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
         this.streamLog = streamLog;
@@ -61,14 +59,14 @@ public class LogUnitServerCache {
 
         MeterRegistryProvider.getInstance().ifPresent(registry ->
                 CaffeineCacheMetrics.monitor(registry, dataCache, "logunit.read_cache"));
-        hitRatio = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(hitRatioName,
                 dataCache, cache -> cache.stats().hitRate()).register(registry));
-        loadTime = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(loadTimeName,
                         dataCache, cache -> cache.stats().totalLoadTime())
                         .register(registry));
-        weight = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(weightName,
                         dataCache, cache -> cache.stats().evictionWeight())
                         .register(registry));

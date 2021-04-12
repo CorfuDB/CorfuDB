@@ -3,6 +3,7 @@ package org.corfudb.universe.scenario.fixture;
 import com.google.common.collect.ImmutableList;
 import lombok.Builder;
 import lombok.Builder.Default;
+import lombok.extern.slf4j.Slf4j;
 import org.corfudb.universe.group.cluster.CorfuClusterParams;
 import org.corfudb.universe.node.server.CorfuServerParams;
 import org.corfudb.universe.node.server.CorfuServerParams.ContainerResources;
@@ -12,6 +13,7 @@ import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmCorfuServerParamsBuilder;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +24,7 @@ import java.util.stream.IntStream;
  * Dynamically generates a list of corfu server params, based on corfu cluster parameters.
  */
 @Builder
+@Slf4j
 public class FixtureUtil {
 
     @Default
@@ -80,14 +83,25 @@ public class FixtureUtil {
                     .index(i)
                     .build();
 
-            VmCorfuServerParams serverParam = serverParamsBuilder
-                    .clusterName(cluster.getName())
-                    .vmName(vmName)
-                    .port(port)
-                    .serverVersion(cluster.getServerVersion())
-                    .build();
-
-            serversParams.add(serverParam);
+            try {
+                VmCorfuServerParams serverParam = ((VmCorfuServerParams) serverParamsBuilder
+                        .vmName(vmName)
+                        // Call the parent's builder methods using reflection as calling from
+                        // the child builder object (serverParamsBuilder)
+                        // will type cast the builder to the parent class (CorfuServerParamsBuilder)
+                        // instead of the child class (VmCorfuServerParamsBuilder).
+                        .getClass().getMethod("clusterName", String.class)
+                            .invoke(serverParamsBuilder, cluster.getName())
+                        .getClass().getMethod("port", Integer.class)
+                            .invoke(serverParamsBuilder, port)
+                        .getClass().getMethod("serverVersion", String.class)
+                            .invoke(serverParamsBuilder, cluster.getServerVersion())
+                        .getClass().getMethod("build")
+                            .invoke(serverParamsBuilder));
+                serversParams.add(serverParam);
+            } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+                log.error("buildVmServers: Error while building serverParams using reflection: {}", e.getMessage());
+            }
         }
 
         return ImmutableList.copyOf(serversParams);

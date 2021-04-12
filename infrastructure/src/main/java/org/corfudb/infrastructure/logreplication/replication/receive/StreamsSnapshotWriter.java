@@ -327,7 +327,7 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         // This variable reflects the minimum timestamp for all shadow streams in the current snapshot cycle.
         // We seek up to this address, assuming that no trim should occur beyond this snapshot start
         long currentMinShadowStreamTimestamp = logReplicationMetadataManager.getMinSnapshotSyncShadowStreamTs();
-        OpaqueStream shadowOpaqueStream = new OpaqueStream(rt, rt.getStreamsView().get(shadowStreamId, options));
+        OpaqueStream shadowOpaqueStream = new OpaqueStream(rt.getStreamsView().get(shadowStreamId, options));
         shadowOpaqueStream.seek(currentMinShadowStreamTimestamp);
         Stream shadowStream = shadowOpaqueStream.streamUpTo(snapshot);
 

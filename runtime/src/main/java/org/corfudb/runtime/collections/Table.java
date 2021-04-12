@@ -85,26 +85,18 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     /**
      * Returns a Table instance backed by a CorfuTable.
      *
-     * @param namespace               namespace of the table
-     * @param fullyQualifiedTableName Fully qualified table name
-     * @param kClass                  key class
-     * @param vClass                  value class
-     * @param mClass                  metadata class
-     * @param valueSchema             value schema to identify secondary keys
-     * @param metadataSchema          default metadata instance
+     * @param tableParameters         Table parameters including
+     *                                table's namespace and fullyQualifiedTableName,
+     *                                key, value, and metadata classes,
+     *                                value and metadata schemas
      * @param corfuRuntime            connected instance of the Corfu Runtime
      * @param serializer              protobuf serializer
      * @param streamingMapSupplier    supplier of underlying map data structure
      * @param versionPolicy           versioning policy
+     * @param streamTags              set of UUIDs representing the streamTags
      */
     @Nonnull
-    public Table(@Nonnull final String namespace,
-                 @Nonnull final String fullyQualifiedTableName,
-                 @Nonnull final Class<K> kClass,
-                 @Nonnull final Class<V> vClass,
-                 @Nullable final Class<M> mClass,
-                 @Nonnull final V valueSchema,
-                 @Nullable final M metadataSchema,
+    public Table(@Nonnull final TableParameters<K, V, M> tableParameters,
                  @Nonnull final CorfuRuntime corfuRuntime,
                  @Nonnull final ISerializer serializer,
                  @Nonnull final Supplier<StreamingMap<K, V>> streamingMapSupplier,
@@ -112,11 +104,11 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                  @NonNull final Set<UUID> streamTags) {
 
         this.corfuRuntime = corfuRuntime;
-        this.namespace = namespace;
-        this.fullyQualifiedTableName = fullyQualifiedTableName;
+        this.namespace = tableParameters.getNamespace();
+        this.fullyQualifiedTableName = tableParameters.getFullyQualifiedTableName();
         this.streamUUID = CorfuRuntime.getStreamID(this.fullyQualifiedTableName);
         this.streamTags = streamTags;
-        this.metadataOptions = Optional.ofNullable(metadataSchema)
+        this.metadataOptions = Optional.ofNullable(tableParameters.getMetadataSchema())
                 .map(schema -> MetadataOptions.builder()
                         .metadataEnabled(true)
                         .defaultMetadataInstance(schema)
@@ -127,14 +119,14 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setTypeToken(CorfuTable.<K, CorfuRecord<V, M>>getTableType())
                 .setStreamName(this.fullyQualifiedTableName)
                 .setSerializer(serializer)
-                .setArguments(new ProtobufIndexer(valueSchema), streamingMapSupplier, versionPolicy)
+                .setArguments(new ProtobufIndexer(tableParameters.getValueSchema()), streamingMapSupplier, versionPolicy)
                 .setStreamTags(streamTags)
                 .open();
-        this.keyClass = kClass;
-        this.valueClass = vClass;
-        this.metadataClass = mClass;
-        if (kClass == Queue.CorfuGuidMsg.class &&
-                mClass == Queue.CorfuQueueMetadataMsg.class) { // Really a Queue
+        this.keyClass = tableParameters.getKClass();
+        this.valueClass = tableParameters.getVClass();
+        this.metadataClass = tableParameters.getMClass();
+        if (keyClass == Queue.CorfuGuidMsg.class &&
+                metadataClass == Queue.CorfuQueueMetadataMsg.class) { // Really a Queue
             this.guidGenerator = CorfuGuidGenerator.getInstance(corfuRuntime);
         } else {
             this.guidGenerator = null;

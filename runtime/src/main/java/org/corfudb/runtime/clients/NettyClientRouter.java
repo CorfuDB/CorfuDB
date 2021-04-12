@@ -679,31 +679,6 @@ public class NettyClientRouter extends SimpleChannelInboundHandler<Object> imple
                 RuntimeParameters.builder().build());
     }
 
-    /**
-     * Creates a new NettyClientRouter connected to the specified host and port.
-     *
-     * @param host Host to connectAsync to.
-     * @param port Port to connectAsync to.
-     * @deprecated Use {@link this#NettyClientRouter(NodeLocator, RuntimeParameters)}
-     */
-    @Deprecated
-    public NettyClientRouter(String host, Integer port, Boolean tls,
-                             String keyStore, String ksPasswordFile, String trustStore,
-                             String tsPasswordFile, Boolean saslPlainText, String usernameFile,
-                             String passwordFile) {
-        this(NodeLocator.builder().host(host).port(port).build(),
-                RuntimeParameters.builder()
-                        .tlsEnabled(tls)
-                        .keyStore(keyStore)
-                        .ksPasswordFile(ksPasswordFile)
-                        .trustStore(trustStore)
-                        .tsPasswordFile(tsPasswordFile)
-                        .saslPlainTextEnabled(saslPlainText)
-                        .usernameFile(usernameFile)
-                        .passwordFile(passwordFile)
-                        .build());
-    }
-
     public NettyClientRouter(@Nonnull NodeLocator node,
                              @Nonnull RuntimeParameters parameters) {
         this(node, parameters.getSocketType()

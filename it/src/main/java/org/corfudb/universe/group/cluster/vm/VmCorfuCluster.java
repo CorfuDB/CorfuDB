@@ -17,7 +17,6 @@ import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.node.server.vm.VmCorfuServer;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams;
 import org.corfudb.universe.node.server.vm.VmCorfuServerParams.VmName;
-import org.corfudb.universe.node.stress.vm.VmStress;
 import org.corfudb.universe.universe.vm.VmManager;
 import org.corfudb.universe.universe.vm.VmUniverseParams;
 
@@ -60,18 +59,10 @@ public class VmCorfuCluster extends AbstractCorfuCluster<VmCorfuServerParams, Vm
                 .credentials(universeParams.getCredentials().getVmCredentials())
                 .build();
 
-        VmStress stress = VmStress.builder()
-                .params(params)
-                .universeParams(universeParams)
-                .vmManager(vmManager)
-                .commandHelper(commandHelper)
-                .build();
-
         return VmCorfuServer.builder()
                 .universeParams(universeParams)
                 .params(params)
                 .vmManager(vmManager)
-                .stress(stress)
                 .remoteOperationHelper(commandHelper)
                 .loggingParams(loggingParams)
                 .build();
