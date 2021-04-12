@@ -7,8 +7,6 @@ import lombok.NonNull;
 import lombok.Setter;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
-import org.corfudb.generator.distributions.Keys.KeyId;
-import org.corfudb.generator.distributions.Streams.StreamId;
 import org.corfudb.generator.state.State;
 
 import java.util.Optional;
@@ -31,6 +29,13 @@ public abstract class Operation {
 
     public abstract Operation.Context getContext();
 
+    protected Keys.FullyQualifiedKey generateFqKey(State state) {
+        return Keys.FullyQualifiedKey.builder()
+                .tableId(state.getStreams().sample())
+                .keyId(state.getKeys().sample())
+                .build();
+    }
+
     /**
      * Operation context keeps an operation state and data, and can be used by other parts of the application
      * without the "operation" itself to verify that the corfu database or table is in consistent state.
@@ -39,23 +44,18 @@ public abstract class Operation {
     @Getter
     public static class Context {
         @NonNull
-        private final StreamId streamId;
-        @NonNull
-        private final KeyId key;
+        private final FullyQualifiedKey fqKey;
         @NonNull
         @Builder.Default
-        private final Optional<String> val = Optional.empty();
+        @Setter
+        private Optional<String> val = Optional.empty();
 
         @Setter
         private Keys.Version version;
 
         public String getCorrectnessRecord(String operationName) {
-            String value = val.orElseThrow(()-> new IllegalStateException("Empty value for: " + getFqKey()));
-            return String.format("%s, %s:%s=%s", operationName, streamId, key, value);
-        }
-
-        public FullyQualifiedKey getFqKey() {
-            return  FullyQualifiedKey.builder().keyId(key).tableId(streamId).build();
+            String value = val.orElse(null);
+            return String.format("%s, %s:%s=%s", operationName, fqKey.getTableId(), fqKey.getKeyId(), value);
         }
     }
 

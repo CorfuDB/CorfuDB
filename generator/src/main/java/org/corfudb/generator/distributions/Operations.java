@@ -11,6 +11,7 @@ import org.corfudb.generator.operations.tx.NestedTxOperation;
 import org.corfudb.generator.operations.tx.OptimisticTxOperation;
 import org.corfudb.generator.operations.tx.SnapshotTxOperation;
 import org.corfudb.generator.operations.tx.WriteAfterWriteTxOperation;
+import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.State;
 
 import java.util.List;
@@ -25,9 +26,9 @@ public class Operations implements DataSet<Operation.Type> {
 
     private final List<Operation.Type> allOperations;
     private final State state;
-    private final State.CorfuTablesGenerator tablesManager;
+    private final CorfuTablesGenerator tablesManager;
 
-    public Operations(State state, State.CorfuTablesGenerator tablesManager) {
+    public Operations(State state, CorfuTablesGenerator tablesManager) {
         this.state = state;
         this.tablesManager = tablesManager;
 

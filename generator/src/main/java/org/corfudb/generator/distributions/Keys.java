@@ -4,6 +4,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.ToString;
 import org.corfudb.generator.distributions.Streams.StreamId;
 
@@ -61,6 +62,7 @@ public class Keys implements DataSet<Keys.KeyId> {
     @EqualsAndHashCode
     @AllArgsConstructor
     @ToString
+    @Getter
     public static class FullyQualifiedKey {
         private final KeyId keyId;
         private final StreamId tableId;

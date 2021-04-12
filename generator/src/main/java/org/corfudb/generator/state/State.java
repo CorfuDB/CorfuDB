@@ -4,17 +4,18 @@ import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.OperationCount;
-import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.distributions.Streams;
 import org.corfudb.generator.util.StringIndexer;
-import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.object.transactions.TransactionalContext;
+import org.corfudb.runtime.view.Address;
 
 import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT;
 import static org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
@@ -60,46 +61,6 @@ public class State {
 
     public VersionedKey getKey(FullyQualifiedKey fqKey) {
         return keysState.get(fqKey);
-    }
-
-    public static class CorfuTablesGenerator {
-
-        private final Map<StreamId, CorfuTable<String, String>> maps;
-        private final Streams streams;
-        @Getter
-        private final CorfuRuntime runtime;
-
-        public CorfuTablesGenerator(CorfuRuntime rt, Streams streams){
-            this.maps = new HashMap<>();
-            this.runtime = rt;
-            this.streams = streams;
-        }
-
-        public void openObjects() {
-            for (StreamId streamId : streams.getDataSet()) {
-                CorfuTable<String, String> map = runtime.getObjectsView()
-                        .build()
-                        .setStreamID(streamId.getStreamId())
-                        .setTypeToken(new TypeToken<CorfuTable<String, String>>() {
-                        })
-                        .setArguments(new StringIndexer())
-                        .open();
-
-                maps.put(streamId, map);
-            }
-        }
-
-        public CorfuTable<String, String> getMap(StreamId streamId) {
-            CorfuTable<String, String> map = maps.get(streamId);
-            if (map == null) {
-                throw new IllegalStateException("Map doesn't exist: " + streamId);
-            }
-            return map;
-        }
-
-        public Collection<CorfuTable<String, String>> getMaps() {
-            return maps.values();
-        }
     }
 
     public static class StateContext {

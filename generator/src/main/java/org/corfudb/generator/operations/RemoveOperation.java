@@ -3,14 +3,13 @@ package org.corfudb.generator.operations;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.KeysState;
 import org.corfudb.generator.state.State;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 import java.util.Optional;
-
-import static org.corfudb.generator.distributions.Keys.KeyId;
-import static org.corfudb.generator.distributions.Streams.StreamId;
 
 /**
  * Removes the value from a corfu table
@@ -20,35 +19,36 @@ public class RemoveOperation extends Operation {
 
     @Getter
     private final Operation.Context context;
-    private final State.CorfuTablesGenerator tableManager;
+    private final CorfuTablesGenerator tableManager;
 
-    public RemoveOperation(State state, State.CorfuTablesGenerator tableManager) {
+    public RemoveOperation(State state, CorfuTablesGenerator tableManager) {
         super(state, Type.REMOVE);
         this.tableManager = tableManager;
 
-        StreamId streamId = state.getStreams().sample();
-        KeyId key = state.getKeys().sample();
+        Keys.FullyQualifiedKey key = generateFqKey(state);
+
         this.context = Context.builder()
-                .streamId(streamId)
-                .key(key)
+                .fqKey(key)
                 .build();
     }
 
     @Override
     public void execute() {
         // Hack for Transaction writes only
-        if (TransactionalContext.isInTransaction()) {
-            tableManager.getMap(context.getStreamId()).remove(context.getKey().getKey());
+        if (tableManager.isInTransaction()) {
+            tableManager
+                    .getMap(context.getFqKey().getTableId())
+                    .remove(context.getFqKey().getKeyId().getKey());
 
             String correctnessRecord = String.format(
                     "%s, %s:%s",
-                    opType.getOpType(), context.getStreamId(), context.getKey().getKey()
+                    opType.getOpType(), context.getFqKey().getTableId(), context.getFqKey().getKeyId().getKey()
             );
-            Correctness.recordOperation(correctnessRecord, TransactionalContext.isInTransaction());
+            Correctness.recordOperation(correctnessRecord);
 
             addToHistory();
 
-            if (!TransactionalContext.isInTransaction()) {
+            if (!tableManager.isInTransaction()) {
                 state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
             }
         }

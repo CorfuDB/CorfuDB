@@ -4,16 +4,13 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
 import org.corfudb.generator.distributions.Keys;
-import org.corfudb.generator.distributions.Keys.KeyId;
-import org.corfudb.generator.distributions.Streams.StreamId;
+import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.KeysState.ThreadName;
 import org.corfudb.generator.state.State;
 import org.corfudb.generator.state.TxState;
 import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
-
-import java.util.Optional;
 
 /**
  * Reads data from corfu table and saves the current state in the operation context
@@ -22,40 +19,40 @@ import java.util.Optional;
 public class ReadOperation extends Operation {
     @Getter
     private final Context context;
-    private final State.CorfuTablesGenerator tableManager;
+    private final CorfuTablesGenerator tableManager;
     private boolean keyFromTx;
 
-    public ReadOperation(State state, State.CorfuTablesGenerator tableManager) {
+    public ReadOperation(State state, CorfuTablesGenerator tableManager) {
         super(state, Type.READ);
         this.tableManager = tableManager;
 
-        StreamId streamId = state.getStreams().sample();
-        KeyId key = state.getKeys().sample();
+        Keys.FullyQualifiedKey key = generateFqKey(state);
+
         this.context = Context.builder()
-                .streamId(streamId)
-                .key(key)
-                .val(Optional.ofNullable(tableManager.getMap(streamId).get(key.getKey())))
+                .fqKey(key)
+                .val(tableManager.get(key))
                 .build();
     }
 
     @Override
     public void execute() {
+        context.setVal(tableManager.get(context.getFqKey()));
         String logMessage = context.getCorrectnessRecord(opType.getOpType());
-        Correctness.recordOperation(logMessage, TransactionalContext.isInTransaction());
+        Correctness.recordOperation(logMessage);
 
         // Accessing secondary objects
-        CorfuTable<String, String> corfuMap = tableManager.getMap(context.getStreamId());
+        CorfuTable<String, String> corfuMap = tableManager.getMap(context.getFqKey().getTableId());
 
         corfuMap.getByIndex(StringIndexer.BY_FIRST_CHAR, "a");
         corfuMap.getByIndex(StringIndexer.BY_VALUE, context.getVal());
 
-        context.setVersion(Correctness.getVersion());
+        context.setVersion(tableManager.getVersion());
 
-        if (!TransactionalContext.isInTransaction()) {
+        if (!tableManager.isInTransaction()) {
             state.getCtx().updateLastSuccessfulReadOperationTimestamp();
         }
 
-        if (TransactionalContext.isInTransaction()) {
+        if (tableManager.isInTransaction()) {
             //transactional read
             addToHistoryTransactional();
         } else {

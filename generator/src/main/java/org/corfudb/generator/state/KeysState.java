@@ -40,6 +40,10 @@ public class KeysState {
         return versionsByThread.get(thread);
     }
 
+    public boolean contains(FullyQualifiedKey fqKey) {
+        return keys.containsKey(fqKey);
+    }
+
     public static class VersionedKey {
         //private final FullyQualifiedKey key;
         private final SortedMap<Keys.Version, KeyEntry> history = new TreeMap<>();

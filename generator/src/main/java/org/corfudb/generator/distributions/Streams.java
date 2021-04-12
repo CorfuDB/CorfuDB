@@ -43,11 +43,11 @@ public class Streams implements DataSet<StreamId> {
 
     @EqualsAndHashCode
     @AllArgsConstructor
-    @ToString
+    @ToString(doNotUseGetters = true)
     public static final class StreamId {
         private final int streamId;
 
-        private String getTableName(){
+        private String getTableName() {
             return String.valueOf(streamId);
         }
 

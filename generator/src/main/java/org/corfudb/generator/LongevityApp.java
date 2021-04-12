@@ -3,12 +3,14 @@ package org.corfudb.generator;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.generator.Correctness.OperationTxType;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.distributions.Streams;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.operations.UpdateVersionHandler;
+import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.State;
 import org.corfudb.generator.verification.VerificationManager;
 import org.corfudb.runtime.CorfuRuntime;
@@ -41,7 +43,7 @@ public class LongevityApp {
 
     private final CorfuRuntime rt;
     private final State state;
-    private final State.CorfuTablesGenerator tablesManager;
+    private final CorfuTablesGenerator tablesManager;
     private final Operations operations;
 
     private final ExecutorService taskProducer;
@@ -81,7 +83,7 @@ public class LongevityApp {
         streams.populate();
         keys.populate();
 
-        tablesManager = new State.CorfuTablesGenerator(rt, streams);
+        tablesManager = new CorfuTablesGenerator(rt, streams);
         tablesManager.openObjects();
 
         state = new State(streams, keys);
@@ -148,7 +150,7 @@ public class LongevityApp {
 
         String livenessState = state.getCtx().livenessSuccess(exitStatus.toBool()) ? "Success" : "Fail";
 
-        Correctness.recordOperation("Liveness, " + livenessState, false);
+        Correctness.recordOperation("Liveness, " + livenessState, OperationTxType.NON_TX);
 
         taskProducer.shutdownNow();
         checkpointer.shutdownNow();
@@ -248,7 +250,7 @@ public class LongevityApp {
         try {
             CompletableFuture.supplyAsync(rt::connect).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (Exception e) {
-            Correctness.recordOperation("Liveness, " + false, false);
+            Correctness.recordOperation("Liveness, " + false, OperationTxType.NON_TX);
             throw new SystemUnavailableError(e.getMessage());
         }
     }

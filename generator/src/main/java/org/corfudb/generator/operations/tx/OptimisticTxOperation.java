@@ -5,7 +5,7 @@ import org.corfudb.generator.Correctness;
 import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
-import org.corfudb.generator.state.State.CorfuTablesGenerator;
+import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;

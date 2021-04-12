@@ -20,9 +20,19 @@ public class ReadOperationVerification implements Verification {
     @Override
     public boolean verify() {
         FullyQualifiedKey fqKey = context.getFqKey();
-        VersionedKey keyState = state.getKey(fqKey);
 
-        Optional<String> stateValue = keyState.get(context.getVersion()).getValue();
-        return stateValue.equals(context.getVal());
+        if(context.getVal().isPresent()) {
+            if (state.getKeysState().contains(fqKey)) {
+                VersionedKey keyState = state.getKey(fqKey);
+
+                Optional<String> stateValue = keyState.get(context.getVersion()).getValue();
+                return stateValue.equals(context.getVal());
+            } else {
+                return false;
+            }
+        } else {
+            boolean isPresentInTheState = state.getKeysState().contains(fqKey);
+            return !isPresentInTheState;
+        }
     }
 }

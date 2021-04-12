@@ -3,8 +3,9 @@ package org.corfudb.generator.operations;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.State;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -16,15 +17,16 @@ import java.util.UUID;
 public class WriteOperation extends Operation {
     @Getter
     private final Context context;
-    private final State.CorfuTablesGenerator tableManager;
+    private final CorfuTablesGenerator tableManager;
 
-    public WriteOperation(State state, State.CorfuTablesGenerator tableManager) {
+    public WriteOperation(State state, CorfuTablesGenerator tableManager) {
         super(state, Operation.Type.WRITE);
         this.tableManager = tableManager;
 
+        Keys.FullyQualifiedKey key = generateFqKey(state);
+
         this.context = Context.builder()
-                .streamId(state.getStreams().sample())
-                .key(state.getKeys().sample())
+                .fqKey(key)
                 .val(Optional.of(UUID.randomUUID().toString()))
                 .build();
     }
@@ -32,17 +34,11 @@ public class WriteOperation extends Operation {
     @Override
     public void execute() {
         // Hack for Transaction writes only
-        if (TransactionalContext.isInTransaction()) {
-            tableManager.getMap(context.getStreamId()).put(context.getKey().getKey(), context.getVal().get());
-
-            Correctness.recordOperation(
-                    context.getCorrectnessRecord(opType.getOpType()),
-                    TransactionalContext.isInTransaction()
-            );
-
-            if (!TransactionalContext.isInTransaction()) {
-                state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
-            }
+        boolean transactional = tableManager.isInTransaction();
+        if (transactional) {
+            tableManager.put(context.getFqKey(), context.getVal().get());
+            Correctness.recordOperation(context.getCorrectnessRecord(opType.getOpType()));
+            state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
         }
     }
 }
