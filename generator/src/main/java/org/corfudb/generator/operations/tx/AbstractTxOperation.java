@@ -1,5 +1,6 @@
 package org.corfudb.generator.operations.tx;
 
+import org.corfudb.generator.Correctness;
 import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.State;
@@ -14,12 +15,14 @@ public abstract class AbstractTxOperation extends Operation {
 
     protected final Operations operations;
     protected final CorfuTablesGenerator tablesManager;
+    protected final Correctness correctness;
 
     public AbstractTxOperation(State state, Operation.Type operationType, Operations operations,
-                               CorfuTablesGenerator tablesManager) {
+                               CorfuTablesGenerator tablesManager, Correctness correctness) {
         super(state, operationType);
         this.operations = operations;
         this.tablesManager = tablesManager;
+        this.correctness = correctness;
     }
 
     protected void executeOperations() {

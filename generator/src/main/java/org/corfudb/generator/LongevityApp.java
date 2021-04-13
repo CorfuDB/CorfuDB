@@ -45,6 +45,7 @@ public class LongevityApp {
     private final State state;
     private final CorfuTablesGenerator tablesManager;
     private final Operations operations;
+    private final Correctness correctness;
 
     private final ExecutorService taskProducer;
     private final ScheduledExecutorService checkpointer;
@@ -87,7 +88,9 @@ public class LongevityApp {
         tablesManager.openObjects();
 
         state = new State(streams, keys);
-        operations = new Operations(state, tablesManager);
+
+        correctness = new Correctness();
+        operations = new Operations(state, tablesManager, correctness);
         operations.populate();
 
         taskProducer = Executors.newSingleThreadExecutor();
@@ -150,7 +153,7 @@ public class LongevityApp {
 
         String livenessState = state.getCtx().livenessSuccess(exitStatus.toBool()) ? "Success" : "Fail";
 
-        Correctness.recordOperation("Liveness, " + livenessState, OperationTxType.NON_TX);
+        correctness.recordOperation("Liveness, " + livenessState, OperationTxType.NON_TX);
 
         taskProducer.shutdownNow();
         checkpointer.shutdownNow();
@@ -250,7 +253,7 @@ public class LongevityApp {
         try {
             CompletableFuture.supplyAsync(rt::connect).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (Exception e) {
-            Correctness.recordOperation("Liveness, " + false, OperationTxType.NON_TX);
+            correctness.recordOperation("Liveness, " + false, OperationTxType.NON_TX);
             throw new SystemUnavailableError(e.getMessage());
         }
     }

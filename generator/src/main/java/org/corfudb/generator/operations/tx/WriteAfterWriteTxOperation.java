@@ -13,23 +13,24 @@ import org.corfudb.runtime.object.transactions.TransactionType;
  */
 public class WriteAfterWriteTxOperation extends AbstractTxOperation {
 
-    public WriteAfterWriteTxOperation(State state, Operations operations, CorfuTablesGenerator tablesManager) {
-        super(state, Operation.Type.TX_WAW, operations, tablesManager);
+    public WriteAfterWriteTxOperation(State state, Operations operations, CorfuTablesGenerator tablesManager,
+                                      Correctness correctness) {
+        super(state, Operation.Type.TX_WAW, operations, tablesManager, correctness);
     }
 
     @Override
     public void execute() {
-        Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_START);
+        correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_START);
         long timestamp;
         startWriteAfterWriteTx();
 
         executeOperations();
         try {
             timestamp = stopTx();
-            Correctness.recordTransactionMarkers(true, opType.getOpType(), Correctness.TX_END,
+            correctness.recordTransactionMarkers(true, opType.getOpType(), Correctness.TX_END,
                     Long.toString(timestamp));
         } catch (TransactionAbortedException tae) {
-            Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_ABORTED);
+            correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_ABORTED);
         }
     }
 

@@ -10,7 +10,6 @@ import org.corfudb.generator.state.State;
 import org.corfudb.generator.state.TxState;
 import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 /**
  * Reads data from corfu table and saves the current state in the operation context
@@ -20,11 +19,14 @@ public class ReadOperation extends Operation {
     @Getter
     private final Context context;
     private final CorfuTablesGenerator tableManager;
+    private final Correctness correctness;
+
     private boolean keyFromTx;
 
-    public ReadOperation(State state, CorfuTablesGenerator tableManager) {
+    public ReadOperation(State state, CorfuTablesGenerator tableManager, Correctness correctness) {
         super(state, Type.READ);
         this.tableManager = tableManager;
+        this.correctness = correctness;
 
         Keys.FullyQualifiedKey key = generateFqKey(state);
 
@@ -38,7 +40,7 @@ public class ReadOperation extends Operation {
     public void execute() {
         context.setVal(tableManager.get(context.getFqKey()));
         String logMessage = context.getCorrectnessRecord(opType.getOpType());
-        Correctness.recordOperation(logMessage);
+        correctness.recordOperation(logMessage);
 
         // Accessing secondary objects
         CorfuTable<String, String> corfuMap = tableManager.getMap(context.getFqKey().getTableId());
@@ -68,11 +70,11 @@ public class ReadOperation extends Operation {
 
     private void addToHistoryTransactional() {
         TxState.TxContext txContext = state.getTransactions().get(ThreadName.buildFromCurrentThread());
-        txContext.setVersion(context.getVersion());
+        txContext.getSnapshotId().setVersion(context.getVersion());
 
         keyFromTx = txContext.contains(context.getFqKey());
 
-        if (!context.getVersion().equals(txContext.getVersion())){
+        if (!context.getVersion().equals(txContext.getSnapshotId().getVersion())){
             throw new IllegalStateException("Inconsistent state");
         }
     }

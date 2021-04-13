@@ -49,7 +49,7 @@ public class Generator {
         tablesManager.openObjects();
 
         State state = new State(streams, keys);
-        Operations operations = new Operations(state, tablesManager);
+        Operations operations = new Operations(state, tablesManager, new Correctness());
         operations.populate();
 
         Runnable cpTrimTask = () -> {

@@ -7,7 +7,6 @@ import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.KeysState;
 import org.corfudb.generator.state.State;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
 
 import java.util.Optional;
 
@@ -20,10 +19,12 @@ public class RemoveOperation extends Operation {
     @Getter
     private final Operation.Context context;
     private final CorfuTablesGenerator tableManager;
+    private final Correctness correctness;
 
-    public RemoveOperation(State state, CorfuTablesGenerator tableManager) {
+    public RemoveOperation(State state, CorfuTablesGenerator tableManager, Correctness correctness) {
         super(state, Type.REMOVE);
         this.tableManager = tableManager;
+        this.correctness = correctness;
 
         Keys.FullyQualifiedKey key = generateFqKey(state);
 
@@ -44,7 +45,7 @@ public class RemoveOperation extends Operation {
                     "%s, %s:%s",
                     opType.getOpType(), context.getFqKey().getTableId(), context.getFqKey().getKeyId().getKey()
             );
-            Correctness.recordOperation(correctnessRecord);
+            correctness.recordOperation(correctnessRecord);
 
             addToHistory();
 
@@ -55,11 +56,15 @@ public class RemoveOperation extends Operation {
     }
 
     private void addToHistory() {
-        KeysState.KeyEntry entry = KeysState.KeyEntry.builder()
+        KeysState.SnapshotId snapshotId = KeysState.SnapshotId.builder()
                 .version(context.getVersion())
-                .value(Optional.empty())
                 .threadId(KeysState.ThreadName.buildFromCurrentThread())
                 .clientId("client")
+                .build();
+
+        KeysState.KeyEntry entry = KeysState.KeyEntry.builder()
+                .snapshotId(snapshotId)
+                .value(Optional.empty())
                 .build();
 
         state.getKeysState().put(context.getFqKey(), entry);

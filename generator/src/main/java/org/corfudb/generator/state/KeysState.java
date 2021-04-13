@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.ToString;
 import org.corfudb.generator.distributions.Keys;
 
@@ -45,7 +46,6 @@ public class KeysState {
     }
 
     public static class VersionedKey {
-        //private final FullyQualifiedKey key;
         private final SortedMap<Keys.Version, KeyEntry> history = new TreeMap<>();
 
         public KeyEntry get(Keys.Version version){
@@ -53,8 +53,21 @@ public class KeysState {
         }
 
         public void put(KeyEntry keyEntry) {
-            history.put(keyEntry.version, keyEntry);
+            history.put(keyEntry.snapshotId.version, keyEntry);
         }
+    }
+
+    @Builder
+    @ToString
+    public static class SnapshotId {
+        @NonNull
+        private final ThreadName threadId;
+        @NonNull
+        @Setter
+        @Getter
+        private Version version;
+        @NonNull
+        private final String clientId;
     }
 
     @Builder
@@ -62,15 +75,10 @@ public class KeysState {
     @ToString
     public static class KeyEntry {
         @NonNull
-        private final Version version;
+        private final SnapshotId snapshotId;
         @NonNull
         @Getter
         private final Optional<String> value;
-
-        @NonNull
-        private final ThreadName threadId;
-        @NonNull
-        private final String clientId;
     }
 
     @AllArgsConstructor(access = AccessLevel.PRIVATE)

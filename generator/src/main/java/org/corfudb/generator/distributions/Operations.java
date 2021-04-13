@@ -1,6 +1,7 @@
 package org.corfudb.generator.distributions;
 
 import com.google.common.collect.ImmutableList;
+import org.corfudb.generator.Correctness;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.operations.ReadOperation;
@@ -27,10 +28,12 @@ public class Operations implements DataSet<Operation.Type> {
     private final List<Operation.Type> allOperations;
     private final State state;
     private final CorfuTablesGenerator tablesManager;
+    private final Correctness correctness;
 
-    public Operations(State state, CorfuTablesGenerator tablesManager) {
+    public Operations(State state, CorfuTablesGenerator tablesManager, Correctness correctness) {
         this.state = state;
         this.tablesManager = tablesManager;
+        this.correctness = correctness;
 
         allOperations = ImmutableList.of(
                 Operation.Type.WRITE, Operation.Type.READ, Operation.Type.TX_OPTIMISTIC,
@@ -54,21 +57,21 @@ public class Operations implements DataSet<Operation.Type> {
     public Operation create(Operation.Type opType) {
         switch (opType) {
             case READ:
-                return new ReadOperation(state, tablesManager);
+                return new ReadOperation(state, tablesManager, correctness);
             case REMOVE:
-                return new RemoveOperation(state, tablesManager);
+                return new RemoveOperation(state, tablesManager, correctness);
             case SLEEP:
                 return new SleepOperation(state);
             case WRITE:
-                return new WriteOperation(state, tablesManager);
+                return new WriteOperation(state, tablesManager, correctness);
             case TX_NESTED:
-                return new NestedTxOperation(state, this, tablesManager);
+                return new NestedTxOperation(state, this, tablesManager, correctness);
             case TX_OPTIMISTIC:
-                return new OptimisticTxOperation(state, this, tablesManager);
+                return new OptimisticTxOperation(state, this, tablesManager, correctness);
             case TX_SNAPSHOT:
-                return new SnapshotTxOperation(state, this, tablesManager);
+                return new SnapshotTxOperation(state, this, tablesManager, correctness);
             case TX_WAW:
-                return new WriteAfterWriteTxOperation(state, this, tablesManager);
+                return new WriteAfterWriteTxOperation(state, this, tablesManager, correctness);
             case CHECKPOINT:
                 return new CheckpointOperation(state, tablesManager);
             default:

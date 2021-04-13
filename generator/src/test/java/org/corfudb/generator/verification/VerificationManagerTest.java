@@ -1,5 +1,6 @@
 package org.corfudb.generator.verification;
 
+import org.corfudb.generator.Correctness;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.Streams;
 import org.corfudb.generator.operations.ReadOperation;
@@ -26,10 +27,6 @@ import static org.mockito.Mockito.when;
 
 class VerificationTest {
 
-    public static void main(String[] args) {
-        System.out.println("yay");
-    }
-
     @Test
     public void testReadWriteAndVerification() {
         Streams streams = new Streams(1);
@@ -46,10 +43,12 @@ class VerificationTest {
 
         tablesManagerMock.startOptimisticTx();
 
-        WriteOperation write = new WriteOperation(state, tablesManagerMock);
+        Correctness correctness = new Correctness();
+
+        WriteOperation write = new WriteOperation(state, tablesManagerMock, correctness);
         write.execute();
 
-        ReadOperation read = new ReadOperation(state, tablesManagerMock);
+        ReadOperation read = new ReadOperation(state, tablesManagerMock, correctness);
         read.execute();
 
         tablesManagerMock.stopTx();

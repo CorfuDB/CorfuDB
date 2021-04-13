@@ -23,16 +23,12 @@ public class TxState {
     @Builder
     @ToString
     public static class TxContext {
+        @Getter
         @NonNull
-        private final KeysState.ThreadName id;
-        private final String clientId;
+        private KeysState.SnapshotId snapshotId;
+
         @NonNull
         private final Operation.Type opType;
-        @NonNull
-        @Builder.Default
-        @Setter
-        @Getter
-        private Keys.Version version = Keys.Version.noVersion();
 
         @NonNull
         @Builder.Default

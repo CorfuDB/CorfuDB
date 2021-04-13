@@ -17,15 +17,16 @@ import java.util.List;
  */
 @Slf4j
 public class SnapshotTxOperation extends AbstractTxOperation {
-    public SnapshotTxOperation(State state, Operations operations, CorfuTablesGenerator tablesManager) {
-        super(state, Operation.Type.TX_SNAPSHOT, operations, tablesManager);
+    public SnapshotTxOperation(State state, Operations operations, CorfuTablesGenerator tablesManager,
+                               Correctness correctness) {
+        super(state, Operation.Type.TX_SNAPSHOT, operations, tablesManager, correctness);
     }
 
     @Override
     public void execute() {
         try {
             // Safety Hack for not having snapshot in the future
-            Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_START);
+            correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_START);
             startSnapshotTx();
 
             int numOperations = state.getOperationCount().sample();
@@ -44,10 +45,10 @@ public class SnapshotTxOperation extends AbstractTxOperation {
             }
 
             stopTx();
-            Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_END);
+            correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_END);
             state.getCtx().updateLastSuccessfulReadOperationTimestamp();
         } catch (TransactionAbortedException tae) {
-            Correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_ABORTED);
+            correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_ABORTED);
         }
     }
 

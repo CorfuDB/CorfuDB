@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.Correctness;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.state.CorfuTablesGenerator;
+import org.corfudb.generator.state.KeysState;
 import org.corfudb.generator.state.State;
 
 import java.util.Optional;
@@ -18,10 +19,12 @@ public class WriteOperation extends Operation {
     @Getter
     private final Context context;
     private final CorfuTablesGenerator tableManager;
+    private final Correctness correctness;
 
-    public WriteOperation(State state, CorfuTablesGenerator tableManager) {
+    public WriteOperation(State state, CorfuTablesGenerator tableManager, Correctness correctness) {
         super(state, Operation.Type.WRITE);
         this.tableManager = tableManager;
+        this.correctness = correctness;
 
         Keys.FullyQualifiedKey key = generateFqKey(state);
 
@@ -37,8 +40,30 @@ public class WriteOperation extends Operation {
         boolean transactional = tableManager.isInTransaction();
         if (transactional) {
             tableManager.put(context.getFqKey(), context.getVal().get());
-            Correctness.recordOperation(context.getCorrectnessRecord(opType.getOpType()));
+            correctness.recordOperation(context.getCorrectnessRecord(opType.getOpType()));
             state.getCtx().updateLastSuccessfulWriteOperationTimestamp();
+
+            addToHistory();
+        } else {
+            throw new IllegalStateException("Not supported operation");
         }
+    }
+
+    private void addToHistory() {
+        Keys.Version stateVersion = state.getThreadLatestVersion(KeysState.ThreadName.buildFromCurrentThread());
+        context.setVersion(stateVersion);
+
+        KeysState.SnapshotId snapshotId = KeysState.SnapshotId.builder()
+                .clientId("client")
+                .threadId(KeysState.ThreadName.buildFromCurrentThread())
+                .version(context.getVersion())
+                .build();
+
+        KeysState.KeyEntry entry = KeysState.KeyEntry.builder()
+                .snapshotId(snapshotId)
+                .value(context.getVal())
+                .build();
+
+        state.getKeysState().put(context.getFqKey(), entry);
     }
 }
