@@ -1,17 +1,21 @@
 package org.corfudb.generator.verification;
 
-import org.corfudb.generator.Correctness;
+import org.corfudb.generator.correctness.Correctness;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.Streams;
+import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.operations.ReadOperation;
 import org.corfudb.generator.operations.WriteOperation;
 import org.corfudb.generator.state.CorfuTablesGenerator;
+import org.corfudb.generator.state.KeysState.SnapshotId;
+import org.corfudb.generator.state.KeysState.ThreadName;
 import org.corfudb.generator.state.State;
+import org.corfudb.generator.state.TxState;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.object.VloVersioningListener;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import java.util.HashMap;
@@ -41,20 +45,54 @@ class VerificationTest {
         CorfuTablesGenerator tablesManagerMock = spy(tablesManager);
         setupTableManager(tablesManagerMock);
 
-        tablesManagerMock.startOptimisticTx();
+        //subscribe on version updates
+        VloVersioningListener.subscribe(ver -> {
+            //update the state
+            ThreadName threadName = ThreadName.buildFromCurrentThread();
+            Keys.Version version = Keys.Version.build(ver);
+
+            state.getKeysState().updateThreadLatestVersion(threadName, version);
+        });
+
+        startTx(tablesManagerMock, state);
 
         Correctness correctness = new Correctness();
 
         WriteOperation write = new WriteOperation(state, tablesManagerMock, correctness);
         write.execute();
 
+        VloVersioningListener.submit(111);
+
         ReadOperation read = new ReadOperation(state, tablesManagerMock, correctness);
         read.execute();
 
-        tablesManagerMock.stopTx();
+        stopTx(tablesManagerMock);
 
         ReadOperationVerification verification = new ReadOperationVerification(state, read.getContext());
         Assertions.assertTrue(verification.verify());
+    }
+
+    private void startTx(CorfuTablesGenerator tablesManagerMock, State state) {
+        //update transaction state
+        tablesManagerMock.startOptimisticTx();
+
+        ThreadName thread = ThreadName.buildFromCurrentThread();
+        SnapshotId snapshotId = SnapshotId.builder()
+                .threadId(thread)
+                .clientId("client")
+                .version(Keys.Version.noVersion())
+                .build();
+
+        TxState.TxContext txContext = TxState.TxContext.builder()
+                .snapshotId(snapshotId)
+                .opType(Operation.Type.TX_OPTIMISTIC)
+                .build();
+
+        state.getTransactions().put(thread, txContext);
+    }
+
+    private void stopTx(CorfuTablesGenerator tablesManagerMock) {
+        tablesManagerMock.stopTx();
     }
 
     private void setupTableManager(CorfuTablesGenerator tablesManagerMock) {

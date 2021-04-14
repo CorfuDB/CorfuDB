@@ -1,7 +1,7 @@
 package org.corfudb.generator.distributions;
 
 import com.google.common.collect.ImmutableList;
-import org.corfudb.generator.Correctness;
+import org.corfudb.generator.correctness.Correctness;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.operations.ReadOperation;

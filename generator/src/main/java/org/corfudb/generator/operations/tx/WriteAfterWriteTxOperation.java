@@ -1,10 +1,10 @@
 package org.corfudb.generator.operations.tx;
 
-import org.corfudb.generator.Correctness;
+import org.corfudb.generator.correctness.Correctness;
 import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.operations.Operation;
-import org.corfudb.generator.state.State;
 import org.corfudb.generator.state.CorfuTablesGenerator;
+import org.corfudb.generator.state.State;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 

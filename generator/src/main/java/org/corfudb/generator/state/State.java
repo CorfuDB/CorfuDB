@@ -1,26 +1,16 @@
 package org.corfudb.generator.state;
 
-import com.google.common.reflect.TypeToken;
 import lombok.Getter;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.OperationCount;
 import org.corfudb.generator.distributions.Streams;
-import org.corfudb.generator.util.StringIndexer;
-import org.corfudb.runtime.CorfuRuntime;
-import org.corfudb.runtime.collections.CorfuTable;
-import org.corfudb.runtime.object.transactions.TransactionalContext;
-import org.corfudb.runtime.view.Address;
 
 import java.time.Duration;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT;
 import static org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
-import static org.corfudb.generator.distributions.Streams.StreamId;
 import static org.corfudb.generator.state.KeysState.VersionedKey;
 
 /**

@@ -1,4 +1,4 @@
-package org.corfudb.generator;
+package org.corfudb.generator.correctness;
 
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.slf4j.Logger;

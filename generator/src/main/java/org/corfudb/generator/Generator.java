@@ -1,12 +1,13 @@
 package org.corfudb.generator;
 
+import org.corfudb.generator.correctness.Correctness;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.distributions.Streams;
 import org.corfudb.generator.operations.CheckpointOperation;
 import org.corfudb.generator.operations.Operation;
-import org.corfudb.generator.state.State;
 import org.corfudb.generator.state.CorfuTablesGenerator;
+import org.corfudb.generator.state.State;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.util.ArrayList;

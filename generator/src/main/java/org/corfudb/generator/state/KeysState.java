@@ -30,6 +30,9 @@ public class KeysState {
     }
 
     public void put(FullyQualifiedKey key, KeyEntry entry){
+        if (!contains(key)) {
+            keys.put(key, new VersionedKey());
+        }
         keys.get(key).put(entry);
     }
 
@@ -59,6 +62,7 @@ public class KeysState {
 
     @Builder
     @ToString
+    @EqualsAndHashCode
     public static class SnapshotId {
         @NonNull
         private final ThreadName threadId;

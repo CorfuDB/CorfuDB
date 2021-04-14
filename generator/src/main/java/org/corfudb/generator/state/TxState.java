@@ -3,7 +3,6 @@ package org.corfudb.generator.state;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Setter;
 import lombok.ToString;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.operations.Operation;
@@ -18,6 +17,10 @@ public class TxState {
 
     public TxContext get(KeysState.ThreadName transactionId) {
         return state.get(transactionId);
+    }
+
+    public void put(KeysState.ThreadName thread, TxContext context) {
+        state.put(thread, context);
     }
 
     @Builder
