@@ -44,6 +44,7 @@ import org.junit.Before;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -516,6 +517,11 @@ public abstract class AbstractViewTest extends AbstractCorfuTest {
         }
 
         TestServer(ServerContext serverContext) {
+            System.out.println("server context is: " + serverContext.getServerConfig().toString());
+            HashMap<String, Object> newConfig = new HashMap<>(serverContext.getServerConfig());
+            newConfig.put("--initial-token", Integer.MAX_VALUE - 1000);
+            serverContext = new ServerContext(newConfig);
+
             this.serverContext = serverContext;
             this.serverRouter = serverContext.getServerRouter();
             if (serverRouter == null) {

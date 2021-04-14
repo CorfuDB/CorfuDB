@@ -94,7 +94,7 @@ public class SequencerServer extends AbstractServer {
      * global log first available position (initially, 0).
      */
     @Getter
-    private long globalLogTail = Address.getMinAddress();
+    public long globalLogTail;
 
     private long trimMark = Address.NON_ADDRESS;
 
@@ -158,6 +158,8 @@ public class SequencerServer extends AbstractServer {
         this.cache = new SequencerServerCache(config.getCacheSize());
 
         setUpTimerNameCache();
+
+        System.out.println("SequencerServer constructor tail: " + globalLogTail);
     }
 
     @Override
@@ -363,6 +365,8 @@ public class SequencerServer extends AbstractServer {
                                          ChannelHandlerContext ctx, IServerRouter r) {
         log.info("Reset sequencer server.");
         long initialToken = msg.getPayload().getGlobalTail();
+        System.out.println("resetting sequencer, updating tail to " + initialToken);
+
         final Map<UUID, StreamAddressSpace> addressSpaceMap = msg.getPayload().getStreamsAddressMap();
         final long bootstrapMsgEpoch = msg.getPayload().getSequencerEpoch();
 
@@ -712,11 +716,12 @@ public class SequencerServer extends AbstractServer {
         public static Config parse(Map<String, Object> opts) {
             long cacheSize = Utils.parseLong(opts.getOrDefault("--sequencer-cache-size", DEFAULT_CACHE_SIZE));
             long initialToken = Utils.parseLong(opts.get("--initial-token"));
+            System.out.println("Parsed: " + initialToken);
 
             if (Address.nonAddress(initialToken)) {
                 initialToken = Address.getMinAddress();
             }
-
+            System.out.println("SequencerServer initialToken: " + initialToken);
             return Config.builder()
                     .initialToken(initialToken)
                     .cacheSize(cacheSize)

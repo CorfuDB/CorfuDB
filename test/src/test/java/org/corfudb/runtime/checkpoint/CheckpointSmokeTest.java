@@ -38,6 +38,7 @@ import org.corfudb.util.serializer.ISerializer;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Before;
 import org.junit.Test;
+import org.roaringbitmap.longlong.Roaring64NavigableMap;
 
 /**
  * Basic smoke tests for checkpoint-in-stream PoC.
@@ -232,6 +233,65 @@ public class CheckpointSmokeTest extends AbstractViewTest {
         setRuntime();
         Map<String, Long> m3 = instantiateMap(streamName);
         testAssertions.accept(m3);
+    }
+
+    @Test
+    @SuppressWarnings("MagicNumber")
+    public void test1() throws Exception {
+
+        // Open map.
+        final String streamA = "streamA";
+        Map<String, Long> mA = instantiateMap(streamA);
+
+        // Sequencer token starts from Integer.MAX_VALUE - 1000
+        // Add 950 data entries, then after checkpointing (batchSize = 50), the cp entries will NOT hit Integer.MAX_VALUE
+        // #cp entries = 1 + 900/50 + 1 = 21
+        for (int i = 0; i < 900; i++) {
+            mA.put(String.valueOf(i), (long) i);
+        }
+
+        CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-1", mA);
+        Token cpToken = cpw1.appendCheckpoint();
+
+        r.getAddressSpaceView().prefixTrim(cpToken);
+
+        // New Runtime
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
+
+        // Address Integer.MAX_VALUE is used for normal data
+        for (int i = 1000; i < 1100; i++) {
+            mA.put(String.valueOf(i), (long) i);
+        }
+
+        CheckpointWriter cpw2 = new CheckpointWriter(rt2, CorfuRuntime.getStreamID(streamA), "checkpointer-2", mA);
+        cpw2.appendCheckpoint();
+    }
+
+    @Test
+    @SuppressWarnings("MagicNumber")
+    public void test2() throws Exception {
+
+        // Open map.
+        final String streamA = "streamA";
+        Map<String, Long> mA = instantiateMap(streamA);
+
+        // Sequencer token starts from Integer.MAX_VALUE - 1000
+        // Add 990 data entries, then after checkpointing (batchSize = 50), the cp entries will hit Integer.MAX_VALUE
+        // #cp entries = 1 + ceiling(990/50) + 1 = 22
+        for (int i = 0; i < 990; i++) {
+            mA.put(String.valueOf(i), (long) i);
+        }
+
+        CheckpointWriter cpw1 = new CheckpointWriter(r, CorfuRuntime.getStreamID(streamA), "checkpointer-1", mA);
+        Token cpToken = cpw1.appendCheckpoint();
+
+        r.getAddressSpaceView().prefixTrim(cpToken);
+
+        // New Runtime
+        CorfuRuntime rt2 = getNewRuntime(getDefaultNode()).connect();
+
+        CheckpointWriter cpw2 = new CheckpointWriter(rt2, CorfuRuntime.getStreamID(streamA), "checkpointer-2", mA);
+        cpw2.appendCheckpoint();
     }
 
     /** Test the CheckpointWriter class, part 1.

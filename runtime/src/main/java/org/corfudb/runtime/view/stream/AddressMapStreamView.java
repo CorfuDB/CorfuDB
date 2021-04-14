@@ -203,7 +203,12 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
     private void processCheckpoint(StreamAddressSpace streamAddressSpace, Function<ILogData, Boolean> filter,
                                    NavigableSet<Long> queue) {
         SortedSet<Long> checkpointAddresses = new TreeSet<>(Collections.reverseOrder());
-        streamAddressSpace.getAddressMap().forEach(checkpointAddresses::add);
+        Roaring64NavigableMap mp = streamAddressSpace.getAddressMap();
+        System.out.println("The addresses in bit map are: " + mp.toString());
+        mp.forEach(addr -> {
+            checkpointAddresses.add(addr);
+            System.out.println(addr);
+        });
 
         // Checkpoint entries will be read in batches of a predefined size,
         // the reason not to read them all in a single call is that:

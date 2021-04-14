@@ -440,6 +440,8 @@ public class LayoutManagementView extends AbstractView {
                     bootstrapWithoutTailsUpdate = false;
                 }
 
+                maxTokenRequested = Integer.MAX_VALUE - 1000;
+                System.out.println("LayoutManagementView bootstrapping, maxTokenRequested: " + maxTokenRequested);
                 // Configuring the new sequencer.
                 boolean sequencerBootstrapResult = CFUtils.getUninterruptibly(
                         runtime.getLayoutView().getRuntimeLayout(newLayout)

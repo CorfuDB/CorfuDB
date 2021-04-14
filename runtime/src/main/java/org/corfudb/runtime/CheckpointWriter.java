@@ -209,6 +209,7 @@ public class CheckpointWriter<T extends Map> {
         CheckpointEntry cp = new CheckpointEntry(CheckpointEntry.CheckpointEntryType.START,
                 author, checkpointId, streamId, mdkv, null);
         startAddress = nonCachedAppend(cp, checkpointStreamID);
+        System.out.println("Cp start pos: " + startAddress);
 
         postAppendFunc.accept(cp, startAddress);
     }
@@ -263,6 +264,7 @@ public class CheckpointWriter<T extends Map> {
                     .CheckpointEntryType.CONTINUATION,
                     author, checkpointId, streamId, mdkv, smrEntries);
             long pos = nonCachedAppend(cp, checkpointStreamID);
+            System.out.println("CpEntry pos is: " + pos);
             postAppendFunc.accept(cp, pos);
             numEntries++;
             // CheckpointEntry::serialize() has a side-effect we use
@@ -290,6 +292,7 @@ public class CheckpointWriter<T extends Map> {
                 author, checkpointId, streamId, mdkv, null);
 
         endAddress = nonCachedAppend(cp, checkpointStreamID);
+        System.out.println("Cp end pos: " + endAddress);
 
         postAppendFunc.accept(cp, endAddress);
     }
