@@ -70,6 +70,9 @@ class VerificationTest {
 
         ReadOperationVerification verification = new ReadOperationVerification(state, read.getContext());
         Assertions.assertTrue(verification.verify());
+
+        Keys.FullyQualifiedKey key = read.getContext().getFqKey();
+        System.out.println(state.getKeysState().get(key));
     }
 
     private void startTx(CorfuTablesGenerator tablesManagerMock, State state) {

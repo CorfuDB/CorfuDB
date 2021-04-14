@@ -1,5 +1,8 @@
 package org.corfudb.generator.correctness;
 
+import org.corfudb.generator.distributions.Keys;
+import org.corfudb.generator.operations.Operation;
+import org.corfudb.generator.state.TxState.TxStatus;
 import org.corfudb.runtime.object.transactions.TransactionalContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,12 +12,8 @@ import org.slf4j.LoggerFactory;
  */
 public class Correctness {
 
-    private static final String TX_PATTERN = "%s, %s";
+    //operation_type, tx_state, version
     private static final String TX_PATTERN_VERSION = "%s, %s, %s";
-
-    public static final String TX_START = "start";
-    public static final String TX_END = "end";
-    public static final String TX_ABORTED = "aborted";
 
     private static final Logger CORRECTNESS_LOGGER = LoggerFactory.getLogger("correctness");
 
@@ -31,7 +30,7 @@ public class Correctness {
      * 2021-02-02_23:44:57.853, [pool-6-thread-7], TxRead, table_36:key_69=3a1f57b1-35a4-4a7f-aee0-99e00d7e1cf2, 136
      *
      * @param operation log message
-     * @param txType tx prefix
+     * @param txType    tx prefix
      */
     public void recordOperation(String operation, OperationTxType txType) {
         if (txType == OperationTxType.TX) {
@@ -45,15 +44,17 @@ public class Correctness {
     /**
      * Record a transaction marker operation
      *
-     * @param version if we have a version to report
-     * @param fields  fields to report
+     * @param version  a version to report
+     * @param txStatus the status of a transaction
+     * @param opType   operation type
      */
-    public void recordTransactionMarkers(boolean version, String... fields) {
-        if (version) {
-            recordOperation(String.format(TX_PATTERN_VERSION, fields[0], fields[1], fields[2]), OperationTxType.NON_TX);
-        } else {
-            recordOperation(String.format(TX_PATTERN, fields[0], fields[1]), OperationTxType.NON_TX);
-        }
+    public void recordTransactionMarkers(Operation.Type opType, TxStatus txStatus, Keys.Version version) {
+        String msg = String.format(TX_PATTERN_VERSION, opType.getOpType(), txStatus.getStatus(), version.getVer());
+        recordOperation(msg, OperationTxType.NON_TX);
+    }
+
+    public void recordTransactionMarkers(Operation.Type opType, TxStatus txStatus) {
+        recordTransactionMarkers(opType, txStatus, Keys.Version.noVersion());
     }
 
     public enum OperationTxType {

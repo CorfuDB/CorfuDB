@@ -1,5 +1,6 @@
 package org.corfudb.generator.state;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -47,7 +48,11 @@ public class TxState {
         }
     }
 
+    @Getter
+    @AllArgsConstructor
     public enum TxStatus {
-        START, END, ABORTED
+        START("start"), END("end"), ABORTED("aborted");
+
+        private final String status;
     }
 }

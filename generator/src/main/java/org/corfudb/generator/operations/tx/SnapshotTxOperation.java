@@ -6,6 +6,8 @@ import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.State;
+import org.corfudb.generator.state.TxState;
+import org.corfudb.generator.state.TxState.TxStatus;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.transactions.TransactionType;
 
@@ -26,7 +28,7 @@ public class SnapshotTxOperation extends AbstractTxOperation {
     public void execute() {
         try {
             // Safety Hack for not having snapshot in the future
-            correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_START);
+            correctness.recordTransactionMarkers(opType, TxStatus.START);
             startSnapshotTx();
 
             int numOperations = state.getOperationCount().sample();
@@ -45,10 +47,10 @@ public class SnapshotTxOperation extends AbstractTxOperation {
             }
 
             stopTx();
-            correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_END);
+            correctness.recordTransactionMarkers(opType, TxStatus.END);
             state.getCtx().updateLastSuccessfulReadOperationTimestamp();
         } catch (TransactionAbortedException tae) {
-            correctness.recordTransactionMarkers(false, opType.getOpType(), Correctness.TX_ABORTED);
+            correctness.recordTransactionMarkers(opType, TxStatus.ABORTED);
         }
     }
 

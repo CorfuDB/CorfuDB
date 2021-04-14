@@ -48,6 +48,7 @@ public class KeysState {
         return keys.containsKey(fqKey);
     }
 
+    @ToString
     public static class VersionedKey {
         private final SortedMap<Keys.Version, KeyEntry> history = new TreeMap<>();
 

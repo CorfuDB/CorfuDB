@@ -75,6 +75,7 @@ public class Keys implements DataSet<Keys.KeyId> {
         private static final ConcurrentMap<Long, Version> REGISTRY = new ConcurrentHashMap<>();
         private static final Function<Long, Version> FACTORY = Version::new;
 
+        @Getter
         private final long ver;
 
         public static Version build(long version){
