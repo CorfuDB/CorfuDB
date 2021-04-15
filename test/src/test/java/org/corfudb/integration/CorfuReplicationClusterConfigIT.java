@@ -50,6 +50,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
 
     private final static long shortInterval = 1L;
     private final static long mediumInterval = 10L;
+    private final static long lockInterval = 6L;
     private final static int firstBatch = 10;
     private final static int secondBatch = 15;
     private final static int thirdBatch = 20;
@@ -971,7 +972,12 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
         txnContext.clear(activeLockTable);
         txnContext.commit();
         log.info("Active's lock is released!");
-        TimeUnit.SECONDS.sleep(shortInterval);
+        TimeUnit.SECONDS.sleep(lockInterval);
+
+        // Release Active's lock again
+        txnContext = activeCorfuStore.txn(CORFU_SYSTEM_NAMESPACE);
+        txnContext.clear(activeLockTable);
+        txnContext.commit();
 
         for (int i = secondBatch; i < thirdBatch; i++) {
             activeRuntime.getObjectsView().TXBegin();
