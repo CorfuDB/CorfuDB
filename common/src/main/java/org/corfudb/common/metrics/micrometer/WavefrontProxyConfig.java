@@ -3,7 +3,6 @@ package org.corfudb.common.metrics.micrometer;
 import lombok.Builder;
 import lombok.Builder.Default;
 import lombok.Getter;
-import lombok.NonNull;
 import lombok.ToString;
 
 import java.time.Duration;
@@ -22,8 +21,8 @@ public class WavefrontProxyConfig {
     @Default
     private final int port = 2878;
 
-    @NonNull
-    private final String apiToken;
+    @Default
+    private final String apiToken = "";
 
     @Default
     private final Duration exportDuration = Duration.ofMinutes(1);

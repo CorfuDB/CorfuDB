@@ -58,8 +58,8 @@ public class MeterRegistryProvider {
          * Configure the meter registry of type WavefrontMeterRegistry. All the metrics registered
          * with this meter registry will be exported to the configured Wavefront proxy.
          *
-         * @param config          A config for Wavefront proxy.
-         * @param identifier      A global identifier to tag every metric with.
+         * @param config     A config for Wavefront proxy.
+         * @param identifier A global identifier to tag every metric with.
          */
         public static synchronized void initWavefrontRegistry(WavefrontProxyConfig config,
                                                               String identifier) {
@@ -78,6 +78,11 @@ public class MeterRegistryProvider {
                 public String apiToken() {
                     return config.getApiToken();
                 }
+
+                @Override
+                public Duration step() {
+                    return config.getExportDuration();
+                }
             };
             Supplier<Optional<MeterRegistry>> supplier = () -> {
                 MeterRegistry registry =
@@ -92,8 +97,7 @@ public class MeterRegistryProvider {
                                  String identifier) {
             if (meterRegistry.isPresent()) {
                 log.warn("Registry has already been initialized.");
-            }
-            else {
+            } else {
                 meterRegistry = meterRegistrySupplier.get();
                 meterRegistry.ifPresent(registry -> registry.config().commonTags("id", identifier));
                 JVMMetrics.register(meterRegistry);
