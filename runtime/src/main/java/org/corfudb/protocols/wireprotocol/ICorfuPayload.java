@@ -398,7 +398,9 @@ public interface ICorfuPayload<T> {
         } else if (payload instanceof Roaring64NavigableMap) {
             Roaring64NavigableMap mrb = (Roaring64NavigableMap) payload;
             // Improve compression
-            mrb.runOptimize();
+            // runOptimize() has a known bug dealing with bitmap around Integer.MAX_VALUE
+            // https://github.com/RoaringBitmap/RoaringBitmap/issues/475
+            // mrb.runOptimize();
             try (ByteBufOutputStream outputStream = new ByteBufOutputStream(buffer);
                  DataOutputStream dataOutputStream =  new DataOutputStream(outputStream)){
                 mrb.serialize(dataOutputStream);
