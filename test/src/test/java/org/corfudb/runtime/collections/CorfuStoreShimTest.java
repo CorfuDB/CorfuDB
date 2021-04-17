@@ -123,6 +123,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             assertThatThrownBy( () -> readWriteTxn.putRecord(tableName, key2, null, null))
                     .isExactlyInstanceOf(IllegalArgumentException.class);
         }
+        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -213,6 +214,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(entry.getMetadata().getCreateUser()).isEqualTo("user_1");
         assertThat(entry.getMetadata().getLastModifiedTime()).isLessThan(System.currentTimeMillis() + 1);
         assertThat(entry.getMetadata().getCreateTime()).isLessThan(entry.getMetadata().getLastModifiedTime());
+        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -283,6 +285,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         txn.commit();
         assertThat(shimStore.getTable(someNamespace, tableName).get(key1).getMetadata())
                 .isNull();
+        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -353,6 +356,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                             .build(), true);
             txn.commit();
         }
+        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -452,6 +456,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             });
             txn.commit();
         }
+        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -538,6 +543,7 @@ public class CorfuStoreShimTest extends AbstractViewTest {
         assertThat(TransactionalContext.isInTransaction()).isTrue();
         long commitAddress = corfuRuntime.getObjectsView().TXEnd();
         assertThat(commitAddress).isNotEqualTo(Address.NON_ADDRESS);
+        log.debug(table.getMetrics().toString());
     }
 
     /**
@@ -612,5 +618,6 @@ public class CorfuStoreShimTest extends AbstractViewTest {
             Long order = ((ExampleSchemas.ExampleValue)records.get(i).getEntry()).getAnotherKey();
             assertThat(order).isEqualTo(validator.get(i));
         }
+        log.debug(corfuQueue.getMetrics().toString());
     }
 }
