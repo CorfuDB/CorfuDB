@@ -6,6 +6,7 @@ import org.corfudb.generator.correctness.Correctness;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.KeysState;
+import org.corfudb.generator.state.KeysState.ThreadName;
 import org.corfudb.generator.state.State;
 
 import java.util.Optional;
@@ -55,12 +56,12 @@ public class WriteOperation extends Operation {
     }
 
     private void addToHistory() {
-        Keys.Version stateVersion = state.getThreadLatestVersion(KeysState.ThreadName.buildFromCurrentThread());
+        Keys.Version stateVersion = state.getKeysState().getThreadLatestVersion(ThreadName.buildFromCurrentThread());
         context.setVersion(stateVersion);
 
         KeysState.SnapshotId snapshotId = KeysState.SnapshotId.builder()
                 .clientId("client")
-                .threadId(KeysState.ThreadName.buildFromCurrentThread())
+                .threadId(ThreadName.buildFromCurrentThread())
                 .version(context.getVersion())
                 .build();
 
