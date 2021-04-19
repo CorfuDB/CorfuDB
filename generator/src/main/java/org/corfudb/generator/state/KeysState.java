@@ -23,7 +23,7 @@ import static org.corfudb.generator.distributions.Keys.Version;
 public class KeysState {
 
     private final ConcurrentMap<FullyQualifiedKey, VersionedKey> keys = new ConcurrentHashMap<>();
-    private final ConcurrentMap<ThreadName, Version> versionsByThread = new ConcurrentHashMap<>();
+    private final ConcurrentMap<ThreadName, Version> threadLatestVersions = new ConcurrentHashMap<>();
 
     public VersionedKey get(FullyQualifiedKey key) {
         return keys.get(key);
@@ -37,11 +37,15 @@ public class KeysState {
     }
 
     public void updateThreadLatestVersion(ThreadName thread, Version version) {
-        versionsByThread.put(thread, version);
+        threadLatestVersions.put(thread, version);
     }
 
     public Version getThreadLatestVersion(ThreadName thread) {
-        return versionsByThread.get(thread);
+        if (!threadLatestVersions.containsKey(thread)) {
+            return Version.noVersion();
+        }
+
+        return threadLatestVersions.get(thread);
     }
 
     public boolean contains(FullyQualifiedKey fqKey) {

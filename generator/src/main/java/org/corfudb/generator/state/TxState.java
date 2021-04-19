@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import lombok.ToString;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.operations.Operation;
@@ -41,7 +42,9 @@ public class TxState {
         @Builder.Default
         private final ConcurrentMap<Keys.FullyQualifiedKey, String> values = new ConcurrentHashMap<>();
 
-        private final boolean terminated;
+        @Getter
+        @Setter
+        private boolean terminated;
 
         public boolean contains(Keys.FullyQualifiedKey key) {
             return values.containsKey(key);

@@ -25,7 +25,7 @@ import java.util.List;
  */
 public class Operations implements DataSet<Operation.Type> {
 
-    private final List<Operation.Type> allOperations;
+    private final List<Operation.Type> allOperationTypes;
     private final State state;
     private final CorfuTablesGenerator tablesManager;
     private final Correctness correctness;
@@ -35,7 +35,7 @@ public class Operations implements DataSet<Operation.Type> {
         this.tablesManager = tablesManager;
         this.correctness = correctness;
 
-        allOperations = ImmutableList.of(
+        allOperationTypes = ImmutableList.of(
                 Operation.Type.WRITE, Operation.Type.READ, Operation.Type.TX_OPTIMISTIC,
                 Operation.Type.TX_SNAPSHOT, Operation.Type.SLEEP, Operation.Type.REMOVE
         );
@@ -46,12 +46,12 @@ public class Operations implements DataSet<Operation.Type> {
     }
 
     public Operation getRandomOperation() {
-        Operation.Type opType = allOperations.get(RANDOM.nextInt(allOperations.size()));
+        Operation.Type opType = allOperationTypes.get(RANDOM.nextInt(allOperationTypes.size()));
         return create(opType);
     }
 
     public List<Operation.Type> getDataSet() {
-        return allOperations;
+        return allOperationTypes;
     }
 
     public Operation create(Operation.Type opType) {

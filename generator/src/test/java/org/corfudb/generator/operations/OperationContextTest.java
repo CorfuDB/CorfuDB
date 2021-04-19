@@ -1,6 +1,5 @@
 package org.corfudb.generator.operations;
 
-import lombok.val;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
 import org.corfudb.generator.distributions.Streams;

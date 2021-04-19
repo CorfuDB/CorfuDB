@@ -12,10 +12,16 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class SleepOperation extends Operation {
+
     private static final Random RANDOM = new Random();
 
     public SleepOperation(State state) {
         super(state, Operation.Type.SLEEP);
+    }
+
+    @Override
+    public boolean verify() {
+        throw new UnsupportedOperationException("Not verifiable");
     }
 
     @Override

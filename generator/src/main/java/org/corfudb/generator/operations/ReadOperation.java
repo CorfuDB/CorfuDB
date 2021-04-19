@@ -5,17 +5,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.correctness.Correctness;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.state.CorfuTablesGenerator;
+import org.corfudb.generator.state.KeysState;
 import org.corfudb.generator.state.KeysState.ThreadName;
 import org.corfudb.generator.state.State;
 import org.corfudb.generator.state.TxState;
 import org.corfudb.generator.util.StringIndexer;
 import org.corfudb.runtime.collections.CorfuTable;
 
+import java.util.Optional;
+
 /**
  * Reads data from corfu table and saves the current state in the operation context
  */
 @Slf4j
 public class ReadOperation extends Operation {
+
     @Getter
     private final Context context;
     private final CorfuTablesGenerator tableManager;
@@ -34,6 +38,25 @@ public class ReadOperation extends Operation {
                 .fqKey(key)
                 .val(tableManager.get(key))
                 .build();
+    }
+
+    @Override
+    public boolean verify() {
+        Keys.FullyQualifiedKey fqKey = context.getFqKey();
+
+        if(context.getVal().isPresent()) {
+            if (state.getKeysState().contains(fqKey)) {
+                KeysState.VersionedKey keyState = state.getKey(fqKey);
+
+                Optional<String> stateValue = keyState.get(context.getVersion()).getValue();
+                return stateValue.equals(context.getVal());
+            } else {
+                return false;
+            }
+        } else {
+            boolean isPresentInTheState = state.getKeysState().contains(fqKey);
+            return !isPresentInTheState;
+        }
     }
 
     @Override

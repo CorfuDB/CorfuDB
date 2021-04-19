@@ -6,8 +6,6 @@ import org.corfudb.generator.distributions.OperationCount;
 import org.corfudb.generator.distributions.Streams;
 
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.corfudb.generator.LongevityApp.APPLICATION_TIMEOUT;
 import static org.corfudb.generator.distributions.Keys.FullyQualifiedKey;
@@ -27,8 +25,6 @@ public class State {
 
     @Getter
     private final KeysState keysState;
-
-    private final Map<KeysState.ThreadName, Keys.Version> threadLatestVersions = new ConcurrentHashMap<>();
 
     @Getter
     private final TxState transactions;
@@ -54,14 +50,6 @@ public class State {
 
     public VersionedKey getKey(FullyQualifiedKey fqKey) {
         return keysState.get(fqKey);
-    }
-
-    public Keys.Version getThreadLatestVersion(KeysState.ThreadName threadName) {
-        if (!threadLatestVersions.containsKey(threadName)) {
-            return Keys.Version.noVersion();
-        }
-
-        return threadLatestVersions.get(threadName);
     }
 
     public static class StateContext {

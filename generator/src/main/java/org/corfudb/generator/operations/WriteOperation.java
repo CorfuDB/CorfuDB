@@ -35,6 +35,11 @@ public class WriteOperation extends Operation {
     }
 
     @Override
+    public boolean verify() {
+        return false;
+    }
+
+    @Override
     public void execute() {
         // Hack for Transaction writes only
         boolean transactional = tableManager.isInTransaction();

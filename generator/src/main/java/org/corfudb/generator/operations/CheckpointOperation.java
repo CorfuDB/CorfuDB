@@ -24,6 +24,11 @@ public class CheckpointOperation extends Operation {
     }
 
     @Override
+    public boolean verify() {
+        throw new UnsupportedOperationException("Not supported");
+    }
+
+    @Override
     public void execute() {
         try {
             MultiCheckpointWriter<CorfuTable<String, String>> mcw = new MultiCheckpointWriter<>();

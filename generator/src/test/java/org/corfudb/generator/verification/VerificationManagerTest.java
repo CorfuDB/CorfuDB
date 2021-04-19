@@ -68,8 +68,7 @@ class VerificationTest {
 
         stopTx(tablesManagerMock);
 
-        ReadOperationVerification verification = new ReadOperationVerification(state, read.getContext());
-        Assertions.assertTrue(verification.verify());
+        Assertions.assertTrue(read.verify());
 
         Keys.FullyQualifiedKey key = read.getContext().getFqKey();
         System.out.println(state.getKeysState().get(key));

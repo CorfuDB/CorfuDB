@@ -13,7 +13,6 @@ import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.operations.UpdateVersionHandler;
 import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.State;
-import org.corfudb.generator.verification.VerificationManager;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.unrecoverable.SystemUnavailableError;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
@@ -118,12 +117,17 @@ public class LongevityApp {
             return exitStatus;
         }
 
-        boolean verificationResult = VerificationManager.builder()
-                .completedOperations(completedOperations)
-                .build()
-                .verify();
 
-        return ExitStatus.fromBool(verificationResult);
+        while (!completedOperations.isEmpty()){
+            Operation op = completedOperations.poll();
+            boolean verify = op.verify();
+
+            if (!verify) {
+                return ExitStatus.ERROR;
+            }
+        }
+
+        return ExitStatus.OK;
     }
 
 
@@ -192,7 +196,7 @@ public class LongevityApp {
      * the executorService.
      */
     private void runTaskProducer() {
-        taskProducer.execute(() -> {
+        CompletableFuture.runAsync(() -> {
             while (true) {
                 Operation current = operations.getRandomOperation();
                 try {
@@ -203,8 +207,7 @@ public class LongevityApp {
                     log.error("operation error", e);
                 }
             }
-        });
-
+        }, taskProducer);
     }
 
     /**
@@ -221,7 +224,6 @@ public class LongevityApp {
                     try {
                         Operation op = operationQueue.take();
                         op.execute();
-
                         completedOperations.put(op);
                     } catch (Exception e) {
                         log.error("Operation failed with", e);

@@ -1,5 +1,6 @@
 package org.corfudb.generator.operations.tx;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.generator.correctness.Correctness;
 import org.corfudb.generator.distributions.Keys;
@@ -7,11 +8,12 @@ import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.operations.Operation;
 import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.State;
-import org.corfudb.generator.state.TxState;
 import org.corfudb.generator.state.TxState.TxStatus;
 import org.corfudb.runtime.exceptions.AbortCause;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.view.Address;
+
+import java.util.List;
 
 /**
  * Created by maithem on 7/14/17.
@@ -19,9 +21,14 @@ import org.corfudb.runtime.view.Address;
 @Slf4j
 public class OptimisticTxOperation extends AbstractTxOperation {
 
+    @Getter
+    private final List<Operation> nestedOperations;
+
     public OptimisticTxOperation(State state, Operations operations, CorfuTablesGenerator tablesManager,
                                  Correctness correctness) {
         super(state, Operation.Type.TX_OPTIMISTIC, operations, tablesManager, correctness);
+
+        this.nestedOperations = createOperations();
     }
 
     @Override

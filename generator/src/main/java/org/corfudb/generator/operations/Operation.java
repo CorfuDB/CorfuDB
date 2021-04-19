@@ -25,6 +25,8 @@ public abstract class Operation {
         this.opType = operationType;
     }
 
+    public abstract boolean verify();
+
     public abstract void execute();
 
     public abstract Operation.Context getContext();
@@ -64,6 +66,10 @@ public abstract class Operation {
         READ("Read"), REMOVE("Rm"), SLEEP("Sleep"), WRITE("Write"), 
         TX_NESTED("TxNest"), TX_OPTIMISTIC("TxOpt"), TX_SNAPSHOT("TxSnap"), TX_WAW("TxWaw"),
         CHECKPOINT("Checkpoint");
+
+        public boolean notTxOptimisticOrNestedOrSnapshot() {
+            return !(this == TX_OPTIMISTIC || this == TX_NESTED || this == TX_SNAPSHOT);
+        }
 
         @Getter
         private final String opType;

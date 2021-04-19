@@ -6,6 +6,7 @@ import org.corfudb.generator.correctness.Correctness;
 import org.corfudb.generator.distributions.Keys;
 import org.corfudb.generator.state.CorfuTablesGenerator;
 import org.corfudb.generator.state.KeysState;
+import org.corfudb.generator.state.KeysState.ThreadName;
 import org.corfudb.generator.state.State;
 
 import java.util.Optional;
@@ -34,9 +35,20 @@ public class RemoveOperation extends Operation {
     }
 
     @Override
+    public boolean verify() {
+        return true;
+    }
+
+    @Override
     public void execute() {
         // Hack for Transaction writes only
         if (tableManager.isInTransaction()) {
+            Keys.Version latestVersion = state
+                    .getKeysState()
+                    .getThreadLatestVersion(ThreadName.buildFromCurrentThread());
+
+            context.setVersion(latestVersion);
+
             tableManager
                     .getMap(context.getFqKey().getTableId())
                     .remove(context.getFqKey().getKeyId().getKey());
@@ -58,7 +70,7 @@ public class RemoveOperation extends Operation {
     private void addToHistory() {
         KeysState.SnapshotId snapshotId = KeysState.SnapshotId.builder()
                 .version(context.getVersion())
-                .threadId(KeysState.ThreadName.buildFromCurrentThread())
+                .threadId(ThreadName.buildFromCurrentThread())
                 .clientId("client")
                 .build();
 

@@ -1,5 +1,6 @@
 package org.corfudb.generator.operations.tx;
 
+import com.google.common.collect.ImmutableList;
 import org.corfudb.generator.correctness.Correctness;
 import org.corfudb.generator.distributions.Operations;
 import org.corfudb.generator.operations.Operation;
@@ -25,19 +26,34 @@ public abstract class AbstractTxOperation extends Operation {
         this.correctness = correctness;
     }
 
-    protected void executeOperations() {
+    @Override
+    public boolean verify() {
+        for (Operation nestedOperation : getNestedOperations()) {
+            if(!nestedOperation.verify()){
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    protected List<Operation> createOperations() {
         int numOperations = state.getOperationCount().sample();
         List<Operation.Type> operationTypes = operations.sample(numOperations);
 
-        for (Operation.Type opType : operationTypes) {
-            if (opType == Type.TX_OPTIMISTIC || opType == Type.TX_SNAPSHOT || opType == Type.TX_NESTED) {
-                continue;
-            }
+        return operationTypes.stream()
+                .filter(Type::notTxOptimisticOrNestedOrSnapshot)
+                .map(operations::create)
+                .collect(ImmutableList.toImmutableList());
+    }
 
-            Operation operation = operations.create(opType);
-            operation.execute();
+    protected void executeOperations() {
+        for (Operation nestedOperation : getNestedOperations()) {
+            nestedOperation.execute();
         }
     }
+
+    public abstract List<Operation> getNestedOperations();
 
     protected long stopTx() {
         return tablesManager.getRuntime().getObjectsView().TXEnd();
