@@ -65,6 +65,12 @@ public class Table<K extends Message, V extends Message, M extends Message> {
     @Getter
     private final MetadataOptions metadataOptions;
 
+    /**
+     * List of Metrics captured on this table
+     */
+    @Getter
+    private final TableMetrics metrics;
+
     @Getter
     private final Class<K> keyClass;
 
@@ -122,6 +128,7 @@ public class Table<K extends Message, V extends Message, M extends Message> {
                 .setArguments(new ProtobufIndexer(tableParameters.getValueSchema()), streamingMapSupplier, versionPolicy)
                 .setStreamTags(streamTags)
                 .open();
+        this.metrics = new TableMetrics(this.fullyQualifiedTableName);
         this.keyClass = tableParameters.getKClass();
         this.valueClass = tableParameters.getVClass();
         this.metadataClass = tableParameters.getMClass();
