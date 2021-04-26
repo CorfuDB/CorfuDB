@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package org.corfudb.infrastructure.compaction.proto;
+
+import "google/protobuf/timestamp.proto";
+
+
+// Metadata in Compaction Manager
+message MetadataKeyMsg {
+  string key = 1;
+}
+
+message MetadataMsg {
+  string compaction_task_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  repeated CheckpointTaskMsg checkpoint_task = 3;
+  CompactionTaskStatus status = 4;
+}
+
+enum CompactionTaskStatus {
+  ONGOING = 0;
+  ERROR = 1;
+  RETRY = 2;
+  COMPLETED = 3;
+}
+
+message PollingTaskTriggerKeyMsg {
+  string compaction_task_id = 1;
+}
+
+message PollingTaskTriggerMsg {
+  SafeSnapshotMsg safe_snapshot = 1;
+  CompactionTaskStatus task_status = 2;
+}
+
+message SafeSnapshotMsg {
+  bool committed = 1;
+  fixed64 address = 2;
+  google.protobuf.Timestamp record_time = 3;
+}
+
+// Element of the Checkpoint Task Queue
+message CheckpointTaskMsg {
+  string namespace = 1;
+  string table_name = 2;
+  string compaction_task_id = 3;
+  bool is_disk_based = 4;
+}
+
+// Checkpoint Task Status Key
+message StatusKeyMsg {
+  string namespace = 1;
+  string table_name = 2;
+  string compaction_task_id = 3;
+}
+
+// Checkpoint Task Status Value
+message StatusMsg {
+  CheckpointTaskStatus status = 1;
+  string detail_msg = 2;
+}
+
+enum CheckpointTaskStatus {
+  UNASSIGNED = 0;
+  ASSIGNED = 1;
+  FAILED = 2;
+  FINISHED = 3;
+}

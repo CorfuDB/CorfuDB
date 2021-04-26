@@ -18,11 +18,11 @@ public abstract class LockState {
 
     // Renew lease every 20 seconds
     @Setter
-    public static int DurationBetweenLeaseRenewals = 20;
+    protected static int durationBetweenLeaseRenewals = 20;
 
     // Max time allowed for listener to process a notification
     @Setter
-    public static int MaxTimeForNotificationListenerProcessing = 60;
+    protected static int maxTimeForNotificationListenerProcessing = 60;
 
     // Lock being acquired
     protected final Lock lock;
@@ -35,7 +35,7 @@ public abstract class LockState {
     // Listener executor (for lock lost, lockAcquired) notifications.
     protected final ExecutorService lockListenerExecutor;
 
-    public LockState(Lock lock) {
+    protected LockState(Lock lock) {
         this.lock = lock;
         this.lockStore = lock.getClientContext().getLockStore();
         this.taskScheduler =  lock.getClientContext().getTaskScheduler();

@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
@@ -312,7 +313,7 @@ public class CorfuQueue {
                 Math.min(corfuTable.size(), maxEntries)
         );
 
-        Comparator<Map.Entry<CorfuRecordId, ByteString>> recordIdComparator = Comparator.comparing(Map.Entry::getKey);
+        Comparator<Map.Entry<CorfuRecordId, ByteString>> recordIdComparator = Map.Entry.comparingByKey();
         for (Map.Entry<CorfuRecordId, ByteString> entry : corfuTable.entryStream()
                 .filter(e -> e.getKey().compareTo(entriesAfter) > 0)
                 .limit(maxEntries)
@@ -361,6 +362,23 @@ public class CorfuQueue {
      */
     public ByteString removeEntry(CorfuRecordId entryId) {
         return corfuTable.remove(entryId);
+    }
+
+    /**
+     * Retrieves and removes the head of this queue, or returns null if this queue is empty.
+     *
+     * @return The head entry that was successfully retrieved and removed or null if this queue is empty.
+     */
+    public ByteString poll() {
+        if (corfuTable.isEmpty()) {
+            return null;
+        }
+
+        return corfuTable.entryStream()
+                .min(Map.Entry.comparingByKey())
+                .map(headEntry -> corfuTable.remove(headEntry.getKey())
+                )
+                .orElse(null);
     }
 
     /**

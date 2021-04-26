@@ -76,7 +76,6 @@ public class Lock {
 
     // Lease duration in 60 seconds
     @Setter
-    @VisibleForTesting
     public static int leaseDuration = 60;
 
     // Id of the lock
@@ -103,7 +102,7 @@ public class Lock {
 
     // Map of pre-created FSM state objects
     @Getter
-    private Map<LockStateType, LockState> states = new HashMap<>();
+    private final Map<LockStateType, LockState> states = new HashMap<>();
 
     /**
      * Constructor
