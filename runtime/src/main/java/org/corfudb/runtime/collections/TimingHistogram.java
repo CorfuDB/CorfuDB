@@ -20,7 +20,7 @@ public class TimingHistogram {
         this.timer = MeterRegistryProvider.getInstance().map(registry ->
                 DistributionSummary
                         .builder(metricName)
-                        .tag("time", tag)
+                        .tag("time_key", tag)
                         .publishPercentiles(0.50, 0.95, 0.99)
                         .publishPercentileHistogram()
                         .baseUnit("s")
