@@ -192,6 +192,7 @@ public class TxnContext implements AutoCloseable {
         validateWrite(table, key);
         operations.add(() -> {
             table.put(key, value, metadata);
+            table.getMetrics().incNumPuts();
         });
     }
 
@@ -247,10 +248,13 @@ public class TxnContext implements AutoCloseable {
                 throw ex;
             }
             if (mergedRecord == null) {
+                table.getMetrics().incNumDeletes();
                 table.deleteRecord(key);
             } else {
+                table.getMetrics().incNumPuts();
                 table.put(key, mergedRecord.getPayload(), mergedRecord.getMetadata());
             }
+            table.getMetrics().incNumMerges();
         });
     }
 
@@ -278,6 +282,7 @@ public class TxnContext implements AutoCloseable {
                         "Attempt to touch() a non-existing object in "
                                 + table.getFullyQualifiedTableName());
             }
+            table.getMetrics().incNumTouches();
         });
     }
 
@@ -332,6 +337,7 @@ public class TxnContext implements AutoCloseable {
         validateWrite(table);
         operations.add(() -> {
             table.clearAll();
+            table.getMetrics().incNumClears();
         });
     }
 
@@ -363,6 +369,7 @@ public class TxnContext implements AutoCloseable {
     TxnContext delete(@Nonnull Table<K, V, M> table,
                       @Nonnull final K key) {
         validateWrite(table);
+        table.getMetrics().incNumDeletes();
         operations.add(() -> table.deleteRecord(key));
         return this;
     }
@@ -400,6 +407,7 @@ public class TxnContext implements AutoCloseable {
               @Nonnull final V record) {
         validateWrite(table);
         applyWritesForReadOnTable(table);
+        table.getMetrics().incNumEnqueues();
         return table.enqueue(record);
     }
 
@@ -420,6 +428,7 @@ public class TxnContext implements AutoCloseable {
                                        @Nonnull final K key) {
         applyWritesForReadOnTable(table);
         CorfuRecord<V, M> record = table.get(key);
+        table.getMetrics().incNumGets();
         if (record == null) {
             return new CorfuStoreEntry<K, V, M>(key, null, null);
         }
@@ -459,6 +468,7 @@ public class TxnContext implements AutoCloseable {
                                               @Nonnull final String indexName,
                                               @Nonnull final I indexKey) {
         applyWritesForReadOnTable(table);
+        table.getMetrics().incNumGetByIndexes();
         return table.getByIndex(indexName, indexKey);
     }
 
@@ -490,6 +500,7 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     int count(@Nonnull final Table<K, V, M> table) {
         applyWritesForReadOnTable(table);
+        table.getMetrics().incNumCounts();
         return table.count();
     }
 
@@ -512,6 +523,7 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     Set<K> keySet(@Nonnull final Table<K, V, M> table) {
         applyWritesForReadOnTable(table);
+        table.getMetrics().incNumKeySets();
         return table.keySet();
     }
 
@@ -537,6 +549,7 @@ public class TxnContext implements AutoCloseable {
     List<CorfuStoreEntry<K, V, M>> executeQuery(@Nonnull final Table<K, V, M> table,
                                                 @Nonnull final Predicate<CorfuStoreEntry<K, V, M>> entryPredicate) {
         applyWritesForReadOnTable(table);
+        table.getMetrics().incNumScans();
         return table.scanAndFilterByEntry(entryPredicate);
     }
 
@@ -622,7 +635,9 @@ public class TxnContext implements AutoCloseable {
             @Nonnull final BiFunction<R, S, T> joinFunction,
             final Function<T, U> joinProjection) {
         applyWritesForReadOnTable(table1);
-        applyWritesForReadOnTable(table1);
+        table1.getMetrics().incNumJoins();
+        applyWritesForReadOnTable(table2);
+        table2.getMetrics().incNumJoins();
         return Query.executeJoinQuery(table1, table2,
                 query1, query2, queryOptions1,
                 queryOptions2, joinPredicate, joinFunction, joinProjection);
@@ -670,6 +685,7 @@ public class TxnContext implements AutoCloseable {
     public <K extends Message, V extends Message, M extends Message>
     List<Table.CorfuQueueRecord> entryList(@Nonnull final Table<K, V, M> table) {
         applyWritesForReadOnTable(table);
+        table.getMetrics().incNumEntryLists();
         return table.entryList();
     }
 
@@ -758,9 +774,26 @@ public class TxnContext implements AutoCloseable {
             try {
                 commitAddress = this.objectsView.TXEnd();
             } catch (Exception ex) {
+                tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
                 tablesInTxn.clear();
                 throw ex;
             }
+        }
+
+        long timeElapsed = System.nanoTime() - txnStartTime;
+        switch (txnType) {
+            case READ_ONLY:
+                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadOnlyTxnTime(timeElapsed));
+                break;
+            case WRITE_ONLY:
+                tablesInTxn.values().forEach(t -> t.getMetrics().recordWriteOnlyTxnTime(timeElapsed));
+                break;
+            case READ_WRITE:
+                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadWriteTxnTime(timeElapsed));
+                break;
+            default:
+                log.error("UNKNOWN TxnType!!");
+                break;
         }
 
         // These can be moved to trace once stability improves.
@@ -777,7 +810,6 @@ public class TxnContext implements AutoCloseable {
         });
         commitCallbacks.forEach(cb -> cb.onCommit(mutations));
         operations.clear();
-
         return commitAddress;
     }
 
@@ -800,6 +832,7 @@ public class TxnContext implements AutoCloseable {
             // Regardless of transaction outcome remove any TxnContext association from ThreadLocal.
             TransactionalContext.getRootContext().setTxnContext(null);
             this.objectsView.TXAbort();
+            tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
         }
         tablesInTxn.clear();
     }
@@ -813,6 +846,12 @@ public class TxnContext implements AutoCloseable {
         if (TransactionalContext.isInTransaction()) {
             TransactionalContext.getRootContext().setTxnContext(null);
             log.warn("close()ing a {} transaction without calling commit()!", txnType);
+            long timeElapsed = System.nanoTime() - txnStartTime;
+            if (txnType == READ_ONLY) {
+                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadOnlyTxnTime(timeElapsed));
+            } else {
+                tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
+            }
             if (iDidNotStartCorfuTxn) {
                 log.warn("close() called on an inner transaction not started by CorfuStore");
             } else {
