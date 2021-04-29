@@ -314,7 +314,6 @@ public class StreamingIT extends AbstractIT {
         assertThat(update.getEntries()).hasSize(1);
         List<CorfuStreamEntry> entry = update.getEntries().values().stream().findFirst().get();
         assertThat(entry.get(0).getAddress()).isGreaterThan(0L);
-        assertThat(entry.get(0).getEpoch()).isEqualTo(0L);
         assertThat(entry).hasSize(1);
         assertThat(entry.get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.DELETE);
         assertThat(entry.get(0).getKey()).isEqualTo(uuid0);
@@ -897,7 +896,7 @@ public class StreamingIT extends AbstractIT {
      */
     @Test
     public void testTrimmedExceptionCompleteLogTrim() {
-        assertThat(testStreamingTrimmedException(false)).isTrue();
+        assertThat(testStreamingTrimmedException(false, false, false)).isTrue();
     }
 
     /**
@@ -909,10 +908,30 @@ public class StreamingIT extends AbstractIT {
      */
     @Test
     public void testTrimmedExceptionPartialLogTrim() {
-        assertThat(testStreamingTrimmedException(true)).isTrue();
+        assertThat(testStreamingTrimmedException(true, false, false)).isTrue();
     }
 
-    private boolean testStreamingTrimmedException(boolean partialTrim) {
+    /**
+     * Test case where the log is partially trimmed and the listener's syncing point is ahead from the trimmed space
+     * while the runtimeGC kicks in.
+     **/
+    @Test
+    public void testTrimmedExceptionPartialLogTrimSyncAhead()  {
+        assertThat(testStreamingTrimmedException(true, true, false)).isTrue();
+        assertThat(testStreamingTrimmedException(true, true, true)).isTrue();
+    }
+
+    /**
+     * Test case where the log is completely trimmed and the listener's syncing point is ahead from the trimmed space
+     * while the runtimeGC kicks in.
+     **/
+    @Test
+    public void testTrimmedExceptionCompleteLogTrimSyncAhead()  {
+        assertThat(testStreamingTrimmedException(false, true, false)).isTrue();
+        assertThat(testStreamingTrimmedException(false, true, true)).isTrue();
+    }
+
+    private boolean testStreamingTrimmedException(boolean partialTrim, boolean syncAhead, boolean addDeltaUpdates) {
         try {
             // Run a corfu server & initialize CorfuStore
             initializeCorfu();
@@ -921,11 +940,28 @@ public class StreamingIT extends AbstractIT {
             Timestamp ts1 = store.getTimestamp();
 
             final int totalUpdates = 100;
+            final int fewUpdates = 5;
 
-            writeUpdatesToDefaultTable(totalUpdates);
+            writeUpdatesToDefaultTable(totalUpdates, 0);
 
             // Checkpoint and Trim
             Token trimPoint = checkpointAndTrim(namespace, Arrays.asList(defaultTableName), partialTrim);
+
+            // Build a trim timestamp to be used later
+            Timestamp trimTimestamp = Timestamp.newBuilder()
+                    .setEpoch(trimPoint.getEpoch())
+                    .setSequence(trimPoint.getSequence())
+                    .build();
+
+            Timestamp syncTs;
+            if (!syncAhead) {
+                syncTs = ts1;
+            } else {
+                syncTs = trimTimestamp;
+                if (addDeltaUpdates) {
+                    writeUpdatesToDefaultTable(fewUpdates, totalUpdates);
+                }
+            }
 
             // Subscribe listener to stream tag 'sample_streamer_1'
             final CountDownLatch errorListener = new CountDownLatch(1);
@@ -933,21 +969,37 @@ public class StreamingIT extends AbstractIT {
             // Start Listener on Trimmed Space
             TrimExceptionListener listener = new TrimExceptionListener("stream_listener", errorListener);
             store.subscribeListener(listener, namespace, defaultTag,
-                    Collections.singletonList(defaultTableName), ts1);
+                    Collections.singletonList(defaultTableName), syncTs);
 
-            // Wait until TrimmedException is received by listener
-            errorListener.await();
+            // KEY to this use case, the runtime GC moves the gcTrimMark which makes abstractStreamContext.validateGlobalPointerPosition fail
+            runtime.getGarbageCollector().runRuntimeGC();
 
-            // Confirm we are unsubscribed (subscribing again does not throw an error) -> subscribing beyond trim point
-            Timestamp trimTimestamp = Timestamp.newBuilder()
-                    .setEpoch(trimPoint.getEpoch())
-                    .setSequence(trimPoint.getSequence())
-                    .build();
-            store.subscribeListener(listener, namespace, "sample_streamer_1",
-                    Collections.singletonList(defaultTableName), trimTimestamp);
+            if (!syncAhead) {
+                // Wait until TrimmedException is received by listener
+                errorListener.await();
 
-            // Verify number of updates received by listener is zero (empty) as the space was trimmed.
-            assertThat(listener.getUpdates()).isEmpty();
+                // Confirm we are unsubscribed (subscribing again does not throw an error) -> subscribing beyond trim point
+                store.subscribeListener(listener, namespace, "sample_streamer_1",
+                        Collections.singletonList(defaultTableName), trimTimestamp);
+
+                // Verify number of updates received by listener is zero (empty) as the space was trimmed.
+                assertThat(listener.getUpdates()).isEmpty();
+
+            } else {
+                // If we synced ahead from the trimmed space no reason to expect a Trimmed Exception
+                // wait for a while for "sync" to happen and confirm  updates are received (if deltas were added)
+                // or no updates is nothing was added post CP.
+                TimeUnit.SECONDS.sleep(2);
+                if (addDeltaUpdates) {
+                    assertThat(listener.getUpdates().size()).isEqualTo(fewUpdates);
+                } else {
+                    assertThat(listener.getUpdates()).isEmpty();
+                }
+
+                // Confirm we are still subscribed (no TrimmedException affected our listener as the sync point was beyond)
+                assertThrows(StreamingException.class, () -> store.subscribeListener(listener, namespace, "sample_streamer_1",
+                        Collections.singletonList(defaultTableName), trimTimestamp));
+            }
 
             // Re-Sync the table from Snapshot and confirm all entries are present, from a different runtime
             readDefaultTableSnapshot(trimTimestamp, totalUpdates);
@@ -971,7 +1023,7 @@ public class StreamingIT extends AbstractIT {
 
         // Write a number of updates to a certain table
         final int numUpdates = 20;
-        writeUpdatesToDefaultTable(numUpdates);
+        writeUpdatesToDefaultTable(numUpdates, 0);
 
         // Subscribe to defaultTag from start of Log
         Timestamp startTimestamp = Timestamp.newBuilder()
@@ -1002,7 +1054,7 @@ public class StreamingIT extends AbstractIT {
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
-    private void writeUpdatesToDefaultTable(int numUpdates) throws Exception {
+    private void writeUpdatesToDefaultTable(int numUpdates, int offset) throws Exception {
         Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
                 namespace, defaultTableName,
                 Uuid.class, SampleTableAMsg.class, Uuid.class,
@@ -1010,7 +1062,7 @@ public class StreamingIT extends AbstractIT {
         );
 
         // Make some updates to tableA
-        for (int index = 0; index < numUpdates; index++) {
+        for (int index = offset; index < offset + numUpdates; index++) {
             // Update TableA
             try (TxnContext tx = store.txn(namespace)) {
                 Uuid uuid = Uuid.newBuilder().setMsb(index).setLsb(index).build();
