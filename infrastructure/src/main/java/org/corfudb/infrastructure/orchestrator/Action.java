@@ -2,8 +2,10 @@ package org.corfudb.infrastructure.orchestrator;
 
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.runtime.CorfuRuntime;
+import org.corfudb.util.Sleep;
 
 import javax.annotation.Nonnull;
+import java.time.Duration;
 
 /**
  *
@@ -16,6 +18,8 @@ import javax.annotation.Nonnull;
 public abstract class Action {
 
     ActionStatus status = ActionStatus.CREATED;
+
+    private final Duration retryDelay = Duration.ofMillis(300);
 
     /**
      * Returns the name of this action.
@@ -47,6 +51,7 @@ public abstract class Action {
                         getName(), x, e);
                 changeStatus(ActionStatus.ERROR);
                 runtime.invalidateLayout();
+                Sleep.sleepUninterruptibly(retryDelay);
             }
         }
     }
