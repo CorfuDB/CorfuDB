@@ -209,6 +209,10 @@ public class TableRegistry {
                         .equals(tableDescriptors.getFileDescriptorsMap())) {
                     hasSchemaChanged = true;
                     log.warn("registerTable: Schema update detected for table {}${}", namespace, tableName);
+
+                    for (StackTraceElement st : Thread.currentThread().getStackTrace()) {
+                        log.warn("{}", st);
+                    }
                     log.debug("registerTable: old schema: {}", oldRecord.getPayload().getFileDescriptorsMap());
                     log.debug("registerTable: new schema: {}", tableDescriptors.getFileDescriptorsMap());
                 }
