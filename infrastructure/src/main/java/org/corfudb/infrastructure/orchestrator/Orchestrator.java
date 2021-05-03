@@ -264,7 +264,11 @@ public class Orchestrator {
 
             long workflowEnd = System.currentTimeMillis();
             log.info("run: Completed workflow {} in {} ms", workflow.getId(), workflowEnd - workflowStart);
-        } catch (Exception e) {
+        }
+        catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+        catch (Exception e) {
             log.error("run: Encountered an error while running workflow {}", workflow.getId(), e);
         } finally {
             activeWorkflows.remove(workflow.getId());
