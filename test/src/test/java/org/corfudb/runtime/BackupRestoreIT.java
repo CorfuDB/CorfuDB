@@ -28,9 +28,9 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
-
 
 
 /**
@@ -271,7 +271,8 @@ public class BackupRestoreIT extends AbstractIT {
         TarArchiveInputStream tarInput = new TarArchiveInputStream(fileInput);
         TarArchiveEntry entry;
         while ((entry = tarInput.getNextTarEntry()) != null) {
-            streamIDs.add(UUID.fromString(entry.getName()));
+            String streamId = entry.getName().substring(0, entry.getName().indexOf("."));
+            streamIDs.add(UUID.fromString(streamId));
         }
         return streamIDs;
     }
@@ -315,8 +316,14 @@ public class BackupRestoreIT extends AbstractIT {
         File backupTarFile = new File(BACKUP_TAR_FILE_PATH);
         assertThat(backupTarFile).exists();
 
+        // Add pre-existing data into restore server
+        // Restore should clean up the pre-existing data before actual restoring
+        for (String tableName : tableNames) {
+            generateData(destDataCorfuStore, tableName, true);
+        }
+
         // Restore using backup files
-        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
         restore.start();
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
@@ -350,7 +357,7 @@ public class BackupRestoreIT extends AbstractIT {
         }
 
         // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime);
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, true);
         backup.start();
 
         // Verify that backup tar file exists
@@ -358,7 +365,7 @@ public class BackupRestoreIT extends AbstractIT {
         assertThat(backupTarFile).exists();
 
         // Restore using backup files
-        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
         restore.start();
 
         // Compare data entries in CorfuStore before and after the Backup/Restore
@@ -395,6 +402,7 @@ public class BackupRestoreIT extends AbstractIT {
         List<UUID> streamIDs = new ArrayList<>();
         int i = 0;
         for (String tableName : tableNames) {
+            // Only back up a half of all tables
             if (i++ % 2 == 0) {
                 streamIDs.add(CorfuRuntime.getStreamID(TableRegistry.getFullyQualifiedTableName(NAMESPACE, tableName)));
             }
@@ -432,6 +440,7 @@ public class BackupRestoreIT extends AbstractIT {
         List<String> tableNames = getTableNames(numTables);
 
         // Generate random entries and save into sourceServer
+        // Set half of the tables with backup tag, and the other half without backup tag
         int i = 0;
         for (String tableName : tableNames) {
             if (i++ % 2 == 0) {
@@ -449,7 +458,7 @@ public class BackupRestoreIT extends AbstractIT {
         }
 
         // Backup
-        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime);
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, true);
         backup.start();
 
         // Verify that backup tar file exists
@@ -513,13 +522,14 @@ public class BackupRestoreIT extends AbstractIT {
      * Test backing up an existent but empty table
      */
     @Test
-    public void backupEmptyTableTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+    public void backupRestoreEmptyTableTest() throws IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
 
         // Set up the test environment
         setupEnv();
 
         // Create Corfu Store to add entries into server
         CorfuStore srcDataCorfuStore = new CorfuStore(srcDataRuntime);
+        CorfuStore destDataCorfuStore = new CorfuStore(destDataRuntime);
 
         List<String> tableNames = getTableNames(numTables);
 
@@ -550,6 +560,14 @@ public class BackupRestoreIT extends AbstractIT {
         List<UUID> backupStreamIds = getStreamIdsFromTarFile(BACKUP_TAR_FILE_PATH);
         assertThat(streamIDs.size()).isEqualTo(backupStreamIds.size());
         assertThat(streamIDs).containsAll(backupStreamIds);
+
+        // Restore using backup files
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
+        restore.start();
+
+        // Compare data entries in CorfuStore before and after the Backup/Restore
+        openTableWithoutBackupTag(destDataCorfuStore, emptyTableName);
+        compareCorfuStoreTables(srcDataCorfuStore, emptyTableName, destDataCorfuStore, emptyTableName);
 
         // Close servers and runtime before exiting
         cleanEnv();
@@ -596,7 +614,7 @@ public class BackupRestoreIT extends AbstractIT {
         backupTarFile.delete();
 
         // Restore using backup files
-        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime);
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.PARTIAL);
         assertThrows(FileNotFoundException.class, restore::start);
 
         // Close servers and runtime before exiting
@@ -649,4 +667,67 @@ public class BackupRestoreIT extends AbstractIT {
         // Close servers and runtime before exiting
         cleanEnv();
 
-    }}
+    }
+
+    /**
+     * Test full backup and restore
+     */
+    @Test
+    public void backupRestoreAllTablesTest() throws
+            IOException, NoSuchMethodException, IllegalAccessException, InvocationTargetException {
+        // Set up the test environment
+        setupEnv();
+
+        // Create Corfu Store to add entries into server
+        CorfuStore srcDataCorfuStore = new CorfuStore(srcDataRuntime);
+        CorfuStore destDataCorfuStore = new CorfuStore(destDataRuntime);
+
+        List<String> tableNames = getTableNames(numTables);
+
+        // Generate random entries and save into sourceServer
+        // Set half of the tables with backup tag, and the other half without backup tag
+        int i = 0;
+        for (String tableName : tableNames) {
+            if (i++ % 2 == 0) {
+                // set requires_backup_support
+                generateData(srcDataCorfuStore, tableName, true);
+            } else {
+                generateData(srcDataCorfuStore, tableName, false);
+            }
+        }
+
+        // Backup
+        Backup backup = new Backup(BACKUP_TAR_FILE_PATH, backupRuntime, false);
+        backup.start();
+
+        // Verify that backup tar file exists
+        File backupTarFile = new File(BACKUP_TAR_FILE_PATH);
+        assertThat(backupTarFile).exists();
+
+        // Generate pre-existing data and save into destServer
+        for (String tableName : tableNames) {
+            generateData(destDataCorfuStore, tableName, true);
+        }
+
+        // Restore using backup files
+        Restore restore = new Restore(BACKUP_TAR_FILE_PATH, restoreRuntime, Restore.RestoreMode.FULL);
+        restore.start();
+
+        // Compare data entries in CorfuStore before and after the Backup/Restore
+        for (String tableName : tableNames) {
+            openTableWithoutBackupTag(destDataCorfuStore, tableName);
+            compareCorfuStoreTables(srcDataCorfuStore, tableName, destDataCorfuStore, tableName);
+        }
+
+        Collection<CorfuStoreMetadata.TableName> allTablesBeforeBackup =
+                srcDataRuntime.getTableRegistry().listTables();
+        Collection<CorfuStoreMetadata.TableName> allTablesAfterRestore =
+                destDataRuntime.getTableRegistry().listTables();
+
+        assertThat(allTablesBeforeBackup).containsAll(allTablesAfterRestore);
+        assertThat(allTablesAfterRestore).containsAll(allTablesBeforeBackup);
+
+        // Close servers and runtime before exiting
+        cleanEnv();
+    }
+}
