@@ -129,6 +129,7 @@ public class StreamViewTest extends AbstractViewTest {
     public void testRemainingUpToWithTrim() {
         StreamOptions options = StreamOptions.builder()
                 .ignoreTrimmed(true)
+                .isCheckpointCapable(false)
                 .build();
 
         IStreamView txStream = runtime.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID, options);
