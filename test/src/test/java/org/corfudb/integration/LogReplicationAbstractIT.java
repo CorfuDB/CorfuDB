@@ -138,6 +138,10 @@ public class LogReplicationAbstractIT extends AbstractIT {
     }
 
     public void testEndToEndSnapshotAndLogEntrySyncUFO() throws Exception {
+        // TODO: when ObjectsView.TRANSACTION_STREAM_ID is removed or LOG_REPLICATOR_STREAM_ID name is changed,
+        //  change these tests such that UFO tables used in the tests have the is_federated tag set,
+        //  as these will determine which tables will be written to the LOG_REPLICATOR_STREAM_ID
+        //  (for now, it is not required as they're written to the same TRANSACTION_STREAM_ID from legacy impl.)
         testEndToEndSnapshotAndLogEntrySyncUFO(1);
     }
 

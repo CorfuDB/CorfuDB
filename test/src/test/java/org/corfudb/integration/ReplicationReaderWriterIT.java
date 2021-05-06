@@ -254,7 +254,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
                 .cacheEntries(false)
                 .build();
 
-        IStreamView txStream = rt.getStreamsView().getUnsafe(ObjectsView.TRANSACTION_STREAM_ID, options);
+        IStreamView txStream = rt.getStreamsView().getUnsafe(ObjectsView.LOG_REPLICATOR_STREAM_ID, options);
         List<ILogData> dataList = txStream.remaining();
         log.debug("\ndataList size " + dataList.size());
         for (ILogData data : txStream.remaining()) {
@@ -456,7 +456,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
 
         // Open a tx stream
-        IStreamView txStream = srcTestRuntime.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
+        IStreamView txStream = srcTestRuntime.getStreamsView().get(ObjectsView.LOG_REPLICATOR_STREAM_ID);
         long tail = srcDataRuntime.getAddressSpaceView().getLogTail();
         Stream<ILogData> stream = txStream.streamUpTo(tail);
         Iterator iterator = stream.iterator();
