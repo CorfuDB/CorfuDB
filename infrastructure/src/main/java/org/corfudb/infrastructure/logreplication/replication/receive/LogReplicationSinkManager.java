@@ -493,6 +493,7 @@ public class LogReplicationSinkManager implements DataReceiver {
 
             default:
                 log.error("Wrong state {}.", rxState);
+                break;
         }
     }
 

@@ -232,7 +232,7 @@ public class CorfuReplicationReconfigurationIT extends LogReplicationAbstractIT 
 
             consumerRts.add(consumerRt);
 
-            IStreamView txStream = consumerRt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
+            IStreamView txStream = consumerRt.getStreamsView().get(ObjectsView.LOG_REPLICATOR_STREAM_ID);
 
             int counter = 0;
 

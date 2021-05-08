@@ -248,8 +248,8 @@ public class SequencerServerCacheTest extends AbstractObjectTest {
             result = cache.put(txEle);
 
             i++;
-            if (result != false) {
-                log.debug("\n not false  i " + i + " txV " + txVersion + " result " + result + " size " + recordMap.keySet().size() + " cacheSize " + cache.size()); ;
+            if (result) {
+                log.debug("\n not false  i " + i + " txV " + txVersion + " result " + result + " size " + recordMap.keySet().size() + " cacheSize " + cache.size());
             }
             assertThat(result).isFalse();
         }

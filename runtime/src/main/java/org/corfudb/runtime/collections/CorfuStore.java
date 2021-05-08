@@ -1,21 +1,29 @@
 package org.corfudb.runtime.collections;
 
+import com.google.common.collect.Iterables;
 import com.google.protobuf.Message;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.ILogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
 import org.corfudb.protocols.wireprotocol.Token;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.TableName;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
 import org.corfudb.runtime.Queue;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
+import org.corfudb.util.Utils;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.Map;
+import java.util.NavigableSet;
+import java.util.UUID;
 
 /**
  * CorfuStore is a protobuf API layer that provides all the features of CorfuDB.
@@ -27,12 +35,13 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>
  * Created by zlokhandwala on 2019-08-02.
  */
+@Slf4j
 public class CorfuStore {
 
     @Getter
     private final CorfuRuntime runtime;
 
-    private final Optional<AtomicLong> openTableCounter;
+    private final CorfuStoreMetrics corfuStoreMetrics;
 
     /**
      * Creates a new CorfuStore.
@@ -54,9 +63,7 @@ public class CorfuStore {
     public CorfuStore(@Nonnull final CorfuRuntime runtime, boolean enableTxLogging) {
         runtime.setTransactionLogging(enableTxLogging);
         this.runtime = runtime;
-        openTableCounter = runtime.getRegistry()
-                .map(registry ->
-                        registry.gauge("open_tables.count", new AtomicLong(0L)));
+        this.corfuStoreMetrics = new CorfuStoreMetrics();
     }
 
     /**
@@ -100,9 +107,12 @@ public class CorfuStore {
                              @Nullable final Class<M> mClass,
                              @Nonnull final TableOptions tableOptions)
             throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        long startTime = System.nanoTime();
         Table table =
                 runtime.getTableRegistry().openTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
-        openTableCounter.ifPresent(count -> count.getAndIncrement());
+        corfuStoreMetrics.recordTableCount();
+        long elapsedTime = System.nanoTime() - startTime;
+        table.getMetrics().recordTableOpenTime(elapsedTime);
         return table;
     }
 
@@ -214,7 +224,11 @@ public class CorfuStore {
     }
 
     /**
-     * Return the address of the latest updated made in this table.
+     * Return the address of the latest update made in this table.
+     *
+     * Note: we can't deliberately return the tail of the stream map
+     * as this entry might be a HOLE, we need to filter and return only that
+     * corresponding to the last DATA entry.
      *
      * @param namespace - namespace that this table belongs to.
      * @param tableName - table name of this table without the namespace prefixed in.
@@ -222,11 +236,49 @@ public class CorfuStore {
      */
     public long getHighestSequence(@Nonnull final String namespace,
                                    @Nonnull final String tableName) {
-        return this.runtime.getSequencerView().query(
-                CorfuRuntime.getStreamID(
-                        TableRegistry.getFullyQualifiedTableName(namespace, tableName)
-                )
-        );
+
+        // Overall strategy:
+        // (1) Retrieve streams full address map from sequencer
+        // (2) Read entries in reverse to confirm it's a DATA type entry (for optimization
+        // read in batches). A batch size of 4 is guaranteed to suit one edge case case scenario: i.e.,
+        // consecutive checkpoints enforcing holes (3 rounds of CP accumulate before trim happens == 3 holes)
+
+        long startTime = System.nanoTime();
+        UUID streamId = CorfuRuntime.getStreamID(
+                TableRegistry.getFullyQualifiedTableName(namespace, tableName));
+        StreamAddressSpace streamAddressSpace = this.runtime.getSequencerView()
+                .getStreamAddressSpace(new StreamAddressRange(streamId, Address.MAX, Address.NON_ADDRESS));
+
+        int numBatches = 0;
+
+        if (streamAddressSpace.size() != 0) {
+            NavigableSet<Long> addresses = streamAddressSpace.copyAddressesToSet(Address.MAX).descendingSet();
+            Iterable<List<Long>> batches = Iterables.partition(addresses,
+                    runtime.getParameters().getHighestSequenceNumberBatchSize());
+
+            for (List<Long> batch : batches) {
+                numBatches++;
+                // TODO: We can optimize this such that actual data is not transferred back to the client,
+                //  we require an API that inspects the data at the remote and indicates whether its an actual DATA
+                //  entry or a HOLE, e.g.: Map<Long, DataType> entryTypes = runtime.getAddressSpaceView().getDataType(batch)
+                Map<Long, ILogData> entries = runtime.getAddressSpaceView().read(batch);
+                for (Long address : batch) {
+                    if (!entries.get(address).isHole()) {
+                        corfuStoreMetrics.recordBatchReads(numBatches);
+                        corfuStoreMetrics.recordNumberReads(numBatches*runtime.getParameters().getHighestSequenceNumberBatchSize());
+                        corfuStoreMetrics.recordHighestSequenceNumberDuration(System.nanoTime() - startTime);
+                        return address;
+                    }
+                }
+            }
+        }
+
+        corfuStoreMetrics.recordBatchReads(numBatches);
+        corfuStoreMetrics.recordNumberReads(numBatches*runtime.getParameters().getHighestSequenceNumberBatchSize());
+        corfuStoreMetrics.recordHighestSequenceNumberDuration(System.nanoTime() - startTime);
+        log.debug("Stream[{}${}][{}]no DATA entry found. Highest sequence number corresponds to trim mark={}",
+                namespace, tableName, Utils.toReadableId(streamId), streamAddressSpace.getTrimMark());
+        return streamAddressSpace.getTrimMark();
     }
 
     /**

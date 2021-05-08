@@ -86,7 +86,7 @@ In addition to generating a key pair, this command also creates a self-signed ce
 For example, the following command generates a private/public key pair, creates a self-signed certificate and stores them in a key store protected by the given password.
 
 ```bash
-$ keytool -genkeypair -keystore s1.jks -keyalg RSA -keysize 2048 -alias s1 -storepass test123
+keytool -genkeypair -keystore s1.jks -keyalg RSA -keysize 2048 -alias s1 -storepass test123
 ```
 
 The given key store password is then saved in a file. The permissions to this plain-text password file is then set such that it can only be read by members of the appropriate group.

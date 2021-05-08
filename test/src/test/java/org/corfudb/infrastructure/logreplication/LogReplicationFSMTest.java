@@ -83,7 +83,6 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
     private CorfuRuntime runtime;
     private DataSender dataSender;
     private SnapshotReader snapshotReader;
-    private LogEntryReader logEntryReader;
     private LogReplicationAckReader ackReader;
 
     @Before
@@ -466,7 +465,7 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     private void initLogReplicationFSM(ReaderImplementation readerImpl) {
 
-        logEntryReader = new TestLogEntryReader();
+        LogEntryReader logEntryReader = new TestLogEntryReader();
 
         switch(readerImpl) {
             case EMPTY:
@@ -589,19 +588,17 @@ public class LogReplicationFSMTest extends AbstractViewTest implements Observer 
      */
     @Override
     public void update(Observable obs, Object arg) {
-        if (obs == transitionObservable)
-        {
+        if (obs.equals(transitionObservable)) {
             while (!transitionAvailable.hasQueuedThreads()) {
                 // Wait until some thread is waiting to acquire...
             }
             transitionAvailable.release();
             // log.debug("Transition::#"  + transitionObservable.getValue() + "::" + fsm.getState().getType());
-        } else if (obs == snapshotMessageCounterObservable) {
-            if (limitSnapshotMessages == snapshotMessageCounterObservable.getValue() && observeSnapshotSync) {
-                // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
-                // log.debug("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
-                fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
-            }
+        } else if (obs.equals(snapshotMessageCounterObservable) &&
+                limitSnapshotMessages == snapshotMessageCounterObservable.getValue() && observeSnapshotSync) {
+            // If number of messages in snapshot reaches the expected value force termination of SNAPSHOT_SYNC
+            // log.debug("Insert event: " + LogReplicationEventType.REPLICATION_STOP);
+            fsm.input(new LogReplicationEvent(LogReplicationEventType.REPLICATION_STOP));
         }
     }
 

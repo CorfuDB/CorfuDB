@@ -81,14 +81,18 @@ public class LongevityRun {
             case "s":
                 longevity = Duration.ofSeconds(amountTimeValue).toMillis();
                 break;
+
             case "m":
                 longevity = Duration.ofMinutes(amountTimeValue).toMillis();
                 break;
+
             case "h":
                 longevity = Duration.ofHours(amountTimeValue).toMillis();
                 break;
+
             default:
                 longevity = Duration.ofHours(1).toMillis();
+                break;
         }
 
         LongevityApp la = new LongevityApp(longevity, 10, configurationString, checkPoint);

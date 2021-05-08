@@ -139,7 +139,7 @@ public class OpaqueEntry implements Serializable {
         return new OpaqueEntry(version, res);
     }
 
-    public static void write(FileOutputStream fileOutput, OpaqueEntry opaqueEntry) throws IOException {
+    public static int write(FileOutputStream fileOutput, OpaqueEntry opaqueEntry) throws IOException {
         ByteBuf byteBuf = Unpooled.buffer();
         OpaqueEntry.serialize(byteBuf, opaqueEntry);
         int size = byteBuf.writerIndex();
@@ -148,6 +148,8 @@ public class OpaqueEntry implements Serializable {
 
         fileOutput.write(intBytes);
         fileOutput.write(dataBytes);
+
+        return size;
     }
 
     public static OpaqueEntry read(FileInputStream fileInput) throws IOException {

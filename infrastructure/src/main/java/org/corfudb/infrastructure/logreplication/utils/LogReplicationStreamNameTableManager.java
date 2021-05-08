@@ -36,8 +36,6 @@ public class LogReplicationStreamNameTableManager {
 
     private ILogReplicationConfigAdapter logReplicationConfigAdapter;
 
-    private final CorfuRuntime corfuRuntime;
-
     private String pluginConfigFilePath;
 
     private CorfuStore corfuStore;
@@ -49,8 +47,7 @@ public class LogReplicationStreamNameTableManager {
 
     public LogReplicationStreamNameTableManager(CorfuRuntime runtime, String pluginConfigFilePath) {
         this.pluginConfigFilePath = pluginConfigFilePath;
-        this.corfuRuntime = runtime;
-        corfuStore = new CorfuStore(corfuRuntime);
+        corfuStore = new CorfuStore(runtime);
 
         initStreamNameFetcherPlugin();
     }
@@ -81,10 +78,7 @@ public class LogReplicationStreamNameTableManager {
     public boolean isUpgraded() {
         if (verifyTableExists(LOG_REPLICATION_PLUGIN_VERSION_TABLE)) {
             openExistingTable(LOG_REPLICATION_PLUGIN_VERSION_TABLE);
-            if (tableVersionMatchesPlugin()) {
-                return false;
-            }
-            return true;
+            return !tableVersionMatchesPlugin();
         }
         // TODO pankti: this may be the first time the replication server is initialized, so return false.
         //  But what about a case if the user has deleted the table?

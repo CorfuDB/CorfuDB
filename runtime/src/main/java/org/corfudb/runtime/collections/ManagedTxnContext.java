@@ -578,7 +578,7 @@ public class ManagedTxnContext implements AutoCloseable {
                             builder.setField(fieldDescriptor, 0L);
                         } else {
                             Long prevRevision = (Long) oldRecord.getMetadata().getField(fieldDescriptor);
-                            Long givenRevision = (Long)deltaMetadata.getField(fieldDescriptor);
+                            Long givenRevision = (Long) deltaMetadata.getField(fieldDescriptor);
                             if (givenRevision == 0 || // Do not validate revision if field isn't set
                                     (givenRevision > 0 && // Validate revision only if set
                                             prevRevision.longValue() == givenRevision.longValue())) {

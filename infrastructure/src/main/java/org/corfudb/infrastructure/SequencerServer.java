@@ -600,18 +600,19 @@ public class SequencerServer extends AbstractServer {
         switch (tokenRequest.getRequestType()) {
             case TK_QUERY:
                 handleTokenQuery(req, ctx, r);
-                return;
+                break;
 
             case TK_RAW:
                 handleRawToken(req, ctx, r);
-                return;
+                break;
 
             case TK_TX:
                 handleTxToken(req, ctx, r);
-                return;
+                break;
 
             default:
                 handleAllocation(req, ctx, r);
+                break;
         }
     }
 
@@ -826,8 +827,6 @@ public class SequencerServer extends AbstractServer {
                         .getAddressesInRange(getStreamAddressRange(streamAddressRange));
                 requestedAddressSpaces.put(streamId, addressesInRange);
             } else {
-                log.warn("getStreamsAddressesMap: address space map is not present for stream {}." +
-                        " Verify this is a valid stream.", streamId);
                 requestedAddressSpaces.put(streamId, new StreamAddressSpace(Address.NON_EXIST, Collections.EMPTY_SET));
             }
         }

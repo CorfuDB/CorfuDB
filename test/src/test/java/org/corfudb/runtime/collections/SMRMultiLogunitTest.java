@@ -184,18 +184,17 @@ public class SMRMultiLogunitTest extends AbstractViewTest {
         }
         // check that all the values are either value0_ or value1_ not a mix
         String base = "invalid";
-        for (int i=0; i < numKeys; i++) {
-            String key = "key" + String.valueOf(i);
+        for (int i = 0; i < numKeys; i++) {
+            String key = "key" + i;
             String val = testMap.get(key);
-            if (val != null) {
-                if (i == 0) {
-                    int underscore = val.indexOf("_");
-                    assertNotEquals(-1, underscore);
-                    base = val.substring(0, underscore);
-                    System.out.println("base is " + base);
-                }
+            assertNotNull(val);
+            if (i == 0) {
+                int underscore = val.indexOf("_");
+                assertNotEquals(-1, underscore);
+                base = val.substring(0, underscore);
+                System.out.println("base is " + base);
             }
-            assertEquals(true, val.contains(base));
+            assertTrue(val.contains(base));
         }
     }
 

@@ -38,7 +38,13 @@ public class ObjectsView extends AbstractView {
      * The Transaction stream is used to log/write successful transactions from different clients.
      * Transaction data and meta data can be obtained by reading this stream.
      */
+    @Deprecated
     public static final UUID TRANSACTION_STREAM_ID = CorfuRuntime.getStreamID("Transaction_Stream");
+
+    // We are temporarily naming this stream with the same name as TRANSACTION_STREAM_ID to avoid breaking LR code
+    // while transition to UFO is completed (once migration is complete to UFO this stream can be renamed)
+    // add a prefix to the name: e.g., org.corfudb.logreplication.transactionstream
+    public static final UUID LOG_REPLICATOR_STREAM_ID = CorfuRuntime.getStreamID("Transaction_Stream");
 
     @Getter
     @Setter

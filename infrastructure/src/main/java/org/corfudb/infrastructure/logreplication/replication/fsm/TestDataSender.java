@@ -29,12 +29,11 @@ public class TestDataSender implements DataSender {
 
     @Override
     public CompletableFuture<LogReplicationEntryMsg> send(LogReplicationEntryMsg message) {
-        if (message != null && !message.getData().isEmpty()) {
-            if (message.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_MESSAGE) ||
-                    message.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_MESSAGE)) {
-                // Ignore, do not account Start and End Markers as messages
-                entryQueue.add(message);
-            }
+        if (message != null && !message.getData().isEmpty() &&
+                (message.getMetadata().getEntryType().equals(LogReplicationEntryType.SNAPSHOT_MESSAGE) ||
+                    message.getMetadata().getEntryType().equals(LogReplicationEntryType.LOG_ENTRY_MESSAGE))) {
+            // Ignore, do not account Start and End Markers as messages
+            entryQueue.add(message);
         }
 
         CompletableFuture<LogReplicationEntryMsg> cf = new CompletableFuture<>();

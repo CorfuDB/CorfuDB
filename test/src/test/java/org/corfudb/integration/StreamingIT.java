@@ -1,18 +1,28 @@
 package org.corfudb.integration;
 
 
+import com.google.common.reflect.TypeToken;
 import lombok.Getter;
+import org.corfudb.protocols.wireprotocol.Token;
+import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata.Timestamp;
+import org.corfudb.runtime.MultiCheckpointWriter;
+import org.corfudb.runtime.collections.CorfuRecord;
 import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuStreamEntries;
 import org.corfudb.runtime.collections.CorfuStreamEntry;
+import org.corfudb.runtime.collections.CorfuTable;
+import org.corfudb.runtime.collections.IsolationLevel;
 import org.corfudb.runtime.collections.StreamListener;
-import org.corfudb.runtime.collections.StreamingManager;
+import org.corfudb.runtime.collections.StreamManager;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
 import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
-import org.corfudb.runtime.exceptions.StreamSubscriptionException;
+import org.corfudb.runtime.exceptions.TrimmedException;
+import org.corfudb.runtime.exceptions.StreamingException;
+import org.corfudb.runtime.view.TableRegistry;
+import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
 import org.corfudb.test.SampleSchema.SampleTableBMsg;
 import org.corfudb.test.SampleSchema.SampleTableCMsg;
@@ -43,6 +53,14 @@ public class StreamingIT extends AbstractIT {
     private static String corfuSingleNodeHost;
     private static int corfuStringNodePort;
     private static String singleNodeEndpoint;
+    private Process corfuServer;
+    private CorfuStore store;
+
+    private final String namespace = "test_namespace";
+    private final String defaultTableName = "table_testA";
+    private final String defaultTag = "sample_streamer_1";
+
+    private final int sleepTime = 100;
 
     /**
      * A helper method that takes host and port specification, start a single server and
@@ -73,27 +91,48 @@ public class StreamingIT extends AbstractIT {
      * A StreamListener implementation to be used in the tests.
      * This listener accumulates all updates streamed to it into a linked list that
      * can then be used to verify.
+     * This listener can throw an exception on 'n' number of updates, in order to
+     * trigger the onError(Throwable t) and consequently, automatically unsubscribe.
      */
     private class StreamListenerImpl implements StreamListener {
 
         @Getter
         private final String name;
 
+        private int updatesToError = 0;
+
+        @Getter
+        private Timestamp timestamp;
+
         @Getter
         private final LinkedList<CorfuStreamEntries> updates = new LinkedList<>();
+
+        private CountDownLatch latch = null;
 
         StreamListenerImpl(String name) {
             this.name = name;
         }
 
+        StreamListenerImpl(String name, int updatesToError, CountDownLatch latch) {
+            this(name);
+            this.updatesToError = updatesToError;
+            this.latch = latch;
+        }
+
         @Override
         public void onNext(CorfuStreamEntries results) {
             updates.add(results);
+            timestamp = results.getTimestamp();
+            if (updates.size() == updatesToError) {
+                throw new IndexOutOfBoundsException("Artificial exception to trigger onError");
+            }
         }
 
         @Override
         public void onError(Throwable throwable) {
-
+            if (throwable instanceof IndexOutOfBoundsException) {
+                latch.countDown();
+            }
         }
 
         @Override
@@ -114,7 +153,7 @@ public class StreamingIT extends AbstractIT {
 
     /**
      * A StreamListener implementation to be used in the tests.
-     * This listener blocks on a latch when executing onNext()/
+     * This listener blocks on a latch when executing onNext()
      */
     private class BlockingStreamListener extends StreamListenerImpl {
 
@@ -134,6 +173,63 @@ public class StreamingIT extends AbstractIT {
             }
             super.updates.add(results);
         }
+    }
+
+    /**
+     * A StreamListener implementation to be used in the tests.
+     *
+     * This listener notifies on TrimmedException's, unblocking the client.
+     *
+     */
+    private class TrimExceptionListener extends StreamListenerImpl {
+
+        private final CountDownLatch errorNotifierLatch;
+
+        TrimExceptionListener(String name, CountDownLatch errorNotifierLatch) {
+            super(name);
+            this.errorNotifierLatch = errorNotifierLatch;
+        }
+
+        @Override
+        public void onError(Throwable throwable) {
+            if (throwable instanceof StreamingException && throwable.getCause() instanceof TrimmedException) {
+                errorNotifierLatch.countDown();
+            }
+        }
+    }
+
+    /**
+     * Test that streaming API throws an Exception when number of subscribers is exceeded.
+     */
+    @Test
+    public void testStreamingMaxNumberOfSubscribers() throws Exception {
+        // Run a corfu server.
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime & CorfuStore
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        // Record the initial timestamp.
+        Timestamp ts1 = store.getTimestamp();
+
+        // Create a table.
+        store.openTable(
+                "test_namespace", "tableA",
+                Uuid.class, Uuid.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        assertThatThrownBy( () -> {
+                    for (int i = 0; i < StreamManager.MAX_SUBSCRIBERS + 1; i++) {
+                        // Subscribe to streaming updates from the table using customized buffer size.
+                        StreamListenerImpl listener = new StreamListenerImpl("stream_listener_" + i);
+                        store.subscribe(listener, "test_namespace",
+                                Collections.singletonList(new TableSchema<>("tableA", Uuid.class, Uuid.class, Uuid.class)), ts1);
+                    }
+                }).isInstanceOf(IllegalStateException.class);
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
     }
 
     /**
@@ -185,7 +281,7 @@ public class StreamingIT extends AbstractIT {
                 Collections.singletonList("tableA"), ts1, bufferSize);
 
         // After a brief wait verify that the listener gets all the updates.
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
 
         LinkedList<CorfuStreamEntries> updates = listener1.getUpdates();
         assertThat(updates.size()).isEqualTo(numUpdates);
@@ -212,7 +308,7 @@ public class StreamingIT extends AbstractIT {
         Uuid uuid0 = Uuid.newBuilder().setMsb(0).setLsb(0).build();
         tx.delete(tableA, uuid0).commit();
 
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
 
         // Both the listener should see the deletion.
         updates = listener1.getUpdates();
@@ -220,7 +316,6 @@ public class StreamingIT extends AbstractIT {
         assertThat(update.getEntries()).hasSize(1);
         List<CorfuStreamEntry> entry = update.getEntries().values().stream().findFirst().get();
         assertThat(entry.get(0).getAddress()).isGreaterThan(0L);
-        assertThat(entry.get(0).getEpoch()).isEqualTo(0L);
         assertThat(entry).hasSize(1);
         assertThat(entry.get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.DELETE);
         assertThat(entry.get(0).getKey()).isEqualTo(uuid0);
@@ -241,7 +336,7 @@ public class StreamingIT extends AbstractIT {
 
         // Unsubscribe listener1 and ensure that it no longer gets any updates.
         store.unsubscribeListener(listener1);
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
 
         tx = store.txn("test_namespace");
         Uuid uuid1 = Uuid.newBuilder().setMsb(1).setLsb(1).build();
@@ -249,7 +344,7 @@ public class StreamingIT extends AbstractIT {
         tx.commit();
 
         // Listener1 should see no new updates, where as listener2 should see the latest delete.
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
         updates = listener1.getUpdates();
         assertThat(updates).hasSize(numUpdates + 1);
         updates = listener2.getUpdates();
@@ -339,7 +434,7 @@ public class StreamingIT extends AbstractIT {
                 Collections.singletonList("tableA"), ts1);
 
         // Attempt to subscribe to streaming updates from tableB using same listener
-        assertThrows(StreamSubscriptionException.class, () -> store.subscribeListener(listenerCommon, "test_namespace", "sample_streamer_4",
+        assertThrows(StreamingException.class, () -> store.subscribeListener(listenerCommon, "test_namespace", "sample_streamer_4",
                 Collections.singletonList("tableB"), ts1));
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
@@ -413,7 +508,7 @@ public class StreamingIT extends AbstractIT {
                 Collections.emptyList(), ts1);
 
         // After a brief wait verify that the listener gets all the updates.
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
 
         LinkedList<CorfuStreamEntries> updates1 = listener1.getUpdates();
         assertThat(updates1).hasSize(2);
@@ -494,7 +589,7 @@ public class StreamingIT extends AbstractIT {
                 TableOptions.builder().build()
         );
 
-        final int numThread = StreamingManager.getNumThreadPerPool();
+        final int numThread = runtime.getParameters().getStreamingPollingThreadPoolSize();
         final int numListener = numThread + 2;
         final int bufferSize = 3;
         final int numUpdates = bufferSize + 1;
@@ -523,7 +618,7 @@ public class StreamingIT extends AbstractIT {
                     Collections.singletonList("tableA"), ts1, bufferSize);
         }
 
-        TimeUnit.SECONDS.sleep(6);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
 
         for (int i = 0; i < numListener; i++) {
             if (i < numThread - 1) {
@@ -534,7 +629,7 @@ public class StreamingIT extends AbstractIT {
         }
 
         latch.countDown();
-        TimeUnit.SECONDS.sleep(4);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
 
         for (int i = 0; i < numListener; i++) {
             assertThat(listeners[i].getUpdates().size()).isEqualTo(numUpdates);
@@ -575,10 +670,10 @@ public class StreamingIT extends AbstractIT {
                 Collections.singletonList(tableName), ts1);
 
         // Wait for a while, so we are sure the subscriber poller has run
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
 
         assertThatThrownBy(() -> store.subscribeListener(listener1, namespace, "sample_streamer_1",
-                Collections.singletonList(tableName), ts1)).isExactlyInstanceOf(StreamSubscriptionException.class);
+                Collections.singletonList(tableName), ts1)).isExactlyInstanceOf(StreamingException.class);
 
         // Make some updates to the table
         final int numUpdates = 5;
@@ -592,7 +687,7 @@ public class StreamingIT extends AbstractIT {
         }
 
         // Wait for a while, so we are sure the subscriber poller has run
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
 
         // Verify updates
         LinkedList<CorfuStreamEntries> updates1 = listener1.getUpdates();
@@ -601,6 +696,113 @@ public class StreamingIT extends AbstractIT {
         for (int index = 0; index < numUpdates; index++) {
             assertThat(updates1.get(index).getEntries()).hasSize(1);
             List<CorfuStreamEntry> entries = updates1.get(index).getEntries().values().stream().findFirst().get();
+            assertThat(entries).hasSize(1);
+            assertThat(((Uuid)entries.get(0).getKey()).getMsb()).isEqualTo(index);
+            assertThat(((SampleTableAMsg)entries.get(0).getPayload()).getPayload()).isEqualTo(String.valueOf(index));
+            assertThat(((Uuid)entries.get(0).getMetadata()).getMsb()).isEqualTo(index);
+        }
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Test the case where a subscriber hits an error (for instance due to a poison pill) and
+     * decides to re-subscribe from the last observed update (based on the provided timestamp).
+     */
+    @Test
+    @SuppressWarnings("checkstyle:magicnumber")
+    public void testSubscriberTimestamp() throws Exception {
+        // Run a corfu server.
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+
+        // Start a Corfu runtime.
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStore store = new CorfuStore(runtime);
+
+        // Record the initial timestamp.
+        Timestamp ts1 = store.getTimestamp();
+        final String namespace = "test_namespace";
+        final String tableNameA = "table_testA";
+        final String tableNameB = "table_testB";
+
+        // Create 2 tables.
+        Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
+                namespace, tableNameA,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        Table<Uuid, SampleTableBMsg, Uuid> tableB = store.openTable(
+                namespace, tableNameB,
+                Uuid.class, SampleTableBMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        final int numUpdates = 10;
+
+        // Subscribe to streaming for one 'tag' corresponding to TableA
+        // This listener will artificially throw an Exception when numUpdates/2 are received, enforcing unsubscription
+        // and testing the last provided timestamp truly tracks the last received update and can resume from that point
+        // onwards (no data loss or need to sync a full snapshot)
+        CountDownLatch latch = new CountDownLatch(1);
+        StreamListenerImpl listener1 = new StreamListenerImpl("stream_listener_1", numUpdates/2, latch);
+        store.subscribeListener(listener1, namespace, "sample_streamer_1",
+                Collections.singletonList(tableNameA), ts1);
+
+        // Wait for a while, so we are sure the subscriber poller has run
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+
+        // Confirm subscribe was successful
+        assertThatThrownBy(() -> store.subscribeListener(listener1, namespace, "sample_streamer_1",
+                Collections.singletonList(tableNameA), ts1)).isExactlyInstanceOf(StreamingException.class);
+
+        // Make some updates to both tables
+        for (int index = 0; index < numUpdates; index++) {
+            // Update TableA
+            try (TxnContext tx = store.txn(namespace)) {
+                Uuid uuid = Uuid.newBuilder().setMsb(index).setLsb(index).build();
+                SampleTableAMsg msgA = SampleTableAMsg.newBuilder().setPayload(String.valueOf(index)).build();
+                tx.putRecord(tableA, uuid, msgA, uuid);
+                tx.commit();
+            }
+            // Update TableB (just an interleaving table so the space of updates is not continuous)
+            try (TxnContext tx = store.txn(namespace)) {
+                Uuid uuid = Uuid.newBuilder().setMsb(index).setLsb(index).build();
+                SampleTableBMsg msgB = SampleTableBMsg.newBuilder().setPayload(String.valueOf(index)).build();
+                tx.putRecord(tableB, uuid, msgB, uuid);
+                tx.commit();
+            }
+        }
+
+        // Block until the error has been triggered
+        latch.await();
+
+        // Verify Partial Updates were received (before error) and re-subscribe
+        LinkedList<CorfuStreamEntries> updates1 = listener1.getUpdates();
+        assertThat(updates1).hasSize(numUpdates/2);
+
+        for (int index = 0; index < numUpdates/2; index++) {
+            assertThat(updates1.get(index).getEntries()).hasSize(1);
+            List<CorfuStreamEntry> entries = updates1.get(index).getEntries().values().stream().findFirst().get();
+            assertThat(entries).hasSize(1);
+            assertThat(((Uuid)entries.get(0).getKey()).getMsb()).isEqualTo(index);
+            assertThat(((SampleTableAMsg)entries.get(0).getPayload()).getPayload()).isEqualTo(String.valueOf(index));
+            assertThat(((Uuid)entries.get(0).getMetadata()).getMsb()).isEqualTo(index);
+        }
+
+        // Re-subscribe from the last synced point and verify we catch up on the correct differential
+        store.subscribeListener(listener1, namespace, "sample_streamer_1",
+                Collections.singletonList(tableNameA), listener1.getTimestamp());
+
+        // Wait for a while, so we are sure the subscriber poller has run
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+
+        LinkedList<CorfuStreamEntries> updates2 = listener1.getUpdates();
+        assertThat(updates2).hasSize(numUpdates); // accumulated updates
+
+        for (int index = numUpdates/2; index < numUpdates; index++) {
+            assertThat(updates2.get(index).getEntries()).hasSize(1);
+            List<CorfuStreamEntry> entries = updates2.get(index).getEntries().values().stream().findFirst().get();
             assertThat(entries).hasSize(1);
             assertThat(((Uuid)entries.get(0).getKey()).getMsb()).isEqualTo(index);
             assertThat(((SampleTableAMsg)entries.get(0).getPayload()).getPayload()).isEqualTo(String.valueOf(index));
@@ -668,7 +870,7 @@ public class StreamingIT extends AbstractIT {
         store.subscribe(listener, "n1", tablesSubscribed, ts1);
 
         // Verify that both updates come to the subscriber in the same StreamEntry.
-        TimeUnit.SECONDS.sleep(2);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
         LinkedList<CorfuStreamEntries> updates = listener.getUpdates();
         assertThat(updates.size()).isEqualTo(1);
         assertThat(updates.getFirst().getEntries().entrySet().size()).isEqualTo(2);
@@ -685,5 +887,328 @@ public class StreamingIT extends AbstractIT {
         assertThat(updates.getFirst().getEntries().get(schema2).get(0).getOperation()).isEqualTo(CorfuStreamEntry.OperationType.UPDATE);
 
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Test the case where streaming is interrupted due to an unrecoverable TrimmedException.
+     *
+     * In this case we do a full log trim, such that the address space of the stream of interest is empty (0 addresses),
+     * i.e., all updates to the stream have been trimmed and are subsumed by the checkpoint.
+     *
+     */
+    @Test
+    public void testTrimmedExceptionCompleteLogTrim() {
+        assertThat(testStreamingTrimmedException(false, false, false)).isTrue();
+    }
+
+    /**
+     * Test the case where streaming is interrupted due to an unrecoverable TrimmedException.
+     *
+     * In this case we do a partial trim, such that the address space of the stream of interest reflects remaining addresses
+     * (i.e., not all updates have been trimmed, though subsumed by a checkpoint)
+     *
+     */
+    @Test
+    public void testTrimmedExceptionPartialLogTrim() {
+        assertThat(testStreamingTrimmedException(true, false, false)).isTrue();
+    }
+
+    /**
+     * Test case where the log is partially trimmed and the listener's syncing point is ahead from the trimmed space
+     * while the runtimeGC kicks in.
+     **/
+    @Test
+    public void testTrimmedExceptionPartialLogTrimSyncAhead()  {
+        assertThat(testStreamingTrimmedException(true, true, false)).isTrue();
+        assertThat(testStreamingTrimmedException(true, true, true)).isTrue();
+    }
+
+    /**
+     * Test case where the log is completely trimmed and the listener's syncing point is ahead from the trimmed space
+     * while the runtimeGC kicks in.
+     **/
+    @Test
+    public void testTrimmedExceptionCompleteLogTrimSyncAhead()  {
+        assertThat(testStreamingTrimmedException(false, true, false)).isTrue();
+        assertThat(testStreamingTrimmedException(false, true, true)).isTrue();
+    }
+
+    /**
+     * Test the case where a tagged stream does not progress over time (no updates) and
+     * several checkpoint cycles kick in, moving the trim mark beyond last synced point
+     * (ensure a trimmed exception is not thrown as it is actually up to date)
+     */
+    @Test
+    public void testStreamingConsecutiveCheckpoints() throws Exception {
+        // Run a corfu server & initialize CorfuStore
+        initializeCorfu();
+
+        // Record the initial timestamp.
+        Timestamp initTs = store.getTimestamp();
+
+        final int totalUpdates = 20;
+        final int numCheckpointTrimCycles = 5;
+        final String randomTableName = "randomTable";
+
+        // Write 'totalUpdates' to defaultTable (which we will be streaming) and another random table
+        // (which writes to a different tagged stream), the idea is to
+        writeUpdatesToDefaultTable(totalUpdates, 0);
+        writeUpdatesToRandomTable(totalUpdates, 0, randomTableName);
+
+        // Start Listener on defaultTable from initial timestamp
+        StreamListenerImpl listener = new StreamListenerImpl("stream_listener");
+        store.subscribeListener(listener, namespace, defaultTag, Collections.singletonList(defaultTableName), initTs);
+
+        // Confirm totalUpdates are received
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listener.getUpdates().size()).isEqualTo(totalUpdates);
+
+        // Run X number of checkpoint/trim (on each run, trigger runtimeGC)
+        for (int i = 0; i < numCheckpointTrimCycles; i++) {
+            checkpointAndTrim(namespace, Arrays.asList(defaultTableName, randomTableName), false);
+            runtime.getGarbageCollector().runRuntimeGC();
+        }
+
+        // Confirm first untrimmed address is higher than the last received update (confirm pointer is below global trim mark)
+        assertThat(runtime.getAddressSpaceView().getTrimMark().getSequence()).isGreaterThan(listener.getTimestamp().getSequence());
+
+        // Check listener was not unsubscribed due to a Trimmed Exception (as pointer was kept below the latest trim mark)
+        assertThrows(StreamingException.class, () -> store.subscribeListener(listener, namespace, defaultTag,
+                Collections.singletonList(defaultTableName), store.getTimestamp()));
+
+        // Add new updates to the stream being subscribed to, confirm data is received
+        writeUpdatesToDefaultTable(totalUpdates, totalUpdates);
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listener.getUpdates().size()).isEqualTo(totalUpdates*2);
+    }
+
+    private boolean testStreamingTrimmedException(boolean partialTrim, boolean syncAhead, boolean addDeltaUpdates) {
+        try {
+            // Run a corfu server & initialize CorfuStore
+            initializeCorfu();
+
+            // Record the initial timestamp.
+            Timestamp ts1 = store.getTimestamp();
+
+            final int totalUpdates = 100;
+            final int fewUpdates = 5;
+
+            writeUpdatesToDefaultTable(totalUpdates, 0);
+
+            // Checkpoint and Trim
+            Token trimPoint = checkpointAndTrim(namespace, Arrays.asList(defaultTableName), partialTrim);
+
+            // Build a trim timestamp to be used later
+            Timestamp trimTimestamp = Timestamp.newBuilder()
+                    .setEpoch(trimPoint.getEpoch())
+                    .setSequence(trimPoint.getSequence())
+                    .build();
+
+            Timestamp syncTs;
+            if (!syncAhead) {
+                syncTs = ts1;
+            } else {
+                syncTs = trimTimestamp;
+                if (addDeltaUpdates) {
+                    writeUpdatesToDefaultTable(fewUpdates, totalUpdates);
+                }
+            }
+
+            // Subscribe listener to stream tag 'sample_streamer_1'
+            final CountDownLatch errorListener = new CountDownLatch(1);
+
+            // KEY to this use case, the runtime GC moves the gcTrimMark which makes abstractStreamContext.validateGlobalPointerPosition fail
+            runtime.getGarbageCollector().runRuntimeGC();
+
+            final TrimExceptionListener listener = new TrimExceptionListener("stream_listener", errorListener);
+            if (!syncAhead) {
+                // Start Listener on Trimmed Space
+                assertThrows(StreamingException.class, () -> store.subscribeListener(listener, namespace, defaultTag,
+                        Collections.singletonList(defaultTableName), syncTs));
+
+                boolean verifyExceptionCause = false;
+                try {
+                    store.subscribeListener(listener, namespace, defaultTag, Collections.singletonList(defaultTableName), syncTs);
+                } catch (StreamingException ste) {
+                    if (ste.getCause() instanceof TrimmedException) {
+                        verifyExceptionCause = true;
+                    }
+                }
+                assertThat(verifyExceptionCause).isTrue();
+
+                // Confirm we are unsubscribed (subscribing again does not throw an error) -> subscribing beyond trim point
+                store.subscribeListener(listener, namespace, "sample_streamer_1",
+                        Collections.singletonList(defaultTableName), trimTimestamp);
+
+                // Verify number of updates received by listener is zero (empty) as the space was trimmed.
+                assertThat(listener.getUpdates()).isEmpty();
+
+            } else {
+                store.subscribeListener(listener, namespace, defaultTag, Collections.singletonList(defaultTableName), syncTs);
+
+                // If we synced ahead from the trimmed space no reason to expect a Trimmed Exception
+                // wait for a while for "sync" to happen and confirm  updates are received (if deltas were added)
+                // or no updates is nothing was added post CP.
+                TimeUnit.MILLISECONDS.sleep(sleepTime);
+                if (addDeltaUpdates) {
+                    assertThat(listener.getUpdates().size()).isEqualTo(fewUpdates);
+                } else {
+                    assertThat(listener.getUpdates()).isEmpty();
+                }
+
+                // Confirm we are still subscribed (no TrimmedException affected our listener as the sync point was beyond)
+                assertThrows(StreamingException.class, () -> store.subscribeListener(listener, namespace, "sample_streamer_1",
+                        Collections.singletonList(defaultTableName), trimTimestamp));
+            }
+
+            // Re-Sync the table from Snapshot and confirm all entries are present, from a different runtime
+            readDefaultTableSnapshot(trimTimestamp, totalUpdates);
+
+            runtime.shutdown();
+            assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Confirm client exceptions (during onNext processing) are not wrapped as corfu unrecoverable streaming exceptions.
+     */
+    @Test
+    public void testClientExceptions() throws Exception {
+        // Run a corfu server & initialize Corfu Store
+        initializeCorfu();
+
+        // Write a number of updates to a certain table
+        final int numUpdates = 20;
+        writeUpdatesToDefaultTable(numUpdates, 0);
+
+        // Subscribe to defaultTag from start of Log
+        Timestamp startTimestamp = Timestamp.newBuilder()
+                .setEpoch(0L)
+                .setSequence(-1L)
+                .build();
+        CountDownLatch onErrorLatch = new CountDownLatch(1);
+        StreamListenerImpl listener = new StreamListenerImpl("listener_client_failure", numUpdates/2, onErrorLatch);
+        store.subscribeListener(listener, namespace, defaultTag, Arrays.asList(defaultTableName), startTimestamp);
+
+        // Block until Client Exception has been received and onError has been triggered.
+        onErrorLatch.await();
+
+        // Verify the expected received deltas (before trigger of exception was received)
+        LinkedList<CorfuStreamEntries> updates1 = listener.getUpdates();
+        assertThat(updates1).hasSize(numUpdates/2);
+
+        for (int index = 0; index < numUpdates/2; index++) {
+            assertThat(updates1.get(index).getEntries()).hasSize(1);
+            List<CorfuStreamEntry> entries = updates1.get(index).getEntries().values().stream().findFirst().get();
+            assertThat(entries).hasSize(1);
+            assertThat(((Uuid)entries.get(0).getKey()).getMsb()).isEqualTo(index);
+            assertThat(((SampleTableAMsg)entries.get(0).getPayload()).getPayload()).isEqualTo(String.valueOf(index));
+            assertThat(((Uuid)entries.get(0).getMetadata()).getMsb()).isEqualTo(index);
+        }
+
+        runtime.shutdown();
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    private void writeUpdatesToDefaultTable(int numUpdates, int offset) throws Exception {
+        Table<Uuid, SampleTableAMsg, Uuid> tableA = store.openTable(
+                namespace, defaultTableName,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Make some updates to tableA
+        for (int index = offset; index < offset + numUpdates; index++) {
+            // Update TableA
+            try (TxnContext tx = store.txn(namespace)) {
+                Uuid uuid = Uuid.newBuilder().setMsb(index).setLsb(index).build();
+                SampleTableAMsg msgA = SampleTableAMsg.newBuilder().setPayload(String.valueOf(index)).build();
+                tx.putRecord(tableA, uuid, msgA, uuid);
+                tx.commit();
+            }
+        }
+    }
+
+    private void writeUpdatesToRandomTable(int numUpdates, int offset, String tableName) throws Exception {
+        Table<Uuid, SampleTableBMsg, Uuid> tableB = store.openTable(
+                namespace, tableName,
+                Uuid.class, SampleTableBMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Make some updates to tableB
+        for (int index = offset; index < offset + numUpdates; index++) {
+            try (TxnContext tx = store.txn(namespace)) {
+                Uuid uuid = Uuid.newBuilder().setMsb(index).setLsb(index).build();
+                SampleTableBMsg msgB = SampleTableBMsg.newBuilder().setPayload(String.valueOf(index)).build();
+                tx.putRecord(tableB, uuid, msgB, uuid);
+                tx.commit();
+            }
+        }
+    }
+
+    private void initializeCorfu() throws Exception {
+        corfuServer = runSinglePersistentServer(corfuSingleNodeHost, corfuStringNodePort);
+        runtime = createRuntime(singleNodeEndpoint);
+        store = new CorfuStore(runtime);
+    }
+
+    private void readDefaultTableSnapshot(Timestamp snapshotTimestamp, int numUpdates) throws Exception {
+        CorfuRuntime readRuntime = createRuntime(singleNodeEndpoint);
+        CorfuStore readStore = new CorfuStore(readRuntime);
+
+        readStore.openTable(namespace, defaultTableName,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        try (TxnContext txn = readStore.txn(namespace, IsolationLevel.snapshot(snapshotTimestamp))) {
+            Table<Uuid, SampleTableAMsg, Uuid> readTable = txn.getTable(defaultTableName);
+            assertThat(readTable.count()).isEqualTo(numUpdates);
+
+            readTable.entryStream().forEach(entry -> entry.getKey().getMsb());
+
+            for (int index = 0; index < numUpdates; index++) {
+                CorfuRecord<SampleTableAMsg, Uuid> record = readTable.get(Uuid.newBuilder().setLsb(index).setMsb(index).build());
+                assertThat(record).isNotNull();
+                assertThat(record.getPayload().getPayload()).isEqualTo(String.valueOf(index));
+            }
+        }
+
+        readRuntime.shutdown();
+    }
+
+    private Token checkpointAndTrim(String namespace, List<String> tablesToCheckpoint, boolean partialTrim) {
+        MultiCheckpointWriter<CorfuTable> mcw = new MultiCheckpointWriter<>();
+        tablesToCheckpoint.forEach(tableName -> {
+            CorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, SampleSchema.ManagedResources>> corfuTable = runtime.getObjectsView().build()
+                    .setTypeToken(new TypeToken<CorfuTable<Uuid, CorfuRecord<SampleSchema.EventInfo, SampleSchema.ManagedResources>>>() {
+                    })
+                    .setStreamName(TableRegistry.getFullyQualifiedTableName(namespace, tableName))
+                    .open();
+            mcw.addMap(corfuTable);
+        });
+
+        CorfuRuntime rt = createRuntime(runtime.getLayoutServers().get(0));
+
+        // Add Registry Table
+        mcw.addMap(rt.getTableRegistry().getRegistryTable());
+        // Checkpoint & Trim
+        Token trimPoint = mcw.appendCheckpoints(rt, "StreamingIT");
+        if (partialTrim) {
+            final int trimOffset = 5;
+            Long sequenceModified = trimPoint.getSequence() - trimOffset;
+            Token partialTrimMark = Token.of(trimPoint.getEpoch(), sequenceModified);
+            rt.getAddressSpaceView().prefixTrim(partialTrimMark);
+        } else {
+            rt.getAddressSpaceView().prefixTrim(trimPoint);
+        }
+        rt.getAddressSpaceView().gc();
+        rt.getObjectsView().getObjectCache().clear();
+        return trimPoint;
     }
 }
