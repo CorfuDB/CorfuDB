@@ -397,8 +397,9 @@ public interface ICorfuPayload<T> {
             buffer.writeLong(streamRange.getEnd());
         } else if (payload instanceof Roaring64NavigableMap) {
             Roaring64NavigableMap mrb = (Roaring64NavigableMap) payload;
+            // runOptimize results in overflow when address straddle Integer.MAX_VALUE (2147483647), so avoid it by skipping runOptimize()
             // Improve compression
-            mrb.runOptimize();
+            // mrb.runOptimize();
             try (ByteBufOutputStream outputStream = new ByteBufOutputStream(buffer);
                  DataOutputStream dataOutputStream =  new DataOutputStream(outputStream)){
                 mrb.serialize(dataOutputStream);
