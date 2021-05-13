@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 
 import java.util.Optional;
@@ -28,8 +29,8 @@ public class CorfuStoreMetrics {
         openTableCounter.ifPresent(Counter::increment);
     }
 
-    public void recordHighestSequenceNumberDuration(long elapsedTime) {
-        highestSequenceNumberDuration.update(elapsedTime);
+    public void recordHighestSequenceNumberDuration(Optional<Timer.Sample> startTime) {
+        highestSequenceNumberDuration.update(startTime);
     }
 
     /**
@@ -39,15 +40,15 @@ public class CorfuStoreMetrics {
         Optional<MeterRegistry> registryProvider = MeterRegistryProvider.getInstance();
         this.numberBatchReads = registryProvider.map(registry -> DistributionSummary
                 .builder("highestSeqNum.numberBatchReads")
-                .publishPercentiles(0.95, 0.99)
+                .publishPercentiles(0.5, 0.99)
                 .description("Number of batches read before finding highest DATA sequence number")
                 .register(registry));
         this.numberReads = registryProvider.map(registry ->
-                        DistributionSummary
-                                .builder("highestSeqNum.numberReads")
-                                .publishPercentiles(0.95, 0.99)
-                                .description("Number of addresses read in batches before finding highest DATA sequence number")
-                                .register(registry));
+                DistributionSummary
+                        .builder("highestSeqNum.numberReads")
+                        .publishPercentiles(0.5, 0.99)
+                        .description("Number of addresses read in batches before finding highest DATA sequence number")
+                        .register(registry));
         this.openTableCounter = registryProvider.map(registry ->
                 registry.counter("open_tables.count"));
 
@@ -56,6 +57,7 @@ public class CorfuStoreMetrics {
 
     /**
      * Method to pretty print the metrics into a JSON object.
+     *
      * @return metrics as jsonObject
      */
     public JsonObject toJsonObject() {

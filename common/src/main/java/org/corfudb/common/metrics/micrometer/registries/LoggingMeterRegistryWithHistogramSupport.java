@@ -65,14 +65,14 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
     }
 
     Stream<String> writeCounter(Meter.Id id, double count) {
-        if (Double.isFinite(count)) {
+        if (Double.isFinite(count) && count != 0) {
             return Stream.of(influxLineProtocol(id, "counter", Stream.of(new Field("value", count))));
         }
         return Stream.empty();
     }
 
     Stream<String> writeGauge(Meter.Id id, Double value) {
-        if (Double.isFinite(value)) {
+        if (Double.isFinite(value) && value != 0) {
             return Stream.of(influxLineProtocol(id, "gauge", Stream.of(new Field("value", value))));
         }
         return Stream.empty();
@@ -80,7 +80,7 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
 
     Stream<String> writeFunctionTimer(FunctionTimer timer) {
         double sum = timer.totalTime(getBaseTimeUnit());
-        if (Double.isFinite(sum)) {
+        if (Double.isFinite(sum) && sum != 0) {
             Stream.Builder<Field> builder = Stream.builder();
             builder.add(new Field("sum", sum));
             builder.add(new Field("count", timer.count()));
@@ -94,6 +94,9 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
     }
 
     Stream<String> writeTimer(Timer timer) {
+        if (timer.count() == 0 || timer.totalTime(getBaseTimeUnit()) == 0) {
+            return Stream.empty();
+        }
         final Stream<Field> fields = Stream.of(
                 new Field("sum", timer.totalTime(getBaseTimeUnit())),
                 new Field("count", timer.count()),
@@ -105,6 +108,9 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
     }
 
     Stream<String> writeSummary(DistributionSummary summary) {
+        if (summary.totalAmount() == 0 || summary.count() == 0) {
+            return Stream.empty();
+        }
         final Stream<Field> fields = Stream.of(
                 new Field("sum", summary.totalAmount()),
                 new Field("count", summary.count()),

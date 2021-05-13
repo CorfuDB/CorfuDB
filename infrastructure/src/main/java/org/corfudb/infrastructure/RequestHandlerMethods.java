@@ -184,7 +184,7 @@ public class RequestHandlerMethods {
         timerNameCache.computeIfAbsent(type,
                 aType -> ("corfu.infrastructure.message-handler." +
                         aType.name().toLowerCase()));
-        double[] percentiles = new double[]{0.50, 0.95, 0.99};
+        double[] percentiles = new double[]{0.50, 0.99};
 
         return MeterRegistryProvider.getInstance()
                 .map(registry -> Timer.builder(timerNameCache.get(type))

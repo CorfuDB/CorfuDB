@@ -48,13 +48,13 @@ public class LogData implements IMetadata, ILogData {
     private final Optional<Timer> decompressTimer = MeterRegistryProvider.getInstance()
             .map(registry -> Timer.builder("logdata.decompress")
                     .publishPercentileHistogram(true)
-                    .publishPercentiles(0.5, 0.95, 0.99)
+                    .publishPercentiles(0.5, 0.99)
                     .register(registry));
 
     private final Optional<Timer> compressTimer = MeterRegistryProvider.getInstance()
             .map(registry -> Timer.builder("logdata.compress")
                     .publishPercentileHistogram(true)
-                    .publishPercentiles(0.5, 0.95, 0.99)
+                    .publishPercentiles(0.5, 0.99)
                     .register(registry));
 
     @RequiredArgsConstructor
