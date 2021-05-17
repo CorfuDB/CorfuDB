@@ -18,6 +18,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Globally Unique Identity generator that returns ids
@@ -233,7 +234,17 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
      */
     private synchronized CorfuGuid getCorrectedTimestamp() {
         long currentTimestamp = System.currentTimeMillis();
-        if (currentTimestamp == previousTimestamp) {
+        if (currentTimestamp > previousTimestamp) {
+            final long oneYearInMillis = TimeUnit.DAYS.toMillis(365);
+            int maxCrazyNtpValueRetries = 1000;
+            while (currentTimestamp - previousTimestamp > oneYearInMillis) {
+                currentTimestamp = System.currentTimeMillis();
+                if (maxCrazyNtpValueRetries-- <= 0) {
+                    log.warn("Time moved forward by too much, NTP misbehaving?");
+                    break;
+                }
+            }
+        } else if (currentTimestamp == previousTimestamp) { // No change in wall clock time
             resolutionCorrection++;
             // If more than 16 concurrent threads are calling this api, we can hit this.
             // Simple solution is to make the last thread wait a few microseconds.
@@ -244,12 +255,9 @@ public class CorfuGuidGenerator implements OrderedGuidGenerator {
                 }
                 resolutionCorrection = 0;
             }
-        } else {
-            resolutionCorrection = 0;
-        }
-
-        if (currentTimestamp < previousTimestamp) {
+        } else if (currentTimestamp < previousTimestamp) { // NTP corrects time backward
             driftCorrection++;
+            resolutionCorrection = 0;
             if (driftCorrection > CorfuGuid.MAX_CORRECTION) {
                 log.warn("updateInstanceId: Time went backward too many times "+
                                 " timestamp={} previousTimestamp={} correction={} instanceId={}",
