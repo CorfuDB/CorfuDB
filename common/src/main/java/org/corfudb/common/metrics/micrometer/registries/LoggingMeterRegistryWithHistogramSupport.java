@@ -72,7 +72,7 @@ public class LoggingMeterRegistryWithHistogramSupport extends StepMeterRegistry 
     }
 
     Stream<String> writeGauge(Meter.Id id, Double value) {
-        if (Double.isFinite(value) && value != 0) {
+        if (Double.isFinite(value)) {
             return Stream.of(influxLineProtocol(id, "gauge", Stream.of(new Field("value", value))));
         }
         return Stream.empty();
