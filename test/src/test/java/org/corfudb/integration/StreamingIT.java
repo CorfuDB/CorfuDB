@@ -21,6 +21,7 @@ import org.corfudb.runtime.collections.TableSchema;
 import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.TrimmedException;
 import org.corfudb.runtime.exceptions.StreamingException;
+import org.corfudb.runtime.view.Address;
 import org.corfudb.runtime.view.TableRegistry;
 import org.corfudb.test.SampleSchema;
 import org.corfudb.test.SampleSchema.SampleTableAMsg;
@@ -1112,6 +1113,99 @@ public class StreamingIT extends AbstractIT {
 
         runtime.shutdown();
         assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
+     * Test subscribe streaming API for which only streams tags are specified.
+     *
+     * (1) Test the case where tables with a common tag are opened in advance and by subscribing to the tag,
+     * updates for all tables are received.
+     *
+     * (2) Test the case where tables have been registered on a different store, and we attempt to
+     * subscribe without opening the tables (this should fail, as key, value & metadata schemas are required).
+     *
+     * (3) Test the case where partial tables belonging to a tag have been opened by the time of subscription (should still fail).
+     */
+    @Test
+    public void testSubscribeAPIForTagsOnly() throws Exception {
+        // Run a corfu server & initialize Corfu Store
+        initializeCorfu();
+
+        // Write a number of updates to a certain table
+        final int numUpdates = 20;
+        final int totalTables = 3;
+        final String commonStreamTag = "sample_streamer_2";
+        final String uniqueTag = "sample_streamer_1";
+        final String table1Name = defaultTableName;
+        final String table2Name  = "tableSampleB_2";
+        final String table3Name  = "tableSampleB_3";
+
+        writeUpdatesToDefaultTable(numUpdates, 0);
+        writeUpdatesToRandomTable(numUpdates, 0, table2Name);
+        writeUpdatesToRandomTable(numUpdates, 0, table3Name);
+
+        // First CorfuStore used to open 3 tables (2 share the same tag)
+        // Subscribe first store to commonStreamTag and verify updates for all 3 tables are received
+        StreamListenerImpl listener = new StreamListenerImpl("stream_listener");
+        store.subscribeListener(listener, namespace, commonStreamTag, Timestamp.newBuilder().setSequence(Address.NON_ADDRESS).setEpoch(0L).build());
+
+        // Confirm totalUpdates are received
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listener.getUpdates().size()).isEqualTo(numUpdates*totalTables);
+
+        // Second CorfuStore (initially no tables opened)
+        CorfuRuntime newRuntime = createRuntime(singleNodeEndpoint);
+        CorfuStore newStore = new CorfuStore(newRuntime);
+
+        StreamListenerImpl newListener = new StreamListenerImpl("new_stream_listener");
+        // Attempt to subscribe to 'commonStreamTag', it should fail as none of the tables labeled with this tag
+        // have been opened
+        assertThatThrownBy(() -> newStore.subscribeListener(newListener, namespace, commonStreamTag,
+                    Timestamp.newBuilder().setSequence(Address.NON_ADDRESS).setEpoch(0L).build()))
+                .isExactlyInstanceOf(IllegalArgumentException.class);
+
+        // Open only 1 of the tables labeled with 'commonStreamTag'
+        newStore.openTable(
+                namespace, table2Name,
+                Uuid.class, SampleTableBMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Attempt to subscribe to 'commonStreamTag', it should still fail as ALL of the tables labeled with this tag
+        // have not yet been opened
+        assertThatThrownBy(() -> newStore.subscribeListener(newListener, namespace, commonStreamTag,
+                Timestamp.newBuilder().setSequence(Address.NON_ADDRESS).setEpoch(0L).build()))
+                .isExactlyInstanceOf(IllegalArgumentException.class);
+
+        // Open remaining 2 tables
+        newStore.openTable(
+                namespace, table3Name,
+                Uuid.class, SampleTableBMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        newStore.openTable(
+                namespace, table1Name,
+                Uuid.class, SampleTableAMsg.class, Uuid.class,
+                TableOptions.builder().build()
+        );
+
+        // Attempt to register, now that 3 tables have been opened
+        newStore.subscribeListener(newListener, namespace, commonStreamTag,
+                Timestamp.newBuilder().setSequence(Address.NON_ADDRESS).setEpoch(0L).build());
+
+        // Confirm totalUpdates are received
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(newListener.getUpdates().size()).isEqualTo(numUpdates*totalTables);
+
+        // Confirm a tag which is unique to 1 table, also works
+        StreamListenerImpl listenerUniqueTag = new StreamListenerImpl("stream_listener_unique");
+        newStore.subscribeListener(listenerUniqueTag, namespace, uniqueTag,
+                Timestamp.newBuilder().setSequence(Address.NON_ADDRESS).setEpoch(0L).build());
+
+        // Confirm totalUpdates are received
+        TimeUnit.MILLISECONDS.sleep(sleepTime);
+        assertThat(listenerUniqueTag.getUpdates().size()).isEqualTo(numUpdates);
     }
 
     private void writeUpdatesToDefaultTable(int numUpdates, int offset) throws Exception {

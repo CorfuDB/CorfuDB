@@ -38,6 +38,7 @@ import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
@@ -497,6 +498,20 @@ public class TableRegistry {
      */
     public Collection<TableName> listTables() {
         return registryTable.keySet();
+    }
+
+    /**
+     * Lists all tables for a specific stream tag.
+     *
+     * @return Collection of tables.
+     */
+    public List<String> listTables(@Nullable final String namespace, @Nullable final String streamTag) {
+        return registryTable.entryStream()
+                .filter(table -> table.getKey().getNamespace().equals(namespace))
+                .filter(table -> table.getValue().getMetadata().getTableOptions().getStreamTagList().contains(streamTag))
+                .map(Map.Entry::getKey)
+                .map(TableName::getTableName)
+                .collect(Collectors.toList());
     }
 
     /**
