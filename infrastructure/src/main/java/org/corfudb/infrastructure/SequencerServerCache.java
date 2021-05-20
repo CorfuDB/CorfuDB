@@ -103,7 +103,7 @@ public class SequencerServerCache {
                         registry.gauge(conflictKeysCounterName, Collections.emptyList(),
                                 new HashMap<ConflictTxStream, Long>(), HashMap::size))
                 .orElse(new HashMap<>());
-        double [] percentiles = new double[] {0.50, 0.95, 0.99};
+        double [] percentiles = new double[] {0.50, 0.99};
         evictionsPerTrimCall = MeterRegistryProvider.getInstance().map(registry ->
                 DistributionSummary
                         .builder("sequencer.cache.evictions")

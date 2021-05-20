@@ -162,7 +162,7 @@ public class SequencerServer extends AbstractServer {
                 registry.timer("sequencer.tx-resolution.timer"));
         this.streamsPerTx = MeterRegistryProvider.getInstance().map(registry ->
                 DistributionSummary.builder("sequencer.tx-resolution.num_streams")
-                        .baseUnit("stream").publishPercentiles(0.50, 0.95, 0.99).register(registry));
+                        .baseUnit("stream").publishPercentiles(0.50, 0.99).register(registry));
     }
 
     @Override

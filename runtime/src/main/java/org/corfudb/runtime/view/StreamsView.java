@@ -55,7 +55,7 @@ public class StreamsView extends AbstractView {
         this.serializationTimer = MeterRegistryProvider.getInstance()
                 .map(registry ->
                         Timer.builder("streams.view.serialization")
-                                .publishPercentiles(0.5, 0.95, 0.99)
+                                .publishPercentiles(0.5, 0.99)
                                 .publishPercentileHistogram(true)
                                 .register(registry));
     }
