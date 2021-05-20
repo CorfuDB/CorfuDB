@@ -359,6 +359,8 @@ public class StreamsSnapshotWriter implements SnapshotWriter {
         if (seqNum != Address.NON_ADDRESS) {
             log.debug("Start applying shadow streams, seqNum={}", seqNum);
             applyShadowStreams();
+        } else {
+            log.warn("seqNum is NON_ADDRESS! Skipping apply shadow streams!!!");
         }
     }
     

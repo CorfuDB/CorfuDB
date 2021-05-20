@@ -438,6 +438,8 @@ public class LogReplicationSinkManager implements DataReceiver {
                     // Mark Snapshot Sync Transfer as complete and return ACK right away
                     completeSnapshotTransfer(entry);
                     startSnapshotApplyAsync(entry);
+                } else {
+                    log.warn("snapshotWriter is in apply phase! Skipping SNAPSHOT_END!");
                 }
                 break;
             default:
@@ -449,7 +451,10 @@ public class LogReplicationSinkManager implements DataReceiver {
     private synchronized void startSnapshotApplyAsync(LogReplicationEntry entry) {
         if (!ongoingApply.get()) {
             ongoingApply.set(true);
+            log.info("Submit a snapshot apply task!");
             applyExecutor.submit(() -> startSnapshotApply(entry));
+        } else {
+            log.warn("Sink Manager's ongoingApply is true! Skipping startSnapshotApplyAsync");
         }
     }
 
