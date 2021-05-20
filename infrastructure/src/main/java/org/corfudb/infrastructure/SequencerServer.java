@@ -131,7 +131,7 @@ public class SequencerServer extends AbstractServer {
     /**
      * The percentiles to compute and publish for {@link this#streamsPerTx}.
      */
-    private final double[] percentiles = {0.50, 0.95, 0.99};
+    private final double[] percentiles = {0.50, 0.99};
 
     /**
      * RequestHandlerMethods for the Sequencer server

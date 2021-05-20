@@ -28,7 +28,7 @@ public class StreamSubscriptionMetrics {
 
     StreamSubscriptionMetrics(StreamListener listener, String namespace, String streamTag) {
         this.listenerId = String.format("listener_%s_%s_%s", listener, namespace, streamTag);
-        this.percentiles = new double[]{0.5, 0.95, 0.99};
+        this.percentiles = new double[]{0.5, 0.99};
         this.deliveryTimer = MeterRegistryProvider.getInstance()
                 .map(registry -> Timer.builder("stream_sub.delivery.timer")
                         .tags("listenerId", listenerId)

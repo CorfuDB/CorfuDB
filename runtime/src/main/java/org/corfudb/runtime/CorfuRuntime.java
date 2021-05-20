@@ -904,7 +904,7 @@ public class CorfuRuntime {
         }
 
         fetchLayoutTimer = MeterRegistryProvider.getInstance().map(r -> Timer.builder("runtime.fetch_layout.timer")
-                .publishPercentileHistogram(true).publishPercentiles(0.50, 0.95, 0.99).register(r));
+                .publishPercentileHistogram(true).publishPercentiles(0.50, 0.99).register(r));
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
 

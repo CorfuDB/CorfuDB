@@ -1,8 +1,9 @@
 package org.corfudb.runtime.collections;
 
+import com.google.gson.JsonObject;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import com.google.gson.JsonObject;
+import io.micrometer.core.instrument.Timer;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 
 import java.util.Optional;
@@ -10,9 +11,8 @@ import java.util.Optional;
 
 /**
  * List of metrics captured at a CorfuStore Table level
- *
+ * <p>
  * Created by hisundar on 2020-09-22
- *
  */
 public class TableMetrics {
     private final String tableName;
@@ -92,20 +92,20 @@ public class TableMetrics {
         numTxnAborts.ifPresent(Counter::increment);
     }
 
-    public void recordTableOpenTime(long elapsedTime) {
-        openTableTimes.update(elapsedTime);
+    public void recordTableOpenTime(Optional<Timer.Sample> sample) {
+        openTableTimes.update(sample);
     }
 
-    public void recordWriteOnlyTxnTime(long elapsedTime) {
-        writeOnlyTxnTimes.update(elapsedTime);
+    public void recordWriteOnlyTxnTime(Optional<Timer.Sample> sample) {
+        writeOnlyTxnTimes.update(sample);
     }
 
-    public void recordReadOnlyTxnTime(long elapsedTime) {
-        readOnlyTxnTimes.update(elapsedTime);
+    public void recordReadOnlyTxnTime(Optional<Timer.Sample> sample) {
+        readOnlyTxnTimes.update(sample);
     }
 
-    public void recordReadWriteTxnTime(long elapsedTime) {
-        readWriteTxnTimes.update(elapsedTime);
+    public void recordReadWriteTxnTime(Optional<Timer.Sample> sample) {
+        readWriteTxnTimes.update(sample);
     }
 
     /**
@@ -151,6 +151,7 @@ public class TableMetrics {
 
     /**
      * Method to pretty print the metrics into a JSON object.
+     *
      * @return metrics as jsonObject
      */
     public JsonObject toJsonObject() {
