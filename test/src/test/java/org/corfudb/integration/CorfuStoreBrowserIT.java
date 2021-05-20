@@ -262,6 +262,32 @@ public class CorfuStoreBrowserIT extends AbstractIT {
     }
 
     /**
+     * Test Corfu Browser protobuf descriptor table
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testListAllProtos() throws Exception {
+        Process corfuServer = runSinglePersistentServer(corfuSingleNodeHost,
+                corfuStringNodePort);
+
+        final String namespace = "UT-namespace";
+        final String tableBaseName = "table";
+
+        final int expectedFiles = 5;
+        populateRegistryTable(namespace, tableBaseName);
+
+        runtime = createRuntime(singleNodeEndpoint);
+        CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
+        assertThat(browser.printAllProtoDescriptors()).isEqualTo(expectedFiles);
+
+        runtime.shutdown();
+        Serializers.clearCustomSerializers();
+
+        assertThat(shutdownCorfuServer(corfuServer)).isTrue();
+    }
+
+    /**
      * Create a table and add nested protobufs as data to it.  Verify that the
      * browser tool is able to read the contents accurately.
      * @throws IOException
@@ -381,7 +407,7 @@ public class CorfuStoreBrowserIT extends AbstractIT {
         runtime = createRuntime(singleNodeEndpoint);
         CorfuStoreBrowser browser = new CorfuStoreBrowser(runtime);
         // Invoke listTables and verify table count
-        Assert.assertEquals(2, browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
+        Assert.assertEquals(3, browser.printTableInfo(TableRegistry.CORFU_SYSTEM_NAMESPACE,
         TableRegistry.REGISTRY_TABLE_NAME));
         Assert.assertEquals(1, browser.printTableInfo(namespace, tableName));
         // Todo: Remove this once serializers move into the runtime

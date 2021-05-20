@@ -24,6 +24,7 @@ public class CorfuStoreBrowserMain {
         showTable,
         listenOnTable,
         dropTable,
+        listAllProtos,
         listTags,
         listTablesForTag,
         listTagsForTable,
@@ -43,7 +44,7 @@ public class CorfuStoreBrowserMain {
         + "Options:\n"
         + "--host=<host>   Hostname\n"
         + "--port=<port>   Port\n"
-        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable|listenOnTable|listTags|listTagsMap|listTablesForTag|listTagsForTable> Operation\n"
+        + "--operation=<listTables|infoTable|showTable|dropTable|loadTable|listenOnTable|listTags|listTagsMap|listTablesForTag|listTagsForTable|listAllProtos> Operation\n"
         + "--namespace=<namespace>   Namespace\n"
         + "--tablename=<tablename>   Table Name\n"
         + "--tag=<tag>  Stream tag of interest\n"
@@ -164,6 +165,9 @@ public class CorfuStoreBrowserMain {
                     break;
                 case listTagsMap:
                     browser.listTagToTableMap();
+                    break;
+                case listAllProtos:
+                    browser.printAllProtoDescriptors();
                     break;
                 default:
                     break;

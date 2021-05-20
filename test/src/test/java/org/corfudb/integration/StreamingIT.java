@@ -1480,6 +1480,7 @@ public class StreamingIT extends AbstractIT {
 
         // Add Registry Table
         mcw.addMap(rt.getTableRegistry().getRegistryTable());
+        mcw.addMap(rt.getTableRegistry().getProtobufDescriptorTable());
         // Checkpoint & Trim
         Token trimPoint = mcw.appendCheckpoints(rt, "StreamingIT");
         if (partialTrim) {
