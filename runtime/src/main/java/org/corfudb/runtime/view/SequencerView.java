@@ -44,7 +44,7 @@ public class SequencerView extends AbstractView {
      */
     private void setupTimers() {
         Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
-        double[] percentiles = new double[]{0.50, 0.95, 0.99};
+        double[] percentiles = new double[]{0.50, 0.99};
         queryRateTimer = metricsRegistry
                 .map(registry ->
                         Timer.builder("sequencer.query")
