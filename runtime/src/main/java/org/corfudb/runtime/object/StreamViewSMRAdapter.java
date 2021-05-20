@@ -59,14 +59,14 @@ public class StreamViewSMRAdapter implements ISMRStream {
                         .tags("type", "streamUpTo")
                         .tags("streams", getID().toString())
                         .publishPercentileHistogram(true)
-                        .publishPercentiles(0.5, 0.95, 0.99)
+                        .publishPercentiles(0.5, 0.99)
                         .register(registry));
         this.remainingUpToDeserializationTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("streams.view.deserialization")
                         .tags("type", "remainingUpTo")
                         .tags("streams", getID().toString())
                         .publishPercentileHistogram(true)
-                        .publishPercentiles(0.5, 0.95, 0.99)
+                        .publishPercentiles(0.5, 0.99)
                         .register(registry));
     }
 

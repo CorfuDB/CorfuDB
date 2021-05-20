@@ -182,7 +182,7 @@ public class StreamLogFiles implements StreamLog, StreamLogWithRankedAddressSpac
 
         fsyncTimer = MeterRegistryProvider.getInstance()
                 .map(registry -> Timer.builder("logunit.fsync.timer")
-                        .publishPercentiles(0.50, 0.95, 0.99)
+                        .publishPercentiles(0.50, 0.99)
                         .publishPercentileHistogram(true)
                         .register(registry));
         long initialLogSize = estimateSize(logDir);

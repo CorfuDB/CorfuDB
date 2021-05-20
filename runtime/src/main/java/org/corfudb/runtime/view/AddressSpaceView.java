@@ -138,7 +138,7 @@ public class AddressSpaceView extends AbstractView {
         loadExceptionCount = metricsRegistry.map(registry -> Gauge.builder("address_space.read_cache.load_exception_count",
                 readCache, cache -> cache.stats().loadExceptionCount()).register(registry));
 
-        double[] percentiles = new double[]{0.50, 0.95, 0.99};
+        double[] percentiles = new double[]{0.50, 0.99};
 
         multiReadTimer = metricsRegistry
                 .map(registry -> Timer.builder("address_space.read.latency")
