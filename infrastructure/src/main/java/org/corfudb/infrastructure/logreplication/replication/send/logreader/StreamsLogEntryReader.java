@@ -308,7 +308,7 @@ public class StreamsLogEntryReader implements LogEntryReader {
         public TxOpaqueStream(CorfuRuntime rt) {
             //create an opaque stream for transaction stream
             this.rt = rt;
-            txStream = new OpaqueStream(rt.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID));
+            txStream = new OpaqueStream(rt.getStreamsView().get(ObjectsView.LOG_REPLICATOR_STREAM_ID));
             streamUpTo();
         }
 

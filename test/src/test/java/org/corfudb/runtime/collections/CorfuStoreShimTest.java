@@ -3,6 +3,9 @@ package org.corfudb.runtime.collections;
 import com.google.common.reflect.TypeToken;
 import com.google.protobuf.Message;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.protocols.wireprotocol.LogData;
+import org.corfudb.protocols.wireprotocol.StreamAddressRange;
+import org.corfudb.protocols.wireprotocol.TokenResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.CorfuStoreMetadata;
 import org.corfudb.runtime.ExampleSchemas;
@@ -15,6 +18,7 @@ import org.corfudb.runtime.proto.RpcCommon.UuidMsg;
 import org.corfudb.runtime.view.AbstractViewTest;
 import org.corfudb.runtime.ExampleSchemas.ManagedMetadata;
 import org.corfudb.runtime.view.Address;
+import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -124,6 +128,65 @@ public class CorfuStoreShimTest extends AbstractViewTest {
                     .isExactlyInstanceOf(IllegalArgumentException.class);
         }
         log.debug(table.getMetrics().toString());
+    }
+
+    /**
+     * This test verifies getHighestSequenceNumber is able to return the highest sequence number
+     * corresponding to a DATA entry when the tail of a stream is filled with HOLES.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void getHighestSequenceNumberPresenceOfHoles() throws Exception {
+        final String namespace = "corfu";
+        final String tableName = "UT-Table";
+        final int numUpdates = 30;
+        final int numHoles = 10;
+
+        // Open 'table' and write 'n' consecutive updates
+        CorfuRuntime corfuRuntime = getTestRuntime();
+        CorfuStoreShim shimStore = new CorfuStoreShim(corfuRuntime);
+        Table<UuidMsg, ExampleSchemas.ExampleValue, ManagedMetadata> table = shimStore.openTable(
+                namespace,
+                tableName,
+                UuidMsg.class,
+                ExampleSchemas.ExampleValue.class,
+                ManagedMetadata.class,
+                TableOptions.builder().build());
+
+        UuidMsg key;
+        UUID uuid;
+
+        for (int index = 0; index < numUpdates; index++) {
+            try (ManagedTxnContext writeTxn = shimStore.tx(namespace)) {
+                uuid = UUID.nameUUIDFromBytes(String.valueOf(index).getBytes());
+                key = UuidMsg.newBuilder().setLsb(uuid.getLeastSignificantBits()).setMsb(uuid.getMostSignificantBits()).build();
+                writeTxn.putRecord(table, key,
+                        ExampleSchemas.ExampleValue.newBuilder().setEntryIndex(index).build(),
+                        ManagedMetadata.newBuilder().build());
+                writeTxn.commit();
+            }
+        }
+
+        // Verify Data is reflected in the sequencer
+        StreamAddressSpace addressSpace = corfuRuntime.getSequencerView().getStreamAddressSpace(new StreamAddressRange(table.getStreamUUID(), Address.MAX, Address.NON_ADDRESS));
+        assertThat(addressSpace.size()).isEqualTo(numUpdates);
+
+        // Enforce 'numHoles' holes to 'table'
+        for (int index = 0; index < numHoles; index++) {
+            TokenResponse token = corfuRuntime.getSequencerView().next(table.getStreamUUID());
+            corfuRuntime.getLayoutView().getRuntimeLayout().getLogUnitClient(SERVERS.ENDPOINT_0).write(LogData.getHole(token.getSequence())).get();
+        }
+
+        // Verify Data is reflected in the sequencer
+        StreamAddressSpace addressSpaceWithHoles = corfuRuntime.getSequencerView().getStreamAddressSpace(new StreamAddressRange(table.getStreamUUID(), Address.MAX, Address.NON_ADDRESS));
+        assertThat(addressSpaceWithHoles.size()).isEqualTo(numUpdates + numHoles);
+
+        // Get Highest Sequence Number and verify it does not retrieve non-data entry.
+        // Clear cache so we guarantee we are going to the server to read data
+        corfuRuntime.getObjectsView().getObjectCache().clear();
+
+        assertThat(shimStore.getHighestSequence(namespace, tableName)).isEqualTo(addressSpace.getTail());
     }
 
     /**

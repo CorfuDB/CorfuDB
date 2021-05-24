@@ -1,8 +1,10 @@
 package org.corfudb.runtime.collections;
 
 import com.google.protobuf.Message;
+import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.protocols.logprotocol.MultiObjectSMREntry;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.protocols.wireprotocol.Token;
@@ -21,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
@@ -36,7 +39,7 @@ import static org.corfudb.runtime.collections.QueryOptions.DEFAULT_OPTIONS;
  * It can help reduce the footprint of a CorfuStore transaction by only having writes in it.
  * All mutations/writes are aggregated and applied at once a the time of commit() call
  * where a real corfu transaction is started.
- *
+ * <p>
  * Created by hisundar, @wenbinzhu, @pankti-m on 2020-09-15
  */
 @Slf4j
@@ -51,20 +54,21 @@ public class TxnContext implements AutoCloseable {
     @Getter
     private final Map<UUID, Table> tablesInTxn;
     private final List<CommitCallback> commitCallbacks;
-    private long txnStartTime = 0L;
-    private static final byte READ_ONLY  = 0x01;
+    private Optional<Timer.Sample> startTxSample = Optional.empty();
+    private static final byte READ_ONLY = 0x01;
     private static final byte WRITE_ONLY = 0x02;
     private static final byte READ_WRITE = 0x03;
     private byte txnType;
 
     private boolean iDidNotStartCorfuTxn;
+
     /**
      * Creates a new TxnContext.
      *
-     * @param objectsView   ObjectsView from the Corfu client.
-     * @param tableRegistry Table Registry.
-     * @param namespace     Namespace boundary defined for the transaction.
-     * @param isolationLevel How should this transaction be applied/evaluated.
+     * @param objectsView             ObjectsView from the Corfu client.
+     * @param tableRegistry           Table Registry.
+     * @param namespace               Namespace boundary defined for the transaction.
+     * @param isolationLevel          How should this transaction be applied/evaluated.
      * @param allowNestedTransactions Is it ok to re-use another transaction context.
      */
     @Nonnull
@@ -85,8 +89,7 @@ public class TxnContext implements AutoCloseable {
 
     /**
      * @param allowNestedTransactions - is it ok to re-use thread's corfu transaction?
-     * Start the actual corfu transaction. Ensure there isn't one already in the same thread.
-     *
+     *                                Start the actual corfu transaction. Ensure there isn't one already in the same thread.
      */
     private void txBeginInternal(boolean allowNestedTransactions) {
         if (TransactionalContext.isInTransaction()) {
@@ -105,7 +108,7 @@ public class TxnContext implements AutoCloseable {
                 }
                 throw new TransactionAlreadyStartedException(TransactionalContext.getRootContext().toString());
             }
-            this.txnStartTime = System.nanoTime();
+            this.startTxSample = MeterRegistryProvider.getInstance().map(Timer::start);
             log.warn("Reusing the transactional context created outside this layer!");
             this.iDidNotStartCorfuTxn = true;
             TransactionalContext.getRootContext().setTxnContext(this);
@@ -114,7 +117,7 @@ public class TxnContext implements AutoCloseable {
 
         // Consider moving this to trace after stability improves.
         log.debug("TxnContext: begin transaction in namespace {}", namespace);
-        this.txnStartTime = System.nanoTime();
+        this.startTxSample = MeterRegistryProvider.getInstance().map(Timer::start);
         Transaction.TransactionBuilder transactionBuilder = this.objectsView
                 .TXBuild()
                 .type(TransactionType.WRITE_AFTER_WRITE);
@@ -125,7 +128,7 @@ public class TxnContext implements AutoCloseable {
         TransactionalContext.getRootContext().setTxnContext(this);
     }
 
-    public  <K extends Message, V extends Message, M extends Message>
+    public <K extends Message, V extends Message, M extends Message>
     Table<K, V, M> getTable(@Nonnull final String tableName) {
         return this.tableRegistry.getTable(this.namespace, tableName);
     }
@@ -137,12 +140,12 @@ public class TxnContext implements AutoCloseable {
     /**
      * All write api must be validate to ensure that the table belongs to the namespace.
      *
-     * @param table         - table being written to
-     * @param key           - key used in the transaction to check for null.
-     * @param validateKey   - should key be validated for null.
-     * @param <K>           - type of the key
-     * @param <V>           - type of the payload/value
-     * @param <M>           - type of the metadata
+     * @param table       - table being written to
+     * @param key         - key used in the transaction to check for null.
+     * @param validateKey - should key be validated for null.
+     * @param <K>         - type of the key
+     * @param <V>         - type of the payload/value
+     * @param <M>         - type of the metadata
      */
     private <K extends Message, V extends Message, M extends Message>
     void validateWrite(@Nonnull Table<K, V, M> table, K key, boolean validateKey) {
@@ -152,8 +155,8 @@ public class TxnContext implements AutoCloseable {
         }
         if (!TransactionalContext.isInTransaction()) {
             throw new IllegalStateException( // Do not allow transactions after commit() or abort()
-                    "TxnContext cannot be used after a transaction has ended on "+
-                    table.getFullyQualifiedTableName());
+                    "TxnContext cannot be used after a transaction has ended on " +
+                            table.getFullyQualifiedTableName());
         }
         if (validateKey && key == null) {
             throw new IllegalArgumentException("Key cannot be null on "
@@ -176,13 +179,13 @@ public class TxnContext implements AutoCloseable {
     /**
      * put the value on the specified key create record if it does not exist.
      *
-     * @param table Table object to perform the create/update on.
-     * @param key   Key of the record.
-     * @param value Value or payload of the record.
+     * @param table    Table object to perform the create/update on.
+     * @param key      Key of the record.
+     * @param value    Value or payload of the record.
      * @param metadata Metadata associated with the record.
-     * @param <K>   Type of Key.
-     * @param <V>   Type of Value.
-     * @param <M>   Type of Metadata.
+     * @param <K>      Type of Key.
+     * @param <V>      Type of Value.
+     * @param <M>      Type of Metadata.
      */
     public <K extends Message, V extends Message, M extends Message>
     void putRecord(@Nonnull Table<K, V, M> table,
@@ -202,7 +205,6 @@ public class TxnContext implements AutoCloseable {
      */
     public interface MergeCallback {
         /**
-         *
          * @param table     table the merge is being done one that will be returned.
          * @param key       key of the record on which merge is being done.
          * @param oldRecord previous record extracted from the table for the same key.
@@ -223,19 +225,19 @@ public class TxnContext implements AutoCloseable {
      * Merges the delta value with the old value by applying a caller specified BiFunction and writes
      * the final value.
      *
-     * @param table Table object to perform the merge operation on.
-     * @param key            Key
-     * @param mergeCallback  Function to apply to get the new value
-     * @param recordDelta    Argument to pass to the mutation function
-     * @param <K>            Type of Key.
-     * @param <V>            Type of Value.
-     * @param <M>            Type of Metadata.
+     * @param table         Table object to perform the merge operation on.
+     * @param key           Key
+     * @param mergeCallback Function to apply to get the new value
+     * @param recordDelta   Argument to pass to the mutation function
+     * @param <K>           Type of Key.
+     * @param <V>           Type of Value.
+     * @param <M>           Type of Metadata.
      */
     public <K extends Message, V extends Message, M extends Message>
     void merge(@Nonnull Table<K, V, M> table,
                @Nonnull final K key,
                @Nonnull MergeCallback mergeCallback,
-               @Nonnull final CorfuRecord<V,M> recordDelta) {
+               @Nonnull final CorfuRecord<V, M> recordDelta) {
         validateWrite(table, key);
         operations.add(() -> {
             CorfuRecord<V, M> oldRecord = table.get(key);
@@ -269,7 +271,7 @@ public class TxnContext implements AutoCloseable {
      */
     public <K extends Message, V extends Message, M extends Message>
     void touch(@Nonnull Table<K, V, M> table,
-                     @Nonnull final K key) {
+               @Nonnull final K key) {
         validateWrite(table, key);
         operations.add(() -> {
             CorfuRecord<V, M> touchedObject = table.get(key);
@@ -277,7 +279,7 @@ public class TxnContext implements AutoCloseable {
                 table.put(key, touchedObject.getPayload(), touchedObject.getMetadata());
             } else { // TODO: add support for touch()ing an object that hasn't been created.
                 txAbort(); // explicitly abort this transaction and then throw the abort manually
-                log.error("TX Abort touch on non-existing object: in "+ table.getFullyQualifiedTableName());
+                log.error("TX Abort touch on non-existing object: in " + table.getFullyQualifiedTableName());
                 throw new UnsupportedOperationException(
                         "Attempt to touch() a non-existing object in "
                                 + table.getFullyQualifiedTableName());
@@ -289,21 +291,22 @@ public class TxnContext implements AutoCloseable {
     /**
      * touch() a key to generate a conflict on it given tableName.
      *
-     * @param tableName    Table object to perform the touch() in.
-     * @param key          Key of the record.
-     * @param <K>          Type of Key.
+     * @param tableName Table object to perform the touch() in.
+     * @param key       Key of the record.
+     * @param <K>       Type of Key.
      * @throws UnsupportedOperationException if attempted on a non-existing object.
      */
     public <K extends Message, V extends Message, M extends Message>
     void touch(@Nonnull String tableName,
-                      @Nonnull final K key) {
+               @Nonnull final K key) {
         this.touch(getTable(tableName), key);
     }
 
     /**
      * Apply a Corfu SMREntry directly to a stream. This can be used for replaying the mutations
      * directly into the underlying stream bypassing the object layer entirely.
-     * @param streamId - UUID of the stream on which the logUpdate is being added to.
+     *
+     * @param streamId    - UUID of the stream on which the logUpdate is being added to.
      * @param updateEntry - the actual State Machine Replicated entry.
      */
     public void logUpdate(UUID streamId, SMREntry updateEntry) {
@@ -315,7 +318,8 @@ public class TxnContext implements AutoCloseable {
     /**
      * Apply a list of Corfu SMREntries directly to a stream. This can be used for replaying the mutations
      * directly into the underlying stream bypassing the object layer entirely.
-     * @param streamId - UUID of the stream on which the logUpdate is being added to.
+     *
+     * @param streamId      - UUID of the stream on which the logUpdate is being added to.
      * @param updateEntries - the actual State Machine Replicated entries.
      */
     public void logUpdate(UUID streamId, List<SMREntry> updateEntries) {
@@ -328,9 +332,9 @@ public class TxnContext implements AutoCloseable {
      * Clears the entire table.
      *
      * @param table Table object to perform the delete on.
-     * @param <K>       Type of Key.
-     * @param <V>       Type of Value.
-     * @param <M>       Type of Metadata.
+     * @param <K>   Type of Key.
+     * @param <V>   Type of Value.
+     * @param <M>   Type of Metadata.
      */
     public <K extends Message, V extends Message, M extends Message>
     void clear(@Nonnull Table<K, V, M> table) {
@@ -345,9 +349,9 @@ public class TxnContext implements AutoCloseable {
      * Clears the entire table given the table name.
      *
      * @param tableName Full table name of table to be cleared.
-     * @param <K>   Type of Key.
-     * @param <V>   Type of Value.
-     * @param <M>   Type of Metadata.
+     * @param <K>       Type of Key.
+     * @param <V>       Type of Value.
+     * @param <M>       Type of Metadata.
      */
     public <K extends Message, V extends Message, M extends Message>
     void clear(@Nonnull String tableName) {
@@ -358,10 +362,10 @@ public class TxnContext implements AutoCloseable {
      * Deletes the specified key.
      *
      * @param table Table object to perform the delete on.
-     * @param key       Key of the record to be deleted.
-     * @param <K>       Type of Key.
-     * @param <V>       Type of Value.
-     * @param <M>       Type of Metadata.
+     * @param key   Key of the record to be deleted.
+     * @param <K>   Type of Key.
+     * @param <V>   Type of Value.
+     * @param <M>   Type of Metadata.
      * @return TxnContext instance.
      */
     @Nonnull
@@ -394,11 +398,11 @@ public class TxnContext implements AutoCloseable {
     /**
      * Enqueue a message object into the CorfuQueue.
      *
-     * @param table Table object to perform the delete on.
-     * @param record    Record to be inserted into the Queue.
-     * @param <K>       Type of Key.
-     * @param <V>       Type of Value.
-     * @param <M>       Type of Metadata.
+     * @param table  Table object to perform the delete on.
+     * @param record Record to be inserted into the Queue.
+     * @param <K>    Type of Key.
+     * @param <V>    Type of Value.
+     * @param <M>    Type of Metadata.
      * @return K the type of key this queue table was created with.
      */
     @Nonnull
@@ -441,7 +445,7 @@ public class TxnContext implements AutoCloseable {
      * and applying all the updates done so far.
      *
      * @param tableName Table object to retrieve the record from
-     * @param key   Key of the record.
+     * @param key       Key of the record.
      * @return CorfuStoreEntry<Key, Value, Metadata> instance.
      */
     @Nonnull
@@ -454,7 +458,7 @@ public class TxnContext implements AutoCloseable {
     /**
      * Query by a secondary index.
      *
-     * @param table Table object.
+     * @param table     Table object.
      * @param indexName Index name. In case of protobuf-defined secondary index it is the field name.
      * @param indexKey  Key to query.
      * @param <K>       Type of Key.
@@ -541,7 +545,7 @@ public class TxnContext implements AutoCloseable {
     /**
      * Scan and filter by entry.
      *
-     * @param table Table< K, V, M > object on which the scan must be done.
+     * @param table          Table< K, V, M > object on which the scan must be done.
      * @param entryPredicate Predicate to filter the entries.
      * @return Collection of filtered entries.
      */
@@ -556,7 +560,7 @@ public class TxnContext implements AutoCloseable {
     /**
      * Scan and filter by entry.
      *
-     * @param tableName fullyQualified tablename to filter the entries on.
+     * @param tableName      fullyQualified tablename to filter the entries on.
      * @param entryPredicate Predicate to filter the entries.
      * @return Collection of filtered entries.
      */
@@ -647,10 +651,10 @@ public class TxnContext implements AutoCloseable {
      * Test if a record exists in a table.
      *
      * @param table - table object to test if record exists
-     * @param key - key or identifier to test for existence.
-     * @param <K> - type of the key
-     * @param <V> - type of payload or value
-     * @param <M> - type of metadata
+     * @param key   - key or identifier to test for existence.
+     * @param <K>   - type of the key
+     * @param <V>   - type of payload or value
+     * @param <M>   - type of metadata
      * @return true if record exists and false if record does not exist.
      */
     public <K extends Message, V extends Message, M extends Message>
@@ -663,10 +667,10 @@ public class TxnContext implements AutoCloseable {
      * Variant of isExists that works on tableName instead of the table object.
      *
      * @param tableName - namespace + tablename of table being tested
-     * @param key - key to check for existence
-     * @param <K> - type of the key
-     * @param <V> - type of payload or value
-     * @param <M> - type of metadata
+     * @param key       - key to check for existence
+     * @param <K>       - type of the key
+     * @param <V>       - type of payload or value
+     * @param <M>       - type of metadata
      * @return - true if record exists and false if record does not exist.
      */
     public <K extends Message, V extends Message, M extends Message>
@@ -676,7 +680,7 @@ public class TxnContext implements AutoCloseable {
 
     /**
      * Return all the Queue entries ordered by their parent transaction.
-     *
+     * <p>
      * Note that the key in these entries would be the CorfuQueueIdMsg.
      *
      * @param table Table< K, V, M > object aka queue on which the scan must be done.
@@ -737,7 +741,7 @@ public class TxnContext implements AutoCloseable {
          * would just be empty.
          *
          * @param mutations - A group of all tables touched by this transaction along with
-         *                    the updates made in each table.
+         *                  the updates made in each table.
          */
         void onCommit(Map<String, List<CorfuStreamEntry>> mutations);
     }
@@ -752,6 +756,7 @@ public class TxnContext implements AutoCloseable {
      * The cause and the caller's intent of the transaction can determine if this aborted
      * Transaction can be retried.
      * If there are any post-commit callbacks registered, they will be invoked.
+     *
      * @return - address at which the commit of this transaction occurred.
      */
     public long commit() {
@@ -780,16 +785,15 @@ public class TxnContext implements AutoCloseable {
             }
         }
 
-        long timeElapsed = System.nanoTime() - txnStartTime;
         switch (txnType) {
             case READ_ONLY:
-                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadOnlyTxnTime(timeElapsed));
+                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadOnlyTxnTime(startTxSample));
                 break;
             case WRITE_ONLY:
-                tablesInTxn.values().forEach(t -> t.getMetrics().recordWriteOnlyTxnTime(timeElapsed));
+                tablesInTxn.values().forEach(t -> t.getMetrics().recordWriteOnlyTxnTime(startTxSample));
                 break;
             case READ_WRITE:
-                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadWriteTxnTime(timeElapsed));
+                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadWriteTxnTime(startTxSample));
                 break;
             default:
                 log.error("UNKNOWN TxnType!!");
@@ -816,6 +820,7 @@ public class TxnContext implements AutoCloseable {
 
     /**
      * To allow nested transactions, we need to track all commit callbacks
+     *
      * @param commitCallback
      */
     public void addCommitCallback(@Nonnull CommitCallback commitCallback) {
@@ -846,9 +851,8 @@ public class TxnContext implements AutoCloseable {
         if (TransactionalContext.isInTransaction()) {
             TransactionalContext.getRootContext().setTxnContext(null);
             log.warn("close()ing a {} transaction without calling commit()!", txnType);
-            long timeElapsed = System.nanoTime() - txnStartTime;
             if (txnType == READ_ONLY) {
-                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadOnlyTxnTime(timeElapsed));
+                tablesInTxn.values().forEach(t -> t.getMetrics().recordReadOnlyTxnTime(startTxSample));
             } else {
                 tablesInTxn.values().forEach(t -> t.getMetrics().incNumTxnAborts());
             }

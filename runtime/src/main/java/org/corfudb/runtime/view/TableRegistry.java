@@ -383,10 +383,19 @@ public class TableRegistry {
 
         List<String> streamTagsStringList = defaultValueMessage.getDescriptorForType()
                 .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTagList();
-        Set<UUID> streamTagsUUIDSet = streamTagsStringList
+
+        Set<UUID> streamTagsUUIDForTable = streamTagsStringList
                 .stream()
                 .map(tag -> getStreamIdForStreamTag(namespace, tag))
                 .collect(Collectors.toSet());
+
+        // If table is federated, add a new tagged stream (on which updates to federated tables will be appended for
+        // streaming purposes)
+        boolean isFederated = defaultValueMessage.getDescriptorForType()
+                .getOptions().getExtension(CorfuOptions.tableSchema).getIsFederated();
+        if (isFederated) {
+            streamTagsUUIDForTable.add(ObjectsView.LOG_REPLICATOR_STREAM_ID);
+        }
 
         // Open and return table instance.
         Table<K, V, M> table = new Table<>(
@@ -402,7 +411,7 @@ public class TableRegistry {
                 this.protobufSerializer,
                 mapSupplier,
                 versionPolicy,
-                streamTagsUUIDSet);
+                streamTagsUUIDForTable);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);

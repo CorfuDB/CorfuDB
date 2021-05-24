@@ -9,6 +9,6 @@ package org.corfudb.runtime.exceptions;
  */
 public class TransactionAlreadyStartedException extends RuntimeException {
     public TransactionAlreadyStartedException(String message) {
-        super("An exsiting transaction is still in progress. "+message);
+        super("An existing transaction is still in progress. " + message);
     }
 }

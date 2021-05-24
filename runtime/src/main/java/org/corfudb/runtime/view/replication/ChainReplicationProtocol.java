@@ -45,7 +45,7 @@ public class ChainReplicationProtocol extends AbstractReplicationProtocol {
      */
 
     private void registerTimerPerNode(RuntimeLayout runtimeLayout) {
-        double[] percentiles = new double[]{0.50, 0.95, 0.99};
+        double[] percentiles = new double[]{0.50, 0.99};
         MeterRegistryProvider.getInstance().ifPresent(registry -> {
             for (String server : runtimeLayout.getLayout().getAllLogServers()) {
                 perNodeWriteTimer.putIfAbsent(server,

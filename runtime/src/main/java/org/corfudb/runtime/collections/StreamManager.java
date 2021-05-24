@@ -242,6 +242,7 @@ public class StreamManager {
 
             StreamOptions options = StreamOptions.builder()
                     .cacheEntries(false)
+                    .isCheckpointCapable(false)
                     .build();
 
             this.txnStream = runtime.getStreamsView()

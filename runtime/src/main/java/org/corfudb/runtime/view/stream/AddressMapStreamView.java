@@ -381,8 +381,8 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
      * @return whether this stream is capable of being checkpointed
      */
     private boolean isCheckpointCapable() {
-        return !getId().equals(ObjectsView.TRANSACTION_STREAM_ID)
-                && getStreamOptions().isCheckpointCapable();
+        // Subscription tag streams are not checkpoint(able) (used for streaming) this is set on the StreamSubscription
+        return getStreamOptions().isCheckpointCapable();
     }
 
     @Override
@@ -400,7 +400,7 @@ public class AddressMapStreamView extends AbstractQueuedStreamView {
             // but we need to consider the case when the 'syncUpTo' address falls below the trim mark, so we correctly
             // report the TrimmedException allowing consumers to know that data is no longer available from this point.
             // We could throw the TrimmedException directly or in this case let remainingUpTo discover it for us.
-            if (getCurrentGlobalPosition() <= streamAddressSpace.getTrimMark()) {
+            if (getCurrentGlobalPosition() < streamAddressSpace.getTrimMark()) {
                 // If pointer is -1L we must return the known trim mark or the trimmed exception will be lost
                 return getCurrentGlobalPosition() == Address.NON_ADDRESS ? streamAddressSpace.getTrimMark() : getCurrentGlobalPosition();
             } else  {
