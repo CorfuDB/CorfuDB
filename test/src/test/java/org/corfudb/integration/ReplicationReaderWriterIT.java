@@ -64,9 +64,6 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     private static UUID snapshotSyncId = UUID.randomUUID();
 
-    private Process server1;
-    private Process server2;
-
     // Connect with server1 to generate data
     private CorfuRuntime srcDataRuntime = null;
 
@@ -100,13 +97,13 @@ public class ReplicationReaderWriterIT extends AbstractIT {
 
     private void setupEnv() throws IOException {
         // Start node one and populate it with data
-        server1 = new CorfuServerRunner()
+        new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(DEFAULT_PORT)
                 .setSingle(true)
                 .runServer();
 
-        server2 = new CorfuServerRunner()
+        new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(WRITER_PORT)
                 .setSingle(true)
@@ -257,7 +254,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
                 .cacheEntries(false)
                 .build();
 
-        IStreamView txStream = rt.getStreamsView().getUnsafe(ObjectsView.TRANSACTION_STREAM_ID, options);
+        IStreamView txStream = rt.getStreamsView().getUnsafe(ObjectsView.LOG_REPLICATOR_STREAM_ID, options);
         List<ILogData> dataList = txStream.remaining();
         log.debug("\ndataList size " + dataList.size());
         for (ILogData data : txStream.remaining()) {
@@ -459,7 +456,7 @@ public class ReplicationReaderWriterIT extends AbstractIT {
         generateTransactions(srcTables, srcHashMap, NUM_TRANSACTIONS, srcDataRuntime, NUM_KEYS);
 
         // Open a tx stream
-        IStreamView txStream = srcTestRuntime.getStreamsView().get(ObjectsView.TRANSACTION_STREAM_ID);
+        IStreamView txStream = srcTestRuntime.getStreamsView().get(ObjectsView.LOG_REPLICATOR_STREAM_ID);
         long tail = srcDataRuntime.getAddressSpaceView().getLogTail();
         Stream<ILogData> stream = txStream.streamUpTo(tail);
         Iterator iterator = stream.iterator();

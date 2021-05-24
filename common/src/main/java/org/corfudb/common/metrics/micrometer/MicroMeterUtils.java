@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
@@ -17,7 +18,7 @@ public class MicroMeterUtils {
 
     }
 
-    private static Optional<Timer> createOrGetTimer(String name, String... tags) {
+    public static Optional<Timer> createOrGetTimer(String name, String... tags) {
         return MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder(name)
                         .tags(tags)
@@ -33,6 +34,11 @@ public class MicroMeterUtils {
                         .publishPercentileHistogram(PUBLISH_HISTOGRAM)
                         .publishPercentiles(PERCENTILES)
                         .register(registry));
+    }
+
+    public static void time(Duration duration, String name, String... tags) {
+        Optional<Timer> timer = createOrGetTimer(name, tags);
+        timer.ifPresent(value -> value.record(duration));
     }
 
     public static void time(Runnable runnable, String name, String... tags) {

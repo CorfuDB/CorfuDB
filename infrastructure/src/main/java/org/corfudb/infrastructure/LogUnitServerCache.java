@@ -19,6 +19,8 @@ import org.corfudb.protocols.wireprotocol.LogData;
 
 import java.util.Optional;
 
+import java.util.function.Supplier;
+
 import static java.lang.Math.toIntExact;
 
 /**
@@ -41,11 +43,9 @@ public class LogUnitServerCache {
     //Empirical threshold of number of streams in a logdata beyond which server performance may be slow
     private final int MAX_STREAM_THRESHOLD = 20;
 
-    private final Optional<Gauge> loadTime;
+
     String loadTimeName = "logunit.cache.load_time";
-    private final Optional<Gauge> hitRatio;
     String hitRatioName = "logunit.cache.hit_ratio";
-    private final Optional<Gauge> weight;
     String weightName = "logunit.cache.weight";
 
     public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
@@ -60,14 +60,14 @@ public class LogUnitServerCache {
 
         MeterRegistryProvider.getInstance().ifPresent(registry ->
                 CaffeineCacheMetrics.monitor(registry, dataCache, "logunit.read_cache"));
-        hitRatio = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(hitRatioName,
                 dataCache, cache -> cache.stats().hitRate()).register(registry));
-        loadTime = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(loadTimeName,
                         dataCache, cache -> cache.stats().totalLoadTime())
                         .register(registry));
-        weight = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(weightName,
                         dataCache, cache -> cache.stats().evictionWeight())
                         .register(registry));

@@ -1,5 +1,6 @@
 package org.corfudb.infrastructure;
 
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Gauge;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -87,7 +88,6 @@ public class SequencerServerCache {
      *
      * @param cacheSize cache size
      */
-    private final Optional<Gauge> windowSize;
 
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
@@ -102,7 +102,7 @@ public class SequencerServerCache {
                         registry.gauge(conflictKeysCounterName, Collections.emptyList(),
                                 new HashMap<ConflictTxStream, Long>(), HashMap::size))
                 .orElse(new HashMap<>());
-        windowSize = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(windowSizeName,
                         conflictKeys, HashMap::size).register(registry));
 

@@ -40,9 +40,9 @@ import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 @Slf4j
 public class LockStore {
     // Namespace used by locks
-    private static final String namespace = CORFU_SYSTEM_NAMESPACE;
+    private static final String NAMESPACE = CORFU_SYSTEM_NAMESPACE;
     // Locks table name
-    private static final String tableName = "LOCK";
+    private static final String TABLE_NAME = "LOCK";
     private final Table<LockId, LockData, Message> table;
 
     private final Uuid clientId;
@@ -51,7 +51,7 @@ public class LockStore {
     /**
      * Cache of all the observed locks/leases. Contains the last timestamp at which the lock was last observed.
      */
-    private Map<LockId, ObservedLock> observedLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<LockId, ObservedLock> observedLocks = new ConcurrentHashMap<>();
 
     /**
      * Constructor
@@ -63,8 +63,8 @@ public class LockStore {
      */
     public LockStore(CorfuRuntime runtime, UUID clientUuid) throws NoSuchMethodException, IllegalAccessException, InvocationTargetException {
         this.corfuStore = new CorfuStore(runtime);
-        this.table = this.corfuStore.openTable(namespace,
-                tableName,
+        this.table = this.corfuStore.openTable(NAMESPACE,
+                TABLE_NAME,
                 LockId.class,
                 LockData.class,
                 null,
@@ -194,7 +194,7 @@ public class LockStore {
     private void create(LockId lockId, LockData lockMetaData, CorfuStoreMetadata.Timestamp timestamp) throws LockStoreException {
         try {
             log.info("LockStore: create lock record for : {}", lockId.getLockName());
-            TxnContext txnContext = corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp));
+            TxnContext txnContext = corfuStore.txn(NAMESPACE, IsolationLevel.snapshot(timestamp));
             txnContext.putRecord(table, lockId, lockMetaData, null);
             txnContext.commit();
         } catch (Exception e) {
@@ -213,7 +213,7 @@ public class LockStore {
      */
     private void update(LockId lockId, LockData lockMetaData, CorfuStoreMetadata.Timestamp timestamp) throws LockStoreException {
         try {
-            TxnContext txn = corfuStore.txn(namespace, IsolationLevel.snapshot(timestamp));
+            TxnContext txn = corfuStore.txn(NAMESPACE, IsolationLevel.snapshot(timestamp));
             txn.putRecord(table, lockId, lockMetaData, null);
             txn.commit();
         } catch (Exception e) {
@@ -232,7 +232,7 @@ public class LockStore {
      */
     private Optional<LockData> get(LockId lockId, CorfuStoreMetadata.Timestamp timestamp) throws LockStoreException {
         try {
-            CorfuRecord record = corfuStore.query(namespace).getRecord(tableName, timestamp, lockId);
+            CorfuRecord record = corfuStore.query(NAMESPACE).getRecord(TABLE_NAME, timestamp, lockId);
             if (record != null) {
                 return Optional.of((LockData) record.getPayload());
             } else {
@@ -254,7 +254,7 @@ public class LockStore {
     @VisibleForTesting
     public Optional<LockData> get(LockId lockId) throws LockStoreException {
         try {
-            CorfuRecord record = corfuStore.query(namespace).getRecord(tableName, lockId);
+            CorfuRecord record = corfuStore.query(NAMESPACE).getRecord(TABLE_NAME, lockId);
             if (record != null) {
                 return Optional.of((LockData) record.getPayload());
             } else {

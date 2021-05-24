@@ -7,16 +7,10 @@ import org.corfudb.util.serializer.ISerializer;
 public class TestSerializer implements ISerializer {
 
     private byte typeIdentifier;
-    private ISerializer delegate = null;
 
 
     public TestSerializer(byte typeIdentifier) {
         this.typeIdentifier = typeIdentifier;
-    }
-
-    public TestSerializer(byte typeIdentifier, ISerializer delegate) {
-        this.typeIdentifier = typeIdentifier;
-        this.delegate = delegate;
     }
 
     public void setType(byte type) {

@@ -407,6 +407,13 @@ public class AddressSpaceView extends AbstractView {
             return loadedValue;
         }
 
+        // Exclude all checkpoint entries, which might be 25MB and cause OOM.
+        // These entries don't need to be cached because they are not used when
+        // rolling forward/backwards to materialize a snapshot.
+        if (loadedValue.hasCheckpointMetadata()) {
+            return loadedValue;
+        }
+
         try {
             return cache.get(address, () -> loadedValue);
         } catch (ExecutionException | UncheckedExecutionException e) {
