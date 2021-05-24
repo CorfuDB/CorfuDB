@@ -44,9 +44,9 @@ public class LogUnitServerCache {
     private final int MAX_STREAM_THRESHOLD = 20;
 
 
-    String loadTimeName = "logunit.cache.load_time";
-    String hitRatioName = "logunit.cache.hit_ratio";
-    String weightName = "logunit.cache.weight";
+    private final String loadTimeName = "logunit.cache.load_time";
+    private final String hitRatioName = "logunit.cache.hit_ratio";
+    private final String weightName = "logunit.cache.weight";
 
     public LogUnitServerCache(LogUnitServerConfig config, StreamLog streamLog) {
         this.streamLog = streamLog;
