@@ -36,7 +36,7 @@ public class MultiObjectSMREntry extends LogEntry implements ISMRConsumable {
 
     private static final String METRIC_PREFIX = "multi.object.smrentry";
 
-    private static final double[] TRACKED_PERCENTILES = {0.5, 0.95, 0.99};
+    private static final double[] TRACKED_PERCENTILES = {0.5, 0.99};
 
     private static final String STREAM_ID = "streamId";
 

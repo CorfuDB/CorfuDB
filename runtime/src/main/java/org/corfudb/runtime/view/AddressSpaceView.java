@@ -129,7 +129,7 @@ public class AddressSpaceView extends AbstractView {
 
         metricsRegistry.map(registry -> GuavaCacheMetrics.monitor(registry, readCache, "address_space.read_cache"));
 
-        double[] percentiles = new double[]{0.50, 0.95, 0.99};
+        double[] percentiles = new double[]{0.50, 0.99};
 
         multiReadTimer = metricsRegistry
                 .map(registry -> Timer.builder("address_space.read.latency")

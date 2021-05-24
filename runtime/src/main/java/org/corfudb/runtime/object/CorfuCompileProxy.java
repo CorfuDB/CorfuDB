@@ -146,7 +146,7 @@ public class CorfuCompileProxy<T extends ICorfuSMR<T>> implements ICorfuSMRProxy
         String streamIdKey = "streamId";
         String streamIdValue = getStreamID().toString();
 
-        double [] percentiles = new double [] {0.50, 0.95, 0.99};
+        double [] percentiles = new double [] {0.50, 0.99};
         readTimer = MeterRegistryProvider.getInstance().map(registry ->
                 Timer.builder("vlo.read.timer")
                         .tag(streamIdKey, streamIdValue)
