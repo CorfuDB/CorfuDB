@@ -16,9 +16,11 @@ import org.corfudb.runtime.collections.CorfuStore;
 import org.corfudb.runtime.collections.CorfuTable;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TxnContext;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuInterruptedError;
 import org.corfudb.runtime.proto.RpcCommon;
 import org.corfudb.util.Sleep;
+import org.corfudb.utils.lock.LockDataTypes;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -31,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.IntPredicate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.corfudb.runtime.view.TableRegistry.CORFU_SYSTEM_NAMESPACE;
 
 
 /**
@@ -42,9 +45,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class CorfuReplicationClusterConfigIT extends AbstractIT {
     public final static String nettyPluginPath = "src/test/resources/transport/nettyConfig.properties";
     private final static String streamName = "Table001";
+    private static final String LOCK_TABLE_NAME = "LOCK";
+
 
     private final static long shortInterval = 1L;
     private final static long mediumInterval = 10L;
+    private final static long lockInterval = 6L;
     private final static int firstBatch = 10;
     private final static int secondBatch = 15;
     private final static int thirdBatch = 20;
@@ -72,6 +78,7 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
     private CorfuStore activeCorfuStore;
     private CorfuStore standbyCorfuStore;
     private Table<RpcCommon.UuidMsg, RpcCommon.UuidMsg, RpcCommon.UuidMsg> configTable;
+    private Table<LockDataTypes.LockId, LockDataTypes.LockData, Message> activeLockTable;
 
     @Before
     public void setUp() throws Exception {
@@ -113,6 +120,14 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 RpcCommon.UuidMsg.class, RpcCommon.UuidMsg.class, RpcCommon.UuidMsg.class,
                 TableOptions.builder().build()
         );
+
+        activeLockTable = activeCorfuStore.openTable(
+                CORFU_SYSTEM_NAMESPACE,
+                LOCK_TABLE_NAME,
+                LockDataTypes.LockId.class,
+                LockDataTypes.LockData.class,
+                null,
+                TableOptions.builder().build());
 
         activeCorfuStore.openTable(LogReplicationMetadataManager.NAMESPACE,
                 REPLICATION_STATUS_TABLE,
@@ -889,6 +904,92 @@ public class CorfuReplicationClusterConfigIT extends AbstractIT {
                 .isEqualTo(LogReplicationMetadata.SnapshotSyncInfo.SnapshotSyncType.FORCED);
         assertThat(replicationStatusVal.getSnapshotSyncInfo().getStatus())
                 .isEqualTo(LogReplicationMetadata.SyncStatus.COMPLETED);
+    }
+
+
+    /**
+     * This test verifies active's lock release
+     * <p>
+     * 1. Init with corfu 9000 active and 9001 standby
+     * 2. Write 10 entries to active map
+     * 3. Start log replication: Node 9010 - active, Node 9020 - standby
+     * 4. Wait for Snapshot Sync, both maps have size 10
+     * 5. Write 5 more entries to active map, to verify Log Entry Sync
+     * 6. Revoke active's lock and wait for 10 sec
+     * 7. Write 5 more entries to active map
+     * 8. Verify data will not be replicated, since active's lock is released
+     */
+    @Test
+    public void testActiveLockRelease() throws Exception {
+        // Write 10 entries to active map
+        for (int i = 0; i < firstBatch; i++) {
+            activeRuntime.getObjectsView().TXBegin();
+            mapActive.put(String.valueOf(i), i);
+            activeRuntime.getObjectsView().TXEnd();
+        }
+        assertThat(mapActive.size()).isEqualTo(firstBatch);
+        assertThat(mapStandby.size()).isZero();
+
+        log.info("Before log replication, append {} entries to active map. Current active corfu" +
+                        "[{}] log tail is {}, standby corfu[{}] log tail is {}", firstBatch, activeClusterCorfuPort,
+                activeRuntime.getAddressSpaceView().getLogTail(), standbyClusterCorfuPort,
+                standbyRuntime.getAddressSpaceView().getLogTail());
+
+        activeReplicationServer = runReplicationServer(activeReplicationServerPort, nettyPluginPath);
+        standbyReplicationServer = runReplicationServer(standbyReplicationServerPort, nettyPluginPath);
+        log.info("Replication servers started, and replication is in progress...");
+
+        // Wait until data is fully replicated
+        waitForReplication(size -> size == firstBatch, mapStandby, firstBatch);
+        log.info("After full sync, both maps have size {}. Current active corfu[{}] log tail " +
+                        "is {}, standby corfu[{}] log tail is {}", firstBatch, activeClusterCorfuPort,
+                activeRuntime.getAddressSpaceView().getLogTail(), standbyClusterCorfuPort,
+                standbyRuntime.getAddressSpaceView().getLogTail());
+
+        // Write 5 entries to active map
+        for (int i = firstBatch; i < secondBatch; i++) {
+            activeRuntime.getObjectsView().TXBegin();
+            mapActive.put(String.valueOf(i), i);
+            activeRuntime.getObjectsView().TXEnd();
+        }
+        assertThat(mapActive.size()).isEqualTo(secondBatch);
+
+        // Wait until data is fully replicated again
+        waitForReplication(size -> size == secondBatch, mapStandby, secondBatch);
+        log.info("After delta sync, both maps have size {}. Current active corfu[{}] log tail " +
+                        "is {}, standby corfu[{}] log tail is {}", secondBatch, activeClusterCorfuPort,
+                activeRuntime.getAddressSpaceView().getLogTail(), standbyClusterCorfuPort,
+                standbyRuntime.getAddressSpaceView().getLogTail());
+
+        // Verify data
+        for (int i = 0; i < secondBatch; i++) {
+            assertThat(mapStandby.containsKey(String.valueOf(i))).isTrue();
+        }
+        log.info("Log replication succeeds without config change!");
+
+        // Release Active's lock
+        TxnContext txnContext = activeCorfuStore.txn(CORFU_SYSTEM_NAMESPACE);
+        txnContext.clear(activeLockTable);
+        txnContext.commit();
+        log.info("Active's lock is released!");
+        TimeUnit.SECONDS.sleep(lockInterval);
+
+        // Release Active's lock again
+        txnContext = activeCorfuStore.txn(CORFU_SYSTEM_NAMESPACE);
+        txnContext.clear(activeLockTable);
+        txnContext.commit();
+
+        for (int i = secondBatch; i < thirdBatch; i++) {
+            activeRuntime.getObjectsView().TXBegin();
+            mapActive.put(String.valueOf(i), i);
+            activeRuntime.getObjectsView().TXEnd();
+        }
+        assertThat(mapActive.size()).isEqualTo(thirdBatch);
+        log.info("Active map has {} entries now!", thirdBatch);
+
+        // Standby map should still have secondBatch size
+        log.info("Standby map should still have {} size", secondBatch);
+        assertThat(mapStandby.size()).isEqualTo(secondBatch);
     }
 
     private void waitForReplication(IntPredicate verifier, CorfuTable table, int expected) {

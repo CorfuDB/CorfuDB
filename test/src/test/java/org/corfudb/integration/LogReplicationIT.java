@@ -1,24 +1,6 @@
 package org.corfudb.integration;
 
-import static java.lang.Thread.sleep;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
-
 import com.google.common.reflect.TypeToken;
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Observable;
-import java.util.Observer;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.Semaphore;
-
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.util.ObservableValue;
@@ -43,6 +25,24 @@ import org.corfudb.runtime.view.ObjectsView;
 import org.corfudb.util.Utils;
 import org.corfudb.util.serializer.Serializers;
 import org.junit.Test;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Observable;
+import java.util.Observer;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
+
+import static java.lang.Thread.sleep;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.corfudb.integration.ReplicationReaderWriterIT.ckStreamsAndTrim;
 
 /**
  * Test the core components of log replication, namely, Snapshot Sync and Log Entry Sync,
@@ -92,9 +92,6 @@ public class LogReplicationIT extends AbstractIT implements Observer {
     static private final int SMALL_MSG_SIZE = 200;
 
     static private TestConfig testConfig = new TestConfig();
-
-    private Process sourceServer;
-    private Process destinationServer;
 
     // Connect with sourceServer to generate data
     private CorfuRuntime srcDataRuntime = null;
@@ -181,14 +178,14 @@ public class LogReplicationIT extends AbstractIT implements Observer {
      */
     private void setupEnv() throws IOException {
         // Source Corfu Server (data will be written to this server)
-        sourceServer = new CorfuServerRunner()
+        new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(DEFAULT_PORT)
                 .setSingle(true)
                 .runServer();
 
         // Destination Corfu Server (data will be replicated into this server)
-        destinationServer = new CorfuServerRunner()
+        new CorfuServerRunner()
                 .setHost(DEFAULT_HOST)
                 .setPort(WRITER_PORT)
                 .setSingle(true)
@@ -304,7 +301,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
             long tail = Utils.getLogAddressSpace(rt
                     .getLayoutView().getRuntimeLayout())
                     .getAddressMap()
-                    .get(ObjectsView.TRANSACTION_STREAM_ID).getTail();
+                    .get(ObjectsView.LOG_REPLICATOR_STREAM_ID).getTail();
             expectedAckTimestamp = Math.max(tail, expectedAckTimestamp);
         }
 
@@ -703,7 +700,7 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         expectedAckMessages = Utils.getLogAddressSpace(srcDataRuntime
                 .getLayoutView().getRuntimeLayout())
                 .getAddressMap()
-                .get(ObjectsView.TRANSACTION_STREAM_ID).getTail();
+                .get(ObjectsView.LOG_REPLICATOR_STREAM_ID).getTail();
 
         LogReplicationFSM fsm = startLogEntrySync(replicateTables, WAIT.ON_ACK);
 
@@ -1225,26 +1222,23 @@ public class LogReplicationIT extends AbstractIT implements Observer {
 
         // Add this class as observer of the value of interest for the wait condition
         for (WAIT waitCondition : waitConditions) {
-            switch(waitCondition) {
-                case ON_ACK:
-                case ON_ACK_TS:
-                    ackMessages = sourceDataSender.getAckMessages();
-                    ackMessages.addObserver(this);
-                    break;
-                case ON_ERROR: // Wait on Error Notifications to Source
-                case ON_TIMEOUT_ERROR:
-                    errorsLogEntrySync = sourceDataSender.getErrors();
-                    errorsLogEntrySync.addObserver(this);
-                    break;
-                case ON_METADATA_RESPONSE:
-                    metadataResponseObservable = sourceDataSender.getMetadataResponses();
-                    metadataResponseObservable.addObserver(this);
-                case ON_SINK_RECEIVE: // Wait on Received Messages on Sink (Destination)
-                    sinkReceivedMessages = sourceDataSender.getSinkManager().getRxMessageCount();
-                    sinkReceivedMessages.addObserver(this);
-                default:
-                    // Nothing
-                    break;
+            if (waitCondition == WAIT.ON_ACK || waitCondition == WAIT.ON_ACK_TS) {
+                ackMessages = sourceDataSender.getAckMessages();
+                ackMessages.addObserver(this);
+            } else if (waitCondition == WAIT.ON_ERROR || waitCondition == WAIT.ON_TIMEOUT_ERROR) {
+                // Wait on Error Notifications to Source
+                errorsLogEntrySync = sourceDataSender.getErrors();
+                errorsLogEntrySync.addObserver(this);
+            } else if (waitCondition == WAIT.ON_METADATA_RESPONSE) {
+                metadataResponseObservable = sourceDataSender.getMetadataResponses();
+                metadataResponseObservable.addObserver(this);
+                // Wait on Received Messages on Sink (Destination)
+                sinkReceivedMessages = sourceDataSender.getSinkManager().getRxMessageCount();
+                sinkReceivedMessages.addObserver(this);
+            } else if (waitCondition == WAIT.ON_SINK_RECEIVE) {
+                // Wait on Received Messages on Sink (Destination)
+                sinkReceivedMessages = sourceDataSender.getSinkManager().getRxMessageCount();
+                sinkReceivedMessages.addObserver(this);
             }
         }
 
@@ -1307,23 +1301,21 @@ public class LogReplicationIT extends AbstractIT implements Observer {
         if (observableAckMsg.getDataMessage() != null) {
             LogReplicationEntryMsg logReplicationEntry = observableAckMsg.getDataMessage();
 
-            switch (testConfig.waitOn) {
-                case ON_ACK:
-                    verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
-                case ON_ACK_TS:
-                    verifyExpectedValue(expectedAckTimestamp, logReplicationEntry.getMetadata().getTimestamp());
-                    if (expectedAckMsgType == logReplicationEntry.getMetadata().getEntryType()) {
-                        blockUntilExpectedAckType.release();
-                    }
+            if (testConfig.waitOn == WAIT.ON_ACK) {
+                verifyExpectedValue(expectedAckMessages, ackMessages.getMsgCnt());
+            }
 
-                    log.debug("expectedAckTs={}, logEntryTs={}", expectedAckTimestamp, logReplicationEntry.getMetadata().getTimestamp());
+            if (testConfig.waitOn == WAIT.ON_ACK || testConfig.waitOn == WAIT.ON_ACK_TS) {
+                verifyExpectedValue(expectedAckTimestamp, logReplicationEntry.getMetadata().getTimestamp());
+                if (expectedAckMsgType == logReplicationEntry.getMetadata().getEntryType()) {
+                    blockUntilExpectedAckType.release();
+                }
 
-                    if (expectedAckTimestamp == logReplicationEntry.getMetadata().getTimestamp()) {
-                        blockUntilExpectedAckTs.release();
-                    }
-                    break;
-                default:
-                    break;
+                log.debug("expectedAckTs={}, logEntryTs={}", expectedAckTimestamp, logReplicationEntry.getMetadata().getTimestamp());
+
+                if (expectedAckTimestamp == logReplicationEntry.getMetadata().getTimestamp()) {
+                    blockUntilExpectedAckTs.release();
+                }
             }
         }
     }

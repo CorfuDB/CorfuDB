@@ -240,6 +240,11 @@ public class CorfuRuntime {
         private boolean metricsEnabled = true;
 
         /*
+         * Number of entries read in a single batch to compute highest sequence number (based on data entries and not holes)
+         */
+        int highestSequenceNumberBatchSize = 4;
+
+        /*
          * Total time in milliseconds for polling task to block until buffer space is available.
          */
         private long streamingPollingBlockingTimeMs = 5;
@@ -301,6 +306,7 @@ public class CorfuRuntime {
             private PriorityLevel priorityLevel = PriorityLevel.NORMAL;
             private Codec.Type codecType = Codec.Type.ZSTD;
             private boolean metricsEnabled = true;
+            private int highestSequenceNumberBatchSize = 4;
             private long streamingPollingBlockingTimeMs = 5;
             private int streamingQueueSize = 100;
             private int streamingPollingThreadPoolSize = 2;
@@ -551,6 +557,11 @@ public class CorfuRuntime {
 
             public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder metricsEnabled(boolean enabled) {
                 this.metricsEnabled = enabled;
+                return this;
+            }
+
+            public CorfuRuntimeParameters.CorfuRuntimeParametersBuilder highestSequenceNumberBatchSize(int highestSequenceNumberBatchSize) {
+                this.highestSequenceNumberBatchSize = highestSequenceNumberBatchSize;
                 return this;
             }
 
@@ -893,7 +904,7 @@ public class CorfuRuntime {
         }
 
         fetchLayoutTimer = MeterRegistryProvider.getInstance().map(r -> Timer.builder("runtime.fetch_layout.timer")
-                .publishPercentileHistogram(true).publishPercentiles(0.50, 0.95, 0.99).register(r));
+                .publishPercentileHistogram(true).publishPercentiles(0.50, 0.99).register(r));
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
 

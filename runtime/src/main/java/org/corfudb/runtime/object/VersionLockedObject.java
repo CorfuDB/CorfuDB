@@ -161,7 +161,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         syncStreamTimer = metricsRegistry.map(registry ->
                 Timer.builder("vlo.sync.timer")
                         .tags(ImmutableList.of(streamIdTag))
-                        .publishPercentiles(0.50, 0.95, 0.99)
+                        .publishPercentiles(0.50, 0.99)
                         .publishPercentileHistogram(true)
                         .register(registry));
 

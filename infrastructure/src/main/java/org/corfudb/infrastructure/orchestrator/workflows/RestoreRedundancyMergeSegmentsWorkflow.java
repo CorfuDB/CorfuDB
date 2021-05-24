@@ -25,8 +25,6 @@ import static org.corfudb.protocols.wireprotocol.orchestrator.OrchestratorReques
 public class RestoreRedundancyMergeSegmentsWorkflow implements IWorkflow {
 
 
-    private final RestoreRedundancyMergeSegmentsRequest request;
-
     @Getter
     private final UUID id;
 
@@ -41,7 +39,6 @@ public class RestoreRedundancyMergeSegmentsWorkflow implements IWorkflow {
     public RestoreRedundancyMergeSegmentsWorkflow(
             RestoreRedundancyMergeSegmentsRequest request) {
         this.id = UUID.randomUUID();
-        this.request = request;
         this.actions = ImmutableList.of(
                 RestoreRedundancyMergeSegments.builder()
                         .currentNode(request.getEndpoint())

@@ -87,8 +87,8 @@ public class SequencerServerCache {
      *
      * @param cacheSize cache size
      */
+    @SuppressWarnings("OptionalUsedAsFieldOrParameterType")
     private final Optional<DistributionSummary> evictionsPerTrimCall;
-    private final Optional<Gauge> windowSize;
 
     public SequencerServerCache(int cacheSize, long maxConflictNewSequencer) {
         this.cacheSize = cacheSize;
@@ -103,7 +103,7 @@ public class SequencerServerCache {
                         registry.gauge(conflictKeysCounterName, Collections.emptyList(),
                                 new HashMap<ConflictTxStream, Long>(), HashMap::size))
                 .orElse(new HashMap<>());
-        double [] percentiles = new double[] {0.50, 0.95, 0.99};
+        double [] percentiles = new double[] {0.50, 0.99};
         evictionsPerTrimCall = MeterRegistryProvider.getInstance().map(registry ->
                 DistributionSummary
                         .builder("sequencer.cache.evictions")
@@ -111,7 +111,7 @@ public class SequencerServerCache {
                         .publishPercentileHistogram()
                         .baseUnit("eviction")
                         .register(registry));
-        windowSize = MeterRegistryProvider.getInstance().map(registry ->
+        MeterRegistryProvider.getInstance().map(registry ->
                 Gauge.builder(windowSizeName,
                         conflictKeys, HashMap::size).register(registry));
 

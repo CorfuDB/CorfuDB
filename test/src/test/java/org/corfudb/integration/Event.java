@@ -8,18 +8,15 @@ message EventInfo {
     optional uint32 frequency = 5;
  */
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
 public class Event {
     private int id;
     private String name;
     private int port;
     private long event_time;
     private int frequency;
-
-    public Event(int id, String name, int port, long event_time, int freq) {
-        this.id = id;
-        this.name = name;
-        this.port = port;
-        this.event_time = event_time;
-        this.frequency = freq;
-    }
 }

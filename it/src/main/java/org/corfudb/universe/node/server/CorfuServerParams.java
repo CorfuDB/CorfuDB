@@ -8,6 +8,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.ToString;
+import lombok.experimental.SuperBuilder;
 import org.corfudb.universe.node.Node.NodeParams;
 import org.corfudb.universe.node.Node.NodeType;
 import org.corfudb.universe.node.server.CorfuServer.Mode;
@@ -20,7 +21,7 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.Set;
 
-@Builder(builderMethodName = "serverParamsBuilder")
+@SuperBuilder(builderMethodName = "serverParamsBuilder")
 @AllArgsConstructor
 @EqualsAndHashCode
 @ToString

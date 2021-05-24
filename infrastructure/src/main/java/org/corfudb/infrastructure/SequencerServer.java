@@ -131,7 +131,7 @@ public class SequencerServer extends AbstractServer {
     /**
      * The percentiles to compute and publish for {@link this#streamsPerTx}.
      */
-    private final double[] percentiles = {0.50, 0.95, 0.99};
+    private final double[] percentiles = {0.50, 0.99};
 
     /**
      * RequestHandlerMethods for the Sequencer server
@@ -827,8 +827,6 @@ public class SequencerServer extends AbstractServer {
                         .getAddressesInRange(getStreamAddressRange(streamAddressRange));
                 requestedAddressSpaces.put(streamId, addressesInRange);
             } else {
-                log.warn("getStreamsAddressesMap: address space map is not present for stream {}." +
-                        " Verify this is a valid stream.", streamId);
                 requestedAddressSpaces.put(streamId, new StreamAddressSpace(Address.NON_EXIST, Collections.EMPTY_SET));
             }
         }

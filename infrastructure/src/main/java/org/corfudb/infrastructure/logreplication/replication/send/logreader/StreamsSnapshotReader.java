@@ -1,6 +1,5 @@
 package org.corfudb.infrastructure.logreplication.replication.send.logreader;
 
-import com.google.protobuf.ByteString;
 import com.google.protobuf.TextFormat;
 import io.micrometer.core.instrument.DistributionSummary;
 import lombok.Getter;
@@ -291,7 +290,7 @@ public class StreamsSnapshotReader implements SnapshotReader {
                     .ignoreTrimmed(false)
                     .cacheEntries(false)
                     .build();
-            Stream stream = (new OpaqueStream(rt, rt.getStreamsView().get(uuid, options))).streamUpTo(snapshot);
+            Stream stream = (new OpaqueStream(rt.getStreamsView().get(uuid, options))).streamUpTo(snapshot);
             iterator = stream.iterator();
             maxVersion = 0;
          }

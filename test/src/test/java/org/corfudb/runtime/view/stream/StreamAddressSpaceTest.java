@@ -147,12 +147,13 @@ public class StreamAddressSpaceTest {
     }
 
     @Test
+    @SuppressWarnings("ConstantConditions")
     public void testEquality() {
         assertThat(new StreamAddressSpace().equals(null)).isFalse();
         assertThat(new StreamAddressSpace().equals(new StreamAddressSpace())).isTrue();
-        assertThat(new StreamAddressSpace(2L, Collections.EMPTY_SET).equals(new StreamAddressSpace())).isFalse();
-        assertThat(new StreamAddressSpace(2L, Collections.EMPTY_SET)
-                .equals(new StreamAddressSpace(2L, Collections.EMPTY_SET))).isTrue();
+        assertThat(new StreamAddressSpace(2L, Collections.emptySet()).equals(new StreamAddressSpace())).isFalse();
+        assertThat(new StreamAddressSpace(2L, Collections.emptySet())
+                .equals(new StreamAddressSpace(2L, Collections.emptySet()))).isTrue();
         // TODO(Maithem): Re-enable after this fix https://github.com/RoaringBitmap/RoaringBitmap/pull/451
         //assertThat(new StreamAddressSpace(2L, Collections.EMPTY_SET)
           //      .equals(new StreamAddressSpace(2L, ImmutableSet.of(1L, 2L)))).isTrue();

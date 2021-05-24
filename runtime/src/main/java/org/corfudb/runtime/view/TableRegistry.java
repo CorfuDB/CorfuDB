@@ -21,6 +21,7 @@ import org.corfudb.runtime.collections.StreamingMap;
 import org.corfudb.runtime.collections.StreamingMapDecorator;
 import org.corfudb.runtime.collections.Table;
 import org.corfudb.runtime.collections.TableOptions;
+import org.corfudb.runtime.collections.TableParameters;
 import org.corfudb.runtime.exceptions.SerializerException;
 import org.corfudb.runtime.exceptions.TransactionAbortedException;
 import org.corfudb.runtime.object.ICorfuVersionPolicy;
@@ -208,6 +209,10 @@ public class TableRegistry {
                         .equals(tableDescriptors.getFileDescriptorsMap())) {
                     hasSchemaChanged = true;
                     log.warn("registerTable: Schema update detected for table {}${}", namespace, tableName);
+
+                    for (StackTraceElement st : Thread.currentThread().getStackTrace()) {
+                        log.warn("{}", st);
+                    }
                     log.debug("registerTable: old schema: {}", oldRecord.getPayload().getFileDescriptorsMap());
                     log.debug("registerTable: new schema: {}", tableDescriptors.getFileDescriptorsMap());
                 }
@@ -378,23 +383,35 @@ public class TableRegistry {
 
         List<String> streamTagsStringList = defaultValueMessage.getDescriptorForType()
                 .getOptions().getExtension(CorfuOptions.tableSchema).getStreamTagList();
-        Set<UUID> streamTagsUUIDSet = streamTagsStringList
+
+        Set<UUID> streamTagsUUIDForTable = streamTagsStringList
                 .stream()
                 .map(tag -> getStreamIdForStreamTag(namespace, tag))
                 .collect(Collectors.toSet());
 
+        // If table is federated, add a new tagged stream (on which updates to federated tables will be appended for
+        // streaming purposes)
+        boolean isFederated = defaultValueMessage.getDescriptorForType()
+                .getOptions().getExtension(CorfuOptions.tableSchema).getIsFederated();
+        if (isFederated) {
+            streamTagsUUIDForTable.add(ObjectsView.LOG_REPLICATOR_STREAM_ID);
+        }
+
         // Open and return table instance.
-        Table<K, V, M> table = new Table<>(namespace, fullyQualifiedTableName,
-                kClass,
-                vClass,
-                mClass,
-                defaultValueMessage,
-                defaultMetadataMessage,
+        Table<K, V, M> table = new Table<>(
+                TableParameters.<K, V, M>builder()
+                        .namespace(namespace)
+                        .fullyQualifiedTableName(fullyQualifiedTableName)
+                        .kClass(kClass)
+                        .vClass(vClass)
+                        .mClass(mClass)
+                        .valueSchema(defaultValueMessage)
+                        .metadataSchema(defaultMetadataMessage).build(),
                 this.runtime,
                 this.protobufSerializer,
                 mapSupplier,
                 versionPolicy,
-                streamTagsUUIDSet);
+                streamTagsUUIDForTable);
         tableMap.put(fullyQualifiedTableName, (Table<Message, Message, Message>) table);
 
         registerTable(namespace, tableName, kClass, vClass, mClass, tableOptions);
