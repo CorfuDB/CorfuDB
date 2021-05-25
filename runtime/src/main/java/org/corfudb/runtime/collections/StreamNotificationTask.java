@@ -1,6 +1,7 @@
 package org.corfudb.runtime.collections;
 
 import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.runtime.CorfuRuntime;
 
 import java.time.Duration;
@@ -78,8 +79,9 @@ class StreamNotificationTask implements Runnable {
             if (queueEntry == null) {
                 break;
             }
-
-            subscription.getStreamingMetrics().recordQueueEntryDuration(Duration.ofNanos(System.nanoTime() - queueEntry.getEnqueueTime()));
+            String listenerId = subscription.getListenerId();
+            MicroMeterUtils.time(Duration.ofNanos(System.nanoTime() - queueEntry.getEnqueueTime()),
+                    "stream_sub.queueDuration.timer", "listener", listenerId);
             CorfuStreamEntries nextUpdate = queueEntry.getEntry();
 
             long endTime = System.nanoTime();
@@ -87,7 +89,11 @@ class StreamNotificationTask implements Runnable {
 
             // Send notification to client with the pre-registered callback.
             startTime = endTime;
-            subscription.getStreamingMetrics().recordDeliveryDuration(() -> listener.onNext(nextUpdate));
+
+            MicroMeterUtils.time(() -> listener.onNext(nextUpdate),
+                    "stream.notify.duration",
+                    "listener",
+                    listenerId);
             endTime = System.nanoTime();
 
             Duration onNextElapse = Duration.ofNanos(endTime - startTime);

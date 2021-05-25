@@ -55,22 +55,21 @@ public class StreamSubscription<K extends Message, V extends Message, M extends 
     @Getter
     private final int streamBufferSize;
 
-    // The streaming metrics to report to.
+    // The listener id to tag metrics with.
     @Getter
-    private final StreamSubscriptionMetrics streamingMetrics;
+    private final String listenerId;
 
     // Whether the subscription is stopped because of error or is unsubscribed.
     private volatile boolean stopped = false;
 
     public StreamSubscription(CorfuRuntime runtime, StreamListener listener, String namespace,
-                       String streamTag, List<String> tablesOfInterest, int bufferSize,
-                       StreamSubscriptionMetrics streamingMetrics) {
+                       String streamTag, List<String> tablesOfInterest, int bufferSize) {
         this.runtime = runtime;
         this.listener = listener;
         this.namespace = namespace;
         this.streamBuffer = new ArrayBlockingQueue<>(bufferSize);
         this.streamBufferSize = bufferSize;
-        this.streamingMetrics = streamingMetrics;
+        this.listenerId = String.format("listener_%s_%s_%s", listener, namespace, streamTag);
 
         // Generate table name to table schema mapping.
         TableRegistry registry = runtime.getTableRegistry();

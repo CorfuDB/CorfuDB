@@ -3,7 +3,7 @@ package org.corfudb.runtime.collections;
 import com.google.gson.JsonObject;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.distribution.HistogramSnapshot;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -14,15 +14,11 @@ import java.util.concurrent.TimeUnit;
  * created by hisundar 2020-09-20
  */
 public class TimingHistogram {
-    private final Optional<Timer> timer;
-
+    private final String tableName;
+    private final String metricsName;
     public TimingHistogram(String metricName, String tableName) {
-        this.timer = MeterRegistryProvider.getInstance().map(registry ->
-                Timer.builder(metricName)
-                        .tag("table.name", tableName)
-                        .publishPercentiles(0.50, 0.99)
-                        .publishPercentileHistogram(true)
-                        .register(registry));
+        this.metricsName = metricName;
+        this.tableName = tableName;
     }
 
     /**
@@ -31,10 +27,7 @@ public class TimingHistogram {
      * @param sample - A measurement sample to time.
      */
     public void update(Optional<Timer.Sample> sample) {
-        if (!timer.isPresent()) {
-            return;
-        }
-        sample.ifPresent(s -> s.stop(timer.get()));
+        MicroMeterUtils.time(sample, this.metricsName, "table.name", this.tableName);
     }
 
     /**
@@ -64,6 +57,10 @@ public class TimingHistogram {
      */
     public JsonObject asJsonObject() {
         JsonObject jsonObject = new JsonObject();
+
+        Optional<Timer> timer =
+                MicroMeterUtils.createOrGetTimer(this.metricsName, "table.name", this.tableName);
+
         if (!timer.isPresent()) {
             return jsonObject;
         }

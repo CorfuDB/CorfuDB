@@ -1,7 +1,17 @@
 package org.corfudb.infrastructure;
 
-import io.micrometer.core.instrument.Timer;
 import io.netty.channel.ChannelHandlerContext;
+import lombok.NonNull;
+import lombok.extern.slf4j.Slf4j;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
+import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
+import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
+import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
+import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
+import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
+
+import javax.annotation.Nonnull;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -11,19 +21,7 @@ import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import javax.annotation.Nonnull;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
-
-import org.corfudb.protocols.service.CorfuProtocolMessage.ClusterIdCheck;
-import org.corfudb.protocols.service.CorfuProtocolMessage.EpochCheck;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
-import org.corfudb.runtime.proto.service.CorfuMessage.HeaderMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestMsg;
-import org.corfudb.runtime.proto.service.CorfuMessage.RequestPayloadMsg.PayloadCase;
-import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
 
 import static org.corfudb.protocols.CorfuProtocolServerErrors.getUnknownErrorMsg;
 import static org.corfudb.protocols.service.CorfuProtocolMessage.getHeaderMsg;
@@ -164,32 +162,18 @@ public class RequestHandlerMethods {
      */
     private HandlerMethod generateConditionalHandler(@NonNull final PayloadCase type,
                                                      @NonNull final HandlerMethod handler) {
-        // Generate a timer based on the Corfu request type
-        final Optional<Timer> timer = getTimer(type);
-
+        // Generate a timer name based on the Corfu request type
+        String timerName = getTimerName(type);
         // Register the handler. Depending on metrics collection configuration by MetricsUtil,
         // handler will be instrumented by the metrics context.
-        return (req, ctx, r) -> {
-            Runnable handlerRunnable = () -> handler.handle(req, ctx, r);
-            if (timer.isPresent()) {
-                timer.get().record(handlerRunnable);
-            } else {
-                handlerRunnable.run();
-            }
-        };
+        return (req, ctx, r) -> MicroMeterUtils.time(() -> handler.handle(req, ctx, r), timerName);
     }
 
     // Create a timer using cached timer name for the corresponding type
-    private Optional<Timer> getTimer(@Nonnull PayloadCase type) {
+    private String getTimerName(@Nonnull PayloadCase type) {
         timerNameCache.computeIfAbsent(type,
                 aType -> ("corfu.infrastructure.message-handler." +
                         aType.name().toLowerCase()));
-        double[] percentiles = new double[]{0.50, 0.99};
-
-        return MeterRegistryProvider.getInstance()
-                .map(registry -> Timer.builder(timerNameCache.get(type))
-                        .publishPercentiles(percentiles)
-                        .publishPercentileHistogram(true)
-                        .register(registry));
+        return timerNameCache.get(type);
     }
 }

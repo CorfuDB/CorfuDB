@@ -11,8 +11,8 @@ import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.comm.ChannelImplementation;
 import org.corfudb.common.compression.Codec;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider.MeterRegistryInitializer;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.VersionInfo;
 import org.corfudb.runtime.clients.BaseClient;
 import org.corfudb.runtime.clients.IClientRouter;
@@ -773,8 +773,6 @@ public class CorfuRuntime {
      */
     private volatile Layout latestLayout = null;
 
-    private final Optional<Timer> fetchLayoutTimer;
-
     /**
      * Register SystemDownHandler.
      * Please use CorfuRuntimeParameters builder to register this.
@@ -902,9 +900,6 @@ public class CorfuRuntime {
         } else {
             log.warn("Runtime metrics are disabled.");
         }
-
-        fetchLayoutTimer = MeterRegistryProvider.getInstance().map(r -> Timer.builder("runtime.fetch_layout.timer")
-                .publishPercentileHistogram(true).publishPercentiles(0.50, 0.99).register(r));
         log.info("Corfu runtime version {} initialized.", getVersionString());
     }
 
@@ -1159,8 +1154,7 @@ public class CorfuRuntime {
             List<String> layoutServersCopy = new ArrayList<>(servers);
             parameters.getBeforeRpcHandler().run();
             int systemDownTriggerCounter = 0;
-            Optional<Timer.Sample> fetchSample =
-                    MeterRegistryProvider.getInstance().map(Timer::start);
+            Optional<Timer.Sample> fetchSample = MicroMeterUtils.startTimer();
             while (true) {
 
                 Collections.shuffle(layoutServersCopy);
@@ -1197,9 +1191,7 @@ public class CorfuRuntime {
 
                         // Prune away removed node routers from the nodeRouterPool.
                         pruneRemovedRouters(l);
-                        fetchLayoutTimer.ifPresent(flt ->
-                                fetchSample
-                                        .ifPresent(sample -> sample.stop(flt)));
+                        MicroMeterUtils.time(fetchSample, "runtime.fetch_layout.timer");
                         return l;
                     } catch (InterruptedException ie) {
                         throw new UnrecoverableCorfuInterruptedError(
