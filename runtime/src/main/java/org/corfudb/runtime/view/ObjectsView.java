@@ -150,15 +150,8 @@ public class ObjectsView extends AbstractView {
         long totalTime = System.currentTimeMillis() - context.getStartTime();
         log.trace("TXEnd[{}] time={} ms", context, totalTime);
 
-        // If exist, stop the timer for timing the beginning of transaction to start of commit.
-        if (context.getTxOpDurationContext() != null) {
-            context.getTxOpDurationContext().stop();
-        }
 
-        // Create a timer to measure the transaction commit duration
-        Timer txCommitDurationTimer = context.getMetrics().timer(TXN_COMMIT_TIMER_NAME);
-        try (Timer.Context txCommitDuration =
-                     MetricsUtils.getConditionalContext(txCommitDurationTimer)){
+        try {
             return TransactionalContext.getCurrentContext().commitTransaction();
         } catch (TransactionAbortedException e) {
             log.warn("TXEnd[{}] Aborted Exception {}", context, e);

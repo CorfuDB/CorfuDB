@@ -147,21 +147,12 @@ public abstract class AbstractTransactionalContext implements
     /**
      * Metrics related fields for registry and the context marking the beginning of a transaction.
      */
-    @Getter
-    private static final MetricRegistry metrics = CorfuRuntime.getDefaultMetrics();
-    private static final String TXN_OP_DURATION_TIMER_NAME = CorfuComponent.OBJECT.toString() +
-            "txn-op-duration";
-    private final Timer txDurationTimer = metrics.timer(TXN_OP_DURATION_TIMER_NAME);
-    @Getter
-    private final Timer.Context txOpDurationContext;
 
     AbstractTransactionalContext(Transaction transaction) {
         transactionID = UUID.randomUUID();
         this.transaction = transaction;
 
         startTime = System.currentTimeMillis();
-
-        txOpDurationContext = MetricsUtils.getConditionalContext(txDurationTimer);
 
         parentContext = TransactionalContext.getCurrentContext();
 

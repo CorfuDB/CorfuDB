@@ -61,17 +61,6 @@ public class MeterRegistryProvider {
             meterRegistry = meterRegistrySupplier.get();
         }
     }
-
-    /**
-     * Register timer if needed.
-     *
-     * @param name Name of a timer.
-     * @param tags Tags for a timer.
-     */
-    public static void timer(String name, String... tags) {
-        MeterRegistryProvider.getInstance().ifPresent(registry -> registry.timer(name, tags));
-    }
-
     /**
      * Get the previously configured meter registry.
      * If the registry has not been previously configured, return an empty option.

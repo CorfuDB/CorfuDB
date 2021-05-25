@@ -1,7 +1,6 @@
 package org.corfudb.infrastructure.log.statetransfer.batchprocessor.protocolbatchprocessor;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -106,11 +105,12 @@ public class ProtocolBatchProcessor implements StateTransferBatchProcessor {
                     return batch;
 
                 } catch (WrongEpochException e) {
-                    log.warn("readRecords: encountered a wrong epoch exception on try {}: {}.",
-                            i, e);
+                    log.warn("readRecords: encountered a wrong epoch exception on try {}: {}.", i,
+                            maxReadRetries);
                     throw e;
                 } catch (RuntimeException e) {
-                    log.warn("readRecords: encountered an exception on try {}: {}.", i, e);
+                    log.warn("readRecords: encountered an exception on try {}: {}.", i,
+                            maxReadRetries, e);
                     Sleep.sleepUninterruptibly(readSleepDuration);
                 }
             }

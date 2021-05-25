@@ -27,10 +27,9 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
     private List<ICorfuSMR<T>> maps = new ArrayList<>();
 
     // Registry and Timer used for measuring append checkpoints
-    private static final MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
+
     private static final String MULTI_CHECKPOINT_TIMER_NAME = CorfuComponent.GARBAGE_COLLECTION +
             "append-several-checkpoints";
-    private final Timer appendCheckpointsTimer = metricRegistry.timer(MULTI_CHECKPOINT_TIMER_NAME);
 
     /** Add a map to the list of maps to be checkpointed by this class. */
     @SuppressWarnings("unchecked")
@@ -61,7 +60,7 @@ public class MultiCheckpointWriter<T extends StreamingMap> {
         Token minSnapshot = Token.UNINITIALIZED;
 
         final long cpStart = System.currentTimeMillis();
-        try (Timer.Context context = MetricsUtils.getConditionalContext(appendCheckpointsTimer)) {
+        try  {
             for (ICorfuSMR<T> map : maps) {
                 UUID streamId = map.getCorfuStreamID();
 

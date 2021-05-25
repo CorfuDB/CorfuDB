@@ -57,18 +57,7 @@ public class LogUnitClient extends AbstractClient {
         return getRouter().getPort();
     }
 
-    @Getter
-    MetricRegistry metricRegistry = CorfuRuntime.getDefaultMetrics();
 
-    private Timer.Context getTimerContext(String opName) {
-        final String timerName = String.format("%s%s:%s-%s",
-                CorfuComponent.LOG_UNIT_CLIENT.toString(),
-                getHost(),
-                getPort().toString(),
-                opName);
-        Timer t = getMetricRegistry().timer(timerName);
-        return t.time();
-    }
 
     /**
      * Asynchronously write to the logging unit.
@@ -83,7 +72,6 @@ public class LogUnitClient extends AbstractClient {
                                             IMetadata.DataRank rank,
                                             Object writeObject,
                                             Map<UUID, Long> backpointerMap) {
-        Timer.Context context = getTimerContext("writeObject");
         ByteBuf payload = Unpooled.buffer();
         Serializers.CORFU.serialize(writeObject, payload);
         WriteRequest wr = new WriteRequest(DataType.DATA, payload);
@@ -92,7 +80,6 @@ public class LogUnitClient extends AbstractClient {
         wr.setGlobalAddress(address);
         CompletableFuture<Boolean> cf = sendMessageWithFuture(CorfuMsgType.WRITE.payloadMsg(wr));
         return cf.thenApply(x -> {
-            context.stop();
             return x;
         });
     }
@@ -150,12 +137,10 @@ public class LogUnitClient extends AbstractClient {
      * @return a completableFuture which returns a ReadResponse on completion.
      */
     public CompletableFuture<ReadResponse> read(List<Long> addresses, boolean cacheable) {
-        Timer.Context context = getTimerContext("read");
         CompletableFuture<ReadResponse> cf = sendMessageWithFuture(
                 CorfuMsgType.READ_REQUEST.payloadMsg(new ReadRequest(addresses, cacheable)));
 
         return cf.thenApply(x -> {
-            context.stop();
             return x;
         });
     }

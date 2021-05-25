@@ -1,25 +1,9 @@
 package org.corfudb.runtime.view;
 
-import static org.corfudb.util.Utils.getLogTail;
-
-
 import com.google.common.collect.Sets;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Predicate;
-import javax.annotation.Nonnull;
-
-import io.micrometer.core.instrument.Timer;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.wireprotocol.StreamsAddressResponse;
 import org.corfudb.runtime.CorfuRuntime;
 import org.corfudb.runtime.exceptions.LayoutModificationException;
@@ -28,6 +12,19 @@ import org.corfudb.runtime.exceptions.QuorumUnreachableException;
 import org.corfudb.runtime.view.stream.StreamAddressSpace;
 import org.corfudb.util.CFUtils;
 import org.corfudb.util.Utils;
+
+import javax.annotation.Nonnull;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
+
+import static org.corfudb.util.Utils.getLogTail;
 
 /**
  * A view of the Layout Manager to manage reconfigurations of the Corfu Cluster.
@@ -38,15 +35,10 @@ import org.corfudb.util.Utils;
 public class LayoutManagementView extends AbstractView {
 
     public LayoutManagementView(@NonNull CorfuRuntime runtime) {
-
         super(runtime);
-        this.consensusTimer = MeterRegistryProvider.getInstance().map(registry ->
-                registry.timer("layout-management-view.consensus"));
     }
 
     private volatile long prepareRank = 1L;
-
-    private final Optional<Timer> consensusTimer;
 
     private final ReentrantLock recoverSequencerLock = new ReentrantLock();
 
@@ -369,12 +361,7 @@ public class LayoutManagementView extends AbstractView {
         // Attempts to update all the layout servers with the modified layout.
         try {
             Runnable consensusRunnable = () -> runtime.getLayoutView().updateLayout(layout, prepareRank);
-            if (consensusTimer.isPresent()) {
-                consensusTimer.get().record(consensusRunnable);
-            }
-            else {
-                consensusRunnable.run();
-            }
+            MicroMeterUtils.time(consensusRunnable, "layout-management-view.consensus");
             prepareRank = 1L;
         } catch (OutrankedException oe) {
             // Update rank since outranked.

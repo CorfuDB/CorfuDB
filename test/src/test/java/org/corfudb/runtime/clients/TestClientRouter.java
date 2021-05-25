@@ -182,11 +182,6 @@ public class TestClientRouter implements IClientRouter {
                                                                     .port(port).build());
         }
 
-        // Set up the timer and context to measure request
-        final Timer roundTripMsgTimer = getTimer(message);
-        final Timer.Context roundTripMsgContext = MetricsUtils
-                .getConditionalContext(roundTripMsgTimer);
-
         // Get the next request ID.
         final long thisRequest = requestID.getAndIncrement();
         // Set the message fields.
@@ -204,7 +199,6 @@ public class TestClientRouter implements IClientRouter {
 
         // Generate a benchmarked future to measure the underlying request
         final CompletableFuture<T> cfBenchmarked = cf.thenApply(x -> {
-            MetricsUtils.stopConditionalContext(roundTripMsgContext);
             return x;
         });
 
@@ -216,17 +210,6 @@ public class TestClientRouter implements IClientRouter {
             return null;
         });
         return cfTimeout;
-    }
-
-    // Create a timer using appropriate cached timer names
-    private Timer getTimer(@NonNull CorfuMsg message) {
-        if (!timerNameCache.containsKey(message.getMsgType())) {
-            timerNameCache.put(message.getMsgType(),
-                               CorfuComponent.CLIENT_ROUTER.toString() +
-                               message.getMsgType().name().toLowerCase());
-        }
-        return CorfuRuntime.getDefaultMetrics()
-                .timer(timerNameCache.get(message.getMsgType()));
     }
 
     /**

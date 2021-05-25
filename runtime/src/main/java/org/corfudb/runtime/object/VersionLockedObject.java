@@ -1,14 +1,11 @@
 package org.corfudb.runtime.object;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tag;
-import io.micrometer.core.instrument.Timer;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.corfudb.common.metrics.micrometer.MeterRegistryProvider;
+import org.corfudb.common.metrics.micrometer.MicroMeterUtils;
 import org.corfudb.protocols.logprotocol.SMREntry;
 import org.corfudb.runtime.exceptions.NoRollbackException;
 import org.corfudb.runtime.exceptions.unrecoverable.UnrecoverableCorfuError;
@@ -125,12 +122,7 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
     private final Logger correctnessLogger = LoggerFactory.getLogger("correctness");
 
     private final Optional<AtomicLong> noRollBackExceptionCounter;
-    private final Optional<Timer> syncStreamTimer;
-    private final Optional<Counter> versionApplyCounter;
-    private final Optional<Counter> versionUndoCounter;
-    private final Optional<Counter> optimisticReadCounter;
-    private final Optional<Counter> pessimisticReadCounter;
-    /**
+    /*
      * The VersionLockedObject maintains a versioned object which is backed by an ISMRStream,
      * and is optionally backed by an additional optimistic update stream.
      *
@@ -154,37 +146,10 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
         lock = new StampedLock();
 
         Optional<MeterRegistry> metricsRegistry = MeterRegistryProvider.getInstance();
-        Tag streamIdTag = Tag.of("streamId", getID().toString());
         noRollBackExceptionCounter = metricsRegistry
                 .map(registry ->
                         registry.gauge("vlo.no_rollback_exception.count",
                                new AtomicLong(0L)));
-        syncStreamTimer = metricsRegistry.map(registry ->
-                Timer.builder("vlo.sync.timer")
-                        .tags(ImmutableList.of(streamIdTag))
-                        .publishPercentiles(0.50, 0.99)
-                        .publishPercentileHistogram(true)
-                        .register(registry));
-
-        versionApplyCounter = metricsRegistry.map(registry ->
-                Counter.builder("vlo.sync.rate")
-                        .tags(ImmutableList.of(Tag.of("type", "apply"), streamIdTag))
-                        .register(registry));
-        versionUndoCounter = metricsRegistry.map(registry ->
-                Counter.builder("vlo.sync.rate")
-                        .tags(ImmutableList.of(Tag.of("type", "undo"), streamIdTag))
-                        .register(registry));
-
-        optimisticReadCounter = metricsRegistry
-                .map(registry -> Counter.builder("vlo.read.rate")
-                        .tags(ImmutableList.of(Tag.of("type", "optimistic"), streamIdTag))
-                        .register(registry));
-
-        pessimisticReadCounter = metricsRegistry
-                .map(registry -> Counter.builder("vlo.read.rate")
-                        .tags(ImmutableList.of(Tag.of("type", "pessimistic"), streamIdTag))
-                        .register(registry));
-
     }
 
     /**
@@ -254,7 +219,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                     long versionForCorrectness = getVersionUnsafe();
                     if (lock.validate(ts)) {
                         correctnessLogger.trace("Version, {}", versionForCorrectness);
-                        optimisticReadCounter.ifPresent(Counter::count);
                         return ret;
                     }
                 }
@@ -281,7 +245,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
             if (ts == 0) {
                 ts = lock.writeLock();
             }
-            pessimisticReadCounter.ifPresent(Counter::count);
             // Check if direct access is possible (unlikely).
             if (directAccessCheckFunction.apply(this)) {
                 log.trace("Access [{}] Direct (writelock) access at {}", this, getVersionUnsafe());
@@ -678,7 +641,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                 ListIterator<SMREntry> it = entries.listIterator(entries.size());
                 while (it.hasPrevious()) {
                     applyUndoRecordUnsafe(it.previous(), stream);
-                    versionUndoCounter.ifPresent(Counter::increment);
                 }
             } else {
                 Optional<SMREntry> entry = entries.stream().findFirst();
@@ -720,7 +682,6 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                         .forEachOrdered(entry -> {
                             try {
                                 Object res = applyUpdateUnsafe(entry, timestamp);
-                                versionApplyCounter.ifPresent(Counter::increment);
                                 if (timestamp == Address.OPTIMISTIC) {
                                     entry.setUpcallResult(res);
                                 } else if (pendingUpcalls.contains(entry.getGlobalAddress())) {
@@ -736,11 +697,8 @@ public class VersionLockedObject<T extends ICorfuSMR<T>> {
                                 throw new UnrecoverableCorfuError(e);
                             }
                         });
-        if (syncStreamTimer.isPresent()) {
-            syncStreamTimer.get().record(syncStreamRunnable);
-        } else {
-            syncStreamRunnable.run();
-        }
+        MicroMeterUtils.time(syncStreamRunnable, "vlo.sync.timer",
+                "streamId", getID().toString());
     }
 
     /**
