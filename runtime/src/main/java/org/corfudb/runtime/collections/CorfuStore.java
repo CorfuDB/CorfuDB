@@ -361,6 +361,58 @@ public class CorfuStore {
     }
 
     /**
+     * Subscribe to transaction updates on all tables with the specified streamTag and namespace.
+     * Objects returned will honor transactional boundaries.
+     *
+     * Note: all tables belonging to this stream tag must have been previously opened or subscription will fail.
+     *
+     * @param streamListener   client listener for callback
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param timestamp        if specified, all stream updates after this timestamp will be returned,
+     *                         if null, only future updates will be returned
+     * @param bufferSize       maximum size of buffered transaction entries
+     */
+    public void subscribeListener(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                                  @Nonnull String streamTag, @Nullable Timestamp timestamp, int bufferSize) {
+        List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
+        subscribeListener(streamListener, namespace, streamTag, tablesOfInterest, timestamp, bufferSize);
+    }
+
+    /**
+     * Get names of opened tables under the given namespace and stream tag.
+     *
+     * @param namespace
+     * @param streamTag
+     * @return table names (without namespace prefix)
+     */
+    private List<String> getTablesOfInterest(@Nonnull String namespace, @Nonnull String streamTag) {
+        return runtime.getTableRegistry().listTables(namespace, streamTag);
+    }
+
+    /**
+     * Subscribe to transaction updates on all tables with the specified streamTag and namespace.
+     * Objects returned will honor transactional boundaries.
+     * <p>
+     * Note: if memory is a consideration consider using the other version of subscribe that is
+     * able to specify the size of buffered transactions entries.
+     * <p>
+     * Note: all tables belonging to this stream tag must have been previously opened or subscription will fail.
+     *
+     * @param streamListener   callback context
+     * @param namespace        the CorfuStore namespace to subscribe to
+     * @param streamTag        only updates of tables with the stream tag will be polled
+     * @param timestamp        if specified, all stream updates from this timestamp will be returned,
+     *                         if null, only future updates will be returned
+     */
+    public void subscribeListener(@Nonnull StreamListener streamListener, @Nonnull String namespace,
+                                  @Nonnull String streamTag, @Nullable Timestamp timestamp) {
+        List<String> tablesOfInterest = getTablesOfInterest(namespace, streamTag);
+        subscribeListener(streamListener, namespace, streamTag, tablesOfInterest, timestamp);
+    }
+
+
+    /**
      * Gracefully shutdown a streamer.
      * Once this call returns no further stream updates will be returned.
      *
